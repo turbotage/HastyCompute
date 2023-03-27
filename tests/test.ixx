@@ -20,6 +20,11 @@ int main() {
 	std::cout << code;
 	*/
 
+    hasty::cuda::GMW81Solve gmw81s(4, hasty::F32);
+    std::string code = "";
+    hasty::code_generator(code, gmw81s);
+    std::cout << code;
+
     try {
         static const float h_kernel[] = { 1, 1, 1, 1, 0, 1, 1, 1, 1 };
         static const int reset = 500;

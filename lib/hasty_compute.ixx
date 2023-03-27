@@ -64,7 +64,7 @@ namespace hasty {
 
 		virtual string dcode() const = 0;
 
-		virtual string kfid() const { throw NotImplementedThrow; }
+		virtual string kfid() const { return "k_" + dfid(); }
 
 		virtual string kcode() const { throw NotImplementedThrow; }
 

@@ -198,7 +198,7 @@ void {{funcid}}({{fp_type}}* mat, int ii, int jj)
 
 			static string s_dcode() {
 				return
-					R"cuda(
+R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat, int* perm) 
 {
