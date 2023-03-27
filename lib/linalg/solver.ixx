@@ -588,7 +588,6 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, const char* step
 		};
 
 
-
 	}
 
 }

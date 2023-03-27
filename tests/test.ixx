@@ -7,23 +7,16 @@ import <iostream>;
 import <vector>;
 import <string>;
 
-#include <arrayfire.h>
+import <arrayfire.h>;
 
-using namespace af;
+import <symengine/expression.h>;
+import <symengine/simplify.h>;
+import <symengine/parser.h>;
 
 
-int main() {
-	/*
-	hasty::cuda::DiagPivot mda(4, hasty::eDType::F32);
-	string code = "";
-	hasty::code_generator(code, mda);
-	std::cout << code;
-	*/
+void game_of_life() {
 
-    hasty::cuda::GMW81Solve gmw81s(4, hasty::F32);
-    std::string code = "";
-    hasty::code_generator(code, gmw81s);
-    std::cout << code;
+    using namespace af;
 
     try {
         static const float h_kernel[] = { 1, 1, 1, 1, 0, 1, 1, 1, 1 };
@@ -127,6 +120,60 @@ int main() {
         fprintf(stderr, "%s\n", e.what());
         throw;
     }
+}
+
+
+
+int main() {
+	/*
+	hasty::cuda::DiagPivot mda(4, hasty::eDType::F32);
+	string code = "";
+	hasty::code_generator(code, mda);
+	std::cout << code;
+	*/
+
+    /*
+    hasty::cuda::GMW81Solve gmw81s(4, hasty::F32);
+    std::string code = "";
+    hasty::code_generator(code, gmw81s);
+    std::cout << code;
+    */
+
+    auto expr = SymEngine::parse("abs(x_0*exp(-b*x_1))");
+
+    using SymbolSym = SymEngine::RCP < const SymEngine::Symbol>;
+    using BasicSym = SymEngine::RCP < const SymEngine::Basic>;
+
+    SymbolSym x0 = SymEngine::symbol("x_0");
+    SymbolSym x1 = SymEngine::symbol("x_1");
+    SymbolSym x2 = SymEngine::symbol("x_2");
+    SymbolSym x3 = SymEngine::symbol("x_3");
+
+    std::vector<SymbolSym> bsyms = { x0, x1, x2, x3 };
+
+    std::vector<BasicSym> d_expr;
+    std::vector<BasicSym> dd_expr;
+
+    std::cout << "First derivatives\n";
+
+    for (auto sym : bsyms) {
+        auto de = SymEngine::simplify(expr->diff(sym));
+        d_expr.push_back(de);
+        std::cout << "Diff: " << de->__str__() << std::endl;
+    }
+
+    std::cout << "Second derivatives\n";
+
+    for (auto de : d_expr) {
+        for (auto sym : bsyms) {
+            auto dde = SymEngine::simplify(de->diff(sym));
+            dd_expr.push_back(dde);
+            std::cout << "Diff: " << dde->__str__() << std::endl;
+        }
+        std::cout << "next row\n";
+    }
+
+    //game_of_life();
 
 	return 0;
 }
