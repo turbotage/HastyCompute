@@ -1,13 +1,9 @@
 
 import hasty_compute;
-import solver;
-import permute;
+import solver_cu;
+import permute_cu;
 
-import <iostream>;
-import <vector>;
-import <string>;
-
-import <arrayfire.h>;
+import std;
 
 import <symengine/expression.h>;
 import <symengine/simplify.h>;
@@ -206,26 +202,6 @@ void symengine_test() {
 }
 
 int main() {
-
-	af::info();
-
-	af::array fin = af::randu(512, 512, 512, af_dtype::c32);
-
-	fin.eval();
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	af::array fout = af::fft3(fin);
-	for (int i = 0; i < 10; ++i) {
-		fout = af::fft3(fout + 1);
-	}
-
-	fout.eval();
-
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-	std::cout << duration.count() << std::endl;
 
 	return 0;
 }
