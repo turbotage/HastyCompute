@@ -1,16 +1,16 @@
 module;
 
-#include <arrayfire.h>
-
 export module solver_cu;
 
+#ifdef STL_AS_MODULES
 import std;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+#endif
 
-//import <string>;
-//import <vector>;
-//import <memory>;
-
-import hasty_defines;
 import hasty_compute;
 import hasty_cu;
 import permute_cu;
@@ -20,7 +20,7 @@ namespace hasty {
 	export class GMW81 : public RawCudaFunction {
 	public:
 
-		GMW81(i32 ndim, af::dtype dtype)
+		GMW81(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 		}
@@ -109,7 +109,7 @@ for (int j = 0; j < {{ndim}}; ++j) { // compute column j
 
 			switch (_dtype)
 			{
-			case af::dtype::f32:
+			case hasty::dtype::f32:
 			{
 				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
 				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
@@ -172,7 +172,7 @@ if (tid < N) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -180,7 +180,7 @@ if (tid < N) {
 	export class LDL : public RawCudaFunction {
 	public:
 
-		LDL(i32 ndim, af::dtype dtype)
+		LDL(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 		}
@@ -223,7 +223,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 
 			switch (_dtype)
 			{
-			case af::dtype::f32:
+			case hasty::dtype::f32:
 			{
 				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
 				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
@@ -285,7 +285,7 @@ if (tid < N) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -293,7 +293,7 @@ if (tid < N) {
 	export class ForwardSubsUnitDiaged : public RawCudaFunction {
 	public:
 
-		ForwardSubsUnitDiaged(i32 ndim, af::dtype dtype)
+		ForwardSubsUnitDiaged(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 		}
@@ -334,7 +334,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -342,7 +342,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	export class BackwardSubsUnitT : public RawCudaFunction {
 	public:
 
-		BackwardSubsUnitT(i32 ndim, af::dtype dtype)
+		BackwardSubsUnitT(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 		}
@@ -382,7 +382,7 @@ for (int i = {{ndim}} - 1; i >= 0; --i) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -390,7 +390,7 @@ for (int i = {{ndim}} - 1; i >= 0; --i) {
 	export class LDLSolve : public RawCudaFunction {
 	public:
 
-		LDLSolve(i32 ndim, af::dtype dtype)
+		LDLSolve(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 			_deps.emplace_back(std::make_shared<ForwardSubsUnitDiaged>(_ndim, _dtype));
@@ -435,7 +435,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 
 		vec<sptr<RawCudaFunction>> _deps;
@@ -446,7 +446,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 	export class GMW81Solve : public RawCudaFunction {
 	public:
 
-		GMW81Solve(i32 ndim, af::dtype dtype)
+		GMW81Solve(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{
 			_deps.emplace_back(std::make_shared<DiagPivot>(_ndim, _dtype));
@@ -511,7 +511,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 
 			switch (_dtype)
 			{
-			case af::dtype::f32:
+			case hasty::dtype::f32:
 			{
 				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
 				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
@@ -584,7 +584,7 @@ if (tid < N) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 		vec<sptr<RawCudaFunction>> _deps;
 

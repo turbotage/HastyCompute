@@ -3,10 +3,13 @@ module;
 export module mul;
 
 
+#ifdef STL_AS_MODULES
 import std;
-//import <memory>;
-//import <stdexcept>;
-//import <complex>;
+#else
+import <memory>;
+import <stdexcept>;
+import <complex>;
+#endif
 
 import token;
 import hasty_util;

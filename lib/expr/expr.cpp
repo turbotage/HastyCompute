@@ -6,6 +6,15 @@ module;
 
 module expr;
 
+#ifdef STL_AS_MODULES
+import std.compat;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+#endif
+
 //import <memory>;
 //import <deque>;
 //import <unordered_map>;
@@ -19,13 +28,12 @@ module expr;
 //import <iterator>;
 //import <optional>;
 
-import std;
 
-import symbolic;
 import shunter;
 import defaultexp;
 
-using namespace expr;
+using namespace hasty;
+using namespace hasty::expr;
 
 void symengine_get_args(const SymEngine::RCP<const SymEngine::Basic>& subexpr, std::set<std::string>& args)
 {
@@ -137,9 +145,7 @@ std::unique_ptr<Expression> Node::diff(const std::string& x) const
 
 	LexContext new_context(context);
 
-	SymEngine::Assumptions assum1(new_context.variable_assumptions);
-
-	auto parsed = SymEngine::simplify(SymEngine::parse(expr_str), &assum1);
+	auto parsed = SymEngine::simplify(SymEngine::parse(expr_str));
 	auto dexpr = parsed->diff(SymEngine::symbol(
 		util::to_lower_case(
 			util::remove_whitespace(x))));
@@ -151,13 +157,10 @@ std::unique_ptr<Expression> Node::diff(const std::string& x) const
 	for (auto& var : vars) {
 		if (!util::container_contains(new_context.variables, var)) {
 			new_context.variables.emplace_back(var);
-			new_context.variable_assumptions.insert(SymEngine::contains(SymEngine::symbol(var), SymEngine::reals()));
 		}
 	}
 
-	SymEngine::Assumptions assum2(new_context.variable_assumptions);
-
-	auto sim_dexpr = SymEngine::simplify(dexpr, &assum2);
+	auto sim_dexpr = SymEngine::simplify(dexpr);
 
 	auto dexpr_str = util::to_lower_case(
 		util::remove_whitespace(sim_dexpr->__str__()));
@@ -165,7 +168,7 @@ std::unique_ptr<Expression> Node::diff(const std::string& x) const
 	return std::make_unique<Expression>(dexpr_str, new_context);
 }
 
-bool expression::Node::child_is_variable(int i) const
+bool Node::child_is_variable(int i) const
 {
 	const VariableNode* var_node = dynamic_cast<const VariableNode*>(children.at(i).get());
 	return var_node != nullptr;
@@ -231,11 +234,6 @@ std::string TokenNode::str() const
 	}
 }
 
-std::string TokenNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return str();
-}
-
 std::unique_ptr<Node> TokenNode::copy(LexContext& context) const
 {
 	return std::make_unique<TokenNode>(*pToken, context);
@@ -250,11 +248,6 @@ VariableNode::VariableNode(const VariableToken& token, LexContext& context)
 std::string VariableNode::str() const
 {
 	return m_VarToken.name;
-}
-
-std::string VariableNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return symtext.get_glsl_var_name(m_VarToken.name);
 }
 
 std::unique_ptr<Node> VariableNode::copy(LexContext& context) const
@@ -275,11 +268,6 @@ std::string NegNode::str() const
 	return "(-" + children[0]->str() + ")";
 }
 
-std::string NegNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "(-" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> NegNode::copy(LexContext& context) const
 {
 	return std::make_unique<NegNode>(children[0]->copy(context));
@@ -296,11 +284,6 @@ MulNode::MulNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 std::string MulNode::str() const
 {
 	return "(" + children[0]->str() + "*" + children[1]->str() + ")";
-}
-
-std::string MulNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "(" + children[0]->glsl_str(symtext) + "*" + children[1]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> MulNode::copy(LexContext& context) const
@@ -321,11 +304,6 @@ std::string DivNode::str() const
 	return "(" + children[0]->str() + "/" + children[1]->str() + ")";
 }
 
-std::string DivNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "(" + children[0]->glsl_str(symtext) + "/" + children[1]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> DivNode::copy(LexContext& context) const
 {
 	return std::make_unique<DivNode>(children[0]->copy(context), children[1]->copy(context));
@@ -342,11 +320,6 @@ AddNode::AddNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 std::string AddNode::str() const
 {
 	return "(" + children[0]->str() + "+" + children[1]->str() + ")";
-}
-
-std::string AddNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "(" + children[0]->glsl_str(symtext) + "+" + children[1]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> AddNode::copy(LexContext& context) const
@@ -367,11 +340,6 @@ std::string SubNode::str() const
 	return "(" + children[0]->str() + "-" + children[1]->str() + ")";
 }
 
-std::string SubNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "(" + children[0]->glsl_str(symtext) + "-" + children[1]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> SubNode::copy(LexContext& context) const
 {
 	return std::make_unique<SubNode>(children[0]->copy(context), children[1]->copy(context));
@@ -388,11 +356,6 @@ PowNode::PowNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 std::string PowNode::str() const
 {
 	return "pow(" + children[0]->str() + "," + children[1]->str() + ")";
-}
-
-std::string PowNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "pow(" + children[0]->glsl_str(symtext) + "," + children[1]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> PowNode::copy(LexContext& context) const
@@ -412,11 +375,6 @@ std::string SgnNode::str() const
 	return "sgn(" + children[0]->str() + ")";
 }
 
-std::string SgnNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "sign(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> SgnNode::copy(LexContext& context) const
 {
 	return std::make_unique<SgnNode>(children[0]->copy(context));
@@ -432,11 +390,6 @@ AbsNode::AbsNode(std::unique_ptr<Node> child)
 std::string AbsNode::str() const
 {
 	return "abs(" + children[0]->str() + ")";
-}
-
-std::string AbsNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "abs(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> AbsNode::copy(LexContext& context) const
@@ -456,11 +409,6 @@ std::string SqrtNode::str() const
 	return "sqrt(" + children[0]->str() + ")";
 }
 
-std::string SqrtNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "sqrt(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> SqrtNode::copy(LexContext& context) const
 {
 	return std::make_unique<SqrtNode>(children[0]->copy(context));
@@ -476,11 +424,6 @@ ExpNode::ExpNode(std::unique_ptr<Node> child)
 std::string ExpNode::str() const
 {
 	return "exp(" + children[0]->str() + ")";
-}
-
-std::string ExpNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "exp(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> ExpNode::copy(LexContext& context) const
@@ -500,11 +443,6 @@ std::string LogNode::str() const
 	return "log(" + children[0]->str() + ")";
 }
 
-std::string LogNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "log(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> LogNode::copy(LexContext& context) const
 {
 	return std::make_unique<LogNode>(children[0]->copy(context));
@@ -520,11 +458,6 @@ SinNode::SinNode(std::unique_ptr<Node> child)
 std::string SinNode::str() const
 {
 	return "sin(" + children[0]->str() + ")";
-}
-
-std::string SinNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "sin(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> SinNode::copy(LexContext& context) const
@@ -544,11 +477,6 @@ std::string CosNode::str() const
 	return "cos(" + children[0]->str() + ")";
 }
 
-std::string CosNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "cos(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> CosNode::copy(LexContext& context) const
 {
 	return std::make_unique<CosNode>(children[0]->copy(context));
@@ -564,11 +492,6 @@ TanNode::TanNode(std::unique_ptr<Node> child)
 std::string TanNode::str() const
 {
 	return "tan(" + children[0]->str() + ")";
-}
-
-std::string TanNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "tan(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> TanNode::copy(LexContext& context) const
@@ -588,11 +511,6 @@ std::string AsinNode::str() const
 	return "asin(" + children[0]->str() + ")";
 }
 
-std::string AsinNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "asin(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> AsinNode::copy(LexContext& context) const
 {
 	return std::make_unique<AsinNode>(children[0]->copy(context));
@@ -608,11 +526,6 @@ AcosNode::AcosNode(std::unique_ptr<Node> child)
 std::string AcosNode::str() const
 {
 	return "acos(" + children[0]->str() + ")";
-}
-
-std::string AcosNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "acos(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> AcosNode::copy(LexContext& context) const
@@ -632,11 +545,6 @@ std::string AtanNode::str() const
 	return "atan(" + children[0]->str() + ")";
 }
 
-std::string AtanNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "atan(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> AtanNode::copy(LexContext& context) const
 {
 	return std::make_unique<AtanNode>(children[0]->copy(context));
@@ -652,11 +560,6 @@ SinhNode::SinhNode(std::unique_ptr<Node> child)
 std::string SinhNode::str() const
 {
 	return "sinh(" + children[0]->str() + ")";
-}
-
-std::string SinhNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "sinh(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> SinhNode::copy(LexContext& context) const
@@ -676,11 +579,6 @@ std::string CoshNode::str() const
 	return "cosh(" + children[0]->str() + ")";
 }
 
-std::string CoshNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "cosh(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> CoshNode::copy(LexContext& context) const
 {
 	return std::make_unique<CoshNode>(children[0]->copy(context));
@@ -696,11 +594,6 @@ TanhNode::TanhNode(std::unique_ptr<Node> child)
 std::string TanhNode::str() const
 {
 	return "tanh(" + children[0]->str() + ")";
-}
-
-std::string TanhNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "tanh(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> TanhNode::copy(LexContext& context) const
@@ -720,11 +613,6 @@ std::string AsinhNode::str() const
 	return "asinh(" + children[0]->str() + ")";
 }
 
-std::string AsinhNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "asinh(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> AsinhNode::copy(LexContext& context) const
 {
 	return std::make_unique<AsinhNode>(children[0]->copy(context));
@@ -740,11 +628,6 @@ AcoshNode::AcoshNode(std::unique_ptr<Node> child)
 std::string AcoshNode::str() const
 {
 	return "acosh(" + children[0]->str() + ")";
-}
-
-std::string AcoshNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "acosh(" + children[0]->glsl_str(symtext) + ")";
 }
 
 std::unique_ptr<Node> AcoshNode::copy(LexContext& context) const
@@ -764,11 +647,6 @@ std::string AtanhNode::str() const
 	return "atanh(" + children[0]->str() + ")";
 }
 
-std::string AtanhNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return "atanh(" + children[0]->glsl_str(symtext) + ")";
-}
-
 std::unique_ptr<Node> AtanhNode::copy(LexContext& context) const
 {
 	return std::make_unique<AtanhNode>(children[0]->copy(context));
@@ -776,7 +654,7 @@ std::unique_ptr<Node> AtanhNode::copy(LexContext& context) const
 
 // DERIVATIVE NODE
 
-expression::DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child)
+DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child)
 	: Node(left_child->context)
 {
 	const VariableNode* var_ptr = dynamic_cast<const VariableNode*>(right_child.get());
@@ -818,11 +696,6 @@ std::string DerivativeNode::str() const
 	return children[0]->str();
 }
 
-std::string DerivativeNode::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return children[0]->glsl_str(symtext);
-}
-
 std::unique_ptr<Node> DerivativeNode::copy(LexContext& context) const
 {
 	return std::make_unique<DerivativeNode>(children[0]->copy(context), children[1]->copy(context));
@@ -830,11 +703,11 @@ std::unique_ptr<Node> DerivativeNode::copy(LexContext& context) const
 
 // SUBS NODE
 
-expression::SubsNode::SubsNode(std::vector<std::unique_ptr<Node>>&& childs)
+SubsNode::SubsNode(std::vector<std::unique_ptr<Node>>&& childs)
 	: Node(std::move(childs))
 {
 	//throw std::runtime_error("Not Implemented Yet!");
-	std::unordered_map<std::string, expression::Expression> substitutions;
+	std::unordered_map<std::string, Expression> substitutions;
 
 	for (int i = 1; i < children.size(); i += 2) {
 
@@ -842,12 +715,8 @@ expression::SubsNode::SubsNode(std::vector<std::unique_ptr<Node>>&& childs)
 
 }
 
-std::string expression::SubsNode::str() const {
+std::string SubsNode::str() const {
 	return children[0]->str();
-}
-
-std::string expression::SubsNode::glsl_str(const glsl::SymbolicContext& symtext) const {
-	return children[0]->glsl_str(symtext);
 }
 
 std::unique_ptr<Node> SubsNode::copy(LexContext& context) const
@@ -886,7 +755,6 @@ Expression expression_creator(const std::string& expression, const std::vector<s
 	for (auto var : variables) {
 		var = util::to_lower_case(var);
 		context.variables.emplace_back(var);
-		context.variable_assumptions.insert(SymEngine::contains(SymEngine::symbol(var), SymEngine::reals()));
 	}
 
 	Lexer lexer(context);
@@ -955,11 +823,6 @@ Expression::Expression(const LexContext& context, const std::deque<std::unique_p
 std::string Expression::str() const
 {
 	return children[0]->str();
-}
-
-std::string Expression::glsl_str(const glsl::SymbolicContext& symtext) const
-{
-	return children[0]->glsl_str(symtext);
 }
 
 bool Expression::is_zero() const

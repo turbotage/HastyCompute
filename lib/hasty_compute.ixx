@@ -2,30 +2,36 @@ module;
 
 export module hasty_compute;
 
+#ifdef STL_AS_MODULES
 import std;
-
-//import <iostream>;
-//import <sstream>;
-//import <string>;
-//import <vector>;
-
-import <arrayfire.h>;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+#endif
 
 import hasty_util;
 
 namespace hasty {
 
-	export std::string dtype_to_string(af::dtype dtype) {
+	export enum class dtype {
+		f32,
+		c64
+	};
+
+	export std::string dtype_to_string(hasty::dtype dtype) {
 		switch (dtype) {
-		case af::dtype::f32:
+		case hasty::dtype::f32:
 			return "float";
-		case af::dtype::c32:
+		case hasty::dtype::c64:
 			return "complex<float>";
 		}
-		throw std::runtime_error("Not Implemented Yet");
+		throw NotImplementedError();
+		//return "";
 	}
 
-	export std::string dims_type(const vec<i32>& ndims, af::dtype dtype)
+	export std::string dims_type(const vec<i32>& ndims, hasty::dtype dtype)
 	{
 		std::string ret = "_";
 		for (auto& ndim : ndims) {
@@ -33,9 +39,9 @@ namespace hasty {
 		}
 
 		switch (dtype) {
-		case af::dtype::f32:
+		case hasty::dtype::f32:
 			ret += "f"; break;
-		case af::dtype::c32:
+		case hasty::dtype::c64:
 			ret += "cf"; break;
 		}
 		return ret;

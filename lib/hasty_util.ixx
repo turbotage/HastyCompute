@@ -2,32 +2,42 @@ module;
 
 export module hasty_util;
 
+#ifdef STL_AS_MODULES
 import std;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+import <optional>;
+import <algorithm>;
+import <locale>;
+#endif
 
 namespace hasty {
 
-	export {
-		using i8 = std::int8_t;
-		using i16 = std::int16_t;
-		using i32 = std::int32_t;
-		using i64 = std::int64_t;
+    export {
+        using i8 = std::int8_t;
+        using i16 = std::int16_t;
+        using i32 = std::int32_t;
+        using i64 = std::int64_t;
 
-		using f32 = float;
-		using f64 = double;
+        using f32 = float;
+        using f64 = double;
 
-		template<typename T>
-		using vec = std::vector<T>;
+        template<typename T>
+        using vec = std::vector<T>;
 
-		template<typename T, typename U>
-		using vecp = std::vector<std::pair<T, U>>;
+        template<typename T, typename U>
+        using vecp = std::vector<std::pair<T, U>>;
 
-		template<typename T>
-		using sptr = std::shared_ptr<T>;
+        template<typename T>
+        using sptr = std::shared_ptr<T>;
 
-		template<typename T>
-		using uptr = std::unique_ptr<T>;
+        template<typename T>
+        using uptr = std::unique_ptr<T>;
 
-	}
+    }
 
     export {
 
@@ -108,14 +118,14 @@ namespace hasty {
 
     }
 
-	export class NotImplementedError : public std::runtime_error {
-	public:
+    export class NotImplementedError : public std::runtime_error {
+    public:
 
-		NotImplementedError()
-			: runtime_error("Not Implemented Yet")
-		{}
+        NotImplementedError()
+            : std::runtime_error("Not Implemented Yet")
+        {}
 
-	};
+    };
 
 
     namespace util {
@@ -264,7 +274,7 @@ namespace hasty {
             }
         }
 
-        export std::vector<int64_t> broadcast_tensor_shapes(const std::vector<int64_t>& shape1, const std::vector<int64_t>& shape2)
+        export std::vector<std::int64_t> broadcast_tensor_shapes(const std::vector<std::int64_t>& shape1, const std::vector<std::int64_t>& shape2)
         {
             if (shape1.size() == 0 || shape2.size() == 0)
                 throw std::runtime_error("shapes must have atleast one dimension to be broadcastable");

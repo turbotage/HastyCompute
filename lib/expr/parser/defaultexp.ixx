@@ -2,10 +2,12 @@ module;
 
 export module defaultexp;
 
+#ifdef STL_AS_MODULES
 import std;
-
-//import <string>;
-//import <unordered_map>;
+#else
+import <unordered_map>;
+import <string>;
+#endif
 
 namespace hasty {
 	namespace expr {

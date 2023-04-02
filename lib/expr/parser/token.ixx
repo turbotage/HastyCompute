@@ -2,7 +2,12 @@ module;
 
 export module token;
 
-import std;
+#ifdef STL_AS_MODULES
+import std.compat;
+#else
+import <complex>;
+import <vector>;
+#endif
 
 //import <complex>;
 //import <vector>;

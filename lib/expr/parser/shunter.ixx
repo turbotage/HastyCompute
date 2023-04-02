@@ -2,7 +2,15 @@ module;
 
 export module shunter;
 
-import std;
+#ifdef STL_AS_MODULES
+import std.compat;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+import <deque>;
+#endif
 
 //import <deque>;
 //import <memory>;

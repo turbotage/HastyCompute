@@ -2,7 +2,14 @@ module;
 
 export module token_algebra;
 
+#ifdef STL_AS_MODULES
 import std;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+#endif
 
 import token;
 

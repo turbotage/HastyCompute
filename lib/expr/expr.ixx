@@ -2,16 +2,17 @@ module;
 
 export module expr;
 
-import std;
-
-//import <deque>;
-//import <memory>;
-//import <string>;
-//import <functional>;
-//import <unordered_map>;
-//import <initializer_list>;
-//import <iterator>;
-//import <set>;
+#ifdef STL_AS_MODULES
+import std.compat;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+import <set>;
+import <functional>;
+import <deque>;
+#endif
 
 import hasty_util;
 import token;

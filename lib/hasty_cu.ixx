@@ -2,11 +2,25 @@ module;
 
 export module hasty_cu;
 
+#ifdef STL_AS_MODULES
 import std;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+#endif
 
 import hasty_util;
 
 namespace hasty {
+
+	export class CudaFunction {
+	public:
+
+	private:
+
+	};
 
 	export class RawCudaFunction {
 	public:
@@ -23,6 +37,9 @@ namespace hasty {
 		{
 			return vec<sptr<RawCudaFunction>>();
 		}
+	
+		
+
 	};
 
 	export void code_generator(std::string& code, const RawCudaFunction& func) {

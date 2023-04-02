@@ -15,7 +15,12 @@
         {
           "name": "CMAKE_TOOLCHAIN_FILE",
           "value": "D:\\Documents\\GitHub\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
-          "type": "STRING"
+          "type": "FILEPATH"
+        },
+        {
+          "name": "CMAKE_PREFIX_PATH",
+          "value": "D:\\Packages\\LibTorch\\release_2_0_cuda_11_8",
+          "type": "FILEPATH"
         }
       ],
       "intelliSenseMode": "windows-msvc-x86"
@@ -35,7 +40,12 @@
         {
           "name": "CMAKE_TOOLCHAIN_FILE",
           "value": "D:\\Documents\\GitHub\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
-          "type": "STRING"
+          "type": "FILEPATH"
+        },
+        {
+          "name": "CMAKE_PREFIX_PATH",
+          "value": "D:\\Packages\\LibTorch\\release_2_0_cuda_11_8",
+          "type": "FILEPATH"
         }
       ]
     }

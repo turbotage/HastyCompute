@@ -1,16 +1,16 @@
 module;
 
-#include <arrayfire.h>
-
 export module permute_cu;
 
-import std;
+#ifdef STL_AS_MODULES
+import std.compat;
+#else
+import <memory>;
+import <vector>;
+import <string>;
+#endif
 
-//import <string>;
-//import <vector>;
-//import <memory>;
-
-import hasty_defines;
+import hasty_util;
 import hasty_compute;
 import hasty_cu;
 
@@ -41,7 +41,7 @@ return i*(i+1)/2 + j;
 	export class MaxDiagAbs : public RawCudaFunction {
 	public:
 
-		MaxDiagAbs(i32 ndim, af::dtype dtype)
+		MaxDiagAbs(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{}
 
@@ -81,7 +81,7 @@ return max_index;
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -89,7 +89,7 @@ return max_index;
 	export class RowInterchangeI : public RawCudaFunction {
 	public:
 
-		RowInterchangeI(i32 ndim, af::dtype dtype)
+		RowInterchangeI(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{}
 
@@ -129,7 +129,7 @@ for (int k = 0; k < {{ndim}}; ++k) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -137,7 +137,7 @@ for (int k = 0; k < {{ndim}}; ++k) {
 	export class ColInterchangeI : public RawCudaFunction {
 	public:
 
-		ColInterchangeI(i32 ndim, af::dtype dtype)
+		ColInterchangeI(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{}
 
@@ -177,7 +177,7 @@ for (int k = 0; k < {{ndim}}; ++k) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -185,7 +185,7 @@ for (int k = 0; k < {{ndim}}; ++k) {
 	export class DiagPivot : public RawCudaFunction {
 	public:
 
-		DiagPivot(i32 ndim, af::dtype dtype)
+		DiagPivot(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype), _deps()
 		{
 			_deps.emplace_back(std::make_shared<MaxDiagAbs>(_ndim, _dtype));
@@ -239,7 +239,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 		vec<sptr<RawCudaFunction>> _deps;
 
@@ -249,7 +249,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	export class PermuteVec : public RawCudaFunction {
 	public:
 
-		PermuteVec(i32 ndim, af::dtype dtype)
+		PermuteVec(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{}
 
@@ -284,7 +284,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 
@@ -292,7 +292,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	export class InvPermuteVec : public RawCudaFunction {
 	public:
 
-		InvPermuteVec(i32 ndim, af::dtype dtype)
+		InvPermuteVec(i32 ndim, hasty::dtype dtype)
 			: _ndim(ndim), _dtype(dtype)
 		{}
 
@@ -327,7 +327,7 @@ for (int i = 0; i < {{ndim}}; ++i) {
 	private:
 
 		i32 _ndim;
-		af::dtype _dtype;
+		hasty::dtype _dtype;
 
 	};
 

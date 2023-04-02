@@ -1,12 +1,17 @@
 module;
 
-//#include <symengine/expression.h>
-//#include <symengine/simplify.h>
-//#include <symengine/parser.h>
-
 export module lexer;
 
+#ifdef STL_AS_MODULES
 import std;
+#else
+import <memory>;
+import <stdexcept>;
+import <vector>;
+import <string>;
+import <unordered_map>;
+import <regex>;
+#endif
 
 //import <vector>;
 //import <unordered_map>;
@@ -115,7 +120,6 @@ namespace hasty {
 				binary_operators(other.binary_operators),
 				functions(other.functions),
 				variables(other.variables),
-				//variable_assumptions(other.variable_assumptions),
 				operator_id_name_map(other.operator_id_name_map),
 				function_id_name_map(other.function_id_name_map)
 			{
@@ -142,8 +146,6 @@ namespace hasty {
 					std::vector<VariableToken> vot(other.variables.begin(), other.variables.end());
 					variables.swap(vot);
 				}
-
-				//variable_assumptions = other.variable_assumptions;
 
 				operator_id_name_map = other.operator_id_name_map;
 				function_id_name_map = other.operator_id_name_map;
@@ -172,7 +174,6 @@ namespace hasty {
 			vec<BinaryOperatorToken>	binary_operators;
 			vec<FunctionToken>			functions;
 			vec<VariableToken>			variables;
-			//SymEngine::set_basic		variable_assumptions;
 
 			std::unordered_map<int32_t, std::string> operator_id_name_map;
 			std::unordered_map<int32_t, std::string> function_id_name_map;
@@ -188,12 +189,6 @@ namespace hasty {
 					ret.variables.emplace_back(var);
 				}
 			}
-
-			/*
-			for (auto& var : c2.variable_assumptions) {
-				ret.variable_assumptions.insert(var);
-			}
-			*/
 
 			return ret;
 		}

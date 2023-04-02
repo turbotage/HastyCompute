@@ -2,12 +2,14 @@ module;
 
 export module trig;
 
+#ifdef STL_AS_MODULES
 import std;
-
-//import <memory>;
-//import <stdexcept>;
-//import <cmath>;
-//import <complex>;
+#else
+import <memory>;
+import <stdexcept>;
+import <cmath>;
+import <complex>;
+#endif
 
 import token;
 
