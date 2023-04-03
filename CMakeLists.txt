@@ -15,8 +15,6 @@ if (BUILD_CUDA)
 	endif()
 endif()
 
-#find_package(ArrayFire)
-
 if (BUILD_CUDA)
 	set(BACKEND_SOURCES 
 		"lib/hasty_cu.ixx"
@@ -99,6 +97,9 @@ endif()
 
 find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
+
+find_package(ArrayFire)
+target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
 
 set(CAFFE2_USE_CUDNN true)
 find_package(Torch REQUIRED)
