@@ -7,6 +7,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(BUILD_CUDA TRUE)
 
+set(BUILD_SHARED_LIBS ON)
 
 if (${BUILD_CUDA})
 	enable_language(CUDA)
@@ -91,6 +92,7 @@ add_executable(HastyComputeLib
 # Linking CUDA
 if (${BUILD_CUDA})
 	set(CMAKE_CUDA_ARCHITECTURES 90)
+	set(CUDA_USE_STATIC_CUDA_RUNTIME OFF)
 
 	find_package(CUDAToolkit REQUIRED)
 	message("CUDA Build chosen - Found CUDAToolkit = ${CUDAToolkit_FOUND}")
