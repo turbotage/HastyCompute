@@ -60,8 +60,13 @@ endif()
 
 
 
-add_library(HastyComputeLib
+#add_library(HastyComputeLib
+add_executable(HastyComputeLib
+	"tests/test.ixx"
+
 	${STL_SOURCES}
+
+	"lib/metadata.ixx"
 
 	"lib/hasty_util.ixx"
 	"lib/hasty_compute.ixx"
@@ -82,6 +87,10 @@ add_library(HastyComputeLib
 	"lib/expr/expr.ixx" 
 	"lib/expr/expr.cpp"
 
+	"lib/expr/symbolic.ixx"
+
+	"lib/nlsq/nlsq_symbolic.ixx"
+
 	${BACKEND_SOURCES}
 )
 
@@ -101,7 +110,9 @@ target_link_libraries(HastyComputeLib PUBLIC symengine)
 find_package(ArrayFire)
 target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
 
-set(CAFFE2_USE_CUDNN true)
+if (BUILD_CUDA)
+	set(CAFFE2_USE_CUDNN true)
+endif()
 find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
@@ -125,9 +136,7 @@ endif (MSVC)
 
 
 
-add_executable(HastyTest "tests/test.ixx")
-target_link_libraries(HastyTest HastyComputeLib)
-
-#set_property(TARGET HastyTest PROPERTY CXX_STANDARD 23)
-target_compile_features(HastyTest PRIVATE cxx_std_23)
+#add_executable(HastyTest "tests/test.ixx")
+#target_link_libraries(HastyTest HastyComputeLib)
+#target_compile_features(HastyTest PRIVATE cxx_std_23)
 

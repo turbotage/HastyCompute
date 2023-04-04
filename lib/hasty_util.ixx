@@ -12,6 +12,7 @@ import <string>;
 import <optional>;
 import <algorithm>;
 import <locale>;
+import <unordered_map>;
 #endif
 
 namespace hasty {
@@ -36,6 +37,9 @@ namespace hasty {
 
         template<typename T>
         using uptr = std::unique_ptr<T>;
+
+        template<typename T, typename U>
+        using umap = std::unordered_map<T, U>;
 
     }
 
