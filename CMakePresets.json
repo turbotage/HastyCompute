@@ -1,0 +1,150 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    // Windows MSVC
+    {
+      "name": "windows-base",
+      "description": "Target Windows with the Visual Studio development environment.",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    // Windows MSVC Debug CUDA
+    {
+      "name": "x64-debug-cuda",
+      "displayName": "x64 Debug CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Debug)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/release"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CUDAToolkit_ROOT": {
+          "type": "FILEPATH",
+          "value": "$env{CUDA_ROOT}"
+        },
+        "CUDA_TOOLKIT_ROOT_DIR": {
+          "type": "FILEPATH",
+          "value": "$env{CUDA_ROOT}"
+        }
+      }
+    },
+    // Windows MSVC Debug CPU
+    {
+      "name": "x64-debug",
+      "displayName": "x64 Debug CPU",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CPU. (Debug)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": {
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+          "type": "FILEPATH"
+        },
+        "CMAKE_PREFIX_PATH": {
+          "value": "$env{TORCH_CPU_DIR}/release",
+          "type": "FILEPATH"
+        },
+        "BUILD_CUDA": {
+          "value": "OFF",
+          "type": "BOOL"
+        }
+      }
+    },
+    // Windows MSVC Release CUDA
+    {
+      "name": "x64-release-cuda",
+      "displayName": "x64 Release CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Release)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/release"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CUDAToolkit_ROOT": {
+          "type": "FILEPATH",
+          "value": "$env{CUDA_ROOT}"
+        },
+        "CUDA_TOOLKIT_ROOT_DIR": {
+          "type": "FILEPATH",
+          "value": "$env{CUDA_ROOT}"
+        }
+      }
+    },
+    // Windows MSVC Release CPU
+    {
+      "name": "x64-release",
+      "displayName": "x64 Release CPU",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CPU. (Release)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CPU_DIR}/release"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "OFF"
+        }
+      }
+    }
+  ],
+  "buildPresets": [],
+  "testPresets": []
+}

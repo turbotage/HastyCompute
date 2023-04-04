@@ -1,20 +1,22 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.24)
 
 project("HastyCompute")
 
-
-set(CMAKE_VERBOSE_MAKEFILE ON)
-
-set(BUILD_CUDA TRUE)
-
 set(BUILD_SHARED_LIBS ON)
+#set(CMAKE_VERBOSE_MAKEFILE ON)
+
+option(BUILD_CUDA OFF)
+
+message("CMAKE_TOOLCHAIN_FILE ${CMAKE_TOOLCHAIN_FILE}")
+message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
+message("BUILD_CUDA = ${BUILD_CUDA}")
 
 if (${BUILD_CUDA})
-	enable_language(CUDA)
-	set(BACKEND_SOURCES 
+	set(BACKEND_SOURCES
 		"lib/hasty_cu.ixx"
 		"lib/linalg/permute_cu.ixx"
 		"lib/linalg/solver_cu.ixx"
+		"lib/fft/fft_cu.ixx"
 	)
 endif()
 
@@ -91,7 +93,7 @@ add_executable(HastyComputeLib
 
 # Linking CUDA
 if (${BUILD_CUDA})
-	set(CMAKE_CUDA_ARCHITECTURES 90)
+	set(CMAKE_CUDA_ARCHITECTURES 80)
 	set(CUDA_USE_STATIC_CUDA_RUNTIME OFF)
 
 	find_package(CUDAToolkit REQUIRED)
@@ -111,10 +113,6 @@ endif()
 find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
-# Linking ArrayFire
-find_package(ArrayFire)
-target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
-
 if (${BUILD_CUDA})
 	set(CAFFE2_USE_CUDNN TRUE)
 endif()
@@ -122,6 +120,7 @@ find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
 # Linking fiNUFFT
+include_directories("deps/badhack")
 if (${BUILD_CUDA})
 	set(FINUFFT_USE_CUDA ON)
 endif()

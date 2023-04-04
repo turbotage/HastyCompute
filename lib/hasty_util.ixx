@@ -23,6 +23,11 @@ namespace hasty {
         using i32 = std::int32_t;
         using i64 = std::int64_t;
 
+        using i8f = std::int_fast8_t;
+        using i16f = std::int_fast16_t;
+        using i32f = std::int_fast32_t;
+        using i64f = std::int_fast64_t;
+
         using f32 = float;
         using f64 = double;
 
