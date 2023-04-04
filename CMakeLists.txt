@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.25)
 
 project("HastyCompute")
 
@@ -7,15 +7,9 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(BUILD_CUDA TRUE)
 
-if (BUILD_CUDA)
-	find_package(CUDAToolkit REQUIRED)
-	message("CUDA Build chosen - Found CUDAToolkit = ${CUDAToolkit_FOUND}")
-	if (${CUDAToolkit_FOUND})
-		message("CUDA Toolkit Version = ${CUDAToolkit_VERSION}")
-	endif()
-endif()
 
-if (BUILD_CUDA)
+if (${BUILD_CUDA})
+	enable_language(CUDA)
 	set(BACKEND_SOURCES 
 		"lib/hasty_cu.ixx"
 		"lib/linalg/permute_cu.ixx"
@@ -25,7 +19,7 @@ endif()
 
 
 
-set(STL_AS_MODULES false)
+set(STL_AS_MODULES FALSE)
 if (${STL_AS_MODULES})
 	add_compile_definitions("STL_AS_MODULES")
 endif()
@@ -94,28 +88,46 @@ add_executable(HastyComputeLib
 	${BACKEND_SOURCES}
 )
 
+# Linking CUDA
+if (${BUILD_CUDA})
+	set(CMAKE_CUDA_ARCHITECTURES 90)
 
-if (BUILD_CUDA)
+	find_package(CUDAToolkit REQUIRED)
+	message("CUDA Build chosen - Found CUDAToolkit = ${CUDAToolkit_FOUND}")
+	if (${CUDAToolkit_FOUND})
+		message("CUDA Toolkit Version = ${CUDAToolkit_VERSION}")
+	endif()
+
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::toolkit)
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::nvrtc)
-	target_link_libraries(HastyComputeLib PRIVATE CUDA::cudart)
-	target_link_libraries(HastyComputeLib PRIVATE CUDA::nvtx3)
+	target_link_libraries(HastyComputeLib PUBLIC CUDA::cudart)
 
 	message("Linked CUDA Libs")
 endif()
 
+# Linking SymEngine
 find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
+# Linking ArrayFire
 find_package(ArrayFire)
 target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
 
-if (BUILD_CUDA)
-	set(CAFFE2_USE_CUDNN true)
+if (${BUILD_CUDA})
+	set(CAFFE2_USE_CUDNN TRUE)
 endif()
 find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
+# Linking fiNUFFT
+if (${BUILD_CUDA})
+	set(FINUFFT_USE_CUDA ON)
+endif()
+add_subdirectory("deps/finufft")
+target_link_libraries(HastyComputeLib PUBLIC finufft)
+if (${BUILD_CUDA})
+	target_link_libraries(HastyComputeLib PUBLIC cufinufft)
+endif()
 
 #set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
 target_compile_features(HastyComputeLib PRIVATE cxx_std_23)
@@ -127,7 +139,7 @@ if (MSVC)
                      COMMAND ${CMAKE_COMMAND} -E copy_if_different
                      ${TORCH_DLLS}
                      $<TARGET_FILE_DIR:HastyComputeLib>)
-endif (MSVC)
+endif()
 
 
 
