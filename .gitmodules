@@ -1,3 +1,4 @@
 [submodule "deps/finufft"]
 	path = deps/finufft
-	url = https://github.com/flatironinstitute/finufft.git
+	url = https://github.com/turbotage/finufft.git
+
