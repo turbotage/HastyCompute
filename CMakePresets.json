@@ -34,6 +34,9 @@
         "value": "x64",
         "strategy": "external"
       },
+      "environment": {
+        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": {
@@ -42,19 +45,15 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
           "value": "ON"
         },
-        "CUDAToolkit_ROOT": {
-          "type": "FILEPATH",
-          "value": "$env{CUDA_ROOT}"
-        },
-        "CUDA_TOOLKIT_ROOT_DIR": {
-          "type": "FILEPATH",
-          "value": "$env{CUDA_ROOT}"
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
         }
       }
     },
@@ -68,6 +67,9 @@
         "value": "x64",
         "strategy": "external"
       },
+      "environment": {
+        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": {
@@ -75,8 +77,8 @@
           "type": "FILEPATH"
         },
         "CMAKE_PREFIX_PATH": {
-          "value": "$env{TORCH_CPU_DIR}/release",
-          "type": "FILEPATH"
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
         },
         "BUILD_CUDA": {
           "value": "OFF",
@@ -94,6 +96,9 @@
         "value": "x64",
         "strategy": "external"
       },
+      "environment": {
+        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": {
@@ -102,19 +107,15 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
           "value": "ON"
         },
-        "CUDAToolkit_ROOT": {
-          "type": "FILEPATH",
-          "value": "$env{CUDA_ROOT}"
-        },
-        "CUDA_TOOLKIT_ROOT_DIR": {
-          "type": "FILEPATH",
-          "value": "$env{CUDA_ROOT}"
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
         }
       }
     },
@@ -128,6 +129,9 @@
         "value": "x64",
         "strategy": "external"
       },
+      "environment": {
+        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": {
@@ -136,7 +140,7 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CPU_DIR}/release"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
@@ -144,6 +148,7 @@
         }
       }
     }
+    
   ],
   "buildPresets": [],
   "testPresets": []

@@ -16,13 +16,6 @@ import hasty_util;
 namespace hasty {
 	namespace cuda {
 
-		export class CudaFunction {
-		public:
-
-		private:
-
-		};
-
 		export class RawCudaFunction {
 		public:
 

@@ -93,9 +93,6 @@ add_executable(HastyComputeLib
 
 # Linking CUDA
 if (${BUILD_CUDA})
-	set(CMAKE_CUDA_ARCHITECTURES 80)
-	set(CUDA_USE_STATIC_CUDA_RUNTIME OFF)
-
 	find_package(CUDAToolkit REQUIRED)
 	message("CUDA Build chosen - Found CUDAToolkit = ${CUDAToolkit_FOUND}")
 	if (${CUDAToolkit_FOUND})
@@ -105,6 +102,7 @@ if (${BUILD_CUDA})
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::toolkit)
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::nvrtc)
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::cudart)
+	target_link_libraries(HastyComputeLib PUBLIC CUDA::nvToolsExt)
 
 	message("Linked CUDA Libs")
 endif()
@@ -114,24 +112,34 @@ find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
 if (${BUILD_CUDA})
+	set(USE_CUDA ON)
+	set(USE_CUDNN ON)
 	set(CAFFE2_USE_CUDNN TRUE)
 endif()
 find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
 # Linking fiNUFFT
-include_directories("deps/badhack")
+find_package(finufft REQUIRED)
+target_link_libraries(HastyComputeLib PRIVATE FINUFFT::finufft)
+
 if (${BUILD_CUDA})
-	set(FINUFFT_USE_CUDA ON)
-endif()
-add_subdirectory("deps/finufft")
-target_link_libraries(HastyComputeLib PUBLIC finufft)
-if (${BUILD_CUDA})
-	target_link_libraries(HastyComputeLib PUBLIC cufinufft)
+	target_link_libraries(HastyComputeLib PRIVATE FINUFFT::cufinufft)
 endif()
 
 #set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
-target_compile_features(HastyComputeLib PRIVATE cxx_std_23)
+target_compile_features(HastyComputeLib PRIVATE cxx_std_20)
+set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 20)
+
+if (MSVC)
+  file(GLOB finufft_DLLS "${finufft_INSTALL_PREFIX}/../../../bin/*.dll")
+  #message("finufft DLLS: ${finufft_DLLS}")
+  add_custom_command(TARGET HastyComputeLib
+                     POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                     ${finufft_DLLS}
+                     $<TARGET_FILE_DIR:HastyComputeLib>)
+endif()
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")

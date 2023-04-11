@@ -17,22 +17,24 @@ import permute_cu;
 
 namespace hasty {
 
-	export class GMW81 : public RawCudaFunction {
-	public:
+	namespace cuda {
 
-		GMW81(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-		}
+		export class GMW81 : public RawCudaFunction {
+		public:
 
-		std::string dfid() const override {
-			return "gmw81" +
-				dims_type({ _ndim }, _dtype);
-		}
+			GMW81(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+			}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+			std::string dfid() const override {
+				return "gmw81" +
+					dims_type({ _ndim }, _dtype);
+			}
+
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat) 
 {
@@ -98,37 +100,37 @@ for (int j = 0; j < {{ndim}}; ++j) { // compute column j
 }
 }
 )cuda";
-		}
-
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()}
-			};
-
-			switch (_dtype)
-			{
-			case hasty::dtype::f32:
-			{
-				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
-				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
-				rep_dict.emplace_back(std::pair{ "machine_eps", "2e-7" });
 			}
-			break;
-			default:
-				throw NotImplementedError();
+
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()}
+				};
+
+				switch (_dtype)
+				{
+				case hasty::dtype::f32:
+				{
+					rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
+					rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
+					rep_dict.emplace_back(std::pair{ "machine_eps", "2e-7" });
+				}
 				break;
+				default:
+					throw NotImplementedError();
+					break;
+				}
+
+
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
 			}
 
-
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
-
-		static std::string s_kcode() {
-			return
-				R"cuda(
+			static std::string s_kcode() {
+				return
+R"cuda(
 extern \"C\" __global__
 void {{funcid}}({{fp_type}}* mat, int N) 
 {
@@ -155,44 +157,44 @@ if (tid < N) {
 }
 }
 )cuda";
-		}
+			}
 
-		std::string kcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"dfuncid", dfid()},
-				{"funcid", kfid()}
-			};
+			std::string kcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"dfuncid", dfid()},
+					{"funcid", kfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
+				return ret;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
+			i32 _ndim;
+			hasty::dtype _dtype;
 
-	};
+		};
 
 
-	export class LDL : public RawCudaFunction {
-	public:
+		export class LDL : public RawCudaFunction {
+		public:
 
-		LDL(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-		}
+			LDL(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+			}
 
-		std::string dfid() const override {
-			return "ldl" +
-				dims_type({ _ndim }, _dtype);
-		}
+			std::string dfid() const override {
+				return "ldl" +
+					dims_type({ _ndim }, _dtype);
+			}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat) 
 {
@@ -212,36 +214,36 @@ for (int i = 0; i < {{ndim}}; ++i) {
 }
 }
 )cuda";
-		}
-
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()}
-			};
-
-			switch (_dtype)
-			{
-			case hasty::dtype::f32:
-			{
-				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
-				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
 			}
-			break;
-			default:
-				throw NotImplementedError();
+
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()}
+				};
+
+				switch (_dtype)
+				{
+				case hasty::dtype::f32:
+				{
+					rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
+					rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
+				}
 				break;
+				default:
+					throw NotImplementedError();
+					break;
+				}
+
+
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
 			}
 
-
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
-
-		static std::string s_kcode() {
-			return
-				R"cuda(
+			static std::string s_kcode() {
+				return
+R"cuda(
 extern \"C\" __global__
 void {{funcid}}({{fp_type}}* mat, int N) 
 {
@@ -268,44 +270,44 @@ if (tid < N) {
 }
 }
 )cuda";
-		}
+			}
 
-		std::string kcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"dfuncid", dfid()},
-				{"funcid", kfid()}
-			};
+			std::string kcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"dfuncid", dfid()},
+					{"funcid", kfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
+				return ret;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
+			i32 _ndim;
+			hasty::dtype _dtype;
 
-	};
+		};
 
 
-	export class ForwardSubsUnitDiaged : public RawCudaFunction {
-	public:
+		export class ForwardSubsUnitDiaged : public RawCudaFunction {
+		public:
 
-		ForwardSubsUnitDiaged(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-		}
+			ForwardSubsUnitDiaged(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+			}
 
-		std::string dfid() const override {
-			return "forward_subs_unit_diaged" +
-				dims_type({ _ndim }, _dtype);
-		}
+			std::string dfid() const override {
+				return "forward_subs_unit_diaged" +
+					dims_type({ _ndim }, _dtype);
+			}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol) 
 {
@@ -318,43 +320,43 @@ for (int i = 0; i < {{ndim}}; ++i) {
 }
 }
 )cuda";
-		}
+			}
 
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()}
-			};
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
+			i32 _ndim;
+			hasty::dtype _dtype;
 
-	};
+		};
 
 
-	export class BackwardSubsUnitT : public RawCudaFunction {
-	public:
+		export class BackwardSubsUnitT : public RawCudaFunction {
+		public:
 
-		BackwardSubsUnitT(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-		}
+			BackwardSubsUnitT(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+			}
 
-		std::string dfid() const override {
-			return "backward_subs_unit_t" +
-				dims_type({ _ndim }, _dtype);
-		}
+			std::string dfid() const override {
+				return "backward_subs_unit_t" +
+					dims_type({ _ndim }, _dtype);
+			}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol) 
 {
@@ -366,45 +368,45 @@ for (int i = {{ndim}} - 1; i >= 0; --i) {
 }
 }
 )cuda";
-		}
+			}
 
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()}
-			};
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
+			i32 _ndim;
+			hasty::dtype _dtype;
 
-	};
+		};
 
 
-	export class LDLSolve : public RawCudaFunction {
-	public:
+		export class LDLSolve : public RawCudaFunction {
+		public:
 
-		LDLSolve(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-			_deps.emplace_back(std::make_shared<ForwardSubsUnitDiaged>(_ndim, _dtype));
-			_deps.emplace_back(std::make_shared<BackwardSubsUnitT>(_ndim, _dtype));
-		}
+			LDLSolve(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+				_deps.emplace_back(std::make_shared<ForwardSubsUnitDiaged>(_ndim, _dtype));
+				_deps.emplace_back(std::make_shared<BackwardSubsUnitT>(_ndim, _dtype));
+			}
 
-		std::string dfid() const override {
-			return "ldl_solve" +
-				dims_type({ _ndim }, _dtype);
-		}
+			std::string dfid() const override {
+				return "ldl_solve" +
+					dims_type({ _ndim }, _dtype);
+			}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol) 
 {
@@ -413,57 +415,57 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 {{backward_funcid}}(mat, arr, sol);
 }
 )cuda";
-		}
+			}
 
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()},
-				{"forward_funcid", _deps[0]->dfid()},
-				{"backward_funcid", _deps[1]->dfid()}
-			};
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()},
+					{"forward_funcid", _deps[0]->dfid()},
+					{"backward_funcid", _deps[1]->dfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
+			}
 
-		vec<sptr<RawCudaFunction>> deps() const override {
-			return _deps;
-		}
+			vec<sptr<RawCudaFunction>> deps() const override {
+				return _deps;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
-
-
-		vec<sptr<RawCudaFunction>> _deps;
-
-	};
+			i32 _ndim;
+			hasty::dtype _dtype;
 
 
-	export class GMW81Solve : public RawCudaFunction {
-	public:
+			vec<sptr<RawCudaFunction>> _deps;
 
-		GMW81Solve(i32 ndim, hasty::dtype dtype)
-			: _ndim(ndim), _dtype(dtype)
-		{
-			_deps.emplace_back(std::make_shared<DiagPivot>(_ndim, _dtype));
-			_deps.emplace_back(std::make_shared<PermuteVec>(_ndim, _dtype));
-			_deps.emplace_back(std::make_shared<GMW81>(_ndim, _dtype));
-			_deps.emplace_back(std::make_shared<LDLSolve>(_ndim, _dtype));
-			_deps.emplace_back(std::make_shared<InvPermuteVec>(_ndim, _dtype));
-		}
+		};
 
-		std::string dfid() const override {
-			return "gmw81_solve" +
-				dims_type({ _ndim }, _dtype);
-		}
 
-		static std::string s_dcode() {
-			return
-				R"cuda(
+		export class GMW81Solve : public RawCudaFunction {
+		public:
+
+			GMW81Solve(i32 ndim, hasty::dtype dtype)
+				: _ndim(ndim), _dtype(dtype)
+			{
+				_deps.emplace_back(std::make_shared<DiagPivot>(_ndim, _dtype));
+				_deps.emplace_back(std::make_shared<PermuteVec>(_ndim, _dtype));
+				_deps.emplace_back(std::make_shared<GMW81>(_ndim, _dtype));
+				_deps.emplace_back(std::make_shared<LDLSolve>(_ndim, _dtype));
+				_deps.emplace_back(std::make_shared<InvPermuteVec>(_ndim, _dtype));
+			}
+
+			std::string dfid() const override {
+				return "gmw81_solve" +
+					dims_type({ _ndim }, _dtype);
+			}
+
+			static std::string s_dcode() {
+				return
+R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol) 
 {	
@@ -495,40 +497,40 @@ for (int i = 0; i < {{ndim}}; ++i) {
 {{inv_permute_vec_funcid}}(arr2, perm, sol);
 }
 )cuda";
-		}
-
-		std::string dcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"funcid", dfid()},
-				{"diag_pivot_funcid", _deps[0]->dfid()},
-				{"permute_vec_funcid", _deps[1]->dfid()},
-				{"gmw81_funcid", _deps[2]->dfid()},
-				{"ldl_solve_funcid", _deps[3]->dfid()},
-				{"inv_permute_vec_funcid", _deps[4]->dfid()}
-			};
-
-			switch (_dtype)
-			{
-			case hasty::dtype::f32:
-			{
-				rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
-				rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
 			}
-			break;
-			default:
-				throw NotImplementedError();
+
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"funcid", dfid()},
+					{"diag_pivot_funcid", _deps[0]->dfid()},
+					{"permute_vec_funcid", _deps[1]->dfid()},
+					{"gmw81_funcid", _deps[2]->dfid()},
+					{"ldl_solve_funcid", _deps[3]->dfid()},
+					{"inv_permute_vec_funcid", _deps[4]->dfid()}
+				};
+
+				switch (_dtype)
+				{
+				case hasty::dtype::f32:
+				{
+					rep_dict.emplace_back(std::pair{ "abs_func", "fabsf" });
+					rep_dict.emplace_back(std::pair{ "sqrt_func", "sqrtf" });
+				}
 				break;
+				default:
+					throw NotImplementedError();
+					break;
+				}
+
+				std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
+				return ret;
 			}
 
-			std::string ret = hasty::code_replacer(s_dcode(), rep_dict);
-			return ret;
-		}
-
-		static std::string s_kcode() {
-			return
-				R"cuda(
+			static std::string s_kcode() {
+				return
+R"cuda(
 extern "C" __global__
 void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, const char* step_type, {{fp_type}}* sol, int Nprobs) 
 {
@@ -562,32 +564,34 @@ if (tid < N) {
 }
 }
 )cuda";
-		}
+			}
 
-		std::string kcode() const override {
-			vecp<std::string, std::string> rep_dict = {
-				{"ndim", std::to_string(_ndim)},
-				{"nmat", std::to_string(_ndim * (_ndim + 1) / 2)},
-				{"fp_type", dtype_to_string(_dtype)},
-				{"dfuncid", dfid()},
-				{"funcid", kfid()}
-			};
+			std::string kcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"ndim", std::to_string(_ndim)},
+					{"nmat", std::to_string(_ndim * (_ndim + 1) / 2)},
+					{"fp_type", dtype_to_string(_dtype)},
+					{"dfuncid", dfid()},
+					{"funcid", kfid()}
+				};
 
-			std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
-			return ret;
-		}
+				std::string ret = hasty::code_replacer(s_kcode(), rep_dict);
+				return ret;
+			}
 
-		vec<sptr<RawCudaFunction>> deps() const override {
-			return _deps;
-		}
+			vec<sptr<RawCudaFunction>> deps() const override {
+				return _deps;
+			}
 
-	private:
+		private:
 
-		i32 _ndim;
-		hasty::dtype _dtype;
+			i32 _ndim;
+			hasty::dtype _dtype;
 
-		vec<sptr<RawCudaFunction>> _deps;
+			vec<sptr<RawCudaFunction>> _deps;
 
-	};
+		};
+
+	}
 
 }

@@ -1,3 +1,0 @@
-[submodule "deps/finufft"]
-	path = deps/finufft
-	url = https://github.com/flatironinstitute/finufft.git
