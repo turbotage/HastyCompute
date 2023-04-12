@@ -370,8 +370,10 @@ void test_torch_speed() {
 
 int main() {
 
-	int nf = 100;
-	int nx = 3;
+	int nfb = 4;
+	int nf = nfb*nfb*nfb;
+	int nx = nfb;
+	int nt = 1;
 
 	auto device = c10::Device(torch::kCUDA);
 
@@ -379,23 +381,57 @@ int main() {
 
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
-	auto coords = torch::rand({ 3,nf }, options2);
+	auto coords = torch::empty({ 3,nf }, options2);
+	
+	int l = 0;
+	for (int x = 0; x < nfb; ++x) {
+		for (int y = 0; y < nfb; ++y) {
+			for (int z = 0; z < nfb; ++z) {
+				float kx = -M_PI + x * M_PI / nfb;
+				float ky = -M_PI + y * M_PI / nfb;
+				float kz = -M_PI + z * M_PI / nfb;
 
-	std::cout << coords << std::endl;
+				coords.index_put_({ 0,l }, kx);
+				coords.index_put_({ 1,l }, ky);
+				coords.index_put_({ 2,l }, kz);
 
-	hasty::Nufft nu1(coords, { 1,nx,nx,nx }, hasty::NufftType::eType1);
-	hasty::Nufft nu2(coords, { 1,nx,nx,nx }, hasty::NufftType::eType2);
+				++l;
+			}
+		}
+	}
 
-	auto f = torch::rand({ 1,nf }, options1);
-	auto c = torch::rand({ 1,nx,nx,nx }, options1);
 
-	std::cout << at::real(c) << std::endl;
+	//std::cout << coords << std::endl;
+
+	hasty::Nufft nu1(coords, { nt,nx,nx,nx }, hasty::NufftType::eType1);
+	hasty::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::NufftType::eType2);
+
+	auto f = torch::empty({ nt,nf }, options1);
+	auto c = torch::ones({ nt,nx,nx,nx }, options1);
+
+	nu2.apply(c, f);
+
+	std::cout << "Nufft Type 2: " << at::real(f) << std::endl << at::imag(f) << std::endl;
+
+	nu1.apply(f, c);
+
+	std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
+
+	/*
+	torch::cuda::synchronize();
+
+	auto start = std::chrono::high_resolution_clock::now();
 
 	nu2.apply(c, f);
 	nu1.apply(f, c);
 
-	std::cout << at::real(c) << std::endl;
-	//std::cout << at::imag(c) << std::endl;
+	torch::cuda::synchronize();
+
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+	std::cout << duration.count() << std::endl;
+	*/
 
 	//test_torch_speed();
 
