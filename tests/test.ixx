@@ -320,7 +320,9 @@ namespace hasty {
 }
 
 void test_torch_speed() {
-	int n = 384;
+
+	int n1 = 256;
+	int n2 = 2 * n1;
 	//n = 400;
 
 	c10::InferenceMode im;
@@ -329,17 +331,15 @@ void test_torch_speed() {
 
 	auto options = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 
-	at::Tensor tensor = at::rand({ 1, n,n,n }, options);
+	at::Tensor ffter = at::rand({ 1, n1,n1,n1 }, options);
+	//at::Tensor ffter = at::rand({ 1, n2,n2,n2 }, options);
+	at::Tensor ffter_mul = at::rand({ 1, n2,n2,n2 }, options);
 	torch::cuda::synchronize();
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	auto fout = torch::fft_fftn(tensor, c10::nullopt, { 1,2,3 });
-	
-	for (int i = 0; i < 10; ++i) {
-		fout = torch::fft_fftn(fout, c10::nullopt, { 1,2,3 });
-	}
-	
+	ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
+	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
 
 	torch::cuda::synchronize();
 
@@ -347,31 +347,11 @@ void test_torch_speed() {
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
 	std::cout << duration.count() << std::endl;
-
-	torch::cuda::synchronize();
-
-	start = std::chrono::high_resolution_clock::now();
-
-	fout = torch::fft_fftn(tensor, c10::nullopt, { 1,2,3 });
-	
-	for (int i = 0; i < 10; ++i) {
-		fout = torch::fft_fftn(fout, c10::nullopt, { 1,2,3 });
-	}
-	
-
-	torch::cuda::synchronize();
-
-
-	end = std::chrono::high_resolution_clock::now();
-	duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-	std::cout << duration.count() << std::endl;
 }
 
-int main() {
-
+void test_deterministic() {
 	int nfb = 4;
-	int nf = nfb*nfb*nfb;
+	int nf = nfb * nfb * nfb;
 	int nx = nfb;
 	int nt = 1;
 
@@ -382,7 +362,7 @@ int main() {
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
 	auto coords = torch::empty({ 3,nf }, options2);
-	
+
 	int l = 0;
 	for (int x = 0; x < nfb; ++x) {
 		for (int y = 0; y < nfb; ++y) {
@@ -416,24 +396,49 @@ int main() {
 	nu1.apply(f, c);
 
 	std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
+}
 
-	/*
+void test_speed() {
+	int nfb = 256;
+	int nf = 200000;
+	int nx = nfb;
+	int nt = 1;
+
+	auto device = c10::Device(torch::kCUDA);
+	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
+
+	auto coords = torch::rand({ 3,nf }, options2);
+
+	hasty::Nufft nu1(coords, { nt,nx,nx,nx }, hasty::NufftType::eType1, {true, 1e-5f});
+	hasty::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::NufftType::eType2, { true, 1e-5f });
+
+	auto f = torch::rand({ nt,nf }, options1);
+	auto c = torch::rand({ nt,nx,nx,nx }, options1);
+
 	torch::cuda::synchronize();
 
 	auto start = std::chrono::high_resolution_clock::now();
-
 	nu2.apply(c, f);
 	nu1.apply(f, c);
-
 	torch::cuda::synchronize();
 
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
 	std::cout << duration.count() << std::endl;
-	*/
 
-	//test_torch_speed();
+}
+
+int main() {
+
+	for (int i = 0; i < 10; ++i) {
+		test_speed();
+	}
+
+	for (int i = 0; i < 10; ++i) {
+		test_torch_speed();
+	}
 
 	return 0;
 }
