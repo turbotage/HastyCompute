@@ -1,17 +1,14 @@
 
-#include <torch/torch.h>
-#include <ATen/ATen.h>
-//#include <arrayfire.h>
 
+/*
 #include <cufinufft.h>
-
 #include <ATen/ATen.h>
+*/
 
 import hasty_util;
 import hasty_compute;
 import solver_cu;
 import permute_cu;
-import fft_cu;
 
 import <symengine/expression.h>;
 import <symengine/simplify.h>;
@@ -19,6 +16,9 @@ import <symengine/parser.h>;
 
 import <chrono>;
 
+
+
+/*
 namespace hasty {
 
 	struct NufftOptions {
@@ -318,7 +318,9 @@ namespace hasty {
 	};
 
 }
+*/
 
+/*
 void test_torch_speed() {
 
 	int n1 = 256;
@@ -429,9 +431,11 @@ void test_speed() {
 	std::cout << duration.count() << std::endl;
 
 }
+*/
 
 int main() {
 
+	/*
 	for (int i = 0; i < 10; ++i) {
 		test_speed();
 	}
@@ -439,6 +443,7 @@ int main() {
 	for (int i = 0; i < 10; ++i) {
 		test_torch_speed();
 	}
+	*/
 
 	return 0;
 }

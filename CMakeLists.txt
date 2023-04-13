@@ -17,6 +17,7 @@ if (${BUILD_CUDA})
 		"lib/linalg/permute_cu.ixx"
 		"lib/linalg/solver_cu.ixx"
 		"lib/fft/fft_cu.ixx"
+		"lib/fft/fft_cu.cpp"
 	)
 endif()
 
