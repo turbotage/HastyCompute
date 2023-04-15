@@ -5,6 +5,8 @@
 #include <ATen/ATen.h>
 */
 
+#include "../lib/fft/nufft_cu.hpp"
+
 import hasty_util;
 import hasty_compute;
 import solver_cu;
@@ -350,9 +352,11 @@ void test_torch_speed() {
 
 	std::cout << duration.count() << std::endl;
 }
+*/
+
 
 void test_deterministic() {
-	int nfb = 4;
+	int nfb = 2;
 	int nf = nfb * nfb * nfb;
 	int nx = nfb;
 	int nt = 1;
@@ -383,10 +387,7 @@ void test_deterministic() {
 	}
 
 
-	//std::cout << coords << std::endl;
-
-	hasty::Nufft nu1(coords, { nt,nx,nx,nx }, hasty::NufftType::eType1);
-	hasty::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::NufftType::eType2);
+	hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::cuda::NufftType::eType2, {true, 1e6});
 
 	auto f = torch::empty({ nt,nf }, options1);
 	auto c = torch::ones({ nt,nx,nx,nx }, options1);
@@ -395,9 +396,9 @@ void test_deterministic() {
 
 	std::cout << "Nufft Type 2: " << at::real(f) << std::endl << at::imag(f) << std::endl;
 
-	nu1.apply(f, c);
+	//nu1.apply(f, c);
 
-	std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
+	//std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
 }
 
 void test_speed() {
@@ -412,8 +413,8 @@ void test_speed() {
 
 	auto coords = torch::rand({ 3,nf }, options2);
 
-	hasty::Nufft nu1(coords, { nt,nx,nx,nx }, hasty::NufftType::eType1, {true, 1e-5f});
-	hasty::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::NufftType::eType2, { true, 1e-5f });
+	hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, hasty::cuda::NufftType::eType1, {true, 1e-5f});
+	hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, hasty::cuda::NufftType::eType2, { true, 1e-5f });
 
 	auto f = torch::rand({ nt,nf }, options1);
 	auto c = torch::rand({ nt,nx,nx,nx }, options1);
@@ -431,9 +432,11 @@ void test_speed() {
 	std::cout << duration.count() << std::endl;
 
 }
-*/
+
 
 int main() {
+
+	test_deterministic();
 
 	/*
 	for (int i = 0; i < 10; ++i) {

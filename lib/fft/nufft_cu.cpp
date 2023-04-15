@@ -1,10 +1,10 @@
-module;
+
+//#include <cufinufft.h>
+
+#include "nufft_cu.hpp"
 
 #include <cufinufft.h>
-//#include <torch/torch.h>
-#include <ATen/ATen.h>
 
-module fft_cu;
 
 #ifdef STL_AS_MODULES
 import std.compat;
@@ -18,19 +18,21 @@ import <stdexcept>;
 
 import hasty_util;
 
+using namespace hasty::cuda;
 
-hasty::cuda::Nufft::Nufft(const at::Tensor& coords, const std::vector<i32>& nmodes, const NufftType& type, const NufftOptions& opts)
-: _coords(coords), _nmodes(nmodes), _nufftType(type), _opts(opts)
+Nufft::Nufft(const at::Tensor& coords, const std::vector<int32_t>& nmodes, const NufftType& type, const NufftOptions& opts)
+	: _coords(coords), _nmodes(nmodes), _nufftType(type), _opts(opts)
 {
 	_type = _coords.dtype().toScalarType();
 	_ntransf = _nmodes[0];
-	_nfreq = _coords.size(0);
+	_ndim = _coords.size(0);
+	_nfreq = _coords.size(1);
 
 	if (_nufftType == NufftType::eType3) {
 		throw std::runtime_error("Type 3 Nufft is not yet supported");
 	}
 
-	if (_nfreq + 1 != _nmodes.size()) {
+	if (_ndim + 1 != _nmodes.size()) {
 		throw std::runtime_error("coords.size(0) must match number of nmodes given");
 	}
 
@@ -67,7 +69,7 @@ hasty::cuda::Nufft::Nufft(const at::Tensor& coords, const std::vector<i32>& nmod
 
 }
 
-hasty::cuda::Nufft::~Nufft() {
+Nufft::~Nufft() {
 	try {
 		switch (_type) {
 		case c10::ScalarType::Float:
@@ -93,7 +95,7 @@ hasty::cuda::Nufft::~Nufft() {
 	}
 }
 
-void hasty::cuda::Nufft::apply(const at::Tensor& in, at::Tensor& out)
+void Nufft::apply(const at::Tensor& in, at::Tensor& out)
 {
 	switch (_nufftType) {
 	case eType1:
@@ -111,7 +113,7 @@ void hasty::cuda::Nufft::apply(const at::Tensor& in, at::Tensor& out)
 	}
 }
 
-void hasty::cuda::Nufft::make_plan_set_pts()
+void Nufft::make_plan_set_pts()
 {
 
 	using namespace at::indexing;
@@ -154,7 +156,7 @@ void hasty::cuda::Nufft::make_plan_set_pts()
 				throw std::runtime_error("_coords[index] was not view");
 			}
 
-			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), nullptr, 0, nullptr, nullptr, nullptr, _planf)) {
+			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), (float*)tz.data_ptr(), 0, nullptr, nullptr, nullptr, _planf)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -202,7 +204,7 @@ void hasty::cuda::Nufft::make_plan_set_pts()
 				throw std::runtime_error("_coords[index] was not view");
 			}
 
-			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), nullptr, 0, nullptr, nullptr, nullptr, _plan)) {
+			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), (double*)tz.data_ptr(), 0, nullptr, nullptr, nullptr, _plan)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -217,7 +219,7 @@ void hasty::cuda::Nufft::make_plan_set_pts()
 	}
 }
 
-void hasty::cuda::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out)
+void Nufft::apply_type1(const at::Tensor& in, at::Tensor& out)
 {
 	if (_coords.get_device() != in.get_device() || _coords.get_device() != out.get_device()) {
 		throw std::runtime_error("All tensors must reside on same device");
@@ -239,11 +241,11 @@ void hasty::cuda::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out)
 		throw std::runtime_error("in tensor must match ntransf in first dim and nfreq in second dim");
 	}
 
-	switch (caffe2::typeMetaToScalarType(_coords.dtype())) {
+	switch (_type) {
 	case c10::ScalarType::Float:
 	{
-		cuFloatComplex* c = in.data_ptr<cuFloatComplex>();
-		cuFloatComplex* f = out.data_ptr<cuFloatComplex>();
+		cuFloatComplex* c = (cuFloatComplex*)in.data_ptr();
+		cuFloatComplex* f = (cuFloatComplex*)out.data_ptr();
 
 		if (cufinufftf_execute(c, f, _planf)) {
 			throw std::runtime_error("cufinufft_makeplan failed");
@@ -252,8 +254,8 @@ void hasty::cuda::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out)
 	break;
 	case c10::ScalarType::Double:
 	{
-		cuDoubleComplex* c = in.data_ptr<cuDoubleComplex>();
-		cuDoubleComplex* f = out.data_ptr<cuDoubleComplex>();
+		cuDoubleComplex* c = (cuDoubleComplex*)in.data_ptr();
+		cuDoubleComplex* f = (cuDoubleComplex*)out.data_ptr();
 
 		if (cufinufft_execute(c, f, _plan)) {
 			throw std::runtime_error("cufinufft_makeplan failed");
@@ -265,7 +267,7 @@ void hasty::cuda::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out)
 	}
 			}
 
-void hasty::cuda::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out)
+void Nufft::apply_type2(const at::Tensor& in, at::Tensor& out)
 {
 	if (_coords.get_device() != in.get_device() || _coords.get_device() != out.get_device()) {
 		throw std::runtime_error("All tensors must reside on same device");
@@ -287,11 +289,11 @@ void hasty::cuda::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out)
 		throw std::runtime_error("out tensor must match ntransf in first dim and nfreq in second dim");
 	}
 
-	switch (caffe2::typeMetaToScalarType(_coords.dtype())) {
+	switch (_type) {
 	case c10::ScalarType::Float:
 	{
-		cuFloatComplex* c = out.data_ptr<cuFloatComplex>();
-		cuFloatComplex* f = in.data_ptr<cuFloatComplex>();
+		cuFloatComplex* c = (cuFloatComplex*)out.data_ptr();
+		cuFloatComplex* f = (cuFloatComplex*)in.data_ptr();
 
 		if (cufinufftf_execute(c, f, _planf)) {
 			throw std::runtime_error("cufinufft_makeplan failed");
@@ -300,8 +302,8 @@ void hasty::cuda::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out)
 	break;
 	case c10::ScalarType::Double:
 	{
-		cuDoubleComplex* c = out.data_ptr<cuDoubleComplex>();
-		cuDoubleComplex* f = in.data_ptr<cuDoubleComplex>();
+		cuDoubleComplex* c = (cuDoubleComplex*)out.data_ptr();
+		cuDoubleComplex* f = (cuDoubleComplex*)in.data_ptr();
 
 		if (cufinufft_execute(c, f, _plan)) {
 			throw std::runtime_error("cufinufft_makeplan failed");

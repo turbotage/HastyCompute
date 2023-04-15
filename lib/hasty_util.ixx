@@ -13,6 +13,7 @@ import <optional>;
 import <algorithm>;
 import <locale>;
 import <unordered_map>;
+import <array>;
 #endif
 
 namespace hasty {

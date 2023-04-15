@@ -16,8 +16,10 @@ if (${BUILD_CUDA})
 		"lib/hasty_cu.ixx"
 		"lib/linalg/permute_cu.ixx"
 		"lib/linalg/solver_cu.ixx"
-		"lib/fft/fft_cu.ixx"
-		"lib/fft/fft_cu.cpp"
+		"lib/fft/nufft_cu.cpp"
+	)
+	set(BACKEND_HEADERS
+		"lib/fft/nufft_cu.hpp"
 	)
 endif()
 
