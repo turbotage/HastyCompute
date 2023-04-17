@@ -35,7 +35,7 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -65,10 +65,11 @@
       "inherits": "windows-base",
       "architecture": {
         "value": "x64",
+
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -97,7 +98,7 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -130,7 +131,7 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:/Documents/GitHub/finufft/out/install/msvc-default/lib/cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
