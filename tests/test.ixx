@@ -161,6 +161,7 @@ void test_speed() {
 	int nf = 200000;
 	int nx = nfb;
 	int nt = 1;
+	int nrun = 100;
 
 	auto device = c10::Device(torch::kCUDA);
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
@@ -178,7 +179,7 @@ void test_speed() {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	for (int i = 0; i < 100; ++i) {
+	for (int i = 0; i < nrun; ++i) {
 		nu2.apply(c, f);
 		nu1.apply(f, c);
 	}
@@ -189,6 +190,35 @@ void test_speed() {
 
 	std::cout << duration.count() << std::endl;
 
+}
+
+void test_space_cufinufft() {
+	int nfb = 256;
+	int nf = 200000;
+	int nx = nfb;
+	int nt = 5;
+
+	auto device = c10::Device(torch::kCUDA);
+	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
+
+	auto coords = torch::rand({ 3,nf }, options2);
+
+	hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, { hasty::cuda::NufftType::eType1, true, 1e-5f });
+	hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, { hasty::cuda::NufftType::eType2, true, 1e-5f });
+
+	auto f = torch::rand({ nt,nf }, options1);
+	auto c = torch::rand({ nt,nx,nx,nx }, options1);
+
+	torch::cuda::synchronize();
+	auto start = std::chrono::high_resolution_clock::now();
+	nu2.apply(c, f);
+	nu1.apply(f, c);
+	torch::cuda::synchronize();
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+	std::cout << duration.count() << std::endl;
 }
 
 void test_svd_speed() {
@@ -263,8 +293,10 @@ int main() {
 	}
 	*/
 	
+	//test_space_cufinufft();
+
 	std::cout << "cufinufft speed:\n";
-	for (int i = 0; i < 10; ++i) {
+	for (int i = 0; i < 5; ++i) {
 		test_speed();
 	}
 	
