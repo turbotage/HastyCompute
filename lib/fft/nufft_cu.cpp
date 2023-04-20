@@ -379,15 +379,16 @@ const Nufft& NufftNormal::get_backward()
 
 namespace {
 
-	void build_diagonal_base(const at::Tensor& coords, 
-		const std::vector<int64_t>& nmodes, const std::vector<int64_t>& nm_ns, const std::vector<int64_t>& nm_s,
+	void build_diagonal_base(const at::Tensor& coords, const std::vector<int64_t>& nmodes_ns,
 		at::Tensor& diagonal, at::Tensor& frequency_storage, at::Tensor& input_storage)
 	{
-		NufftNormal normal(coords, nmodes, { NufftType::eType2, true, 1e-6 }, { NufftType::eType1, true, 1e-6 });
+		NufftNormal normal(coords, nmodes_ns, { NufftType::eType2, true, 1e-6 }, { NufftType::eType1, true, 1e-6 });
 
-		std::vector<at::indexing::TensorIndex> indices;
-		for (int i = 0; i < nmodes.size(); ++i) {
-			indices.push_back(i == 0 ? "..." : 0);
+		using namespace at::indexing;
+
+		std::vector<TensorIndex> indices;
+		for (int i = 0; i < nmodes_ns.size(); ++i) {
+			indices.emplace_back(i == 0 ? TensorIndex(Slice()) : TensorIndex(0));
 		}
 
 		input_storage.zero_();
@@ -401,17 +402,15 @@ namespace {
 
 void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal)
 {
-	std::vector<int64_t> nm_ns(nmodes.size());
-	std::vector<int64_t> nm_s(nmodes.size());
+	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
-		nm_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
-		nm_s[i] = nmodes[i];
+		nmodes_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
 	}
 	c10::TensorOptions options;
 
 	// Input Storage
 	options = c10::TensorOptions().device(coords.device()).dtype(coords.dtype());
-	at::Tensor input_storage = at::empty(c10::makeArrayRef(nm_s), options);
+	at::Tensor input_storage = at::empty(c10::makeArrayRef(nmodes_ns), options);
 
 	// Frequency Storage
 	switch (c10::typeMetaToScalarType(coords.dtype())) {
@@ -428,18 +427,16 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 
 
 	// Build
-	build_diagonal_base(coords, nmodes, nm_ns, nm_s, diagonal, frequency_storage, input_storage);
+	build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, input_storage);
 
 }
 
 void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
 	at::Tensor& storage, bool storage_is_frequency)
 {
-	std::vector<int64_t> nm_ns(nmodes.size());
-	std::vector<int64_t> nm_s(nmodes.size());
+	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
-		nm_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
-		nm_s[i] = nmodes[i];
+		nmodes_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
 	}
 	c10::TensorOptions options;
 
@@ -459,15 +456,15 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 		auto frequency_storage = at::empty({ nmodes[0], coords.size(1) }, options);
 
 		// Build
-		build_diagonal_base(coords, nmodes, nm_ns, nm_s, diagonal, frequency_storage, storage);
+		build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, storage);
 	}
 	else {
 		// Input Storage
 		options = c10::TensorOptions().device(coords.device()).dtype(coords.dtype());
-		at::Tensor input_storage = at::empty(c10::makeArrayRef(nm_s), options);
+		at::Tensor input_storage = at::empty(c10::makeArrayRef(nmodes_ns), options);
 
 		// Build
-		build_diagonal_base(coords, nmodes, nm_ns, nm_s, diagonal, storage, input_storage);
+		build_diagonal_base(coords, nmodes_ns, diagonal, storage, input_storage);
 	}
 
 }
@@ -475,15 +472,13 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
 	at::Tensor& frequency_storage, at::Tensor& input_storage)
 {	
-	std::vector<int64_t> nm_ns(nmodes.size());
-	std::vector<int64_t> nm_s(nmodes.size());
+	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
-		nm_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
-		nm_s[i] = nmodes[i];
+		nmodes_ns[i] = i == 0 ? nmodes[i] : nmodes[i] * 2;
 	}
 
 	// Build
-	build_diagonal_base(coords, nmodes, nm_ns, nm_s, diagonal, frequency_storage, input_storage);
+	build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, input_storage);
 }
 
 
@@ -553,9 +548,9 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 
 void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage) const
 {
-	torch::fft_fftn_out(storage, in, at::makeArrayRef(_nmodes_ns), at::makeArrayRef(_transdims));
+	torch::fft_fftn_out(storage, in, at::makeArrayRef(std::vector<int64_t>{_nmodes_ns.begin()+1, _nmodes_ns.end()}), at::makeArrayRef(_transdims));
 	storage.mul_(_diagonal);
-	torch::fft_fftn_out(out, storage, at::makeArrayRef(_nmodes), at::makeArrayRef(_transdims));
+	torch::fft_fftn_out(out, storage, at::makeArrayRef(std::vector<int64_t>{ _nmodes.begin()+1, _nmodes.end() }), at::makeArrayRef(_transdims));
 }
 
 

@@ -105,7 +105,7 @@ namespace hasty {
 			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
 				at::Tensor& frequency_storage, at::Tensor& input_storage);
 
-		private:
+		public:
 
 			ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				std::optional<std::reference_wrapper<at::Tensor>> diagonal, 

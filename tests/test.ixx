@@ -107,7 +107,6 @@ void test_deterministic_1d() {
 	//std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
 }
 
-
 void test_deterministic_3d() {
 	int n1 = 3;
 	int n2 = 5;
@@ -280,8 +279,66 @@ void test_svd_speed() {
 
 }
 
+void compare_normal_methods()
+{
+	using namespace hasty::cuda;
+
+	int nfb = 4;
+	int nf = 200;
+	int nx = nfb;
+	int nt = 1;
+
+	auto device = c10::Device(torch::kCUDA);
+	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
+
+	auto coords = torch::rand({ 3,nf }, options2);
+
+	auto fmid = torch::empty({ nt,nf }, options1);
+	auto c = torch::rand({ nt,nx,nx,nx }, options1);
+
+	auto out1 = torch::empty({ nt,nx,nx,nx }, options1);
+	auto out2 = torch::empty({ nt,nx,nx,nx }, options1);
+	auto out3 = torch::empty({ nt,nx,nx,nx }, options1);
+
+	// Explicit forward backward
+	{
+		Nufft nu1(coords, { nt,nx,nx,nx }, { NufftType::eType1, true, 1e-6f });
+		Nufft nu2(coords, { nt,nx,nx,nx }, { NufftType::eType2, true, 1e-6f });
+
+		nu2.apply(c, fmid);
+		nu1.apply(fmid, out1);
+	}
+	// Normal Nufft
+	{
+		NufftNormal nu_normal(coords, { nt,nx,nx,nx }, 
+			{ NufftType::eType2, true, 1e-6 }, { NufftType::eType1, true, 1e-6 });
+
+		nu_normal.apply(c, out2, fmid, std::nullopt);
+	}
+	// Toeplitz Normal Nufft
+	{
+		ToeplitzNormalNufft top_normal(coords, { nt, nx, nx, nx }, std::nullopt, std::nullopt, std::nullopt);
+
+		top_normal.apply(c, out3, fmid);
+	}
+
+	std::cout << "out1: " << torch::abs(out1) << std::endl;
+	std::cout << "out2: " << torch::abs(out2) << std::endl;
+	std::cout << "out3: " << torch::abs(out3) << std::endl;
+
+	/*
+	auto start = std::chrono::high_resolution_clock::now();
+	torch::cuda::synchronize();
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	std::cout << duration.count() << std::endl;
+	*/
+}
 
 int main() {
+
+	compare_normal_methods();
 
 	//test_deterministic_3d();
 	//test_svd_speed();
@@ -295,10 +352,12 @@ int main() {
 	
 	//test_space_cufinufft();
 
+	/*
 	std::cout << "cufinufft speed:\n";
 	for (int i = 0; i < 5; ++i) {
 		test_speed();
 	}
+	*/
 	
 	
 
