@@ -382,19 +382,34 @@ namespace {
 	void build_diagonal_base(const at::Tensor& coords, const std::vector<int64_t>& nmodes_ns,
 		at::Tensor& diagonal, at::Tensor& frequency_storage, at::Tensor& input_storage)
 	{
-		NufftNormal normal(coords, nmodes_ns, { NufftType::eType2, true, 1e-6 }, { NufftType::eType1, true, 1e-6 });
+		NufftNormal normal(coords, nmodes_ns, { NufftType::eType2, false, 1e-6 }, { NufftType::eType1, true, 1e-6 });
 
 		using namespace at::indexing;
 
 		std::vector<TensorIndex> indices;
 		for (int i = 0; i < nmodes_ns.size(); ++i) {
-			indices.emplace_back(i == 0 ? TensorIndex(Slice()) : TensorIndex(0));
+			indices.emplace_back(i == 0 ? TensorIndex(Slice()) : TensorIndex(nmodes_ns[i] / 2));
 		}
 
 		input_storage.zero_();
 		input_storage.index_put_(at::makeArrayRef(indices), 1.0f);
 
 		normal.apply(input_storage, diagonal, frequency_storage, std::nullopt);
+
+		std::vector<int64_t> transdims(coords.size(0));
+		for (int i = 0; i < coords.size(0); ++i) {
+			transdims[i] = i + 1;
+		}
+
+		auto transform_dims = at::makeArrayRef(transdims);
+
+		auto temp_storage = at::empty_like(diagonal);
+		//temp_storage = torch::fft_ifftshift(diagonal, transform_dims);
+		temp_storage = torch::fft_ifftshift(diagonal, transform_dims);
+		torch::fft_fftn_out(diagonal, temp_storage, c10::nullopt, transform_dims);
+
+		//diagonal = torch::fft_ifftshift(diagonal);
+
 	}
 
 }
@@ -546,11 +561,33 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 
 }
 
-void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage) const
+void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const
 {
-	torch::fft_fftn_out(storage, in, at::makeArrayRef(std::vector<int64_t>{_nmodes_ns.begin()+1, _nmodes_ns.end()}), at::makeArrayRef(_transdims));
-	storage.mul_(_diagonal);
-	torch::fft_fftn_out(out, storage, at::makeArrayRef(std::vector<int64_t>{ _nmodes.begin()+1, _nmodes.end() }), at::makeArrayRef(_transdims));
+	auto transform_dims = at::makeArrayRef(_transdims);
+	auto expanded_dims = std::vector<int64_t>(_nmodes_ns.begin() + 1, _nmodes_ns.end());
+	auto small_dims = std::vector<int64_t>(_nmodes.begin() + 1, _nmodes.end());
+
+	torch::fft_fftn_out(storage1, in, at::makeArrayRef(expanded_dims), transform_dims);
+	storage1.mul_(_diagonal);
+	//torch::fft_ifftn_out(out, storage1, at::makeArrayRef(small_dims), transform_dims);
+	torch::fft_ifftn_out(storage2, storage1, c10::nullopt, transform_dims);
+	//return;
+	using namespace at::indexing;
+
+	//storage2 = torch::fft_ifftshift(storage2, transform_dims);
+
+	std::vector<TensorIndex> indices;
+	for (int i = 0; i < _nmodes.size(); ++i) {
+		int64_t start = _nmodes[i] / 2;
+		int64_t end = start + _nmodes[i];
+		indices.emplace_back(i == 0 ? Slice() : Slice(start, end));
+		//indices.emplace_back(i == 0 ? Slice() : Slice(0, _nmodes[i]));
+	}
+
+	out = storage2.index(at::makeArrayRef(indices));
+	//storage2.index(at::makeArrayRef(indices);
+
+	//out = torch::fft_ifftshift(out, transform_dims);
 }
 
 

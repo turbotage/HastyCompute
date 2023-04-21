@@ -108,9 +108,9 @@ void test_deterministic_1d() {
 }
 
 void test_deterministic_3d() {
-	int n1 = 3;
-	int n2 = 5;
-	int n3 = 4;
+	int n1 = 2;
+	int n2 = 2;
+	int n3 = 2;
 	int nf = n1 * n2 * n3;
 	int nx = nf;
 	int nt = 1;
@@ -142,6 +142,7 @@ void test_deterministic_3d() {
 
 
 	hasty::cuda::Nufft nu2(coords, { nt,n3,n2,n1 }, { hasty::cuda::NufftType::eType2, true, 1e-6});
+	hasty::cuda::Nufft nu1(coords, { nt,n3,n2,n1 }, { hasty::cuda::NufftType::eType1, false, 1e-6 });
 
 	auto f = torch::empty({ nt,nf }, options1);
 	auto c = torch::ones({ nt,n3,n2,n1 }, options1); // *c10::complex<float>(0.0f, 1.0f);
@@ -150,9 +151,9 @@ void test_deterministic_3d() {
 
 	std::cout << "Nufft Type 2:\nreal:\n" << at::real(f) << "\n\nimag:\n" << at::imag(f) << std::endl;
 
-	//nu1.apply(f, c);
+	nu1.apply(f, c);
 
-	//std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
+	std::cout << "Nufft Type 1: " << at::real(c) << std::endl << at::imag(c) << std::endl;
 }
 
 void test_speed() {
@@ -283,50 +284,82 @@ void compare_normal_methods()
 {
 	using namespace hasty::cuda;
 
-	int nfb = 4;
-	int nf = 200;
-	int nx = nfb;
+	int nx = 5;
+	int ny = 3;
+	int nz = 7;
+	int nf = nx * ny * nz;
 	int nt = 1;
 
 	auto device = c10::Device(torch::kCUDA);
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
-	auto coords = torch::rand({ 3,nf }, options2);
+	auto coords = torch::empty({ 3,nf }, options2);
+	int l = 0;
+	for (int x = 0; x < nx; ++x) {
+		for (int y = 0; y < ny; ++y) {
+			for (int z = 0; z < nz; ++z) {
+				float kx = (2 * x * M_PI / nx) - M_PI;
+				float ky = (2 * y * M_PI / ny) - M_PI;
+				float kz = (2 * z * M_PI / nz) - M_PI;
 
-	auto fmid = torch::empty({ nt,nf }, options1);
-	auto c = torch::rand({ nt,nx,nx,nx }, options1);
+				coords.index_put_({ 0,l }, kx);
+				coords.index_put_({ 1,l }, ky);
+				coords.index_put_({ 2,l }, kz);
 
-	auto out1 = torch::empty({ nt,nx,nx,nx }, options1);
-	auto out2 = torch::empty({ nt,nx,nx,nx }, options1);
-	auto out3 = torch::empty({ nt,nx,nx,nx }, options1);
+				++l;
+			}
+		}
+	}
+	//coords = -M_PI + M_PI * torch::rand({ 3,nf }, options2);
+
+
+	auto freq_temp = torch::empty({ nt,nf }, options1);
+	auto full_temp1 = torch::empty({ nt, 2 * nz, 2 * ny, 2 * nx }, options1);
+	auto full_temp2 = torch::empty({ nt, 2 * nz, 2 * ny, 2 * nx }, options1);
+	auto c = torch::ones({ nt,nz,ny,nx }, options1);
+	//auto c = torch::rand({ nt,nz,ny,nx }, options1);
+
+	auto out1 = torch::empty({ nt,nz,ny,nx }, options1);
+	auto out2 = torch::empty({ nt,nz,ny,nx }, options1);
+	auto out3 = torch::empty({ nt,nz,ny,nx }, options1);
 
 	// Explicit forward backward
 	{
-		Nufft nu1(coords, { nt,nx,nx,nx }, { NufftType::eType1, true, 1e-6f });
-		Nufft nu2(coords, { nt,nx,nx,nx }, { NufftType::eType2, true, 1e-6f });
+		Nufft nu1(coords, { nt,nz,ny,nx }, { NufftType::eType1, false, 1e-6f });
+		Nufft nu2(coords, { nt,nz,ny,nx }, { NufftType::eType2, true, 1e-6f });
 
-		nu2.apply(c, fmid);
-		nu1.apply(fmid, out1);
+		nu2.apply(c, freq_temp);
+		nu1.apply(freq_temp, out1);
 	}
 	// Normal Nufft
 	{
-		NufftNormal nu_normal(coords, { nt,nx,nx,nx }, 
-			{ NufftType::eType2, true, 1e-6 }, { NufftType::eType1, true, 1e-6 });
+		NufftNormal nu_normal(coords, { nt,nz,ny,nx },
+			{ NufftType::eType2, false, 1e-6 }, { NufftType::eType1, true, 1e-6 });
 
-		nu_normal.apply(c, out2, fmid, std::nullopt);
+		nu_normal.apply(c, out2, freq_temp, std::nullopt);
 	}
 	// Toeplitz Normal Nufft
 	{
-		ToeplitzNormalNufft top_normal(coords, { nt, nx, nx, nx }, std::nullopt, std::nullopt, std::nullopt);
+		ToeplitzNormalNufft top_normal(coords, { nt, nz, ny, nx }, std::nullopt, std::nullopt, std::nullopt);
 
-		top_normal.apply(c, out3, fmid);
+		top_normal.apply(c, out3, full_temp1, full_temp2);
+		//top_normal.apply(torch::fft_fftshift(c), out3, full_temp1, full_temp2);
 	}
 
-	std::cout << "out1: " << torch::abs(out1) << std::endl;
-	std::cout << "out2: " << torch::abs(out2) << std::endl;
-	std::cout << "out3: " << torch::abs(out3) << std::endl;
+	//std::cout << "out3 real: " << torch::real(out3) << std::endl;
+	//std::cout << "ft2  real: " << torch::real(full_temp2) << std::endl;
+	std::cout << "out2 real: " << torch::real(out2) << std::endl;
+	//std::cout << "out3 real: " << torch::real(out3) << std::endl;
 
+	//std::cout << "out3 imag: " << torch::imag(out3) << std::endl;
+	//std::cout << "ft2  imag: " << torch::imag(full_temp2) << std::endl;
+	std::cout << "out2 imag: " << torch::imag(out2) << std::endl;
+	//std::cout << "out3 imag: " << torch::imag(out3) << std::endl;
+
+
+	std::cout << "out2 abs: " << torch::abs(out2) << std::endl;
+	//std::cout << "out3 abs: " << torch::abs(out3) << std::endl;
 	/*
 	auto start = std::chrono::high_resolution_clock::now();
 	torch::cuda::synchronize();
@@ -338,7 +371,10 @@ void compare_normal_methods()
 
 int main() {
 
+	//test_deterministic_3d();
+
 	compare_normal_methods();
+
 
 	//test_deterministic_3d();
 	//test_svd_speed();

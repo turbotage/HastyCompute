@@ -112,7 +112,7 @@ namespace hasty {
 				std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 				std::optional<std::reference_wrapper<at::Tensor>> input_storage);
 
-			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage) const;
+			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const;
 			
 
 		private:
