@@ -67,6 +67,7 @@ add_executable(HastyComputeLib
 	${STL_SOURCES}
 
 	"lib/metadata.ixx"
+	"lib/torch_util.cpp"
 
 	"lib/hasty_util.ixx"
 	"lib/hasty_compute.ixx"

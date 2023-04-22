@@ -117,16 +117,21 @@ namespace hasty {
 
 		private:
 			
-			c10::ScalarType			_type;
-			int32_t					_ntransf;
-			int32_t					_ndim;
-			int32_t					_nfreq;
+			c10::ScalarType								_type;
+			int32_t										_ntransf;
+			int32_t										_ndim;
+			int32_t										_nfreq;
 
-			std::vector<int64_t>	_nmodes;
-			std::vector<int64_t>	_transdims;
-			std::vector<int64_t>	_nmodes_ns;
+			std::vector<int64_t>						_nmodes;
+			std::vector<int64_t>						_transdims;
+			std::vector<int64_t>						_nmodes_ns;
 
-			at::Tensor				_diagonal;
+			c10::IntArrayRef							_transform_dims;
+			c10::IntArrayRef							_expanded_dims;
+			std::vector<at::indexing::TensorIndex>		_index_vector;
+			c10::ArrayRef<at::indexing::TensorIndex>	_indices;
+
+			at::Tensor									_diagonal;
 		};
 
 	}
