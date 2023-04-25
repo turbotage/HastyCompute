@@ -6,7 +6,6 @@
     "patch": 0
   },
   "configurePresets": [
-    // Windows MSVC
     {
       "name": "windows-base",
       "description": "Target Windows with the Visual Studio development environment.",
@@ -16,7 +15,11 @@
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_CONFIGURATION_TYPES": {
+          "type": "STRING",
+          "value": "Release;Debug"
+        }
       },
       "condition": {
         "type": "equals",
@@ -24,7 +27,6 @@
         "rhs": "Windows"
       }
     },
-    // Windows MSVC Debug CUDA
     {
       "name": "x64-debug-cuda",
       "displayName": "x64 Debug CUDA",
@@ -43,9 +45,13 @@
           "type": "FILEPATH",
           "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         },
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows"
+        },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
+          "value": "$env{TORCH_CUDA_DIR}/nightly_release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
@@ -57,37 +63,6 @@
         }
       }
     },
-    // Windows MSVC Debug CPU
-    {
-      "name": "x64-debug",
-      "displayName": "x64 Debug CPU",
-      "description": "Target Windows Visual Studio Env(64-bit) - build with CPU. (Debug)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-
-        "strategy": "external"
-      },
-      "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": {
-          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-          "type": "FILEPATH"
-        },
-        "CMAKE_PREFIX_PATH": {
-          "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
-        },
-        "BUILD_CUDA": {
-          "value": "OFF",
-          "type": "BOOL"
-        }
-      }
-    },
-    // Windows MSVC Release CUDA
     {
       "name": "x64-release-cuda",
       "displayName": "x64 Release CUDA",
@@ -106,9 +81,13 @@
           "type": "FILEPATH",
           "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         },
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows"
+        },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
+          "value": "$env{TORCH_CUDA_DIR}/nightly_release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
@@ -119,38 +98,19 @@
           "value": "60;75;89"
         }
       }
-    },
-    // Windows MSVC Release CPU
-    {
-      "name": "x64-release",
-      "displayName": "x64 Release CPU",
-      "description": "Target Windows Visual Studio Env(64-bit) - build with CPU. (Release)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": {
-          "type": "FILEPATH",
-          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        },
-        "CMAKE_PREFIX_PATH": {
-          "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
-        },
-        "BUILD_CUDA": {
-          "type": "BOOL",
-          "value": "OFF"
-        }
-      }
     }
-    
   ],
-  "buildPresets": [],
+  "buildPresets": [
+    {
+      "name": "x64-debug-cuda",
+      "configurePreset": "x64-debug-cuda",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x64-release-cuda",
+      "configurePreset": "x64-release-cuda",
+      "configuration": "Release"
+    }
+  ],
   "testPresets": []
 }

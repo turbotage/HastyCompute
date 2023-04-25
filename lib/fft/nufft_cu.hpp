@@ -1,6 +1,7 @@
 //module;
 //#include <torch/torch.h>;
 #include <torch/torch.h>
+#include <cufinufft_opts.h>
 
 //export module nufft_cu;
 #ifdef STL_AS_MODULES
@@ -23,6 +24,7 @@ struct cufinufftf_plan_s;
 typedef cufinufftf_plan_s* cufinufftf_plan;
 
 
+
 namespace hasty {
 
 	namespace cuda {
@@ -34,6 +36,12 @@ namespace hasty {
 		};
 
 		class NufftOptions {
+		public:
+
+			inline static NufftOptions type1(double tol = 1e-6) { return { NufftType::eType1, true, tol }; }
+
+			inline static NufftOptions type2(double tol = 1e-6) { return { NufftType::eType2, false, tol }; }
+
 		public:
 			NufftType type = NufftType::eType1;
 			bool positive = true;
@@ -55,6 +63,14 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out) const;
 
+			c10::ScalarType coord_type();
+
+			c10::ScalarType complex_type();
+
+			int32_t nfreq();
+
+			int32_t ndim();
+
 		protected:
 
 			void make_plan_set_pts();
@@ -75,6 +91,8 @@ namespace hasty {
 			cufinufft_plan			_plan;
 			cufinufftf_plan			_planf;
 
+			cufinufft_opts _finufft_opts;
+
 		};
 
 		class NufftNormal {
@@ -84,12 +102,21 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const;
 
+			void apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const;
+
+			c10::ScalarType coord_type();
+
+			c10::ScalarType complex_type();
+
+			int32_t nfreq();
+
+			int32_t ndim();
+
 			const Nufft& get_forward();
 
 			const Nufft& get_backward();
 
 		protected:
-			const at::Tensor	_coords;
 			Nufft				_forward;
 			Nufft				_backward;
 		};
@@ -97,17 +124,17 @@ namespace hasty {
 		class ToeplitzNormalNufft {
 		public:
 
-			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal);
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
 
-			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 				at::Tensor& storage, bool storage_is_frequency);
 
-			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 				at::Tensor& frequency_storage, at::Tensor& input_storage);
 
 		public:
 
-			ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
 				std::optional<std::reference_wrapper<at::Tensor>> diagonal, 
 				std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 				std::optional<std::reference_wrapper<at::Tensor>> input_storage);

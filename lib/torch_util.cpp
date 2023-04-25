@@ -91,4 +91,9 @@ std::stringstream hasty::torch_util::print_4d_xyz(const at::Tensor& toprint)
 	return printer;
 }
 
-
+std::vector<int64_t> hasty::torch_util::nmodes_from_tensor(const at::Tensor& tensor)
+{
+	auto ret = tensor.sizes().vec();
+	ret[0] = 1;
+	return ret;
+}

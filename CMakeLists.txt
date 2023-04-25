@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project("HastyCompute")
 
+
+
 set(BUILD_SHARED_LIBS ON)
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -17,13 +19,12 @@ if (${BUILD_CUDA})
 		"lib/linalg/permute_cu.ixx"
 		"lib/linalg/solver_cu.ixx"
 		"lib/fft/nufft_cu.cpp"
+		"lib/cs/sense_cu.cpp"
 	)
 	set(BACKEND_HEADERS
 		"lib/fft/nufft_cu.hpp"
 	)
 endif()
-
-
 
 set(STL_AS_MODULES FALSE)
 if (${STL_AS_MODULES})
@@ -62,6 +63,7 @@ endif()
 
 #add_library(HastyComputeLib
 add_executable(HastyComputeLib
+
 	"tests/test.ixx"
 
 	${STL_SOURCES}
@@ -111,9 +113,22 @@ if (${BUILD_CUDA})
 	message("Linked CUDA Libs")
 endif()
 
-# Linking SymEngine
-find_package(SymEngine CONFIG REQUIRED)
-target_link_libraries(HastyComputeLib PUBLIC symengine)
+
+message("Toolchain file = ${CMAKE_TOOLCHAIN_FILE}")
+message("BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
+message("Prefix = ${CMAKE_PREFIX_PATH}")
+
+# Linking ArrayFire
+find_package(ArrayFire REQUIRED)
+target_include_directories(HastyComputeLib PRIVATE ${ArrayFire_INCLUDE_DIRS})
+target_link_libraries(HastyComputeLib PRIVATE ArrayFire::af)
+set_target_properties(${ArrayFire_CUDA_LIBRARIES} PROPERTIES
+	MAP_IMPORTED_CONFIG_DEBUG Release
+	MAP_IMPORTED_CONFIG_RELEASE Release
+	MAP_IMPORTED_CONFIG_MINSIZEREL Release
+)
+
+
 
 if (${BUILD_CUDA})
 	set(USE_CUDA ON)
@@ -123,6 +138,7 @@ endif()
 find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
+
 # Linking fiNUFFT
 find_package(finufft REQUIRED)
 target_link_libraries(HastyComputeLib PRIVATE FINUFFT::finufft)
@@ -130,6 +146,13 @@ target_link_libraries(HastyComputeLib PRIVATE FINUFFT::finufft)
 if (${BUILD_CUDA})
 	target_link_libraries(HastyComputeLib PRIVATE FINUFFT::cufinufft)
 endif()
+
+
+# Linking SymEngine
+find_package(SymEngine CONFIG REQUIRED)
+target_link_libraries(HastyComputeLib PRIVATE symengine)
+
+
 
 #set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
 target_compile_features(HastyComputeLib PRIVATE cxx_std_20)
@@ -153,7 +176,6 @@ if (MSVC)
                      ${TORCH_DLLS}
                      $<TARGET_FILE_DIR:HastyComputeLib>)
 endif()
-
 
 
 

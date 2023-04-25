@@ -1,9 +1,5 @@
 
 
-/*
-#include <cufinufft.h>
-#include <ATen/ATen.h>
-*/
 
 #include "../lib/fft/nufft_cu.hpp"
 #include "../lib/torch_util.hpp"
@@ -20,52 +16,10 @@ import <symengine/parser.h>;
 import <chrono>;
 import <array>;
 
+import <arrayfire.h>;
 
 
 
-void test_torch_speed() {
-
-	int n1 = 256;
-	int n2 = 2 * n1;
-	//n = 400;
-
-	int nc = 20;
-
-	c10::InferenceMode im;
-
-	auto device = c10::Device(torch::kCUDA);
-
-	auto options = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
-
-	at::Tensor ffter = at::rand({ nc, n1,n1,n1 }, options);
-	at::Tensor ffter_out = at::empty({ nc, n1,n1,n1 }, options);
-	//at::Tensor ffter = at::rand({ 1, n2,n2,n2 }, options);
-	at::Tensor ffter_mul = at::rand({ n2,n2,n2 }, options);
-	at::Tensor ffter_temp = at::empty({ n2,n2,n2 }, options);
-
-	torch::cuda::synchronize();
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	for (int i = 0; i < nc; ++i) {
-		auto inview = ffter.select(0, i);
-		auto outview = ffter_out.select(0, i);
-
-		torch::fft_fftn_out(ffter_temp, inview, { n2, n2, n2 }, c10::nullopt);
-		ffter_temp.mul_(ffter_mul);
-		torch::fft_ifftn_out(outview, ffter_temp, { n1,n1,n1 }, c10::nullopt);
-	}
-
-	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
-	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
-
-	torch::cuda::synchronize();
-
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-	std::cout << duration.count() << std::endl;
-}
 
 void test_deterministic_1d() {
 	int nfb = 8;
@@ -273,8 +227,7 @@ void test_speed() {
 	int nfb = 256;
 	int nf = 200000;
 	int nx = nfb;
-	int nt = 1;
-	int nrun = 100;
+	int nc = 40;
 
 	auto device = c10::Device(torch::kCUDA);
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
@@ -282,19 +235,27 @@ void test_speed() {
 
 	auto coords = torch::rand({ 3,nf }, options2);
 
-	hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
-	hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, true, 1e-5f });
+	//hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
+	//hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, false, 1e-5f });
 
-	auto f = torch::rand({ nt,nf }, options1);
-	auto c = torch::rand({ nt,nx,nx,nx }, options1);
+	hasty::cuda::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::cuda::NufftType::eType2, false, 1e-5f },
+		{ hasty::cuda::NufftType::eType1, true, 1e-5f });
+
+	auto freq = torch::rand({ 1,nf }, options1);
+	auto in = torch::rand({ nc,nx,nx,nx }, options1);
+	auto out = torch::rand({ nc,nx,nx,nx }, options1);
 
 	torch::cuda::synchronize();
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	for (int i = 0; i < nrun; ++i) {
-		nu2.apply(c, f);
-		nu1.apply(f, c);
+	for (int i = 0; i < nc; ++i) {
+		using namespace at::indexing;
+		auto inview = in.select(0, i).view({1,nx,nx,nx});
+		auto outview = out.select(0, i).view({ 1,nx,nx,nx });
+
+		nufft_normal.apply(inview, outview, freq, std::nullopt);
 	}
 	torch::cuda::synchronize();
 
@@ -563,7 +524,7 @@ void compare_normal_methods()
 	}
 	// Toeplitz Normal Nufft
 	{
-		ToeplitzNormalNufft top_normal(coords, { nt,nz,ny,nx }, std::nullopt, std::nullopt, std::nullopt);
+		ToeplitzNormalNufft top_normal(coords, { nt,nz,ny,nx }, 1e-6, std::nullopt, std::nullopt, std::nullopt);
 
 		top_normal.apply(c, out3, full_temp1, full_temp2);
 		//top_normal.apply(torch::fft_fftshift(c), out3, full_temp1, full_temp2);
@@ -594,33 +555,311 @@ void compare_normal_methods()
 	*/
 }
 
+void test_nufft_speeds(bool toep) {
+	int nfb = 256;
+	int nf = 200000;
+	int nx = nfb;
+	int nt = 1;
+	int nrun = 20;
+	c10::InferenceMode guard;
+
+	auto device = c10::Device(torch::kCUDA);
+	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
+
+	auto coords = torch::rand({ 3,nf }, options2);
+
+	using namespace hasty;
+	using namespace hasty::cuda;
+
+	auto freq_temp = torch::empty({ nt, nf }, options1);
+	auto in = torch::rand({ nt, nx, nx, nx }, options1);
+	auto out = torch::empty({ nt, nx, nx, nx }, options1);
+
+	auto storage1 = torch::empty({ nt, 2*nx, 2*nx, 2*nx }, options1);
+	auto storage2 = torch::empty({ nt, 2*nx, 2*nx, 2*nx }, options1);
+
+	if (!toep)
+	{
+
+		torch::cuda::synchronize();
+
+		auto start = std::chrono::high_resolution_clock::now();
+
+		NufftNormal normal_nufft(coords, { nt, nx, nx, nx }, NufftOptions::type2(1e-4), NufftOptions::type1(1e-4));
+
+		for (int i = 0; i < nrun; ++i) {
+			normal_nufft.apply(in, out, freq_temp, std::nullopt);
+		}
+
+		torch::cuda::synchronize();
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+		std::cout << "2 NUFFTS: " << duration.count() << std::endl;
+
+	}
+
+	if (toep) {
+
+		torch::cuda::synchronize();
+		auto start = std::chrono::high_resolution_clock::now();
+
+		ToeplitzNormalNufft normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, std::nullopt, freq_temp, storage1);
+		for (int i = 0; i < nrun; ++i) {
+			normal_nufft.apply(in, out, storage1, storage2);
+		}
+
+		torch::cuda::synchronize();
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+		std::cout << "Toeplitz: " << duration.count() << std::endl;
+	}
+}
+
+void test_conway() {
+	using namespace af;
+
+	try {
+		static const float h_kernel[] = { 1, 1, 1, 1, 0, 1, 1, 1, 1 };
+		static const int reset = 500;
+		static const int game_w = 128, game_h = 128;
+
+		af::info();
+
+		std::cout << "This example demonstrates the Conway's Game of Life "
+			"using ArrayFire"
+			<< std::endl
+			<< "There are 4 simple rules of Conways's Game of Life"
+			<< std::endl
+			<< "1. Any live cell with fewer than two live neighbours "
+			"dies, as if caused by under-population."
+			<< std::endl
+			<< "2. Any live cell with two or three live neighbours lives "
+			"on to the next generation."
+			<< std::endl
+			<< "3. Any live cell with more than three live neighbours "
+			"dies, as if by overcrowding."
+			<< std::endl
+			<< "4. Any dead cell with exactly three live neighbours "
+			"becomes a live cell, as if by reproduction."
+			<< std::endl
+			<< "Each white block in the visualization represents 1 alive "
+			"cell, black space represents dead cells"
+			<< std::endl;
+
+		af::Window myWindow(512, 512, "Conway's Game of Life using ArrayFire");
+
+		int frame_count = 0;
+
+		// Initialize the kernel array just once
+		const af::array kernel(3, 3, h_kernel, afHost);
+		array state;
+		state = (af::randu(game_h, game_w, f32) > 0.5).as(f32);
+
+		while (!myWindow.close()) {
+			myWindow.image(state);
+			frame_count++;
+
+			// Generate a random starting state
+			if (frame_count % reset == 0)
+				state = (af::randu(game_h, game_w, f32) > 0.5).as(f32);
+
+			// Convolve gets neighbors
+			af::array nHood = convolve(state, kernel);
+
+			// Generate conditions for life
+			// state == 1 && nHood < 2 ->> state = 0
+			// state == 1 && nHood > 3 ->> state = 0
+			// else if state == 1 ->> state = 1
+			// state == 0 && nHood == 3 ->> state = 1
+			af::array C0 = (nHood == 2);
+			af::array C1 = (nHood == 3);
+
+			// Update state
+			state = state * C0 + C1;
+		}
+	}
+	catch (af::exception& e) {
+		fprintf(stderr, "%s\n", e.what());
+		throw;
+	}
+}
+
+// Speed comparisons
+int test_torch_speed(int n, int nc) {
+
+	int n1 = n;
+	int n2 = 2 * n1;
+
+	c10::InferenceMode im;
+
+	auto device = c10::Device(torch::kCUDA);
+
+	auto options = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+
+	at::Tensor ffter = at::rand({ nc, n1,n1,n1 }, options);
+	at::Tensor ffter_out = at::empty({ nc, n1,n1,n1 }, options);
+	//at::Tensor ffter = at::rand({ 1, n2,n2,n2 }, options);
+	at::Tensor ffter_mul = at::rand({ n2,n2,n2 }, options);
+	at::Tensor ffter_temp = at::empty({ n2,n2,n2 }, options);
+
+	torch::cuda::synchronize();
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	for (int i = 0; i < nc; ++i) {
+		using namespace at::indexing;
+		auto inview = ffter.select(0, i);
+		auto outview = ffter_out.select(0, i);
+
+		torch::fft_fftn_out(ffter_temp, inview, { n2, n2, n2 }, c10::nullopt);
+		ffter_temp.mul_(ffter_mul);
+		outview = torch::fft_ifftn(ffter_temp, { n2,n2,n2 }, c10::nullopt).index(
+			{Slice(0,n1), Slice(0,n1), Slice(0,n1)});
+
+	}
+
+	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
+	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
+
+	torch::cuda::synchronize();
+
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+	int durt = duration.count();
+
+	std::cout << "Time (ms): " << durt << std::endl;
+
+	return durt;
+}
+
+int test_af_speed(int n, int nc) {
+
+	af::array input = af::randu(nc,n,n,n, af_dtype::c32);
+
+	af::array diagonal = af::randu(2*n, 2*n, 2*n, af_dtype::c32);
+
+	af::array temp(2*n, 2*n, 2*n, af_dtype::c32);
+
+
+	input.eval();
+	diagonal.eval();
+	temp.eval();
+	af::sync();
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	for (int i = 0; i < nc; ++i) {
+		auto vol = af::moddims(input(i, af::span, af::span, af::span), n,n,n);
+
+		temp = 0.0f;
+		temp(af::seq(0, n-1), af::seq(0, n-1), af::seq(0, n-1)) = vol;
+		af::fft3InPlace(temp);
+		temp *= diagonal;
+		af::ifft3InPlace(temp);
+		input(i, af::span, af::span, af::span) = 
+			af::moddims(temp(af::seq(0, n-1), af::seq(0, n-1), af::seq(0, n-1)), af::dim4(1,n,n,n));
+	}
+
+	input.eval();
+	af::sync();
+
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+	int durt = duration.count();
+
+	std::cout << "Time (ms): " << durt << std::endl;
+
+	return durt;
+
+}
+
+int test_speed(int n, int nc, int nf = 200000) {
+	int nx = n;
+
+	auto device = c10::Device(torch::kCUDA);
+	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
+	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
+
+	auto coords = torch::rand({ 3,nf }, options2);
+
+	//hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
+	//hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, false, 1e-5f });
+
+	auto freq = torch::rand({ 1,nf }, options1);
+	auto in = torch::rand({ nc,nx,nx,nx }, options1);
+	auto out = torch::rand({ nc,nx,nx,nx }, options1);
+
+	torch::cuda::synchronize();
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	hasty::cuda::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::cuda::NufftType::eType2, false, 1e-5f },
+		{ hasty::cuda::NufftType::eType1, true, 1e-5f });
+
+	for (int i = 0; i < nc; ++i) {
+		using namespace at::indexing;
+		auto inview = in.select(0, i).view({ 1,nx,nx,nx });
+		auto outview = out.select(0, i).view({ 1,nx,nx,nx });
+
+		nufft_normal.apply(inview, outview, freq, std::nullopt);
+	}
+	torch::cuda::synchronize();
+
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+	int durt = duration.count();
+
+	std::cout << "Time (ms): " << durt << std::endl;
+
+	return durt;
+}
+
+void speed_comparisons_torch_af_cufinufft(int nrun) {
+	int time;
+	int tot_time;
+
+	std::cout << "LibTorch speed" << std::endl;
+	tot_time = 0;
+	for (int i = 0; i < nrun; ++i) {
+		time = test_torch_speed(256, 20);
+		if (i != 0)
+			tot_time += time;
+	}
+	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
+
+	std::cout << "ArrayFire speed" << std::endl;
+	tot_time = 0;
+	for (int i = 0; i < nrun; ++i) {
+		time = test_af_speed(256, 20);
+		if (i != 0)
+			tot_time += time;
+	}
+	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
+
+
+	std::cout << "cuFINUFFT speed:\n";
+	tot_time = 0;
+	for (int i = 0; i < nrun; ++i) {
+		time = test_speed(256, 20, 200000);
+		if (i != 0)
+			tot_time += time;
+	}
+	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
+}
+
+
 int main() {
-
-	//test_deterministic_3d();
-
-	compare_normal_methods();
-
-
-	//test_deterministic_3d();
-	//test_svd_speed();
-
-	/*
-	std::cout << "torch speed:\n";
-	for (int i = 0; i < 10; ++i) {
-		test_torch_speed();
-	}
-	*/
 	
-	//test_space_cufinufft();
+	//compare_normal_methods();
 
-	/*
-	std::cout << "cufinufft speed:\n";
-	for (int i = 0; i < 5; ++i) {
-		test_speed();
-	}
-	*/
-	
-	
+	speed_comparisons_torch_af_cufinufft(10);
 
 	return 0;
 }

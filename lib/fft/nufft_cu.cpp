@@ -95,15 +95,58 @@ void Nufft::apply(const at::Tensor& in, at::Tensor& out) const
 	}
 }
 
+c10::ScalarType Nufft::coord_type()
+{
+	return _type;
+}
+
+c10::ScalarType Nufft::complex_type()
+{
+	switch (_type) {
+	case c10::ScalarType::Float:
+		return c10::ScalarType::ComplexFloat;
+	break;
+	case c10::ScalarType::Double:
+		return c10::ScalarType::ComplexDouble;
+	break;
+	default:
+		throw std::runtime_error("Coordinates must be real!");
+	}
+}
+
+int32_t Nufft::nfreq()
+{
+	return _nfreq;
+}
+
+int32_t Nufft::ndim()
+{
+	return _ndim;
+}
+
+
+
 void Nufft::make_plan_set_pts()
 {
 
 	using namespace at::indexing;
 
+	auto device = _coords.device();
+
+	if (!device.is_cuda())
+		throw std::runtime_error("Coordinates did not reside in cuda device");
+
+	int cuda_device_idx = device.index();
+
 	switch (_type) {
 	case c10::ScalarType::Float:
 	{
-		if (cufinufftf_makeplan((int32_t)_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_planf, NULL))
+		if (cufinufftf_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
+			throw std::runtime_error("Failed to create cufinufft_default_opts");
+
+		_finufft_opts.gpu_device_id = cuda_device_idx;
+
+		if (cufinufftf_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_planf, &_finufft_opts))
 			throw std::runtime_error("cufinufft_makeplan failed");
 
 		switch (_ndim) {
@@ -141,9 +184,13 @@ void Nufft::make_plan_set_pts()
 	break;
 	case c10::ScalarType::Double:
 	{
-		if (cufinufft_makeplan((int32_t)_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_plan, NULL)) {
+		if (cufinufftf_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
+			throw std::runtime_error("Failed to create cufinufft_default_opts");
+
+		_finufft_opts.gpu_device_id = cuda_device_idx;
+
+		if (cufinufft_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_plan, &_finufft_opts))
 			throw std::runtime_error("cufinufft_makeplan failed");
-		}
 
 		switch (_ndim) {
 		case 1:
@@ -332,7 +379,7 @@ namespace {
 
 
 NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops)
-	: _coords(coords), _forward(coords, nmodes, forward_ops), _backward(coords, nmodes, backward_ops)
+	: _forward(coords, nmodes, forward_ops), _backward(coords, nmodes, backward_ops)
 {
 
 }
@@ -344,6 +391,35 @@ void NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& stora
 		func_between.value()(storage);
 	}
 	_backward.apply(storage, out);
+}
+
+void NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const
+{
+	_forward.apply(in, storage);
+	if (func_between.has_value()) {
+		func_between.value()(storage);
+	}
+	_backward.apply(storage, in);
+}
+
+int32_t NufftNormal::nfreq()
+{
+	return _forward.nfreq();
+}
+
+int32_t NufftNormal::ndim()
+{
+	return _forward.ndim();
+}
+
+c10::ScalarType NufftNormal::coord_type()
+{
+	return _forward.coord_type();
+}
+
+c10::ScalarType NufftNormal::complex_type()
+{
+	return _forward.complex_type();
 }
 
 const Nufft& NufftNormal::get_forward()
@@ -359,9 +435,11 @@ const Nufft& NufftNormal::get_backward()
 
 namespace {
 
-	void build_diagonal_base(const at::Tensor& coords, const std::vector<int64_t>& nmodes_ns,
+	void build_diagonal_base(const at::Tensor& coords, const std::vector<int64_t>& nmodes_ns, double tol,
 		at::Tensor& diagonal, at::Tensor& frequency_storage, at::Tensor& input_storage)
 	{
+		c10::InferenceMode guard;
+
 		NufftNormal normal(coords, nmodes_ns, { NufftType::eType2, false, 1e-6 }, { NufftType::eType1, true, 1e-6 });
 
 		using namespace at::indexing;
@@ -401,7 +479,7 @@ namespace {
 }
 
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal)
+void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
@@ -427,11 +505,11 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 	at::Tensor input_storage = at::empty(c10::makeArrayRef(nmodes_ns), options);
 
 	// Build
-	build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, input_storage);
+	build_diagonal_base(coords, nmodes_ns, tol, diagonal, frequency_storage, input_storage);
 
 }
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
+void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& storage, bool storage_is_frequency)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -456,19 +534,19 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 		at::Tensor frequency_storage = at::empty({ nmodes[0], coords.size(1) }, options);
 
 		// Build
-		build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, storage);
+		build_diagonal_base(coords, nmodes_ns, tol, diagonal, frequency_storage, storage);
 	}
 	else {
 		// Input Storage
 		at::Tensor input_storage = at::empty(c10::makeArrayRef(nmodes_ns), options);
 
 		// Build
-		build_diagonal_base(coords, nmodes_ns, diagonal, storage, input_storage);
+		build_diagonal_base(coords, nmodes_ns, tol, diagonal, storage, input_storage);
 	}
 
 }
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, at::Tensor& diagonal,
+void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& frequency_storage, at::Tensor& input_storage)
 {	
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -477,15 +555,16 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 	}
 
 	// Build
-	build_diagonal_base(coords, nmodes_ns, diagonal, frequency_storage, input_storage);
+	build_diagonal_base(coords, nmodes_ns, tol, diagonal, frequency_storage, input_storage);
 }
 
-ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
 	std::optional<std::reference_wrapper<at::Tensor>> diagonal,
 	std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 	std::optional<std::reference_wrapper<at::Tensor>> input_storage)
 	: _nmodes(nmodes)
 {
+	c10::InferenceMode guard;
 	_type = coords.dtype().toScalarType();
 	_ntransf = _nmodes[0];
 	_ndim = coords.size(0);
@@ -540,23 +619,26 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 	}
 	_indices = at::makeArrayRef(_index_vector);
 
+	double toler = tol.has_value() ? tol.value() : 1e-6;
+
 	if (frequency_storage.has_value() && input_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, _diagonal, frequency_storage.value(), input_storage.value());
+		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), input_storage.value());
 	}
 	else if (frequency_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, _diagonal, frequency_storage.value(), true);
+		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), true);
 	}
 	else if (input_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, _diagonal, input_storage.value(), false);
+		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, input_storage.value(), false);
 	}
 	else {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, _diagonal);
+		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal);
 	}
 
 }
 
 void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const
 {
+	c10::InferenceMode guard;
 	torch::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
 	storage1.mul_(_diagonal);
 	torch::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
