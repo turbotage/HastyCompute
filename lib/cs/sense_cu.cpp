@@ -1,13 +1,15 @@
 #include "sense_cu.hpp"
 #include "../torch_util.hpp"
 
-hasty::cuda::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+using namespace hasty::cuda;
+
+SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1())
 {
 
 }
 
-void hasty::cuda::SenseNormal::apply(const at::Tensor& in, const std::vector<at::Tensor>& smaps, const at::Tensor& out,
+void SenseNormal::apply(const at::Tensor& in, const vec<crefw<at::Tensor>>& smaps, const at::Tensor& out,
 	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage)
 {
 	out.zero_();

@@ -20,6 +20,7 @@ if (${BUILD_CUDA})
 		"lib/linalg/solver_cu.ixx"
 		"lib/fft/nufft_cu.cpp"
 		"lib/cs/sense_cu.cpp"
+		"lib/cs/llr_cu.cpp"
 	)
 	set(BACKEND_HEADERS
 		"lib/fft/nufft_cu.hpp"

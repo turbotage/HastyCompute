@@ -95,6 +95,11 @@ namespace hasty {
         template<typename T>
         using refw = std::reference_wrapper<T>;
 
+        template<typename T>
+        using crefw = std::reference_wrapper<const T>;
+
+
+
         // Used to signal output, functions with these parameters will fill the variable which the
         // reference points to if tc::OptOutRef isn't std::nullopt
         template<typename T>

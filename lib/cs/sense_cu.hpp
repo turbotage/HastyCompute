@@ -14,7 +14,7 @@ import <functional>;
 import <optional>;
 #endif
 
-
+import hasty_util;
 
 namespace hasty {
 
@@ -31,7 +31,7 @@ namespace hasty {
 
 			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-			void apply(const at::Tensor& in, const std::vector<at::Tensor>& smaps, const at::Tensor& out, 
+			void apply(const at::Tensor& in, const vec<crefw<at::Tensor>>& smaps, const at::Tensor& out,
 				std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage);
 
 		private:
