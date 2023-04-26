@@ -1,3 +1,4 @@
+#pragma once
 
 #include <torch/torch.h>
 
@@ -13,12 +14,20 @@ import <functional>;
 import <optional>;
 #endif
 
-import hasty_util;
 
 namespace hasty {
 	namespace cuda {
 
-		at::Tensor block_svt(const vec<refw<const at::Tensor>>& tensors, std::pair<vec<i64>, vec<i64>> block);
+		// tensors outer vector are frames inner are encodes
+		at::Tensor extract_block(const std::vector<std::vector<std::reference_wrapper<const at::Tensor>>>& tensors, 
+			const std::pair<std::vector<int64_t>, std::vector<int64_t>>& block);
+
+		at::Tensor svt(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor,at::Tensor,at::Tensor>> storage);
+
+		void svt_inplace(at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage);
+
+		void insert_block(const std::vector<std::vector<std::reference_wrapper<at::Tensor>>>& tensors, 
+			const std::pair<std::vector<int64_t>, std::vector<int64_t>>& block, const at::Tensor& block_tensor);
 		
 	}
 }

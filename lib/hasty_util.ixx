@@ -15,6 +15,7 @@ import <locale>;
 import <unordered_map>;
 import <array>;
 import <sstream>;
+import <chrono>;
 #endif
 
 namespace hasty {

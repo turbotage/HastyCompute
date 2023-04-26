@@ -1,4 +1,5 @@
-//module;
+#pragma once
+
 //#include <torch/torch.h>;
 #include <torch/torch.h>
 #include <cufinufft_opts.h>

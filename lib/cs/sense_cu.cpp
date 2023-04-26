@@ -9,8 +9,9 @@ SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& n
 
 }
 
-void SenseNormal::apply(const at::Tensor& in, const vec<crefw<at::Tensor>>& smaps, const at::Tensor& out,
-	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage)
+void SenseNormal::apply(const at::Tensor& in, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps, const at::Tensor& out,
+	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
+	std::optional<std::function<void(at::Tensor&)>> freq_manip)
 {
 	out.zero_();
 	
@@ -33,8 +34,8 @@ void SenseNormal::apply(const at::Tensor& in, const vec<crefw<at::Tensor>>& smap
 	for (int i = 0; i < smaps_len; ++i) {
 		const at::Tensor& smap = smaps[i];
 		at::mul_out(xstore, in, smap);
-		_normal_nufft.apply_inplace(xstore, fstore, std::nullopt);
-		out.addcmul_(xstore, smap);
+		_normal_nufft.apply_inplace(xstore, fstore, freq_manip);
+		out.addcmul_(xstore, smap.conj());
 	}
 
 

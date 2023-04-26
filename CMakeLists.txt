@@ -5,6 +5,9 @@ project("HastyCompute")
 
 
 set(BUILD_SHARED_LIBS ON)
+if (MSVC)
+	#set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
 option(BUILD_CUDA OFF)
@@ -62,18 +65,17 @@ endif()
 
 
 
-#add_library(HastyComputeLib
-add_executable(HastyComputeLib
+set(TEST_SOURCES
+	"lib/tests/tests1.cpp"
+)
 
-	"tests/test.ixx"
-
+add_library(HastyComputeLib SHARED
 	${STL_SOURCES}
 
 	"lib/metadata.ixx"
-	"lib/torch_util.cpp"
-
 	"lib/hasty_util.ixx"
 	"lib/hasty_compute.ixx"
+	"lib/torch_util.cpp"
 
 	"lib/expr/parser/token.ixx" 
 	"lib/expr/parser/lexer.ixx" 
@@ -90,12 +92,13 @@ add_executable(HastyComputeLib
 	"lib/expr/algebra/binary/sub.ixx"
 	"lib/expr/expr.ixx" 
 	"lib/expr/expr.cpp"
-
 	"lib/expr/symbolic.ixx"
 
 	"lib/nlsq/nlsq_symbolic.ixx"
 
 	${BACKEND_SOURCES}
+
+	${TEST_SOURCES}
 )
 
 # Linking CUDA
@@ -121,8 +124,8 @@ message("Prefix = ${CMAKE_PREFIX_PATH}")
 
 # Linking ArrayFire
 find_package(ArrayFire REQUIRED)
-target_include_directories(HastyComputeLib PRIVATE ${ArrayFire_INCLUDE_DIRS})
-target_link_libraries(HastyComputeLib PRIVATE ArrayFire::af)
+target_include_directories(HastyComputeLib PUBLIC ${ArrayFire_INCLUDE_DIRS})
+target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
 set_target_properties(${ArrayFire_CUDA_LIBRARIES} PROPERTIES
 	MAP_IMPORTED_CONFIG_DEBUG Release
 	MAP_IMPORTED_CONFIG_RELEASE Release
@@ -142,21 +145,21 @@ target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})
 
 # Linking fiNUFFT
 find_package(finufft REQUIRED)
-target_link_libraries(HastyComputeLib PRIVATE FINUFFT::finufft)
+target_link_libraries(HastyComputeLib PUBLIC FINUFFT::finufft)
 
 if (${BUILD_CUDA})
-	target_link_libraries(HastyComputeLib PRIVATE FINUFFT::cufinufft)
+	target_link_libraries(HastyComputeLib PUBLIC FINUFFT::cufinufft)
 endif()
 
 
 # Linking SymEngine
 find_package(SymEngine CONFIG REQUIRED)
-target_link_libraries(HastyComputeLib PRIVATE symengine)
+target_link_libraries(HastyComputeLib PUBLIC symengine)
 
 
 
 #set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
-target_compile_features(HastyComputeLib PRIVATE cxx_std_20)
+target_compile_features(HastyComputeLib PUBLIC cxx_std_20)
 set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 20)
 
 if (MSVC)
@@ -178,13 +181,24 @@ if (MSVC)
                      $<TARGET_FILE_DIR:HastyComputeLib>)
 endif()
 
+set_target_properties(HastyComputeLib PROPERTIES PUBLIC_HEADER "lib/hasty.hpp")
+install(TARGETS HastyComputeLib
+	LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+	ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+	PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include")
 
 
 
 
 
 
-#add_executable(HastyTest "tests/test.ixx")
-#target_link_libraries(HastyTest HastyComputeLib)
-#target_compile_features(HastyTest PRIVATE cxx_std_23)
+
+
+
+
+
+
+add_executable(HastyTest "tests/test.ixx")
+target_link_libraries(HastyTest HastyComputeLib)
+target_compile_features(HastyTest PRIVATE cxx_std_23)
 
