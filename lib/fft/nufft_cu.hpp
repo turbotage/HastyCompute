@@ -1,7 +1,8 @@
 #pragma once
 
 //#include <torch/torch.h>;
-#include <torch/torch.h>
+//#include <torch/torch.h>
+#include <ATen/ATen.h>
 #include <cufinufft_opts.h>
 
 //export module nufft_cu;

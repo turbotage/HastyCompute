@@ -1,6 +1,6 @@
 #pragma once
 
-#include <torch/torch.h>
+#include <ATen/ATen.h>
 
 #ifdef STL_AS_MODULES
 import std.compat;

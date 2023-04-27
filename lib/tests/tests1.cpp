@@ -14,8 +14,11 @@ import <symengine/simplify.h>;
 import <symengine/parser.h>;
 */
 
+#include <torch/torch.h>
+
 import <chrono>;
 import <array>;
+#include <iostream>
 
 #include <arrayfire.h>
 
@@ -27,13 +30,13 @@ void hasty::tests::test_deterministic_1d() {
 	int nx = nfb;
 	int nt = 1;
 
-	auto device = c10::Device(torch::kCUDA);
+	auto device = c10::Device(c10::kCUDA);
 
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
-	auto coords = torch::empty({ 1,nf }, options2);
+	auto coords = at::empty({ 1,nf }, options2);
 
 	int l = 0;
 	for (int x = 0; x < nfb; ++x) {
@@ -48,12 +51,12 @@ void hasty::tests::test_deterministic_1d() {
 
 	std::cout << "\n" << (float*)coords.data_ptr() << std::endl;
 
-	auto f = torch::empty({ nt,nf }, options1);
-	auto c = torch::ones({ nt,nx }, options1); // *c10::complex<float>(0.0f, 1.0f);
+	auto f = at::empty({ nt,nf }, options1);
+	auto c = at::ones({ nt,nx }, options1); // *c10::complex<float>(0.0f, 1.0f);
 
 	nu2.apply(c, f);
 
-	torch::cuda::synchronize();
+	at::cuda::synchronize();
 
 	std::cout << "Nufft Type 2:\nreal:\n" << at::real(f) << "\n\nimag:\n" << at::imag(f) << std::endl;
 	std::cout << "Nufft Type 2:\nreal:\n" << at::real(c) << "\n\nimag:\n" << at::imag(c) << std::endl;
@@ -71,13 +74,13 @@ void hasty::tests::test_deterministic_3d() {
 	int nx = nf;
 	int nt = 1;
 
-	auto device = c10::Device(torch::kCUDA);
+	auto device = c10::Device(c10::kCUDA);
 
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
-	auto coords = torch::empty({ 3,nf }, options2);
+	auto coords = at::empty({ 3,nf }, options2);
 	std::vector<std::array<float, 3>> fixed_coords = {
 		{0.98032004, 0.34147135, 0.61084439},
 		{0.80602593, 0.65668227, 0.58148698},
@@ -193,8 +196,8 @@ void hasty::tests::test_deterministic_3d() {
 	hasty::cuda::Nufft nu2(coords, nmodes_ns, { hasty::cuda::NufftType::eType2, false, 1e-6 });
 	hasty::cuda::Nufft nu1(coords, nmodes_ns, { hasty::cuda::NufftType::eType1, true, 1e-6 });
 
-	auto f = torch::empty({ nt,nf }, options1);
-	auto c = torch::zeros(nmodes_ns, options1); // *c10::complex<float>(0.0f, 1.0f);
+	auto f = at::empty({ nt,nf }, options1);
+	auto c = at::zeros(nmodes_ns, options1); // *c10::complex<float>(0.0f, 1.0f);
 	c.index_put_({ 0,0,0,1 }, 2.0);
 	c.index_put_({ 0,2,1,3 }, 3.0);
 
@@ -229,11 +232,11 @@ void hasty::tests::test_speed() {
 	int nx = nfb;
 	int nc = 40;
 
-	auto device = c10::Device(torch::kCUDA);
+	auto device = c10::Device(c10::kCUDA);
 	auto options1 = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 	auto options2 = c10::TensorOptions().device(device).dtype(c10::ScalarType::Float);
 
-	auto coords = torch::rand({ 3,nf }, options2);
+	auto coords = at::rand({ 3,nf }, options2);
 
 	//hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
 	//hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, false, 1e-5f });
@@ -242,11 +245,13 @@ void hasty::tests::test_speed() {
 		{ hasty::cuda::NufftType::eType2, false, 1e-5f },
 		{ hasty::cuda::NufftType::eType1, true, 1e-5f });
 
-	auto freq = torch::rand({ 1,nf }, options1);
-	auto in = torch::rand({ nc,nx,nx,nx }, options1);
-	auto out = torch::rand({ nc,nx,nx,nx }, options1);
+	auto freq = at::rand({ 1,nf }, options1);
+	auto in = at::rand({ nc,nx,nx,nx }, options1);
+	auto out = at::rand({ nc,nx,nx,nx }, options1);
 
-	torch::cuda::synchronize();
+	at::cuda::synchronize();
+
+	
 
 	auto start = std::chrono::high_resolution_clock::now();
 
@@ -695,7 +700,7 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 
 	c10::InferenceMode im;
 
-	auto device = c10::Device(torch::kCUDA);
+	auto device = c10::Device(c10::kCUDA);
 
 	auto options = c10::TensorOptions().device(device).dtype(c10::ScalarType::ComplexFloat);
 
@@ -705,7 +710,7 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 	at::Tensor ffter_mul = at::rand({ n2,n2,n2 }, options);
 	at::Tensor ffter_temp = at::empty({ n2,n2,n2 }, options);
 
-	torch::cuda::synchronize();
+	at::cuda::synchronize();
 
 	auto start = std::chrono::high_resolution_clock::now();
 
@@ -714,9 +719,9 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 		auto inview = ffter.select(0, i);
 		auto outview = ffter_out.select(0, i);
 
-		torch::fft_fftn_out(ffter_temp, inview, { n2, n2, n2 }, c10::nullopt);
+		at::fft_fftn_out(ffter_temp, inview, { n2, n2, n2 }, c10::nullopt);
 		ffter_temp.mul_(ffter_mul);
-		outview = torch::fft_ifftn(ffter_temp, { n2,n2,n2 }, c10::nullopt).index(
+		outview = at::fft_ifftn(ffter_temp, { n2,n2,n2 }, c10::nullopt).index(
 			{ Slice(0,n1), Slice(0,n1), Slice(0,n1) });
 
 	}
@@ -724,7 +729,7 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
 	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
 
-	torch::cuda::synchronize();
+	at::cuda::synchronize();
 
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

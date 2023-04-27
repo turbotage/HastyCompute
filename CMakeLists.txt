@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project("HastyCompute")
+project("HastyCompute" VERSION 0.1)
 
 
 
@@ -31,11 +31,9 @@ if (${BUILD_CUDA})
 endif()
 
 set(STL_AS_MODULES FALSE)
-if (${STL_AS_MODULES})
-	add_compile_definitions("STL_AS_MODULES")
-endif()
-
 if(${STL_AS_MODULES})
+	add_compile_definitions("STL_AS_MODULES")
+
 	if (MSVC)
 		#set(TARGET HastyComputeLib PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -62,7 +60,6 @@ if(${STL_AS_MODULES})
 
 	endif()
 endif()
-
 
 
 set(TEST_SOURCES
@@ -100,6 +97,15 @@ add_library(HastyComputeLib SHARED
 
 	${TEST_SOURCES}
 )
+
+target_sources(HastyComputeLib PUBLIC 
+	$<INSTALL_INTERFACE:lib/hasty.hpp>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/lib/hasty.hpp>)
+
+get_target_property(HASTYLIB_PUBLIC_HEADERS HastyComputeLib INTERFACE_SOURCES)
+set_target_properties(HastyComputeLib PROPERTIES PUBLIC_HEADER "${HASTYLIB_PUBLIC_HEADERS}")
+
+
 
 # Linking CUDA
 if (${BUILD_CUDA})
@@ -157,10 +163,8 @@ find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
 
-
-#set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
-target_compile_features(HastyComputeLib PUBLIC cxx_std_20)
-set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 20)
+target_compile_features(HastyComputeLib PUBLIC cxx_std_23)
+set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
 
 if (MSVC)
   file(GLOB finufft_DLLS "${finufft_INSTALL_PREFIX}/../../../bin/*.dll")
@@ -181,24 +185,95 @@ if (MSVC)
                      $<TARGET_FILE_DIR:HastyComputeLib>)
 endif()
 
-set_target_properties(HastyComputeLib PROPERTIES PUBLIC_HEADER "lib/hasty.hpp")
-install(TARGETS HastyComputeLib
-	LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-	ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-	PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include")
-
-
-
-
-
-
-
-
-
-
-
+# Tests
 
 add_executable(HastyTest "tests/test.ixx")
 target_link_libraries(HastyTest HastyComputeLib)
 target_compile_features(HastyTest PRIVATE cxx_std_23)
+
+
+
+
+# Python Interface
+
+set(PYBIND11_PYTHON_VERSION "3.11")
+#find_package(Python COMPONENTS Development REQUIRED)
+find_package(pybind11 REQUIRED)
+
+
+add_library(HastyPyInterface SHARED "python/py_interface.cpp")
+target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
+target_link_libraries(HastyPyInterface PUBLIC pybind11::module)
+target_link_libraries(HastyPyInterface )
+#target_link_libraries(HastyPyInterface PUBLIC Python::Python)
+
+
+
+
+install(TARGETS HastyComputeLib
+	EXPORT hasty-targets
+	RUNTIME DESTINATION bin
+	LIBRARY DESTINATION lib
+	ARCHIVE DESTINATION lib
+	PUBLIC_HEADER DESTINATION include
+	INCLUDES DESTINATION include
+)
+
+install(TARGETS HastyComputeLib
+	COMPONENT HastyComputeLib
+	RUNTIME_DEPENDENCIES
+		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+		POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
+		DIRECTORIES 
+			$<TARGET_FILE_DIR:HastyComputeLib>
+			$ENV{AF_PATH}/lib
+)
+
+install(TARGETS HastyPyInterface 
+	EXPORT hasty-targets
+	RUNTIME DESTINATION bin
+	LIBRARY DESTINATION lib
+	ARCHIVE DESTINATION lib
+	INCLUDES DESTINATION include
+)
+
+install(TARGETS HastyPyInterface 
+	COMPONENT HastyPyInterface
+	RUNTIME_DEPENDENCIES 
+		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+		POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
+		DIRECTORIES $<TARGET_FILE_DIR:HastyPyInterface>
+)
+
+include(CMakePackageConfigHelpers)
+
+# Creates FooConfigVersion.cmake in the build/Foo directory:
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/hasty/hastyConfigVersion.cmake"
+  VERSION       ${hasty_VERSION}
+  COMPATIBILITY AnyNewerVersion)
+
+
+# Export the targets (change namespace appropriately):
+export(EXPORT    hasty-targets
+       FILE      "${CMAKE_CURRENT_BINARY_DIR}/hasty/hastyTargets.cmake"
+       NAMESPACE HASTY::)
+
+# Copy the FooConfig.cmake to the build/Foo directory:
+configure_file(hastyConfig.cmake
+               "${CMAKE_CURRENT_BINARY_DIR}/hasty/hastyConfig.cmake"
+               COPYONLY)
+
+set(ConfigPackageLocation lib/cmake/hasty)
+install(EXPORT      hasty-targets
+        FILE        hastyTargets.cmake
+        NAMESPACE   HASTY::
+        DESTINATION ${ConfigPackageLocation})
+
+# This also installs relative to CMAKE_INSTALL_PREFIX:
+install(
+  FILES       hastyConfig.cmake
+              "${CMAKE_CURRENT_BINARY_DIR}/hasty/hastyConfigVersion.cmake"
+  DESTINATION ${ConfigPackageLocation})
+
 
