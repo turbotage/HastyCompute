@@ -2,7 +2,6 @@
   "name": "hasty-compute",
   "version-string": "0.1.0",
   "dependencies": [
-    "symengine",
-    "pybind11"
+    "symengine"
   ]
 }

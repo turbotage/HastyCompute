@@ -1,16 +1,7 @@
 #include "torch_util.hpp"
 
-#ifdef STL_AS_MODULES
-import std.compat;
-#else
-import <memory>;
-import <vector>;
-import <string>;
-import <array>;
-import <stdexcept>;
-import <optional>;
-import <sstream>;
-#endif
+#include <memory>
+
 
 std::stringstream hasty::torch_util::print_4d_xyz(const at::Tensor& toprint)
 {

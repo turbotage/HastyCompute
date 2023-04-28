@@ -5,17 +5,6 @@
 
 #include <cufinufft.h>
 
-#ifdef STL_AS_MODULES
-import std.compat;
-#else
-import <memory>;
-import <vector>;
-import <string>;
-import <array>;
-import <stdexcept>;
-import <optional>;
-#endif
-
 import hasty_util;
 
 using namespace hasty::cuda;

@@ -1,7 +1,12 @@
 #include "llr_cu.hpp"
 
-using namespace hasty;
-using namespace hasty::cuda;
+#include <random>
+
+
+at::Tensor hasty::cuda::extract_block(const at::Tensor& in, const Block<4>& block)
+{
+
+}
 
 at::Tensor hasty::cuda::extract_block(const std::vector<std::vector<std::reference_wrapper<const at::Tensor>>>& tensors,
 	const std::pair<std::vector<int64_t>, std::vector<int64_t>>& block)
@@ -113,5 +118,29 @@ void hasty::cuda::insert_block(const std::vector<std::vector<std::reference_wrap
 			start += nelem;
 		}
 	}
+
+}
+
+
+
+
+hasty::cuda::LLRecon_4D_Encodes::LLRecon_4D_Encodes(
+	at::Tensor& image,
+	const at::Tensor& coords,
+	const at::Tensor& smaps,
+	const at::Tensor& kdata)
+	:
+	_image(image),
+	_coords(coords),
+	_smaps(smaps),
+	_kdata(kdata)
+{
+	
+}
+
+
+void hasty::cuda::LLRecon_4D_Encodes::run(int iter)
+{
+
 
 }

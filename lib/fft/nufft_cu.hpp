@@ -3,19 +3,6 @@
 #include "../torch_util.hpp"
 #include <cufinufft_opts.h>
 
-//export module nufft_cu;
-#ifdef STL_AS_MODULES
-import std.compat;
-#else
-import <memory>;
-import <vector>;
-import <string>;
-import <stdexcept>;
-import <array>;
-import <functional>;
-import <optional>;
-#endif
-
 
 struct cufinufft_plan_s;
 typedef cufinufft_plan_s* cufinufft_plan;

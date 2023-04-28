@@ -1,11 +1,11 @@
-#import torch
+import torch
 
 import sys
 import os
 
 print(os.getpid())
 
-# class add_path():
+#class add_path():§
 # 	def __init__(self, path):
 # 		self.path = path
 
@@ -19,16 +19,21 @@ print(os.getpid())
 # 			pass
 
 
-# with add_path("D:\\Documents\\GitHub\\HastyCompute\\out\install\\x64-debug-cuda\\bin"):
+#with add_path("D:\\Documents\\GitHub\\HastyCompute\\out\install\\x64-debug-cuda\\bin"):
 # 	try:
 # 		torch.ops.load_library("D:\\Documents\\GitHub\\HastyCompute\\out\install\\x64-debug-cuda\\bin\\HastyPyInterface.dll")
 # 	except Exception as e:
 # 		 print(e)
 
-import ctypes as ct
-cdll = ct.CDLL("D:\\Documents\\GitHub\\HastyCompute\\out\install\\x64-debug-cuda\\bin\\HastyPyInterface.dll")
+torch.ops.load_library("D:\\GitHub\\HastyCompute\\out\\install\\x64-release-cuda\\bin\\HastyPyInterface.dll")
 
-#a = torch.randint(0,10,shape, dtpye=torch.float32)
-#print(a)
+#import ctypes as ct
+#cdll = ct.CDLL("D:\\GitHub\\HastyCompute\\out\\install\\x64-release-cuda\\bin\\HastyPyInterface.dll")
 
-#a = torch.ops.HastyPyinterface.add_one(a)
+shape = (3,3,3)
+a = torch.randint(0,10,shape, dtype=torch.float32)
+print(a)
+
+a = torch.ops.HastyPyInterface.add_one(a)
+
+print(a)

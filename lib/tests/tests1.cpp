@@ -7,8 +7,6 @@ import hasty_compute;
 import solver_cu;
 import permute_cu;
 
-import <chrono>;
-import <array>;
 #include <iostream>
 
 #include <arrayfire.h>

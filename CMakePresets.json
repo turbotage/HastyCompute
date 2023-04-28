@@ -73,7 +73,8 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
+        "PYTHON_PATH": "D:\\Programs\\miniconda3\\envs\\v311torch"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -96,6 +97,10 @@
         "CMAKE_CUDA_ARCHITECTURES": {
           "type": "STRING",
           "value": "60;75;89"
+        },
+        "Python3_ROOT": {
+          "type": "FILEPATH",
+          "value": "$env{PYTHON_PATH}"
         }
       }
     }
