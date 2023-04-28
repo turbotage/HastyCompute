@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ATen/ATen.h>
 #include "block.hpp"
+#include "../torch_util.hpp"
 
 namespace hasty {
 	namespace cuda {
@@ -9,36 +9,40 @@ namespace hasty {
 		using CTensorVec = std::vector<std::reference_wrapper<const at::Tensor>>;
 		using TensorVec = std::vector<std::reference_wrapper<at::Tensor>>;
 
-		using CTensorVecVec = std::vector<CTensorRefVec>;
-		using TensorVecVec = std::vector<TensorRefVec>;
+		using CTensorVecVec = std::vector<CTensorVec>;
+		using TensorVecVec = std::vector<TensorVec>;
 
-
-		// tensors outer vector are frames inner are encodes
-		at::Tensor extract_block(const at::Tensor& tensor, const Block<4>& block);
-
-		at::Tensor svt(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor,at::Tensor,at::Tensor>> storage);
-
-		void svt_inplace(at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage);
-
-		void insert_block(const TensorRefVecVec& tensors, 
-			const std::pair<std::vector<int64_t>, std::vector<int64_t>>& block, const at::Tensor& block_tensor);
 		
 		// Runs 
-		class LLRecon_4D_Encodes {
+		class LLR_4DEncodes {
 		public:
 
-			LLRecon_4D_Encodes(at::Tensor& image,
-					const CTensorVecVec& coords,
-					const at::Tensor& smaps,
-					const CTensorVecVec& kdata);
+			struct LLR_4DEncodesOptions {
+				bool store_nufft_plans = false;
+			};
+
+		public:
+
+			LLR_4DEncodes(
+				const LLR_4DEncodesOptions& options,
+				at::Tensor& image,
+				const CTensorVecVec& coords,
+				const at::Tensor& smaps,
+				const CTensorVecVec& kdata);
+
+			void step_l2_sgd(const std::vector<
+				std::pair<int, std::vector<int>>>& coil_encode_indices);
+
+
 
 			void iter();
 
 		private:
+			LLR_4DEncodesOptions _options;
 			at::Tensor& _image;
-			const at::Tensor& _coords;
+			CTensorVecVec _coords;
 			const at::Tensor& _smaps;
-			const at::Tensor& _kdata;
+			CTensorVecVec _kdata;
 		};
 
 	}

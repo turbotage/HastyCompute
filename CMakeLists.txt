@@ -74,6 +74,8 @@ add_library(HastyComputeLib SHARED
 	"lib/hasty_compute.ixx"
 	"lib/torch_util.cpp"
 
+	"lib/cs/svt.cpp"
+
 	"lib/expr/parser/token.ixx" 
 	"lib/expr/parser/lexer.ixx" 
 	"lib/expr/parser/defaultexp.ixx"
