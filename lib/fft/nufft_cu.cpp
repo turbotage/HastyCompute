@@ -5,8 +5,6 @@
 
 #include <cufinufft.h>
 
-#include "../torch_util.hpp"
-
 #ifdef STL_AS_MODULES
 import std.compat;
 #else
@@ -470,9 +468,9 @@ namespace {
 
 		auto transform_dims = at::makeArrayRef(transdims);
 
-		input_storage = torch::fft_ifftshift(diagonal, transform_dims);
+		input_storage = at::fft_ifftshift(diagonal, transform_dims);
 
-		torch::fft_fftn_out(diagonal, input_storage, c10::nullopt, transform_dims);
+		at::fft_fftn_out(diagonal, input_storage, c10::nullopt, transform_dims);
 
 	}
 
@@ -639,9 +637,9 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
-	torch::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
+	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
 	storage1.mul_(_diagonal);
-	torch::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
+	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
 	out = storage2.index(_indices);
 }
 

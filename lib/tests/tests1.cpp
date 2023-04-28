@@ -1,20 +1,11 @@
 #include "tests1.hpp"
 
 #include "../fft/nufft_cu.hpp"
-#include "../torch_util.hpp"
 
 import hasty_util;
 import hasty_compute;
 import solver_cu;
 import permute_cu;
-
-/*
-import <symengine/expression.h>;
-import <symengine/simplify.h>;
-import <symengine/parser.h>;
-*/
-
-#include <torch/torch.h>
 
 import <chrono>;
 import <array>;
@@ -56,7 +47,7 @@ void hasty::tests::test_deterministic_1d() {
 
 	nu2.apply(c, f);
 
-	at::cuda::synchronize();
+	torch::cuda::synchronize();
 
 	std::cout << "Nufft Type 2:\nreal:\n" << at::real(f) << "\n\nimag:\n" << at::imag(f) << std::endl;
 	std::cout << "Nufft Type 2:\nreal:\n" << at::real(c) << "\n\nimag:\n" << at::imag(c) << std::endl;
@@ -249,7 +240,7 @@ void hasty::tests::test_speed() {
 	auto in = at::rand({ nc,nx,nx,nx }, options1);
 	auto out = at::rand({ nc,nx,nx,nx }, options1);
 
-	at::cuda::synchronize();
+	torch::cuda::synchronize();
 
 	
 
@@ -710,7 +701,7 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 	at::Tensor ffter_mul = at::rand({ n2,n2,n2 }, options);
 	at::Tensor ffter_temp = at::empty({ n2,n2,n2 }, options);
 
-	at::cuda::synchronize();
+	torch::cuda::synchronize();
 
 	auto start = std::chrono::high_resolution_clock::now();
 
@@ -729,7 +720,7 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
 	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
 
-	at::cuda::synchronize();
+	torch::cuda::synchronize();
 
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

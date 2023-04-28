@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ATen/ATen.h>
+#include <torch/torch.h>
 
 namespace hasty {
 

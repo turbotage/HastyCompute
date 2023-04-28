@@ -187,9 +187,9 @@ endif()
 
 # Tests
 
-add_executable(HastyTest "tests/test.ixx")
-target_link_libraries(HastyTest HastyComputeLib)
-target_compile_features(HastyTest PRIVATE cxx_std_23)
+#add_executable(HastyTest "tests/test.cpp")
+#target_link_libraries(HastyTest HastyComputeLib)
+#target_compile_features(HastyTest PRIVATE cxx_std_23)
 
 
 
@@ -197,7 +197,7 @@ target_compile_features(HastyTest PRIVATE cxx_std_23)
 # Python Interface
 
 set(PYBIND11_PYTHON_VERSION "3.11")
-#find_package(Python COMPONENTS Development REQUIRED)
+find_package(Python3 COMPONENTS Development REQUIRED)
 find_package(pybind11 REQUIRED)
 
 

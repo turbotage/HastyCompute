@@ -1,5 +1,4 @@
 #include "sense_cu.hpp"
-#include "../torch_util.hpp"
 
 using namespace hasty::cuda;
 

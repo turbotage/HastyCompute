@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ATen/ATen.h>
 #include "../fft/nufft_cu.hpp"
 
 #ifdef STL_AS_MODULES
