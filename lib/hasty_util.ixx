@@ -16,6 +16,7 @@ import <unordered_map>;
 import <array>;
 import <sstream>;
 import <chrono>;
+import <iterator>;
 #endif
 
 namespace hasty {
@@ -143,7 +144,6 @@ namespace hasty {
         {}
 
     };
-
 
     namespace util {
 
