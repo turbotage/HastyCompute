@@ -2,15 +2,14 @@
 
 #include "block.hpp"
 #include "../torch_util.hpp"
-#include "../fft/nufft_cu.hpp"
+#include "sense_cu.hpp"
+#include "../threading/thread_pool.hpp"
 
 namespace hasty {
 	namespace cuda {
 
-		using CTensorVec = std::vector<std::reference_wrapper<const at::Tensor>>;
-		using TensorVec = std::vector<std::reference_wrapper<at::Tensor>>;
+		using TensorVec = std::vector<at::Tensor>;
 
-		using CTensorVecVec = std::vector<CTensorVec>;
 		using TensorVecVec = std::vector<TensorVec>;
 
 		
@@ -18,52 +17,79 @@ namespace hasty {
 		class LLR_4DEncodes {
 		public:
 
-			struct LLR_4DEncodesOptions {
-				bool store_nufft_plans = false;
+			struct Options {
+				Options(const c10::Device& device)
+				{
+					devices.emplace_back(device);
+				}
+
+				std::vector<c10::Device> devices;
 			};
 
 		public:
 
 			LLR_4DEncodes(
-				const LLR_4DEncodesOptions& options,
+				const Options& options,
 				at::Tensor& image,
-				const CTensorVecVec& coords,
+				const TensorVecVec& coords,
 				const at::Tensor& smaps,
-				const CTensorVecVec& kdata,
-				const CTensorVecVec& weights);
+				const TensorVecVec& kdata,
+				const TensorVecVec& weights);
+
+			LLR_4DEncodes(
+				const Options& options,
+				at::Tensor& image,
+				TensorVecVec&& coords,
+				const at::Tensor& smaps,
+				TensorVecVec&& kdata,
+				TensorVecVec&& weights);
 
 			void step_l2_sgd(const std::vector<
 				std::pair<int, std::vector<int>>>& encode_coil_indices);
 
+		private:
 
-
-			void iter();
+			void construct();
 
 		private:
 
 			struct DeviceContext {
 
+				DeviceContext(const c10::Device& dev) : device(dev) {}
 
-				at::Device device;
+				c10::Device device;
 				at::Tensor image;
 				at::Tensor kdata;
 				at::Tensor weights;
 				at::Tensor coords;
 
-				std::unique_ptr<NufftNormal> normal_nufft;
+				at::Tensor out;
+
+				at::Tensor in_storage; // TensorOptions as image
+				//at::Tensor freq_storage; // TensorOptions as kdata
+
+				at::Tensor smaps;
+
+				std::unique_ptr<SenseNormal> sense;
 			};
+
+			void coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils);
 
 		private:
 
-			LLR_4DEncodesOptions _options;
+			ThreadPool _tpool;
+
+			Options _options;
 			at::Tensor& _image;
-			CTensorVecVec _coords;
+			TensorVecVec _coords;
 			const at::Tensor& _smaps;
-			CTensorVecVec _kdata;
-			CTensorVecVec _weights;
+			TensorVecVec _kdata;
+			TensorVecVec _weights;
+
+			std::vector<int64_t> _nmodes;
 
 			int _nframe;
-
+			std::mutex _copy_back_mutex;
 
 			std::vector<DeviceContext> _dcontexts;
 

@@ -63,8 +63,13 @@ endif()
 
 
 set(TEST_SOURCES
-	"lib/tests/tests1.cpp"
+	"lib/FFI/tests1.cpp"
 )
+set(FFI_SOURCES
+	"lib/FFI/nufft.cpp"
+	"lib/FFI/cs.cpp"
+)
+
 
 add_library(HastyComputeLib SHARED
 	${STL_SOURCES}
@@ -95,9 +100,12 @@ add_library(HastyComputeLib SHARED
 
 	"lib/nlsq/nlsq_symbolic.ixx"
 
+	"lib/threading/thread_pool.cpp"
+
 	${BACKEND_SOURCES}
 
 	${TEST_SOURCES}
+	${FFI_SOURCES}
 )
 
 target_sources(HastyComputeLib PUBLIC 
@@ -204,13 +212,19 @@ find_package(Python3 3.11 EXACT COMPONENTS Development REQUIRED)
 
 
 
-add_library(HastyPyInterface SHARED "python/py_interface.cpp")
+add_library(HastyPyInterface SHARED 
+	"python/py_interface.cpp"
+)
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
 target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
+set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
 
-#target_link_libraries(HastyPyInterface PUBLIC pybind11::module)
-#target_link_libraries(HastyPyInterface )
 
+# Tests of the Python Interface
+add_executable(HastyPyTest "tests/py_test.cpp")
+target_link_libraries(HastyPyTest PUBLIC HastyComputeLib)
+target_link_libraries(HastyPyTest PUBLIC HastyPyInterface)
+set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
 
 
 
@@ -246,7 +260,9 @@ install(TARGETS HastyPyInterface
 	RUNTIME_DEPENDENCIES 
 		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
 		POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
-		DIRECTORIES $<TARGET_FILE_DIR:HastyPyInterface>
+		DIRECTORIES 
+			$<TARGET_FILE_DIR:HastyPyInterface>
+			$ENV{PYTHON_PATH}
 )
 
 include(CMakePackageConfigHelpers)

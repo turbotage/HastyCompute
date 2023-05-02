@@ -1,8 +1,8 @@
 #pragma once
 
 
-#ifdef INCLUDE_TESTS
-#include "tests/tests1.hpp"
+#ifdef INCLUDE_FFI
+#include "FFI/ffi.hpp"
 #endif
 
 #include "fft/nufft_cu.hpp"

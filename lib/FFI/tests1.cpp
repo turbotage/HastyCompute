@@ -11,8 +11,6 @@ import permute_cu;
 
 #include <arrayfire.h>
 
-
-
 void hasty::tests::test_deterministic_1d() {
 	int nfb = 8;
 	int nf = nfb;

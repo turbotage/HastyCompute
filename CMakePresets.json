@@ -51,7 +51,7 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/nightly_release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
         },
         "BUILD_CUDA": {
           "type": "BOOL",
@@ -74,7 +74,7 @@
       },
       "environment": {
         "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
-        "PYTHON_PATH": "D:\\Programs\\miniconda3\\envs\\v311torch"
+        "PYTHON_PATH": "C:\\Users\\TurboTage\\Programs\\miniconda\\envs\\v311torch"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -88,7 +88,7 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/nightly_release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
         },
         "BUILD_CUDA": {
           "type": "BOOL",

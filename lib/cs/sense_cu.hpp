@@ -19,7 +19,11 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps, const at::Tensor& out,
 				std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
-				std::optional<std::function<void(at::Tensor&)>> freq_manip);
+				std::optional<std::function<void(at::Tensor&,int)>> freq_manip);
+
+			void apply(const at::Tensor& in, const at::Tensor& smaps, const std::vector<int32_t>& coils, const at::Tensor& out,
+				std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
+				std::optional<std::function<void(at::Tensor&,int)>> freq_manip);
 
 		private:
 
