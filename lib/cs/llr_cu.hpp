@@ -42,6 +42,8 @@ namespace hasty {
 		private:
 
 			struct DeviceContext {
+
+
 				at::Device device;
 				at::Tensor image;
 				at::Tensor kdata;

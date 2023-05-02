@@ -75,7 +75,7 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 				dctxt.weights = weights.to(dctxt.device);
 			}
 
-
+			dctxt.normal_nufft = std::make_unique<NufftNormal>();
 
 
 			// Move to the next device context
