@@ -28,6 +28,17 @@ namespace hasty {
 
 		public:
 
+			LLR_4DEncodes(const LLR_4DEncodes&) = delete;
+			LLR_4DEncodes(LLR_4DEncodes&&) = delete;
+			LLR_4DEncodes& operator=(const LLR_4DEncodes&) = delete;
+
+			LLR_4DEncodes(
+				const Options& options,
+				at::Tensor& image,
+				const TensorVecVec& coords,
+				const at::Tensor& smaps,
+				const TensorVecVec& kdata);
+
 			LLR_4DEncodes(
 				const Options& options,
 				at::Tensor& image,
@@ -35,6 +46,13 @@ namespace hasty {
 				const at::Tensor& smaps,
 				const TensorVecVec& kdata,
 				const TensorVecVec& weights);
+
+			LLR_4DEncodes(
+				const Options& options,
+				at::Tensor& image,
+				TensorVecVec&& coords,
+				const at::Tensor& smaps,
+				TensorVecVec&& kdata);
 
 			LLR_4DEncodes(
 				const Options& options,
@@ -55,12 +73,16 @@ namespace hasty {
 
 			struct DeviceContext {
 
-				DeviceContext(const c10::Device& dev) : device(dev) {}
+				DeviceContext(const c10::Device& dev) : 
+					device(dev), device_mutex(std::make_unique<std::mutex>()) {}
+				DeviceContext(const DeviceContext&) = delete;
+				DeviceContext& operator=(const DeviceContext&) = delete;
+				DeviceContext(DeviceContext&&) = default;
 
 				c10::Device device;
 				at::Tensor image;
 				at::Tensor kdata;
-				at::Tensor weights;
+				std::optional<at::Tensor> weights;
 				at::Tensor coords;
 
 				at::Tensor out;
@@ -71,6 +93,9 @@ namespace hasty {
 				at::Tensor smaps;
 
 				std::unique_ptr<SenseNormal> sense;
+
+				// Probably have to rethink this
+				std::unique_ptr<std::mutex> device_mutex;
 			};
 
 			void coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils);
@@ -84,7 +109,7 @@ namespace hasty {
 			TensorVecVec _coords;
 			const at::Tensor& _smaps;
 			TensorVecVec _kdata;
-			TensorVecVec _weights;
+			std::optional<TensorVecVec> _weights;
 
 			std::vector<int64_t> _nmodes;
 

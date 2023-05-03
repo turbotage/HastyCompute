@@ -19,37 +19,38 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 
 	TensorVecVec coords_vec;
 	coords_vec.reserve(nframes);
-	TensorVecVec weights_vec;
-	weights_vec.reserve(nframes);
+	//TensorVecVec weights_vec;
+	//weights_vec.reserve(nframes);
 	TensorVecVec kdata_vec;
 	kdata_vec.reserve(nframes);
 
 	auto options = input.options().dtype(c10::kFloat);
 
-	for (int frame = 0; frame < input.size(0); ++frame) {
+	for (int frame = 0; frame < nframes; ++frame) {
 		auto& coords_encode_vec = coords_vec.emplace_back();
 		coords_encode_vec.reserve(nencodes);
-		auto& weights_encode_vec = weights_vec.emplace_back();
-		weights_encode_vec.reserve(nencodes);
+		//auto& weights_encode_vec = weights_vec.emplace_back();
+		//weights_encode_vec.reserve(nencodes);
 		auto& kdata_encode_vec = kdata_vec.emplace_back();
 		kdata_encode_vec.reserve(nencodes);
 
-		for (int encode = 0; encode < input.size(1); ++encode) {
-			auto coord = coords.select(0, frame).select(1, encode);
+		for (int encode = 0; encode < nencodes; ++encode) {
+			auto coord = coords.select(0, frame).select(0, encode);
 			coords_encode_vec.emplace_back(coord);
-			weights_encode_vec.emplace_back(at::ones(coord.sizes(), options));
-			kdata_encode_vec.emplace_back(kdata.select(0, frame).select(1, encode));
+			//weights_encode_vec.emplace_back(at::ones({ 1,coord.size(1)}, options));
+			kdata_encode_vec.emplace_back(kdata.select(0, frame).select(0, encode));
 		}
 	}
 
 	
 	auto llr_options = LLR_4DEncodes::Options(c10::Device(c10::kCUDA));
 
-	LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec), std::move(weights_vec));
+	//LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec), std::move(weights_vec));
+	LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec));
 
 	std::random_device rd;
 	std::mt19937 g(rd());
-	std::uniform_int_distribution<std::mt19937::result_type> dist(1,ncoils);
+	std::uniform_int_distribution<std::mt19937::result_type> dist(ncoils / 4,ncoils);
 
 	for (int k = 0; k < iter; ++k) {
 		std::vector<std::pair<int, std::vector<int>>> mhm;

@@ -51,7 +51,7 @@
         },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
+          "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
         },
         "BUILD_CUDA": {
           "type": "BOOL",

@@ -192,7 +192,6 @@ void Nufft::make_plan_set_pts()
 		{
 			auto tx = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
-
 			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL, _plan)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
@@ -203,7 +202,6 @@ void Nufft::make_plan_set_pts()
 			auto tx = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
 			auto tz = _coords.select(0, 2);
-
 			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), (double*)tz.data_ptr(), 0, NULL, NULL, NULL, _plan)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
@@ -383,9 +381,31 @@ void NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& stora
 void NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const
 {
 	_forward.apply(in, storage);
+
+	try {
+		torch::cuda::synchronize();
+	}
+	catch (c10::Error e) {
+		std::cerr << "c10::Error: " << e.what() << std::endl;
+	}
+	catch (...) {
+		std::cerr << "err" << std::endl;
+	}
+
 	if (func_between.has_value()) {
 		func_between.value()(storage);
 	}
+
+	try {
+		torch::cuda::synchronize();
+	}
+	catch (c10::Error e) {
+		std::cerr << "c10::Error: " << e.what() << std::endl;
+	}
+	catch (...) {
+		std::cerr << "err" << std::endl;
+	}
+
 	_backward.apply(storage, in);
 }
 

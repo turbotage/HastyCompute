@@ -5,6 +5,24 @@
 
 import hasty_util;
 
+hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+	const Options& options,
+	at::Tensor& image,
+	const TensorVecVec& coords,
+	const at::Tensor& smaps,
+	const TensorVecVec& kdata)
+	:
+	_options(options),
+	_image(image),
+	_coords(coords),
+	_smaps(smaps),
+	_kdata(kdata),
+	_nframe(image.size(0)),
+	_nmodes(4),
+	_tpool(options.devices.size())
+{
+	construct();
+}
 
 hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	const Options& options,
@@ -32,15 +50,34 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	at::Tensor& image,
 	TensorVecVec&& coords,
 	const at::Tensor& smaps,
+	TensorVecVec&& kdata)
+	:
+	_options(options),
+	_image(image),
+	_coords(std::move(coords)),
+	_smaps(smaps),
+	_kdata(std::move(kdata)),
+	_nframe(image.size(0)),
+	_nmodes(4),
+	_tpool(options.devices.size())
+{
+	construct();
+}
+
+hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+	const Options& options,
+	at::Tensor& image,
+	TensorVecVec&& coords,
+	const at::Tensor& smaps,
 	TensorVecVec&& kdata,
 	TensorVecVec&& weights)
 	:
 	_options(options),
 	_image(image),
-	_coords(coords),
+	_coords(std::move(coords)),
 	_smaps(smaps),
-	_kdata(kdata),
-	_weights(weights),
+	_kdata(std::move(kdata)),
+	_weights(std::move(weights)),
 	_nframe(image.size(0)),
 	_nmodes(4),
 	_tpool(options.devices.size())
@@ -50,12 +87,12 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 
 void hasty::cuda::LLR_4DEncodes::construct()
 {
-	_nmodes[0] = 1; _nmodes[1] = _image.size(1); _nmodes[2] = _image.size(2); _nmodes[3] = _image.size(3);
+	_nmodes[0] = 1; _nmodes[1] = _image.size(2); _nmodes[2] = _image.size(3); _nmodes[3] = _image.size(4);
 
 	auto base_options1 = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
 	auto base_options2 = c10::TensorOptions().dtype(c10::ScalarType::Float);
 
-	_dcontexts.reserve(_options.devices.size());
+	//_dcontexts.reserve(_options.devices.size());
 	for (auto& device : _options.devices) {
 
 		auto& dcontext = _dcontexts.emplace_back(device);
@@ -95,36 +132,54 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 	};
 	
 
+	std::vector<std::future<void>> futures;
+	futures.reserve(_nframe * encode_coil_indices.size());
+
 	for (int frame = 0; frame < _nframe; ++frame) {
 		for (const auto& encode_pair : encode_coil_indices) {
 			int encode = encode_pair.first;
 			auto& coils = encode_pair.second;
 
 			auto coil_encode_stepper = [this, it, frame, encode, &coils]() {
-				coil_encode_step(it, frame, encode, coils);
+				try {
+					coil_encode_step(it, frame, encode, coils);
+				}
+				catch (...) {
+					std::cerr << "what";
+				}
 			};
 
-			_tpool.enqueue(coil_encode_stepper);
+			//futures.emplace_back(_tpool.enqueue(coil_encode_stepper));
+			coil_encode_stepper();
 
 			// Move to the next device context
 			it = circular_update(it);
 		}
 	}
+
+	// we wait for all promises
+	for (auto rit = std::begin(futures); rit != std::end(futures); ++rit) {
+		rit->get();
+	}
+	
 }
 
 
 void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils)
 {
 	c10::InferenceMode inference_guard;
-	
+
 	// Get the device context
 	auto& dctxt = *dit;
 
+	// Lock this device
+	std::lock_guard<std::mutex> lock(*dctxt.device_mutex);
+		
 	// This shall be done on the correct device
 	c10::cuda::CUDAGuard guard(dctxt.device.index());
 
 	// CPU Frame Encode View
-	auto cpu_frame_encode_view = _image.select(0, frame).select(1, encode); //_image.index({ frame, encode, "..." });
+	auto cpu_frame_encode_view = _image.select(0, frame).select(0, encode).unsqueeze(0); //_image.index({ frame, encode, "..." });
 
 	// Copy image to device
 	dctxt.image.copy_(cpu_frame_encode_view, true);
@@ -148,21 +203,40 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 	}
 
 	// Copy weights to device
-	auto& weights = _weights[frame][encode];
-	if (dctxt.weights.sizes() == weights.sizes()) {
-		dctxt.weights.copy_(weights, true);
-	}
-	else {
+	if (_weights.has_value()) {
+		auto& weights = _weights.value()[frame][encode];
+		auto& dctxt_weights = dctxt.weights.value();
+		if (dctxt_weights.sizes() == weights.sizes()) {
+			dctxt_weights.copy_(weights, true);
+		}
+		else {
 
-		dctxt.weights = weights.to(dctxt.device, true);
+			dctxt_weights = weights.to(dctxt.device, true);
+		}
 	}
 
+	torch::cuda::synchronize();
+
+	//if (dctxt.sense == nullptr) {
 	dctxt.sense = std::make_unique<SenseNormal>(dctxt.coords, _nmodes);
+	//}
 
 	auto freq_manip = [&dctxt](at::Tensor& in, int coil) {
 		in.sub_(dctxt.kdata.select(0, coil));
-		in.mul_(dctxt.weights);
+		if (dctxt.weights.has_value()) {
+			in.mul_(dctxt.weights.value());
+		}
 	};
+
+	try {
+		torch::cuda::synchronize();
+	}
+	catch (c10::Error e) {
+		std::cerr << "c10::Error: " << e.what() << std::endl;
+	}
+	catch (...) {
+		std::cerr << "err" << std::endl;
+	}
 
 	dctxt.sense->apply(dctxt.image, dctxt.smaps, coils, dctxt.out, dctxt.in_storage, std::nullopt, freq_manip);
 
@@ -171,4 +245,5 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 		cpu_frame_encode_view.add_(dctxt.out.to(c10::DeviceType::CPU));
 	}
 
+	torch::cuda::synchronize();
 }

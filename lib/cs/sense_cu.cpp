@@ -25,9 +25,9 @@ void SenseNormal::apply(const at::Tensor& in, const std::vector<std::reference_w
 		xstore = at::empty_like(in);
 	}
 	if (freq_storage.has_value()) {
-		fstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
-	} else {
 		fstore = freq_storage.value();
+	} else {
+		fstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
 	}
 
 	int smaps_len = smaps.size();
@@ -65,17 +65,19 @@ void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std
 		xstore = at::empty_like(in);
 	}
 	if (freq_storage.has_value()) {
-		fstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
+		fstore = freq_storage.value();
 	}
 	else {
-		fstore = freq_storage.value();
+		fstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
 	}
 
 	bool has_freq_manip = freq_manip.has_value();
 
 	for (auto coil : coils) {
-		const at::Tensor& smap = smaps.select(0,coil);
+		const at::Tensor& smap = smaps.select(0,coil).unsqueeze(0);
 		at::mul_out(xstore, in, smap);
+
+		torch::cuda::synchronize();
 
 		if (has_freq_manip) {
 			_normal_nufft.apply_inplace(xstore, fstore, std::bind(freq_manip.value(), std::placeholders::_1, coil));
@@ -83,7 +85,11 @@ void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std
 		else {
 			_normal_nufft.apply_inplace(xstore, fstore, std::nullopt);
 		}
+
+		torch::cuda::synchronize();
+
 		out.addcmul_(xstore, smap.conj());
+
 	}
 
 }

@@ -34,7 +34,6 @@ namespace hasty {
 		std::mutex _queue_mutex;
 		std::vector<std::thread> _threads;
 		bool _stop;
-
 	};
 
 	template<class F, class ...Args>
