@@ -139,10 +139,15 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 		for (const auto& encode_pair : encode_coil_indices) {
 			int encode = encode_pair.first;
 			auto& coils = encode_pair.second;
-
 			auto coil_encode_stepper = [this, it, frame, encode, &coils]() {
 				try {
 					coil_encode_step(it, frame, encode, coils);
+				}
+				catch (c10::Error& e) {
+					std::cerr << e.what() << std::endl;
+				}
+				catch (std::exception& e) {
+					std::cerr << e.what() << std::endl;
 				}
 				catch (...) {
 					std::cerr << "what";
@@ -167,6 +172,7 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 
 void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils)
 {
+	std::cout << " frame: " << frame << " encode: " << encode;
 	c10::InferenceMode inference_guard;
 
 	// Get the device context
@@ -182,7 +188,8 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 	auto cpu_frame_encode_view = _image.select(0, frame).select(0, encode).unsqueeze(0); //_image.index({ frame, encode, "..." });
 
 	// Copy image to device
-	dctxt.image.copy_(cpu_frame_encode_view, true);
+	//dctxt.image.copy_(cpu_frame_encode_view, true);
+	dctxt.image = cpu_frame_encode_view.to(dctxt.device);
 
 	// Copy coords to device
 	auto& coords = _coords[frame][encode];
@@ -195,12 +202,15 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 
 	// Copy kdata to device
 	auto& kdata = _kdata[frame][encode];
+	dctxt.kdata = kdata.to(dctxt.device);
+	/*
 	if (dctxt.kdata.sizes() == kdata.sizes()) {
 		dctxt.kdata.copy_(kdata, true);
 	}
 	else {
 		dctxt.kdata = kdata.to(dctxt.device, true);
 	}
+	*/
 
 	// Copy weights to device
 	if (_weights.has_value()) {
@@ -215,14 +225,17 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 		}
 	}
 
-	torch::cuda::synchronize();
+	torch::cuda::synchronize(dctxt.device.index());
 
 	//if (dctxt.sense == nullptr) {
+	//dctxt.sense = nullptr;
 	dctxt.sense = std::make_unique<SenseNormal>(dctxt.coords, _nmodes);
 	//}
 
 	auto freq_manip = [&dctxt](at::Tensor& in, int coil) {
-		in.sub_(dctxt.kdata.select(0, coil));
+		auto kdata_coil = dctxt.kdata.select(0, coil).unsqueeze(0);
+		//in.sub_(kdata_coil);
+		in.sub_(0.1f);
 		if (dctxt.weights.has_value()) {
 			in.mul_(dctxt.weights.value());
 		}
@@ -234,16 +247,21 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContex
 	catch (c10::Error e) {
 		std::cerr << "c10::Error: " << e.what() << std::endl;
 	}
-	catch (...) {
-		std::cerr << "err" << std::endl;
-	}
 
-	dctxt.sense->apply(dctxt.image, dctxt.smaps, coils, dctxt.out, dctxt.in_storage, std::nullopt, freq_manip);
+	try {
+		dctxt.sense->apply(dctxt.image, dctxt.smaps, coils, dctxt.out, dctxt.in_storage, std::nullopt, freq_manip);
+	}
+	catch (c10::Error& e) {
+		std::cerr << e.what() << std::endl;
+	}
 
 	{
 		std::lock_guard<std::mutex> lock(_copy_back_mutex);
 		cpu_frame_encode_view.add_(dctxt.out.to(c10::DeviceType::CPU));
 	}
 
-	torch::cuda::synchronize();
+	dctxt.sense = nullptr;
+
+
+	//torch::cuda::synchronize();
 }

@@ -38,26 +38,46 @@ Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const
 
 }
 
-Nufft::~Nufft() {
-	try {
+void Nufft::close()
+{
+	if (!_closed) {
+		_closed = true;
 		switch (_type) {
 		case c10::ScalarType::Float:
 		{
-			if (cufinufftf_destroy(_planf)) {
-				std::exit(EXIT_FAILURE);
+			if (_planf == nullptr) {
+				throw std::runtime_error("Tried to close on Nufft with _planf == nullptr");
 			}
+			if (cufinufftf_destroy(_planf)) {
+				throw std::runtime_error("cufinufftf_destroy() failed");
+			}
+			_planf = nullptr;
 		}
 		break;
 		case c10::ScalarType::Double:
 		{
-			if (cufinufft_destroy(_plan)) {
-				std::exit(EXIT_FAILURE);
+			if (_plan == nullptr) {
+				throw std::runtime_error("Tried to close on Nufft with _plan == nullptr");
 			}
+			if (cufinufft_destroy(_plan)) {
+				throw std::runtime_error("cufinufft_destroy() failed");
+			}
+			_planf = nullptr;
 		}
 		break;
 		default:
-			throw std::runtime_error("Coordinates must be real!");
+			throw std::runtime_error("Coordinates must be real! close()");
 		}
+	}
+}
+
+Nufft::~Nufft() {
+	try {
+		close();
+	}
+	catch (std::runtime_error& e) {
+		std::cerr << e.what();
+		std::exit(EXIT_FAILURE);
 	}
 	catch (...) {
 		std::exit(EXIT_FAILURE);
@@ -171,7 +191,7 @@ void Nufft::make_plan_set_pts()
 	break;
 	case c10::ScalarType::Double:
 	{
-		if (cufinufftf_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
+		if (cufinufft_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
 			throw std::runtime_error("Failed to create cufinufft_default_opts");
 
 		_finufft_opts.gpu_device_id = cuda_device_idx;
@@ -263,7 +283,7 @@ void Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
 		cuFloatComplex* f = (cuFloatComplex*)out.data_ptr();
 
 		if (cufinufftf_execute(c, f, _planf)) {
-			throw std::runtime_error("cufinufft_makeplan failed");
+			throw std::runtime_error("cufinufft_execute failed");
 		}
 	}
 	break;
@@ -273,7 +293,7 @@ void Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
 		cuDoubleComplex* f = (cuDoubleComplex*)out.data_ptr();
 
 		if (cufinufft_execute(c, f, _plan)) {
-			throw std::runtime_error("cufinufft_makeplan failed");
+			throw std::runtime_error("cufinufft_execute failed");
 		}
 	}
 	break;
@@ -380,33 +400,34 @@ void NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& stora
 
 void NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const
 {
+	cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		std::cerr << cudaGetErrorString(err) << std::endl;
+	}
+
 	_forward.apply(in, storage);
 
-	try {
-		torch::cuda::synchronize();
-	}
-	catch (c10::Error e) {
-		std::cerr << "c10::Error: " << e.what() << std::endl;
-	}
-	catch (...) {
-		std::cerr << "err" << std::endl;
-	}
+	err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		std::cerr << cudaGetErrorString(err) << std::endl;
+	} 
+	//std::cout << "  apply_inplace_time: " << miliseconds << std::endl;
 
 	if (func_between.has_value()) {
 		func_between.value()(storage);
 	}
 
-	try {
-		torch::cuda::synchronize();
-	}
-	catch (c10::Error e) {
-		std::cerr << "c10::Error: " << e.what() << std::endl;
-	}
-	catch (...) {
-		std::cerr << "err" << std::endl;
+	err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		std::cerr << cudaGetErrorString(err) << std::endl;
 	}
 
 	_backward.apply(storage, in);
+
+	err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		std::cerr << cudaGetErrorString(err) << std::endl;
+	}
 }
 
 int32_t NufftNormal::nfreq()

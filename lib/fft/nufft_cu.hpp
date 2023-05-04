@@ -46,6 +46,7 @@ namespace hasty {
 
 			Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
 
+			void close();
 			~Nufft();
 
 			void apply(const at::Tensor& in, at::Tensor& out) const;
@@ -75,6 +76,7 @@ namespace hasty {
 			std::array<int32_t, 3>	_nmodes_flipped;
 			NufftOptions			_opts;
 
+			bool _closed = false;
 			cufinufft_plan			_plan;
 			cufinufftf_plan			_planf;
 

@@ -152,8 +152,8 @@ set_target_properties(${ArrayFire_CUDA_LIBRARIES} PROPERTIES
 
 if (${BUILD_CUDA})
 	set(USE_CUDA ON)
-	set(USE_CUDNN ON)
-	set(CAFFE2_USE_CUDNN TRUE)
+	#set(USE_CUDNN ON)
+	#set(CAFFE2_USE_CUDNN TRUE)
 endif()
 find_package(Torch REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC ${TORCH_LIBRARIES})

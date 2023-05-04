@@ -24,7 +24,7 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 	TensorVecVec kdata_vec;
 	kdata_vec.reserve(nframes);
 
-	auto options = input.options().dtype(c10::kFloat);
+	//auto options = input.options().dtype(c10::kFloat);
 
 	for (int frame = 0; frame < nframes; ++frame) {
 		auto& coords_encode_vec = coords_vec.emplace_back();
@@ -38,12 +38,14 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 			auto coord = coords.select(0, frame).select(0, encode);
 			coords_encode_vec.emplace_back(coord);
 			//weights_encode_vec.emplace_back(at::ones({ 1,coord.size(1)}, options));
-			kdata_encode_vec.emplace_back(kdata.select(0, frame).select(0, encode));
+			auto kdat = kdata.select(0, frame).select(0, encode);
+			kdata_encode_vec.emplace_back(kdat);
 		}
 	}
 
 	
-	auto llr_options = LLR_4DEncodes::Options(c10::Device(c10::kCUDA));
+	auto llr_options = LLR_4DEncodes::Options(c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0)));
+	//llr_options.devices.emplace_back(c10::Device(c10::kCUDA));
 
 	//LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec), std::move(weights_vec));
 	LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec));
@@ -56,12 +58,14 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 		std::vector<std::pair<int, std::vector<int>>> mhm;
 		for (int i = 0; i < nencodes; ++i) {
 			auto coil_copy = coil_nums;
-			std::shuffle(coil_copy.begin(), coil_copy.end(), g);
-			coil_copy = std::vector(coil_copy.begin(), coil_copy.begin() + dist(g));
+			//std::shuffle(coil_copy.begin(), coil_copy.end(), g);
+			//coil_copy = std::vector(coil_copy.begin(), coil_copy.begin() + dist(g));
 
 
 			mhm.push_back(std::make_pair(i, std::move(coil_copy)));
 		}
+
+		std::cout << "iter: " << k;
 
 		llr.step_l2_sgd(mhm);
 	}
