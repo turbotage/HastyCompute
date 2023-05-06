@@ -5,7 +5,7 @@ using namespace hasty::cuda;
 SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1())
 {
-
+	
 }
 
 void SenseNormal::apply(const at::Tensor& in, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps, const at::Tensor& out,
@@ -75,23 +75,8 @@ void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std
 
 	for (auto coil : coils) {
 
-		try {
-			torch::cuda::synchronize(in.device().index());
-		}
-		catch (c10::Error& e) {
-			std::cerr << e.what() << std::endl;
-		}
-
-		std::cout << " coil: " << coil << std::endl;
 		at::Tensor smap = smaps.select(0,coil).unsqueeze(0);
 		at::mul_out(xstore, in, smap);
-
-		try {
-			torch::cuda::synchronize(in.device().index());
-		}
-		catch (c10::Error& e) {
-			std::cerr << e.what() << std::endl;
-		}
 
 		if (has_freq_manip) {
 			_normal_nufft.apply_inplace(xstore, fstore, std::bind(freq_manip.value(), std::placeholders::_1, coil));
@@ -100,21 +85,7 @@ void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std
 			_normal_nufft.apply_inplace(xstore, fstore, std::nullopt);
 		}
 
-		try {
-			torch::cuda::synchronize(in.device().index());
-		}
-		catch (c10::Error& e) {
-			std::cerr << e.what() << std::endl;
-		}
-
 		out.addcmul_(xstore, smap.conj());
-
-		try {
-			torch::cuda::synchronize(in.device().index());
-		}
-		catch (c10::Error& e) {
-			std::cerr << e.what() << std::endl;
-		}
 
 	}
 

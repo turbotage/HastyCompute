@@ -79,6 +79,8 @@ namespace hasty {
 				DeviceContext& operator=(const DeviceContext&) = delete;
 				DeviceContext(DeviceContext&&) = default;
 
+				std::string str();
+
 				c10::Device device;
 				at::Tensor image;
 				at::Tensor kdata;

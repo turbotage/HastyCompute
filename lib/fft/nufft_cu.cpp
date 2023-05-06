@@ -400,34 +400,13 @@ void NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& stora
 
 void NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const
 {
-	cudaError_t err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		std::cerr << cudaGetErrorString(err) << std::endl;
-	}
-
 	_forward.apply(in, storage);
-
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		std::cerr << cudaGetErrorString(err) << std::endl;
-	} 
-	//std::cout << "  apply_inplace_time: " << miliseconds << std::endl;
 
 	if (func_between.has_value()) {
 		func_between.value()(storage);
 	}
 
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		std::cerr << cudaGetErrorString(err) << std::endl;
-	}
-
 	_backward.apply(storage, in);
-
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		std::cerr << cudaGetErrorString(err) << std::endl;
-	}
 }
 
 int32_t NufftNormal::nfreq()

@@ -15,7 +15,7 @@ void test_llr() {
 	int nres = 120;
 	int ncoil = 12;
 
-	auto coords = -3.141592 * 2 * 3.141592 * at::rand({ nframes,nencodes,3,nfreq }, options_real_cpu);
+	auto coords = -3.141592 + 2 * 3.141592 * at::rand({ nframes,nencodes,3,nfreq }, options_real_cpu);
 
 	auto input = at::rand({ nframes,nencodes,nres,nres,nres }, options_complex_cpu);
 
