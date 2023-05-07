@@ -17,7 +17,7 @@ at::Tensor hasty::ffi::nufft2(const at::Tensor& coords, const at::Tensor& input)
 {
 	using namespace hasty::cuda;
 	Nufft nufft(coords, input.sizes().vec(), NufftOptions::type2());
-	auto out = at::empty({ 1,coords.size(1) }, input.options());
+	auto out = at::empty({ input.size(0), coords.size(1)}, input.options());
 
 	nufft.apply(input, out);
 
@@ -30,7 +30,7 @@ at::Tensor hasty::ffi::nufft2to1(const at::Tensor& coords, const at::Tensor& inp
 	NufftNormal normal_nufft(coords, input.sizes().vec(), NufftOptions::type2(), NufftOptions::type1());
 	auto out = at::empty(at::makeArrayRef(input.sizes()), input.options());
 
-	auto freq_storage = at::empty({ 1, coords.size(1) }, input.options());
+	auto freq_storage = at::empty({ input.size(0), coords.size(1)}, input.options());
 
 	normal_nufft.apply(input, out, freq_storage, std::nullopt);
 

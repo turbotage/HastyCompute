@@ -45,7 +45,7 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 
 	
 	auto llr_options = LLR_4DEncodes::Options(c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0)));
-	llr_options.devices.emplace_back(c10::Device(c10::kCUDA));
+	//llr_options.devices.emplace_back(c10::Device(c10::kCUDA));
 
 	//LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec), std::move(weights_vec));
 	LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec));
