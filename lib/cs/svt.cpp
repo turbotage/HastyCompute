@@ -17,6 +17,20 @@ at::Tensor hasty::extract_block(const at::Tensor& in, const Block<4>& block)
 	return in.index(at::makeArrayRef(idx)).flatten(1);
 }
 
+at::Tensor hasty::extract_block(const at::Tensor& in, const Block<3>& block)
+{
+	using namespace at::indexing;
+	std::array<TensorIndex, 4> idx = {
+		"...",
+		Slice(block.first_corner[0], block.second_corner[0]),
+		Slice(block.first_corner[1], block.second_corner[1]),
+		Slice(block.first_corner[2], block.second_corner[2])
+	};
+
+	// Flatten the all but the first dimension
+	return in.index(at::makeArrayRef(idx)).flatten(1);
+}
+
 at::Tensor hasty::svt(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
 {
 	using namespace at::indexing;

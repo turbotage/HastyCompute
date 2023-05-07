@@ -48,11 +48,7 @@ if dll_loop:
 				print(path)
 				raise
 
-
-
-
 dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-
 
 print(os.getpid())
 

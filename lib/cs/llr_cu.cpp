@@ -44,8 +44,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	_smaps(smaps),
 	_kdata(kdata),
 	_nframe(image.size(0)),
-	_nmodes(4),
-	_tpool(options.devices.size())
+	_nmodes(4)
 {
 	construct();
 }
@@ -65,8 +64,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	_kdata(kdata),
 	_weights(weights),
 	_nframe(image.size(0)),
-	_nmodes(4),
-	_tpool(options.devices.size())
+	_nmodes(4)
 {
 	construct();
 }
@@ -84,8 +82,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	_smaps(smaps),
 	_kdata(std::move(kdata)),
 	_nframe(image.size(0)),
-	_nmodes(4),
-	_tpool(options.devices.size())
+	_nmodes(4)
 {
 	construct();
 }
@@ -105,8 +102,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	_kdata(std::move(kdata)),
 	_weights(std::move(weights)),
 	_nframe(image.size(0)),
-	_nmodes(4),
-	_tpool(options.devices.size())
+	_nmodes(4)
 {
 	construct();
 }
@@ -118,7 +114,6 @@ void hasty::cuda::LLR_4DEncodes::construct()
 	auto base_options1 = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
 	auto base_options2 = c10::TensorOptions().dtype(c10::ScalarType::Float);
 
-	//_dcontexts.reserve(_options.devices.size());
 	for (auto& device : _options.devices) {
 
 		auto& dcontext = _dcontexts.emplace_back(device);
@@ -135,37 +130,35 @@ void hasty::cuda::LLR_4DEncodes::construct()
 		dcontext.smaps = _smaps.to(device, true);
 
 	}
+
+	_tpool = std::make_unique<ContextThreadPool<DeviceContext>>(_dcontexts);
 }
 
 
 
 
-void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<std::pair<int,Block<3>>>& blocks) 
+void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<Block<3>>& blocks, const std::vector<int16_t>& ranks) 
 {
 	c10::InferenceMode inference_guard;
 
-	using dcontext_iterator = std::vector<DeviceContext>::iterator;
-
-	auto it = _dcontexts.begin();
-
-	auto circular_update = [this](const dcontext_iterator& it) {
-		auto updated_it = it + 1;
-		if (updated_it == this->_dcontexts.end()) {
-			updated_it = this->_dcontexts.begin();
-		}
-
-		return updated_it;
-	};
-	
 	std::vector<std::future<void>> futures;
 	futures.reserve(blocks.size());
 
-	for (auto& block : blocks) {
-		it = circular_update(it);
+	for (int i = 0; i < blocks.size(); ++i) {
 
-		auto blockrunner = [this, it, block]() { block_svt_step(it, block); };
+		const int16_t& rank = ranks.size() == 1 ? ranks[0] : ranks[i];
 
-		futures.emplace_back(_tpool.enqueue(blockrunner));
+		const auto& block = blocks[i];
+
+		auto blockrunner = [this, &block, &rank](DeviceContext& context) { block_svt_step(context, block, rank); };
+
+		futures.emplace_back(_tpool->enqueue(blockrunner));
+
+		if (_tpool->work_length() > 100) {
+			using namespace std::chrono_literals;
+			std::this_thread::sleep_for(10ms);
+		}
+
 	}
 
 	// we wait for all promises
@@ -174,20 +167,19 @@ void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<std::pair<int,Block<
 	}
 }
 
-void hasty::cuda::LLR_4DEncodes::block_svt_step(const std::vector<DeviceContext>::iterator& dit, const std::pair<int, Block<3>>& block)
+void hasty::cuda::LLR_4DEncodes::block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank)
 {
-	auto& dctxt = *dit;
 
-	auto tensor_block = hasty::extract_block(_image, block.second);
+	auto tensor_block = hasty::extract_block(_image, block);
 	auto cuda_block = tensor_block.to(dctxt.device);
 
-	auto low_ranked = hasty::svt(cuda_block, block.first, std::nullopt);
+	auto low_ranked = hasty::svt(cuda_block, rank, std::nullopt);
 
 	tensor_block.copy_(low_ranked, true);
 
 	{
 		std::lock_guard<std::mutex> lock(_copy_back_mutex);
-		hasty::insert_block(_image, block.second, tensor_block);
+		hasty::insert_block(_image, block, tensor_block);
 	}
 
 }
@@ -201,19 +193,6 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 {
 	c10::InferenceMode inference_guard;
 
-	using dcontext_iterator = std::vector<DeviceContext>::iterator;
-
-	auto it = _dcontexts.begin();
-
-	auto circular_update = [this](const dcontext_iterator& it) {
-		auto updated_it = it + 1;
-		if (updated_it == this->_dcontexts.end()) {
-			updated_it = this->_dcontexts.begin();
-		}
-		return updated_it;
-	};
-	
-
 	std::vector<std::future<void>> futures;
 	futures.reserve(_nframe * encode_coil_indices.size());
 
@@ -221,15 +200,19 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 		for (const auto& encode_pair : encode_coil_indices) {
 			int encode = encode_pair.first;
 			auto& coils = encode_pair.second;
-			auto coil_encode_stepper = [this, it, frame, encode, &coils]() {
-				coil_encode_step(it, frame, encode, coils);
+
+			std::function<void(DeviceContext&)> coil_encode_stepper = [this, frame, encode, &coils](DeviceContext& context) {
+				coil_encode_step(context, frame, encode, coils);
 			};
 
-			futures.emplace_back(_tpool.enqueue(coil_encode_stepper));
-			//coil_encode_stepper();
+			futures.emplace_back(_tpool->enqueue(coil_encode_stepper));
 
-			// Move to the next device context
-			it = circular_update(it);
+			// TODO: Change this to a rolling iterator, no need to push many tasks to future queue
+			if (_tpool->work_length() > 100) {
+				using namespace std::chrono_literals;
+				std::this_thread::sleep_for(10ms);
+			}
+
 		}
 	}
 
@@ -240,12 +223,9 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 	
 }
 
-void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils)
+void hasty::cuda::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int encode, const std::vector<int32_t>& coils)
 {
 	c10::InferenceMode inference_guard;
-
-	// Get the device context
-	auto& dctxt = *dit;
 
 	// Lock this device
 	std::lock_guard<std::mutex> lock(*dctxt.device_mutex);

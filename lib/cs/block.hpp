@@ -23,7 +23,7 @@ namespace hasty {
 
 			std::uniform_int_distribution<std::mt19937::result_type> dist;
 			for (int i = 0; i < N; ++i) {
-				dist = int_dist(0, bounds[i]);
+				dist = int_dist(0, bounds[i]-1);
 				int64_t lower_bound = dist(rng);
 				in.first_corner[i] = lower_bound;
 				in.second_corner[i] = lower_bound + lens[i];

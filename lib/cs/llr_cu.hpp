@@ -62,7 +62,7 @@ namespace hasty {
 				TensorVecVec&& kdata,
 				TensorVecVec&& weights);
 
-			void step_llr(const std::vector<std::pair<int,Block<3>>>& blocks);
+			void step_llr(const std::vector<Block<3>>& blocks, const std::vector<int16_t>& ranks);
 
 			void step_l2_sgd(const std::vector<
 				std::pair<int, std::vector<int>>>& encode_coil_indices);
@@ -102,13 +102,13 @@ namespace hasty {
 				std::unique_ptr<std::mutex> device_mutex;
 			};
 
-			void coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils);
+			void coil_encode_step(DeviceContext& dctxt, int frame, int encode, const std::vector<int32_t>& coils);
 
-			void block_svt_step(const std::vector<DeviceContext>::iterator& dit, const std::pair<int, Block<3>>& block);
+			void block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank);
 
 		private:
 
-			ThreadPool _tpool;
+			std::unique_ptr<ContextThreadPool<DeviceContext>> _tpool;
 
 			Options _options;
 			at::Tensor& _image;

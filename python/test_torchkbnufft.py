@@ -22,3 +22,7 @@ plt.imshow(np.absolute(image))
 plt.gray()
 plt.title('Shepp-Logan Phantom')
 plt.show()
+
+import torch.nn.functional as tnf
+
+

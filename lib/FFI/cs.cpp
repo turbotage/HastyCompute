@@ -54,20 +54,40 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 	std::mt19937 g(rd());
 	std::uniform_int_distribution<std::mt19937::result_type> dist(ncoils / 4,ncoils);
 
+
+	std::array<int64_t, 3> lens{ 16,16,16 };
+	std::array<int64_t, 3> bounds{ smaps.size(1) - lens[0], smaps.size(2) - lens[1], smaps.size(3) - lens[2] };
+
+	int nblocks = 1000;
+	int16_t rank = 10;
+
 	for (int k = 0; k < iter; ++k) {
+
+		// Create coil choices fir L2 step
 		std::vector<std::pair<int, std::vector<int>>> mhm;
 		for (int i = 0; i < nencodes; ++i) {
 			auto coil_copy = coil_nums;
 			//std::shuffle(coil_copy.begin(), coil_copy.end(), g);
 			//coil_copy = std::vector(coil_copy.begin(), coil_copy.begin() + dist(g));
 
-
 			mhm.push_back(std::make_pair(i, std::move(coil_copy)));
 		}
 
+		// Make L2 step
+		llr.step_l2_sgd(mhm);
+
+		// Create SVT blocks
+		std::vector<Block<3>> blocks(1000);
+		for (int i = 0; i < nblocks; ++i) {
+			Block<3>::randomize(blocks[i], bounds, lens);
+		}
+
+		// Do SVT
+		llr.step_llr(blocks, {rank});
+
 		std::cout << "iter: " << k;
 
-		llr.step_l2_sgd(mhm);
+
 	}
 
 
