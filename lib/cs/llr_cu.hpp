@@ -62,6 +62,8 @@ namespace hasty {
 				TensorVecVec&& kdata,
 				TensorVecVec&& weights);
 
+			void step_llr(const std::vector<std::pair<int,Block<3>>>& blocks);
+
 			void step_l2_sgd(const std::vector<
 				std::pair<int, std::vector<int>>>& encode_coil_indices);
 
@@ -101,6 +103,8 @@ namespace hasty {
 			};
 
 			void coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils);
+
+			void block_svt_step(const std::vector<DeviceContext>::iterator& dit, const std::pair<int, Block<3>>& block);
 
 		private:
 

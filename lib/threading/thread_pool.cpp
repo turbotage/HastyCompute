@@ -16,11 +16,12 @@ void hasty::ThreadPool::work() {
             _work.pop();
         }
         task();
+        _work_length -= 1;
     }
 }
 
 hasty::ThreadPool::ThreadPool(int num_workers)
-    : _stop(false) 
+    : _stop(false), _work_length(0)
 {
     _threads.reserve(num_workers);
     try {

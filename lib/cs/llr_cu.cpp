@@ -3,6 +3,8 @@
 #include <random>
 #include <c10/cuda/CUDAGuard.h>
 
+#include "svt.hpp"
+
 import hasty_util;
 
 namespace {
@@ -137,6 +139,63 @@ void hasty::cuda::LLR_4DEncodes::construct()
 
 
 
+
+void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<std::pair<int,Block<3>>>& blocks) 
+{
+	c10::InferenceMode inference_guard;
+
+	using dcontext_iterator = std::vector<DeviceContext>::iterator;
+
+	auto it = _dcontexts.begin();
+
+	auto circular_update = [this](const dcontext_iterator& it) {
+		auto updated_it = it + 1;
+		if (updated_it == this->_dcontexts.end()) {
+			updated_it = this->_dcontexts.begin();
+		}
+
+		return updated_it;
+	};
+	
+	std::vector<std::future<void>> futures;
+	futures.reserve(blocks.size());
+
+	for (auto& block : blocks) {
+		it = circular_update(it);
+
+		auto blockrunner = [this, it, block]() { block_svt_step(it, block); };
+
+		futures.emplace_back(_tpool.enqueue(blockrunner));
+	}
+
+	// we wait for all promises
+	for (auto rit = std::begin(futures); rit != std::end(futures); ++rit) {
+		rit->get();
+	}
+}
+
+void hasty::cuda::LLR_4DEncodes::block_svt_step(const std::vector<DeviceContext>::iterator& dit, const std::pair<int, Block<3>>& block)
+{
+	auto& dctxt = *dit;
+
+	auto tensor_block = hasty::extract_block(_image, block.second);
+	auto cuda_block = tensor_block.to(dctxt.device);
+
+	auto low_ranked = hasty::svt(cuda_block, block.first, std::nullopt);
+
+	tensor_block.copy_(low_ranked, true);
+
+	{
+		std::lock_guard<std::mutex> lock(_copy_back_mutex);
+		hasty::insert_block(_image, block.second, tensor_block);
+	}
+
+}
+
+
+
+
+
 void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 	std::pair<int, std::vector<int>>>& encode_coil_indices)
 {
@@ -180,7 +239,6 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 	}
 	
 }
-
 
 void hasty::cuda::LLR_4DEncodes::coil_encode_step(const std::vector<DeviceContext>::iterator& dit, int frame, int encode, const std::vector<int32_t>& coils)
 {

@@ -18,3 +18,4 @@ namespace hasty {
 	void insert_block(at::Tensor& in, const Block<3>& block, const at::Tensor& block_tensor);
 
 }
+

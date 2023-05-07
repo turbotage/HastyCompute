@@ -19,6 +19,8 @@ namespace hasty {
 		template<class F, class... Args>
 		std::future<typename std::invoke_result<F, Args...>::type> enqueue(F&& f, Args&&... args);
 
+		int work_length() { return _work_length.load(); }
+
 		ThreadPool(ThreadPool&&) = delete;
 		ThreadPool(const ThreadPool&) = delete;
 		ThreadPool& operator=(ThreadPool&&) = delete;
@@ -34,6 +36,8 @@ namespace hasty {
 		std::mutex _queue_mutex;
 		std::vector<std::thread> _threads;
 		bool _stop;
+
+		std::atomic<int> _work_length;
 	};
 
 	template<class F, class ...Args>
@@ -47,6 +51,7 @@ namespace hasty {
 			_work.emplace([task]() { (*task)(); });
 		}
 		_queue_notifier.notify_one();
+		_work_length += 1;
 		return res;
 	}
 
