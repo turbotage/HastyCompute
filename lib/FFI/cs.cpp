@@ -26,6 +26,8 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 
 	//auto options = input.options().dtype(c10::kFloat);
 
+	std::cout << "vectorizing coords and kdata: " << std::endl;
+
 	for (int frame = 0; frame < nframes; ++frame) {
 		auto& coords_encode_vec = coords_vec.emplace_back();
 		coords_encode_vec.reserve(nencodes);
@@ -61,7 +63,11 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 	int nblocks = 1000;
 	int16_t rank = 10;
 
+	auto start = std::chrono::steady_clock::now();
+
 	for (int k = 0; k < iter; ++k) {
+
+		std::cout << "creates coil choices:" << std::endl;
 
 		// Create coil choices fir L2 step
 		std::vector<std::pair<int, std::vector<int>>> mhm;
@@ -73,8 +79,12 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 			mhm.push_back(std::make_pair(i, std::move(coil_copy)));
 		}
 
+		std::cout << "takes L2 steps:" << std::endl;
+
 		// Make L2 step
 		llr.step_l2_sgd(mhm);
+
+		std::cout << "creates blocks:" << std::endl;
 
 		// Create SVT blocks
 		std::vector<Block<3>> blocks(1000);
@@ -82,14 +92,18 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 			Block<3>::randomize(blocks[i], bounds, lens);
 		}
 
+		std::cout << "step llr:" << std::endl;
+
 		// Do SVT
 		llr.step_llr(blocks, {rank});
 
 		std::cout << "iter: " << k;
 
-
 	}
 
+	auto end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> elapsed_seconds = end - start;
+	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
 
 }
 

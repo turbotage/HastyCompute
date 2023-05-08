@@ -839,7 +839,7 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nrun) {
 	std::cout << "cuFINUFFT speed:\n";
 	tot_time = 0;
 	for (int i = 0; i < nrun; ++i) {
-		time = test_speed(256, 20, 200000);
+		time = test_speed(256, 20, 3000000);
 		if (i != 0)
 			tot_time += time;
 	}

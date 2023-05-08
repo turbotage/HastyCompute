@@ -17,11 +17,11 @@ namespace hasty {
 
 			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-			void apply(const at::Tensor& in, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps, const at::Tensor& out,
+			void apply(const at::Tensor& in, at::Tensor& out, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps,
 				std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
 				std::optional<std::function<void(at::Tensor&,int)>> freq_manip);
 
-			void apply(const at::Tensor& in, const at::Tensor& smaps, const std::vector<int32_t>& coils, const at::Tensor& out,
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int32_t>& coils,
 				std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
 				std::optional<std::function<void(at::Tensor&,int)>> freq_manip);
 
@@ -30,6 +30,20 @@ namespace hasty {
 			NufftNormal _normal_nufft;
 
 		};
+
+		class SenseToeplitzNormal {
+		public:
+
+			SenseToeplitzNormal(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps,
+				const std::optional<at::Tensor>& storage1, const std::optional<at::Tensor>& storage2);
+
+		private:
+
+			ToeplitzNormalNufft _normal_nufft;
+		};
+
 
 	}
 

@@ -119,7 +119,8 @@ void hasty::insert_block(at::Tensor& in, const Block<3>& block, const at::Tensor
 	std::vector<int64_t> view_lens = in.sizes().vec();
 	int i = 0;
 	for (auto it = view_lens.rbegin(); it != view_lens.rbegin() + N; ++it) {
-		*it = block.first_corner[N - 1 - i];
+		int block_idx = N - 1 - i;
+		*it = (block.second_corner[block_idx] - block.first_corner[block_idx]);
 		++i;
 	}
 

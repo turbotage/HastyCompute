@@ -111,7 +111,8 @@ namespace hasty {
 	public:
 
 		template<typename V> requires std::ranges::forward_range<V>
-		explicit ContextThreadPool(V& contexts) 
+		explicit ContextThreadPool(V& contexts)
+			: _stop(false), _work_length(0)
 		{
 			_threads.reserve(contexts.size());
 			try {

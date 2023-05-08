@@ -9,7 +9,6 @@ namespace hasty {
 	namespace cuda {
 
 		using TensorVec = std::vector<at::Tensor>;
-
 		using TensorVecVec = std::vector<TensorVec>;
 
 		

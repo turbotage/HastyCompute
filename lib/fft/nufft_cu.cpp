@@ -569,7 +569,7 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 	std::optional<std::reference_wrapper<at::Tensor>> diagonal,
 	std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 	std::optional<std::reference_wrapper<at::Tensor>> input_storage)
-	: _nmodes(nmodes)
+	: _nmodes(nmodes), _created_from_diagonal(false)
 {
 	c10::InferenceMode guard;
 	_type = coords.dtype().toScalarType();
@@ -643,6 +643,35 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 
 }
 
+ToeplitzNormalNufft::ToeplitzNormalNufft(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+	: _diagonal(std::move(diagonal)), _nmodes(nmodes), _created_from_diagonal(true)
+{
+	c10::InferenceMode guard;
+	_ntransf = _nmodes[0];
+
+	_transdims.resize(_ndim);
+	for (int i = 0; i < _ndim; ++i) {
+		_transdims[i] = i + 1;
+	}
+
+	_nmodes_ns.resize(_nmodes.size());
+	for (int i = 0; i < _nmodes.size(); ++i) {
+		_nmodes_ns[i] = i == 0 ? _nmodes[i] : _nmodes[i] * 2;
+	}
+
+	_transform_dims = at::makeArrayRef(_transdims);
+	_expanded_dims = at::makeArrayRef(_nmodes_ns.data() + 1, 3);
+
+	using namespace at::indexing;
+
+	for (int i = 0; i < _nmodes.size(); ++i) {
+		int64_t start = _nmodes[i] / 2;
+		int64_t end = start + _nmodes[i];
+		_index_vector.emplace_back(i == 0 ? Slice() : Slice(0, _nmodes[i]));
+	}
+	_indices = at::makeArrayRef(_index_vector);
+}
+
 void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
@@ -650,6 +679,11 @@ void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tenso
 	storage1.mul_(_diagonal);
 	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
 	out = storage2.index(_indices);
+}
+
+at::Tensor ToeplitzNormalNufft::get_diagonal()
+{
+	return _diagonal;
 }
 
 

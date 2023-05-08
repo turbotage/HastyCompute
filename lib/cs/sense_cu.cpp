@@ -8,7 +8,7 @@ SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& n
 	
 }
 
-void SenseNormal::apply(const at::Tensor& in, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps, const at::Tensor& out,
+void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps,
 	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
 	std::optional<std::function<void(at::Tensor&,int)>> freq_manip)
 {
@@ -47,7 +47,7 @@ void SenseNormal::apply(const at::Tensor& in, const std::vector<std::reference_w
 
 }
 
-void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std::vector<int32_t>& coils, const at::Tensor& out,
+void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int32_t>& coils,
 	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
 	std::optional<std::function<void(at::Tensor&,int)>> freq_manip)
 {
@@ -88,5 +88,20 @@ void SenseNormal::apply(const at::Tensor& in, const at::Tensor& smaps, const std
 		out.addcmul_(xstore, smap.conj());
 
 	}
+
+}
+
+
+SenseToeplitzNormal::SenseToeplitzNormal(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+	: _normal_nufft(std::move(diagonal), nmodes)
+{
+
+}
+
+void SenseToeplitzNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps)
+{
+	at::mul_out(out, smaps, in);
+
+	
 
 }

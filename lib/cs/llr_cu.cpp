@@ -154,6 +154,7 @@ void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<Block<3>>& blocks, c
 
 		futures.emplace_back(_tpool->enqueue(blockrunner));
 
+		
 		if (_tpool->work_length() > 100) {
 			using namespace std::chrono_literals;
 			std::this_thread::sleep_for(10ms);
@@ -212,6 +213,7 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 				using namespace std::chrono_literals;
 				std::this_thread::sleep_for(10ms);
 			}
+			
 
 		}
 	}
@@ -225,6 +227,8 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 
 void hasty::cuda::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int encode, const std::vector<int32_t>& coils)
 {
+	//printf("frame: %d, encode: %d\n", frame, encode);
+	
 	c10::InferenceMode inference_guard;
 
 	// Lock this device
