@@ -20,16 +20,24 @@ CGRecon::CGRecon(
 	construct();
 }
 
-CGRecon(
+CGRecon::CGRecon(
 	const Options& options,
 	at::Tensor& image,
-	const TensorVec& coords,
+	TensorVec&& coords,
 	const at::Tensor& smaps,
-	const TensorVec& kdata,
-	const TensorVec& weights)
+	TensorVec&& kdata)
+	:
+	_options(options),
+	_image(image),
+	_coords(coords),
+	_smaps(smaps),
+	_kdata(kdata),
+	_nframe(image.size(0)),
+	_nmodes(4)
 {
-
+	construct();
 }
+
 
 
 void CGRecon::construct()

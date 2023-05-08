@@ -42,7 +42,7 @@ if False:
 
 	pu.image_4d(CD)
 
-if True:
+if False:
 	created_img = np.array([0])
 	recreate = False
 	if recreate:
@@ -55,4 +55,6 @@ if True:
 	pu.image_5d(np.imag(created_img))
 	pu.image_5d(np.abs(created_img))
 
-
+if True:
+	with h5py.File('D:\\4DRecon\\SenseMapsCpp.h5', "r") as f2:
+		maps = f2['Maps'][()]
