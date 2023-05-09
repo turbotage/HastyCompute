@@ -1,6 +1,6 @@
 module;
 
-export module hasty_cu;
+export module hasty;
 
 #ifdef STL_AS_MODULES
 import std;

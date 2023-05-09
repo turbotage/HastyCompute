@@ -12,8 +12,8 @@ void test_llr() {
 	int nencodes = 5;
 	int nframes = 20;
 	int nfreq = 400000;
-	int nres = 256;
-	int ncoil = 20;
+	int nres = 160;
+	int ncoil = 32;
 
 	std::cout << "randing coords:" << std::endl;
 

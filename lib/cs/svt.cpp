@@ -1,7 +1,6 @@
 #include "svt.hpp"
 
 
-
 at::Tensor hasty::extract_block(const at::Tensor& in, const Block<4>& block)
 {
 	using namespace at::indexing;

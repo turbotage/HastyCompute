@@ -1,13 +1,12 @@
 
 //#include <cufinufft.h>
 
-#include "nufft_cu.hpp"
+#include "nufft.hpp"
 
 #include <cufinufft.h>
 
 import hasty_util;
 
-using namespace hasty::cuda;
 using namespace hasty;
 
 Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)

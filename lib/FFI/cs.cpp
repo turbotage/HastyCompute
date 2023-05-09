@@ -1,12 +1,14 @@
 #include "cs.hpp"
 
-#include "../cs/llr_cu.hpp"
+#include "../cs/llr.hpp"
 #include <algorithm> 
 #include <cstdlib>
+#include <c10/cuda/CUDAGuard.h>
+
 
 void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tensor& smaps, const at::Tensor& kdata, int64_t iter)
 {
-	using namespace hasty::cuda;
+	using namespace hasty;
 	int nframes = input.size(0);
 	int nencodes = input.size(1);
 	int ncoils = smaps.size(0);
@@ -45,8 +47,11 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 		}
 	}
 
-	
-	auto llr_options = LLR_4DEncodes::Options(c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0)));
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+
+	auto llr_options = LLR_4DEncodes::Options(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	llr_options.push_back_device(device, c10::cuda::getStreamFromPool(device.index()));
+
 	//llr_options.devices.emplace_back(c10::Device(c10::kCUDA));
 
 	//LLR_4DEncodes llr(llr_options, input, std::move(coords_vec), smaps, std::move(kdata_vec), std::move(weights_vec));

@@ -5,7 +5,7 @@
 #include "FFI/ffi.hpp"
 #endif
 
-#include "fft/nufft_cu.hpp"
-#include "cs/llr_cu.hpp"
-#include "cs/sense_cu.hpp"
+#include "fft/nufft.hpp"
+#include "cs/llr.hpp"
+#include "cs/sense.hpp"
 

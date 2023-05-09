@@ -55,6 +55,20 @@ if False:
 	pu.image_5d(np.imag(created_img))
 	pu.image_5d(np.abs(created_img))
 
-if True:
+if False:
 	with h5py.File('D:\\4DRecon\\SenseMapsCpp.h5', "r") as f2:
 		maps = f2['Maps'][()]
+
+if True:
+	with h5py.File('D:\\4DRecon\\FullRecon.h5', "r") as f2:
+
+		image = f2['IMAGE'][()].squeeze(1)
+		image_mag = f2['IMAGE_MAG'][()].squeeze(1)
+		image_phase = f2['IMAGE_PHASE'][()].squeeze(1)
+
+		pu.image_5d(np.abs(image))
+		pu.image_5d(image_mag)
+		pu.image_5d(image_phase)
+
+
+

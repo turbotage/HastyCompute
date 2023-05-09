@@ -1,4 +1,4 @@
-#include "llr_cu.hpp"
+#include "llr.hpp"
 
 #include <random>
 #include <c10/cuda/CUDAGuard.h>
@@ -16,7 +16,7 @@ namespace {
 	}
 }
 
-std::string hasty::cuda::LLR_4DEncodes::DeviceContext::str()
+std::string hasty::LLR_4DEncodes::DeviceContext::str()
 {
 	std::stringstream ss;
 	ss << "device_index: " << device.index() << "\n";
@@ -31,7 +31,7 @@ std::string hasty::cuda::LLR_4DEncodes::DeviceContext::str()
 
 
 
-hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+hasty::LLR_4DEncodes::LLR_4DEncodes(
 	const Options& options,
 	at::Tensor& image,
 	const TensorVecVec& coords,
@@ -49,7 +49,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	construct();
 }
 
-hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+hasty::LLR_4DEncodes::LLR_4DEncodes(
 	const Options& options,
 	at::Tensor& image,
 	const TensorVecVec& coords,
@@ -69,7 +69,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	construct();
 }
 
-hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+hasty::LLR_4DEncodes::LLR_4DEncodes(
 	const Options& options,
 	at::Tensor& image,
 	TensorVecVec&& coords,
@@ -87,7 +87,7 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	construct();
 }
 
-hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
+hasty::LLR_4DEncodes::LLR_4DEncodes(
 	const Options& options,
 	at::Tensor& image,
 	TensorVecVec&& coords,
@@ -107,28 +107,32 @@ hasty::cuda::LLR_4DEncodes::LLR_4DEncodes(
 	construct();
 }
 
-void hasty::cuda::LLR_4DEncodes::construct()
+void hasty::LLR_4DEncodes::construct()
 {
+	c10::InferenceMode inference_guard;
+
 	_nmodes[0] = 1; _nmodes[1] = _image.size(2); _nmodes[2] = _image.size(3); _nmodes[3] = _image.size(4);
 
 	auto base_options1 = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
 	auto base_options2 = c10::TensorOptions().dtype(c10::ScalarType::Float);
 
-	for (auto& device : _options.devices) {
+	for (auto& devicepair : _options.devices) {
+		auto& device = devicepair.first;
+		auto smaps = _smaps.to(device);
+		for (auto& stream : devicepair.second) {
+			auto& dcontext = _dcontexts.emplace_back(device, stream);
 
-		auto& dcontext = _dcontexts.emplace_back(device);
+			c10::cuda::CUDAStreamGuard device_guard(stream);
 
-		c10::cuda::CUDAGuard device_guard(device);
+			auto options1 = base_options1.device(device);
+			auto options2 = base_options2.device(device);
 
-		auto options1 = base_options1.device(device);
-		auto options2 = base_options2.device(device);
+			dcontext.image = at::empty(at::makeArrayRef(_nmodes), options1);
+			dcontext.out = at::empty_like(dcontext.image);
+			dcontext.in_storage = at::empty_like(dcontext.image);
 
-		dcontext.image = at::empty(at::makeArrayRef(_nmodes), options1);
-		dcontext.out = at::empty_like(dcontext.image);
-		dcontext.in_storage = at::empty_like(dcontext.image);
-
-		dcontext.smaps = _smaps.to(device, true);
-
+			dcontext.smaps = smaps;
+		}
 	}
 
 	_tpool = std::make_unique<ContextThreadPool<DeviceContext>>(_dcontexts);
@@ -137,12 +141,26 @@ void hasty::cuda::LLR_4DEncodes::construct()
 
 
 
-void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<Block<3>>& blocks, const std::vector<int16_t>& ranks) 
+void hasty::LLR_4DEncodes::step_llr(const std::vector<Block<3>>& blocks, const std::vector<int16_t>& ranks) 
 {
 	c10::InferenceMode inference_guard;
 
-	std::vector<std::future<void>> futures;
-	futures.reserve(blocks.size());
+	std::deque<std::future<void>> futures;
+
+	auto future_catcher = [](std::future<void>& fut) {
+		try {
+			fut.get();
+		}
+		catch (c10::Error& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (std::exception& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (...) {
+			std::cerr << "caught something strange: " << std::endl;
+		}
+	};
 
 	for (int i = 0; i < blocks.size(); ++i) {
 
@@ -154,22 +172,25 @@ void hasty::cuda::LLR_4DEncodes::step_llr(const std::vector<Block<3>>& blocks, c
 
 		futures.emplace_back(_tpool->enqueue(blockrunner));
 
-		
-		if (_tpool->work_length() > 100) {
-			using namespace std::chrono_literals;
-			std::this_thread::sleep_for(10ms);
+		if (futures.size() > 32 * _dcontexts.size()) {
+			future_catcher(futures.front());
+			futures.pop_front();
 		}
 
 	}
 
 	// we wait for all promises
-	for (auto rit = std::begin(futures); rit != std::end(futures); ++rit) {
-		rit->get();
+	while (futures.size() > 0) {
+		future_catcher(futures.front());
+		futures.pop_front();
 	}
 }
 
-void hasty::cuda::LLR_4DEncodes::block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank)
+void hasty::LLR_4DEncodes::block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank)
 {
+	c10::InferenceMode inference_guard;
+
+	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
 	auto tensor_block = hasty::extract_block(_image, block);
 	auto cuda_block = tensor_block.to(dctxt.device);
@@ -189,13 +210,27 @@ void hasty::cuda::LLR_4DEncodes::block_svt_step(DeviceContext& dctxt, const Bloc
 
 
 
-void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
+void hasty::LLR_4DEncodes::step_l2_sgd(const std::vector<
 	std::pair<int, std::vector<int>>>& encode_coil_indices)
 {
 	c10::InferenceMode inference_guard;
 
-	std::vector<std::future<void>> futures;
-	futures.reserve(_nframe * encode_coil_indices.size());
+	std::deque<std::future<void>> futures;
+
+	auto future_catcher = [](std::future<void>& fut) {
+		try {
+			fut.get();
+		}
+		catch (c10::Error& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (std::exception& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (...) {
+			std::cerr << "caught something strange: " << std::endl;
+		}
+	};
 
 	for (int frame = 0; frame < _nframe; ++frame) {
 		for (const auto& encode_pair : encode_coil_indices) {
@@ -208,34 +243,30 @@ void hasty::cuda::LLR_4DEncodes::step_l2_sgd(const std::vector<
 
 			futures.emplace_back(_tpool->enqueue(coil_encode_stepper));
 
-			// TODO: Change this to a rolling iterator, no need to push many tasks to future queue
-			if (_tpool->work_length() > 100) {
-				using namespace std::chrono_literals;
-				std::this_thread::sleep_for(10ms);
+			if (futures.size() > 32 * _dcontexts.size()) {
+				future_catcher(futures.front());
+				futures.pop_front();
 			}
 			
-
 		}
 	}
 
 	// we wait for all promises
-	for (auto rit = std::begin(futures); rit != std::end(futures); ++rit) {
-		rit->get();
+	while(futures.size() > 0) {
+		future_catcher(futures.front());
+		futures.pop_front();
 	}
 	
 }
 
-void hasty::cuda::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int encode, const std::vector<int32_t>& coils)
+void hasty::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int encode, const std::vector<int32_t>& coils)
 {
 	//printf("frame: %d, encode: %d\n", frame, encode);
 	
 	c10::InferenceMode inference_guard;
 
-	// Lock this device
-	std::lock_guard<std::mutex> lock(*dctxt.device_mutex);
-		
 	// This shall be done on the correct device
-	c10::cuda::CUDAGuard guard(dctxt.device.index());
+	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
 	// CPU Frame Encode View
 	auto cpu_frame_encode_view = _image.select(0, frame).select(0, encode).unsqueeze(0); //_image.index({ frame, encode, "..." });
@@ -285,7 +316,7 @@ void hasty::cuda::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int fram
 		}
 	};
 
-	dctxt.sense->apply(dctxt.image, dctxt.smaps, coils, dctxt.out, dctxt.in_storage, std::nullopt, freq_manip);
+	dctxt.sense->apply(dctxt.image, dctxt.out, dctxt.smaps, coils, dctxt.in_storage, std::nullopt, freq_manip);
 
 	{
 		std::lock_guard<std::mutex> lock(_copy_back_mutex);

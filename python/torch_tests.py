@@ -1,5 +1,8 @@
 import torch
 import time
+import h5py
+import numpy as np
+import plot_utility as pu
 
 def timer(func, input):
     torch.cuda.synchronize()
@@ -27,3 +30,35 @@ def svd_test():
 
 	for i in range(10):
 		print(timer(run_svd, A.transpose(0,1)))
+
+
+import torch.nn.functional as tnf
+
+plot_smaps = False
+smap_list = []
+with h5py.File('D:\\4DRecon\\SenseMapsCpp.h5', 'r') as hf:
+	maps_base = hf['Maps']
+	maps_key_base = 'SenseMaps_'
+	for i in range(len(list(maps_base))):
+		smap = maps_base[maps_key_base + str(i)][()]
+		smap = smap['real'] + 1j*smap['imag']
+	
+		if plot_smaps:
+			pu.image_3d(np.abs(smap))
+
+		smap = torch.tensor(smap).unsqueeze(0).unsqueeze(0)
+		smap_r = tnf.interpolate(torch.real(smap), (64,64,64), mode='trilinear')
+		smap_i = tnf.interpolate(torch.imag(smap), (64,64,64), mode='trilinear')
+		smap = (smap_r + 1j*smap_i).squeeze(0).squeeze(0).numpy()
+
+		if plot_smaps:
+			pu.image_3d(np.abs(smap))
+
+		smap_list.append(smap)
+
+smaps = np.stack(smap_list, axis=0)
+
+pu.image_4d(np.abs(smaps))
+
+
+

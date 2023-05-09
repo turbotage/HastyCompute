@@ -35,7 +35,7 @@ void test_nufft2() {
 
 int main() {
 	
-	hasty::tests::speed_comparisons_torch_af_cufinufft(5);
+	hasty::tests::speed_comparisons_torch_af_cufinufft(180, 4);
 
 	return 0;
 }

@@ -16,19 +16,6 @@ message("CMAKE_TOOLCHAIN_FILE ${CMAKE_TOOLCHAIN_FILE}")
 message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 message("BUILD_CUDA = ${BUILD_CUDA}")
 
-if (${BUILD_CUDA})
-	set(BACKEND_SOURCES
-		"lib/hasty_cu.ixx"
-		"lib/linalg/permute_cu.ixx"
-		"lib/linalg/solver_cu.ixx"
-		"lib/fft/nufft_cu.cpp"
-		"lib/cs/sense_cu.cpp"
-		"lib/cs/llr_cu.cpp"
-	)
-	set(BACKEND_HEADERS
-		"lib/fft/nufft_cu.hpp"
-	)
-endif()
 
 set(STL_AS_MODULES FALSE)
 if(${STL_AS_MODULES})
@@ -62,25 +49,15 @@ if(${STL_AS_MODULES})
 endif()
 
 
-set(TEST_SOURCES
-	"lib/FFI/tests1.cpp"
-)
-set(FFI_SOURCES
-	"lib/FFI/nufft.cpp"
-	"lib/FFI/cs.cpp"
-)
 
-
-add_library(HastyComputeLib SHARED
-	${STL_SOURCES}
-
-	"lib/metadata.ixx"
-	"lib/hasty_util.ixx"
-	"lib/hasty_compute.ixx"
-	"lib/torch_util.cpp"
-
+set(CS_SOURCES
+	"lib/cs/cg.cpp"
+	"lib/cs/llr.cpp"
+	"lib/cs/sense.cpp"
 	"lib/cs/svt.cpp"
+)
 
+set(EXPR_SOURCES
 	"lib/expr/parser/token.ixx" 
 	"lib/expr/parser/lexer.ixx" 
 	"lib/expr/parser/defaultexp.ixx"
@@ -97,15 +74,64 @@ add_library(HastyComputeLib SHARED
 	"lib/expr/expr.ixx" 
 	"lib/expr/expr.cpp"
 	"lib/expr/symbolic.ixx"
+)
 
+set(FFI_SOURCES
+	"lib/FFI/nufft.cpp"
+	"lib/FFI/cs.cpp"
+	"lib/FFI/tests1.cpp"
+)
+
+set(FFT_SOURCES
+	"lib/fft/nufft.cpp"
+)
+
+set(LINALG_SOURCES
+	"lib/linalg/permute.ixx"
+	"lib/linalg/solver.ixx"
+)
+
+set(NLSQ_SOURCES
 	"lib/nlsq/nlsq_symbolic.ixx"
+)
 
+set(OPTION_SOURCES)
+
+set(THREADING_SOURCES
 	"lib/threading/thread_pool.cpp"
+)
 
-	${BACKEND_SOURCES}
+set(BACKEND_HEADERS
+	"lib/fft/nufft.hpp"
+)
 
-	${TEST_SOURCES}
+
+
+add_library(HastyComputeLib SHARED
+	${STL_SOURCES}
+
+	${CS_SOURCES}
+
+	${EXPR_SOURCES}
+
 	${FFI_SOURCES}
+
+	${FFT_SOURCES}
+
+	${LINALG_SOURCES}
+
+	${NLSQ_SOURCES}
+
+	${OPTIM_SOURCES}
+
+	${THREADING_SOURCES}
+
+	"lib/hasty.ixx"
+	"lib/hasty_compute.ixx"
+	"lib/hasty_util.ixx"
+	"lib/metadata.ixx"
+	"lib/torch_util.cpp"
+
 )
 
 target_sources(HastyComputeLib PUBLIC 

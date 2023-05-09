@@ -1,6 +1,6 @@
 module;
 
-export module permute_cu;
+export module permute;
 
 #ifdef STL_AS_MODULES
 import std.compat;
@@ -12,7 +12,7 @@ import <string>;
 
 import hasty_util;
 import hasty_compute;
-import hasty_cu;
+import hasty;
 
 namespace hasty {
 	namespace cuda {

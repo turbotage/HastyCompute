@@ -1,6 +1,6 @@
 module;
 
-export module solver_cu;
+export module solver;
 
 #ifdef STL_AS_MODULES
 import std;
@@ -12,8 +12,8 @@ import <string>;
 #endif
 
 import hasty_compute;
-import hasty_cu;
-import permute_cu;
+import hasty;
+import permute;
 
 namespace hasty {
 

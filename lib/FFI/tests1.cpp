@@ -1,11 +1,11 @@
 #include "tests1.hpp"
 
-#include "../fft/nufft_cu.hpp"
+#include "../fft/nufft.hpp"
 
 import hasty_util;
 import hasty_compute;
-import solver_cu;
-import permute_cu;
+import solver;
+import permute;
 
 #include <iostream>
 
@@ -34,7 +34,7 @@ void hasty::tests::test_deterministic_1d() {
 
 	std::cout << "coords: " << coords << std::endl;
 
-	hasty::cuda::Nufft nu2(coords, { nt,nx }, { hasty::cuda::NufftType::eType2, true, 1e-6 });
+	hasty::Nufft nu2(coords, { nt,nx }, { hasty::NufftType::eType2, true, 1e-6 });
 
 	std::cout << "\n" << (float*)coords.data_ptr() << std::endl;
 
@@ -180,8 +180,8 @@ void hasty::tests::test_deterministic_3d() {
 
 	std::vector<int64_t> nmodes_ns = { nt, 2 * n3, 2 * n2, 2 * n1 };
 
-	hasty::cuda::Nufft nu2(coords, nmodes_ns, { hasty::cuda::NufftType::eType2, false, 1e-6 });
-	hasty::cuda::Nufft nu1(coords, nmodes_ns, { hasty::cuda::NufftType::eType1, true, 1e-6 });
+	hasty::Nufft nu2(coords, nmodes_ns, { hasty::NufftType::eType2, false, 1e-6 });
+	hasty::Nufft nu1(coords, nmodes_ns, { hasty::NufftType::eType1, true, 1e-6 });
 
 	auto f = at::empty({ nt,nf }, options1);
 	auto c = at::zeros(nmodes_ns, options1); // *c10::complex<float>(0.0f, 1.0f);
@@ -225,12 +225,12 @@ void hasty::tests::test_speed() {
 
 	auto coords = at::rand({ 3,nf }, options2);
 
-	//hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
-	//hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, false, 1e-5f });
+	//hasty::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType1, true, 1e-5f});
+	//hasty::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType2, false, 1e-5f });
 
-	hasty::cuda::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
-		{ hasty::cuda::NufftType::eType2, false, 1e-5f },
-		{ hasty::cuda::NufftType::eType1, true, 1e-5f });
+	hasty::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::NufftType::eType2, false, 1e-5f },
+		{ hasty::NufftType::eType1, true, 1e-5f });
 
 	auto freq = at::rand({ 1,nf }, options1);
 	auto in = at::rand({ nc,nx,nx,nx }, options1);
@@ -270,8 +270,8 @@ void hasty::tests::test_space_cufinufft() {
 
 	auto coords = torch::rand({ 3,nf }, options2);
 
-	hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, { hasty::cuda::NufftType::eType1, true, 1e-5f });
-	hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, { hasty::cuda::NufftType::eType2, true, 1e-5f });
+	hasty::Nufft nu1(coords, { nt,nx,nx,nx }, { hasty::NufftType::eType1, true, 1e-5f });
+	hasty::Nufft nu2(coords, { nt,nx,nx,nx }, { hasty::NufftType::eType2, true, 1e-5f });
 
 	auto f = torch::rand({ nt,nf }, options1);
 	auto c = torch::rand({ nt,nx,nx,nx }, options1);
@@ -348,7 +348,7 @@ void hasty::tests::test_svd_speed() {
 
 void hasty::tests::compare_normal_methods()
 {
-	using namespace hasty::cuda;
+	using namespace hasty;
 
 	int nx = 5;
 	int ny = 2;
@@ -562,7 +562,6 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 	auto coords = torch::rand({ 3,nf }, options2);
 
 	using namespace hasty;
-	using namespace hasty::cuda;
 
 	auto freq_temp = torch::empty({ nt, nf }, options1);
 	auto in = torch::rand({ nt, nx, nx, nx }, options1);
@@ -713,8 +712,6 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 
 	}
 
-	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, { n2,n2,n2 }, { 1,2,3 }) * ffter_mul, {n1,n1,n1}, { 1, 2, 3 });
-	//ffter = torch::fft_ifftn(torch::fft_fftn(ffter, c10::nullopt, { 1,2,3 }) * ffter_mul, c10::nullopt, { 1,2,3 });
 
 	torch::cuda::synchronize();
 
@@ -779,8 +776,8 @@ int hasty::tests::test_speed(int n, int nc, int nf) {
 
 	auto coords = torch::rand({ 3,nf }, options2);
 
-	//hasty::cuda::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType1, true, 1e-5f});
-	//hasty::cuda::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::cuda::NufftType::eType2, false, 1e-5f });
+	//hasty::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType1, true, 1e-5f});
+	//hasty::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType2, false, 1e-5f });
 
 	auto freq = torch::rand({ 1,nf }, options1);
 	auto in = torch::rand({ nc,nx,nx,nx }, options1);
@@ -790,9 +787,9 @@ int hasty::tests::test_speed(int n, int nc, int nf) {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	hasty::cuda::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
-		{ hasty::cuda::NufftType::eType2, false, 1e-5f },
-		{ hasty::cuda::NufftType::eType1, true, 1e-5f });
+	hasty::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::NufftType::eType2, false, 1e-5f },
+		{ hasty::NufftType::eType1, true, 1e-5f });
 
 	for (int i = 0; i < nc; ++i) {
 		using namespace at::indexing;
@@ -813,14 +810,14 @@ int hasty::tests::test_speed(int n, int nc, int nf) {
 	return durt;
 }
 
-void hasty::tests::speed_comparisons_torch_af_cufinufft(int nrun) {
+void hasty::tests::speed_comparisons_torch_af_cufinufft(int nres, int nrun) {
 	int time;
 	int tot_time;
 
 	std::cout << "LibTorch speed" << std::endl;
 	tot_time = 0;
 	for (int i = 0; i < nrun; ++i) {
-		time = test_torch_speed(256, 20);
+		time = test_torch_speed(nres, 20);
 		if (i != 0)
 			tot_time += time;
 	}
@@ -829,7 +826,7 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nrun) {
 	std::cout << "ArrayFire speed" << std::endl;
 	tot_time = 0;
 	for (int i = 0; i < nrun; ++i) {
-		time = test_af_speed(256, 20);
+		time = test_af_speed(nres, 20);
 		if (i != 0)
 			tot_time += time;
 	}
@@ -839,7 +836,7 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nrun) {
 	std::cout << "cuFINUFFT speed:\n";
 	tot_time = 0;
 	for (int i = 0; i < nrun; ++i) {
-		time = test_speed(256, 20, 3000000);
+		time = test_speed(nres, 20, 400000);
 		if (i != 0)
 			tot_time += time;
 	}
