@@ -9,8 +9,6 @@ import permute;
 
 #include <iostream>
 
-#include <arrayfire.h>
-
 void hasty::tests::test_deterministic_1d() {
 	int nfb = 8;
 	int nf = nfb;
@@ -516,9 +514,9 @@ void hasty::tests::compare_normal_methods()
 	}
 	// Toeplitz Normal Nufft
 	{
-		ToeplitzNormalNufft top_normal(coords, { nt,nz,ny,nx }, 1e-6, std::nullopt, std::nullopt, std::nullopt);
+		NormalNufftToeplitz top_normal(coords, { nt,nz,ny,nx }, 1e-6, std::nullopt, std::nullopt, std::nullopt);
 
-		top_normal.apply(c, out3, full_temp1, full_temp2);
+		out3 = top_normal.apply(c, full_temp1, full_temp2);
 		//top_normal.apply(torch::fft_fftshift(c), out3, full_temp1, full_temp2);
 	}
 
@@ -596,9 +594,9 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 		torch::cuda::synchronize();
 		auto start = std::chrono::high_resolution_clock::now();
 
-		ToeplitzNormalNufft normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, std::nullopt, freq_temp, storage1);
+		NormalNufftToeplitz normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, std::nullopt, freq_temp, storage1);
 		for (int i = 0; i < nrun; ++i) {
-			normal_nufft.apply(in, out, storage1, storage2);
+			out = normal_nufft.apply(in, storage1, storage2);
 		}
 
 		torch::cuda::synchronize();
@@ -608,76 +606,6 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 		std::cout << "Toeplitz: " << duration.count() << std::endl;
 	}
 }
-
-void hasty::tests::test_conway() {
-	using namespace af;
-
-	try {
-		static const float h_kernel[] = { 1, 1, 1, 1, 0, 1, 1, 1, 1 };
-		static const int reset = 500;
-		static const int game_w = 128, game_h = 128;
-
-		af::info();
-
-		std::cout << "This example demonstrates the Conway's Game of Life "
-			"using ArrayFire"
-			<< std::endl
-			<< "There are 4 simple rules of Conways's Game of Life"
-			<< std::endl
-			<< "1. Any live cell with fewer than two live neighbours "
-			"dies, as if caused by under-population."
-			<< std::endl
-			<< "2. Any live cell with two or three live neighbours lives "
-			"on to the next generation."
-			<< std::endl
-			<< "3. Any live cell with more than three live neighbours "
-			"dies, as if by overcrowding."
-			<< std::endl
-			<< "4. Any dead cell with exactly three live neighbours "
-			"becomes a live cell, as if by reproduction."
-			<< std::endl
-			<< "Each white block in the visualization represents 1 alive "
-			"cell, black space represents dead cells"
-			<< std::endl;
-
-		af::Window myWindow(512, 512, "Conway's Game of Life using ArrayFire");
-
-		int frame_count = 0;
-
-		// Initialize the kernel array just once
-		const af::array kernel(3, 3, h_kernel, afHost);
-		array state;
-		state = (af::randu(game_h, game_w, af_dtype::f32) > 0.5).as(af_dtype::f32);
-
-		while (!myWindow.close()) {
-			myWindow.image(state);
-			frame_count++;
-
-			// Generate a random starting state
-			if (frame_count % reset == 0)
-				state = (af::randu(game_h, game_w, af_dtype::f32) > 0.5).as(af_dtype::f32);
-
-			// Convolve gets neighbors
-			af::array nHood = convolve(state, kernel);
-
-			// Generate conditions for life
-			// state == 1 && nHood < 2 ->> state = 0
-			// state == 1 && nHood > 3 ->> state = 0
-			// else if state == 1 ->> state = 1
-			// state == 0 && nHood == 3 ->> state = 1
-			af::array C0 = (nHood == 2);
-			af::array C1 = (nHood == 3);
-
-			// Update state
-			state = state * C0 + C1;
-		}
-	}
-	catch (af::exception& e) {
-		fprintf(stderr, "%s\n", e.what());
-		throw;
-	}
-}
-
 // Speed comparisons
 int hasty::tests::test_torch_speed(int n, int nc) {
 
@@ -723,48 +651,6 @@ int hasty::tests::test_torch_speed(int n, int nc) {
 	std::cout << "Time (ms): " << durt << std::endl;
 
 	return durt;
-}
-
-int hasty::tests::test_af_speed(int n, int nc) {
-
-	af::array input = af::randu(nc, n, n, n, af_dtype::c32);
-
-	af::array diagonal = af::randu(2 * n, 2 * n, 2 * n, af_dtype::c32);
-
-	af::array temp(2 * n, 2 * n, 2 * n, af_dtype::c32);
-
-
-	input.eval();
-	diagonal.eval();
-	temp.eval();
-	af::sync();
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	for (int i = 0; i < nc; ++i) {
-		auto vol = af::moddims(input(i, af::span, af::span, af::span), n, n, n);
-
-		temp = 0.0f;
-		temp(af::seq(0, n - 1), af::seq(0, n - 1), af::seq(0, n - 1)) = vol;
-		af::fft3InPlace(temp);
-		temp *= diagonal;
-		af::ifft3InPlace(temp);
-		input(i, af::span, af::span, af::span) =
-			af::moddims(temp(af::seq(0, n - 1), af::seq(0, n - 1), af::seq(0, n - 1)), af::dim4(1, n, n, n));
-	}
-
-	input.eval();
-	af::sync();
-
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-	int durt = duration.count();
-
-	std::cout << "Time (ms): " << durt << std::endl;
-
-	return durt;
-
 }
 
 int hasty::tests::test_speed(int n, int nc, int nf) {
@@ -822,16 +708,6 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nres, int nrun) {
 			tot_time += time;
 	}
 	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
-
-	std::cout << "ArrayFire speed" << std::endl;
-	tot_time = 0;
-	for (int i = 0; i < nrun; ++i) {
-		time = test_af_speed(nres, 20);
-		if (i != 0)
-			tot_time += time;
-	}
-	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
-
 
 	std::cout << "cuFINUFFT speed:\n";
 	tot_time = 0;

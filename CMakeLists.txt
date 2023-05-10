@@ -17,39 +17,6 @@ message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 message("BUILD_CUDA = ${BUILD_CUDA}")
 
 
-set(STL_AS_MODULES FALSE)
-if(${STL_AS_MODULES})
-	add_compile_definitions("STL_AS_MODULES")
-
-	if (MSVC)
-		#set(TARGET HastyComputeLib PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-
-		#if (MSVC)
-		# Set STL Sources for module linking
-		#set(PART_STL_SOURCES $ENV{VCToolsInstallDir})
-		#cmake_path(CONVERT ${PART_STL_SOURCES} TO_CMAKE_PATH_LIST PART_STL_SOURCES)
-		#set(STL_SOURCES 
-		#	"${PART_STL_SOURCES}modules/std.ixx"
-		#	"${PART_STL_SOURCES}modules/std.compat.ixx"
-		#)
-		#unset(PART_STL_SOURCES)
-		#set(PART_STL_SOURCES $ENV{USERPROFILE})
-		#cmake_path(CONVERT ${PART_STL_SOURCES} TO_CMAKE_PATH_LIST PART_STL_SOURCES)
-		#set(STL_SOURCES
-		#	"${PART_STL_SOURCES}/source/repos/STLModules/std.obj"
-		#	"${PART_STL_SOURCES}/source/repos/STLModules/std.compat.obj"
-		#)
-		#unset(PART_STL_SOURCES)
-		#message("STL Sources Found at: "${STL_SOURCES})
-		#else()
-		#endif()
-
-	endif()
-endif()
-
-
-
 set(CS_SOURCES
 	"lib/cs/cg.cpp"
 	"lib/cs/llr.cpp"
@@ -108,7 +75,6 @@ set(BACKEND_HEADERS
 
 
 add_library(HastyComputeLib SHARED
-	${STL_SOURCES}
 
 	${CS_SOURCES}
 
@@ -163,17 +129,6 @@ endif()
 message("Toolchain file = ${CMAKE_TOOLCHAIN_FILE}")
 message("BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 message("Prefix = ${CMAKE_PREFIX_PATH}")
-
-# Linking ArrayFire
-find_package(ArrayFire REQUIRED)
-target_include_directories(HastyComputeLib PUBLIC ${ArrayFire_INCLUDE_DIRS})
-target_link_libraries(HastyComputeLib PUBLIC ArrayFire::af)
-set_target_properties(${ArrayFire_CUDA_LIBRARIES} PROPERTIES
-	MAP_IMPORTED_CONFIG_DEBUG Release
-	MAP_IMPORTED_CONFIG_RELEASE Release
-	MAP_IMPORTED_CONFIG_MINSIZEREL Release
-)
-
 
 
 if (${BUILD_CUDA})
@@ -239,7 +194,7 @@ find_package(Python3 3.11 EXACT COMPONENTS Development REQUIRED)
 
 
 add_library(HastyPyInterface SHARED 
-	"python/py_interface.cpp"
+	"python/cpp/py_interface.cpp"
 )
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
 target_link_libraries(HastyPyInterface PUBLIC Python3::Python)

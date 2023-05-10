@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 
 import plot_utility as pu
+import image_creation as ic
 
 #with h5py.File('D:\\4DRecon\\images.h5', "r") as f:
 #	img = f['images'][()]
@@ -27,20 +28,62 @@ def create_mean_img():
 
 		return img
 
-if False:
-	CD = np.array([0])
+def get_CD(img):
+	m = img[:,0,:,:,:].astype(np.float32)
+	vx = img[:,1,:,:,:].astype(np.float32)
+	vy = img[:,2,:,:,:].astype(np.float32)
+	vz = img[:,3,:,:,:].astype(np.float32)
 
-	with h5py.File('D:\\4DRecon\\images.h5', "r") as f:
+	venc = 1100
+	return (m * np.sin(np.pi * np.minimum(np.sqrt(vx*vx + vy*vy + vz*vz), 0.5*venc) / venc)).astype(np.float32)
+
+if False:
+	img = np.array([0])
+
+	with h5py.File('D:\\4DRecon\\dat\\dat1\\images_20f.h5', "r") as f:
 		img = f['images'][()]
 
-		M = img[:,0,:,:,:].astype(np.float32)
-		vx = img[:,1,:,:,:].astype(np.float32)
-		vy = img[:,2,:,:,:].astype(np.float32)
-		vz = img[:,3,:,:,:].astype(np.float32)
+	cd = get_CD(img)
 
-		CD = (M * np.sin(np.pi * np.sqrt(vx*vx + vy*vy + vz*vz) / 110)).astype(np.float32)
+	#pu.image_4d(cd)
+	pu.mip_4d(cd)
 
-	pu.image_4d(CD)
+	imgs = []
+	for i in range(4):
+		imgs.append(np.mean(img[i*4:(i*4+4),:,:,:], axis=0))
+
+	img_mean = np.stack(imgs, axis=0)
+
+	cd_mean = get_CD(img_mean)
+
+	#pu.image_4d(cd_mean)
+	pu.mip_4d(cd_mean)
+
+
+if True:
+	img = np.array([0])
+	img_mag = np.array([0])
+
+	#with h5py.File('D:\\4DRecon\\dat\\dat2\\images_6f.h5', "r") as f:
+	#	img = f['images'][()]
+
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\images_6f_mag.h5', "r") as f:
+		img_mag = f['images'][()]
+
+	#img = np.transpose(img, axes=(4,3,2,1,0))
+	ic.numpy_to_nifti(img_mag, 'D:\\4DRecon\\dat\\dat2\\mag.nii')
+
+	#pu.image_5d(img)
+	#pu.image_3d(img_mag, relim=True)
+
+	#mask = img_mag > 1000
+	#pu.image_3d(mask)
+
+	#cd = get_CD(img)
+ 
+	#pu.image_4d(cd)
+	#pu.maxip_4d(cd)
+	#pu.minip_4d(cd)
 
 if False:
 	created_img = np.array([0])
@@ -59,7 +102,7 @@ if False:
 	with h5py.File('D:\\4DRecon\\SenseMapsCpp.h5', "r") as f2:
 		maps = f2['Maps'][()]
 
-if True:
+if False:
 	with h5py.File('D:\\4DRecon\\FullRecon.h5', "r") as f2:
 
 		image = f2['IMAGE'][()].squeeze(1)

@@ -33,6 +33,23 @@ namespace hasty {
 
 	};
 
+	class SenseNormalToeplitz {
+	public:
+
+		SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol = 1e-5);
+
+		SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+
+		void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
+			const at::Tensor& smaps, const std::vector<int32_t>& coils) const;
+
+	private:
+
+		NormalNufftToeplitz _normal_nufft;
+
+	};
+	
+
 	class BatchedSense {
 	public:
 
@@ -41,13 +58,16 @@ namespace hasty {
 		typedef std::function<void(at::Tensor&, at::Tensor&)> FreqManipulator;
 		// (Tensor: NUFFT(image[frame] * smap_i), Tensor: kdata[frame]_i, Tensor: weights[frame]_i)
 		typedef std::function<void(at::Tensor&, at::Tensor&, at::Tensor&)> WeightedFreqManipulator;
-
-	private:
+		
+	public:
 
 		struct DeviceContext {
 
 			DeviceContext(const c10::Device& dev, const c10::Stream& stream) :
 				device(dev), stream(stream) {}
+
+			//DeviceContext(DeviceContext&&) = default;
+			//DeviceContext& operator=(DeviceContext&&) = default;
 
 			std::string str();
 

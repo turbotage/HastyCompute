@@ -3,19 +3,10 @@
 #include <torch/extension.h>
 #include <torch/library.h>
 
-#include "../lib/FFI/ffi.hpp"
+#include "../../lib/FFI/ffi.hpp"
 
 using namespace at;
 
-
-///Adds one to each element of a tensor
-at::Tensor add_one(const at::Tensor& input) {
-    auto output = torch::zeros_like(input);
-
-    output = input + 1;
-
-    return output;
-}
 
 at::Tensor nufft1(const at::Tensor& coords, const at::Tensor& input, const std::vector<int64_t>& nmodes)
 {
@@ -30,6 +21,16 @@ at::Tensor nufft2(const at::Tensor& coords, const at::Tensor& input)
 at::Tensor nufft2to1(const at::Tensor& coords, const at::Tensor& input)
 {
     return hasty::ffi::nufft2to1(coords, input);
+}
+
+void batched_sense_toep(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords)
+{
+    hasty::ffi::batched_sense(input, smaps, coords);
+}
+
+void batched_sense(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas)
+{
+    hasty::ffi::batched_sense(input, smaps, coords, kdatas);
 }
 
 void llr(const at::Tensor& coords, at::Tensor& input, const at::Tensor& smaps, const at::Tensor& kdata, int64_t iter)

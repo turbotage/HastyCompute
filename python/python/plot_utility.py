@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 
-def image_5d(image):
+def image_5d(image, relim=False):
 
 	wlen = image.shape[0]
 	tlen = image.shape[1]
@@ -42,7 +42,12 @@ def image_5d(image):
 		w = wslider.val
 		t = tslider.val
 		z = zslider.val
-		figdata.set_data(image[w,t,z,:,:])
+		img = image[w,t,z,:,:]
+		figdata.set_data(img)
+		if relim:
+			imax = np.max(img, axis=(0,1))
+			imin = np.min(img, axis=(0,1))
+			figdata.set_clim(imin, imax)
 		fig.canvas.draw_idle()
 
 	wslider.on_changed(update)
@@ -51,7 +56,7 @@ def image_5d(image):
 
 	plt.show()
 
-def image_4d(image):
+def image_4d(image, relim=False):
 
 	tlen = image.shape[0]
 	zlen = image.shape[1]
@@ -82,7 +87,13 @@ def image_4d(image):
 	def update(val):
 		t = tslider.val
 		z = zslider.val
-		figdata.set_data(image[t,z,:,:])
+
+		img = image[t,z,:,:]
+		figdata.set_data(img)
+		if relim:
+			imax = np.max(img, axis=(0,1))
+			imin = np.min(img, axis=(0,1))
+			figdata.set_clim(imin, imax)
 		fig.canvas.draw_idle()
 
 
@@ -91,7 +102,7 @@ def image_4d(image):
 
 	plt.show()
 
-def image_3d(image):
+def image_3d(image, relim=False):
 
 	zlen = image.shape[0]
 
@@ -112,9 +123,23 @@ def image_3d(image):
 
 	def update(val):
 		z = zslider.val
-		figdata.set_data(image[z,:,:])
+
+		img = image[z,:,:]
+		figdata.set_data(img)
+		if relim:
+			imax = np.max(img, axis=(0,1))
+			imin = np.min(img, axis=(0,1))
+			figdata.set_clim(imin, imax)
 		fig.canvas.draw_idle()
 
 	zslider.on_changed(update)
 
 	plt.show()
+
+def maxip_4d(image, axis=3, relim=False):
+	mip = np.max(image, axis=axis)
+	image_3d(mip, relim=relim)
+
+def minip_4d(image, axis=3, relim=False):
+	mip = np.min(image, axis=axis)
+	image_3d(mip, relim=relim)

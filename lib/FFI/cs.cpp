@@ -1,9 +1,49 @@
 #include "cs.hpp"
 
 #include "../cs/llr.hpp"
+#include "../cs/sense.hpp"
 #include <algorithm> 
 #include <cstdlib>
 #include <c10/cuda/CUDAGuard.h>
+
+
+void hasty::ffi::batched_sense(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords)
+{
+	std::vector<BatchedSense::DeviceContext> contexts;
+
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+	auto& context = contexts.emplace_back(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	context.smaps = smaps.to(device);
+
+	auto coords_cpy = coords;
+
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy));
+
+	bsense.apply_toep(input, std::nullopt);
+
+}
+
+void hasty::ffi::batched_sense(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas)
+{
+	std::vector<BatchedSense::DeviceContext> contexts;
+
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+	auto& context1 = contexts.emplace_back(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	context1.smaps = smaps.to(device);
+	//auto& context2 = contexts.emplace_back(device, c10::cuda::getStreamFromPool(false, device.index()));
+	//context2.smaps = contexts[0].smaps;
+
+	auto coords_cpy = coords;
+	auto kdata_cpy = kdatas;
+
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::move(kdata_cpy));
+
+	BatchedSense::FreqManipulator manip = [](at::Tensor& in, at::Tensor& kdata) {
+		in.sub_(kdata);
+	};
+
+	bsense.apply(input, std::nullopt, std::nullopt, manip);
+}
 
 
 void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tensor& smaps, const at::Tensor& kdata, int64_t iter)
@@ -17,7 +57,6 @@ void hasty::ffi::llr(const at::Tensor& coords, at::Tensor& input, const at::Tens
 	for (int i = 0; i < ncoils; ++i) {
 		coil_nums[i] = i;
 	}
-
 
 	TensorVecVec coords_vec;
 	coords_vec.reserve(nframes);

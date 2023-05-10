@@ -12,7 +12,6 @@ def timer(func, input):
     end = time.time()
     return end - start
 
-
 def svd_test():
 
 	def run_svd(A):

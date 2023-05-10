@@ -438,7 +438,6 @@ const Nufft& NufftNormal::get_backward()
 	return _backward;
 }
 
-
 namespace {
 
 	void build_diagonal_base(const at::Tensor& coords, const std::vector<int64_t>& nmodes_ns, double tol,
@@ -485,7 +484,7 @@ namespace {
 }
 
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal)
+void NormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
@@ -515,7 +514,7 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 
 }
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+void NormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& storage, bool storage_is_frequency)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -552,7 +551,7 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 
 }
 
-void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+void NormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& frequency_storage, at::Tensor& input_storage)
 {	
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -564,7 +563,7 @@ void ToeplitzNormalNufft::build_diagonal(const at::Tensor& coords, std::vector<i
 	build_diagonal_base(coords, nmodes_ns, tol, diagonal, frequency_storage, input_storage);
 }
 
-ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
+NormalNufftToeplitz::NormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
 	std::optional<std::reference_wrapper<at::Tensor>> diagonal,
 	std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 	std::optional<std::reference_wrapper<at::Tensor>> input_storage)
@@ -628,21 +627,21 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(const at::Tensor& coords, const std::ve
 	double toler = tol.has_value() ? tol.value() : 1e-6;
 
 	if (frequency_storage.has_value() && input_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), input_storage.value());
+		NormalNufftToeplitz::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), input_storage.value());
 	}
 	else if (frequency_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), true);
+		NormalNufftToeplitz::build_diagonal(coords, _nmodes, toler, _diagonal, frequency_storage.value(), true);
 	}
 	else if (input_storage.has_value()) {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal, input_storage.value(), false);
+		NormalNufftToeplitz::build_diagonal(coords, _nmodes, toler, _diagonal, input_storage.value(), false);
 	}
 	else {
-		ToeplitzNormalNufft::build_diagonal(coords, _nmodes, toler, _diagonal);
+		NormalNufftToeplitz::build_diagonal(coords, _nmodes, toler, _diagonal);
 	}
 
 }
 
-ToeplitzNormalNufft::ToeplitzNormalNufft(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+NormalNufftToeplitz::NormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
 	: _diagonal(std::move(diagonal)), _nmodes(nmodes), _created_from_diagonal(true)
 {
 	c10::InferenceMode guard;
@@ -671,16 +670,43 @@ ToeplitzNormalNufft::ToeplitzNormalNufft(at::Tensor&& diagonal, const std::vecto
 	_indices = at::makeArrayRef(_index_vector);
 }
 
-void ToeplitzNormalNufft::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const
+at::Tensor NormalNufftToeplitz::apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
 	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
 	storage1.mul_(_diagonal);
 	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
-	out = storage2.index(_indices);
+	return storage2.index(_indices);
 }
 
-at::Tensor ToeplitzNormalNufft::get_diagonal()
+void NormalNufftToeplitz::apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const
+{
+	c10::InferenceMode guard;
+	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
+	storage1.mul_(_diagonal);
+	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
+	add_to.add_(storage2.index(_indices));
+}
+
+void NormalNufftToeplitz::apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const
+{
+	c10::InferenceMode guard;
+	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
+	storage1.mul_(_diagonal);
+	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
+	add_to.addcmul_(storage2.index(_indices), mul);
+}
+
+void NormalNufftToeplitz::apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
+{
+	c10::InferenceMode guard;
+	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
+	storage1.mul_(_diagonal);
+	at::fft_ifftn_out(storage2, storage1, c10::nullopt, _transform_dims);
+	in.copy_(storage2.index(_indices));
+}
+
+at::Tensor NormalNufftToeplitz::get_diagonal()
 {
 	return _diagonal;
 }

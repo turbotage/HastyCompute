@@ -107,7 +107,7 @@ namespace hasty {
 		Nufft				_backward;
 	};
 
-	class ToeplitzNormalNufft {
+	class NormalNufftToeplitz {
 	public:
 
 		static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
@@ -120,14 +120,20 @@ namespace hasty {
 
 	public:
 
-		ToeplitzNormalNufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
+		NormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
 			std::optional<std::reference_wrapper<at::Tensor>> diagonal, 
 			std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
 			std::optional<std::reference_wrapper<at::Tensor>> input_storage);
 
-		ToeplitzNormalNufft(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+		NormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
 
-		void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2) const;
+		at::Tensor apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
+
+		void apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const;
+
+		void apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const;
+
+		void apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
 
 		at::Tensor get_diagonal();
 
