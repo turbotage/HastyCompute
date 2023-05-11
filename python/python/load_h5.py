@@ -69,12 +69,17 @@ if True:
 
 	with h5py.File('D:\\4DRecon\\dat\\dat2\\images_6f_mag.h5', "r") as f:
 		img_mag = f['images'][()]
+		img_mag = np.transpose(img_mag, (2,1,0))
+
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\images_6f.h5', "r") as f:
+		img = f['images'][()]
+		img = np.transpose(img, axes=(4,3,2,1,0))
 
 	#img = np.transpose(img, axes=(4,3,2,1,0))
-	ic.numpy_to_nifti(img_mag, 'D:\\4DRecon\\dat\\dat2\\mag.nii')
+	#ic.numpy_to_nifti(img_mag, 'D:\\4DRecon\\dat\\dat2\\mag.nii')
 
-	#pu.image_5d(img)
-	#pu.image_3d(img_mag, relim=True)
+	pu.image_5d(img, relim=True)
+	pu.image_3d(img_mag, relim=True)
 
 	#mask = img_mag > 1000
 	#pu.image_3d(mask)
