@@ -34,6 +34,12 @@ def crop_3d_3d(img, box):
 	new_img = img[box[0][0]:box[0][1],box[1][0]:box[1][1],box[2][0]:box[2][1]]
 	return new_img
 
+def plot_3view_maxip(img):
+	cd = get_CD(img)
+	pu.maxip_4d(cd,axis=1)
+	pu.maxip_4d(cd,axis=2)
+	pu.maxip_4d(cd,axis=3)
+
 def numpy_to_nifti(img, file):
 	nimg = nib.Nifti1Image(img, affine=np.eye(4))
 	nib.save(nimg, file)

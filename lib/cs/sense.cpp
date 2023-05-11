@@ -181,6 +181,9 @@ void BatchedSense::apply(at::Tensor& in,
 	const std::optional<WeightedFreqManipulator>& wmanip,
 	const std::optional<FreqManipulator>& manip)
 {
+	std::cout << "insize: " << in.sizes().size() << std::endl;
+	std::cout << "_ndim: " << _ndim << std::endl;
+
 	if (in.sizes().size() != _ndim + 2) {
 		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
 	}
