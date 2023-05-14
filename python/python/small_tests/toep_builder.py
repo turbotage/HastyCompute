@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 import torchkbnufft as tkbn
 
-ni = 9
+ni = 8
 nx = ni
 ny = ni
 nz = ni
@@ -106,49 +106,41 @@ if True:
 	x = (np.random.rand(nx,ny,nz) + 1j*np.random.rand(nx,ny,nz))
 	y = compute_AHWA(coords, weights, x)
 
-
-	oned = np.zeros((2*nx,2*ny,2*nz), dtype=np.complex64)
-	oned[nx,ny,nz] = 1
-
-	#print('Before compute_AHWA oned')
-	#diag = compute_AHWA(coords, weights, oned)
-
 	print('Before compute_AHWA_col')
 	ahwa_col = compute_AHWA_col(coords,weights,(nx,ny,nz))
+	my_diag = np.conjugate(ahwa_col)
+	
+	def flip_and_concat(block,dim,conj=False):
+		zero_block_shape = list(block.shape)
+		zero_block_shape[dim] = 1
+		zero_block = np.zeros(tuple(zero_block_shape), dtype=np.complex64)
 
-	ahwa_pad = compute_pad_to_circulant_z(ahwa_col)
+		other_half = block.take(indices=range(1,block.shape[dim]), axis=dim)
+		other_half = np.flip(other_half, axis=dim)
+		if conj:
+			other_half = np.conjugate(other_half)
+		return np.concatenate([block, zero_block, other_half], dim)
+	
 
-	diag2 = np.zeros_like(oned)
 
-	diag_block = np.conjugate(ahwa_col)
+	my_diag = flip_and_concat(my_diag,2,conj=True)
+	my_diag = flip_and_concat(my_diag,1)
+	my_diag = flip_and_concat(my_diag,0,conj=True)
+	my_diag /= (2 * np.sqrt(2)*(nx*ny*nz))
 
-	diag2[:nx,:ny,:nz] = diag_block 													# 0,0,0
-	diag2[(nx+1):,:ny,(nz+1):] = np.conjugate(diag_block[:0:-1,:,:0:-1]) 				# 1,0,1
-	diag2[:nx,(ny+1):,:nz] = np.conjugate(diag_block[:,:0:-1,:])						# 0,1,0
-	diag2[(nx+1):,(ny+1):,(nz+1):] = np.conjugate(diag_block[:0:-1,:0:-1,:0:-1])		# 1,1,1
-	#diag2 = diag
-	#diag2 = np.fft.ifftshift(diag2)
-
-	#diag2[nx:,0:ny,0:nz] = diag_block[::-1,:,:]		# 1,0,0 
-	#diag2[0:nx,0:ny,nz:] = diag_block[:,:,::-1]		# 0,0,1
-	#diag2[nx:,ny:,0:nz] = diag_block[::-1,::-1,:]	# 1,1,0
-	#diag2[0:nx,ny:,nz:] = diag_block[:,::-1,::-1]	# 0,1,1
-
-	#diag2 = np.fft.fftn(diag2)
-	#diag2 /= (nx*ny*nz)
 
 	#yn = np.fft.ifftn(diag2 * np.fft.fftn(x, (2*nx,2*ny,2*nz)))
 	#yn = yn[0:nx,0:ny,0:nz]
 
-	diag3 = tkbn.calc_toeplitz_kernel(omega=torch.tensor(coords), weights=
+	their_diag = tkbn.calc_toeplitz_kernel(omega=torch.tensor(coords), weights=
 				   torch.tensor(weights).unsqueeze(0), im_size=(nx,ny,nz)) # without
-	diag4 = diag3
-	diag3 = np.fft.ifftn(diag3)
+	their_diag = np.fft.ifftn(their_diag)
+	their_diag *= 2 * np.sqrt(2)
 
-	yn = np.fft.ifftn(diag4 * np.fft.fftn(x, (2*nx,2*ny,2*nz)))
-	yn = yn[0:nx,0:ny,0:nz]
+	#yn = np.fft.ifftn(diag4 * np.fft.fftn(x, (2*nx,2*ny,2*nz)))
+	#yn = yn[0:nx,0:ny,0:nz]
 
-	if True:
+	if False:
 		y /= 2*np.sqrt(2)*(nx*ny*nz)
 		#yn *= np.sqrt(nx*ny*nz)
 		yn *= 2*np.sqrt(2)
@@ -194,11 +186,11 @@ if True:
 
 
 	if True:
-		diag2 /= (2 * np.sqrt(2)*(nx*ny*nz))
-		diag3 *= 2 * np.sqrt(2)
 
-		diag_block1 = diag2[(nx):,:ny,(nz):]
-		diag_block2 = diag3[(nx):,:ny,(nz):]
+		diag_block1 = my_diag
+		diag_block2 = their_diag
+		#diag_block1 = my_diag[:nx,ny:,:nz]
+		#diag_block2 = their_diag[:nx,ny:,:nz]
 
 		diag_block1 = diag_block1.flatten()
 		diag_block2 = diag_block2.flatten()

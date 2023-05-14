@@ -158,6 +158,10 @@ namespace hasty {
 		at::Tensor									_diagonal;
 	};
 
+	at::Tensor build_toeplitz_diagonal(const at::Tensor& weights, const at::Tensor& coords) {
+
+	}
+
 }
 
 
