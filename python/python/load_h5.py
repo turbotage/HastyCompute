@@ -60,7 +60,7 @@ if False:
 	pu.mip_4d(cd_mean)
 
 
-if True:
+if False:
 	img = np.array([0])
 	img_mag = np.array([0])
 
