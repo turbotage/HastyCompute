@@ -35,11 +35,13 @@ def toeplitz_diagonal(weights, coords, im_size):
 		diagonal = adjnufft(weights, coords)
 
 	return diagonal
+	#return diagonal
 	diagonal = reflect_conj_concat(0, diagonal)
 
-	#diagonal = hermitify(0, diagonal)
+	diagonal = hermitify(0, diagonal)
 	
-	return torch.fft.fftn(diagonal)
+	#return torch.fft.fftn(diagonal)
+	return diagonal
 	
 		
 def adjoint_flip_and_concat(dim, weights, coords, adjnufft):
@@ -114,6 +116,7 @@ ni = 64
 nx = ni
 ny = ni
 nz = ni
+nelem = nx*ny*nz
 nf = 80
 
 
@@ -132,12 +135,16 @@ coords2 = coords.clone()
 weights = torch.rand(nf, dtype=torch.complex64).unsqueeze(0)
 weights2 = weights.clone()
 
+diag = np.array([0])
+diag2 = np.array([0])
+
 if True:
 	diag = tkbn.calc_toeplitz_kernel(omega=coords, weights=weights, im_size=(nx,))
+	#diag = torch.fft.ifftn(diag)
 
 	weights2.squeeze_(0)
 	diag2 = toeplitz_diagonal(weights=weights2, coords=coords2, im_size=(nx,))
-	diag2 = torch.fft.ifftshift(diag2)
+	#diag2 = torch.fft.ifftshift(diag2)
 
 	print(diag.shape)
 	print(diag2.shape)
@@ -166,7 +173,7 @@ if True:
 	plt.show()
 
 
-if False:
+if True:
 	adj_ob = tkbn.KbNufftAdjoint(
 		im_size=im_size,
 		n_shift=[0 for _ in range(coords.shape[0])],
