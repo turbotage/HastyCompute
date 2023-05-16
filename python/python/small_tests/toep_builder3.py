@@ -32,9 +32,9 @@ for x in range(N1):
 
 			l += 1
 
-#coord[0,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N1
-#coord[1,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N2
-#coord[2,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N3
+coord[0,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N1
+coord[1,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N2
+coord[2,:] = -np.pi + 2 * np.pi * np.random.rand(NF).astype(np.float32) / N3
 
 coord = np.transpose(coord, (1,0))
 
