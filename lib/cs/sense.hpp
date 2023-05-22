@@ -95,12 +95,12 @@ namespace hasty {
 			TensorVec&& weights);
 
 		void apply(at::Tensor& in,
-			const std::optional<std::vector<int32_t>>& coils,
+			const std::optional<std::vector<std::vector<int32_t>>>& coils,
 			const std::optional<WeightedFreqManipulator>& wmanip,
 			const std::optional<FreqManipulator>& manip);
 
 		void apply_toep(at::Tensor& in,
-			const std::optional<std::vector<int32_t>>& coils);
+			const std::optional<std::vector<std::vector<int32_t>>>& coils);
 
 	private:
 

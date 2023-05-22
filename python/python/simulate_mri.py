@@ -83,8 +83,6 @@ def simulate():
 
 		img = np.real(ic.interpolate_images(img, 15).astype(np.complex64)).astype(np.float32)
 
-		#plot_3view_maxip(img)
-
 		v_enc = 1100
 		A = (1.0/v_enc) * np.array(
 			[
@@ -135,10 +133,10 @@ def simulate():
 			for encode in range(nenc):
 				coord = -np.pi + 2*np.pi*np.random.rand(3,nfreq).astype(np.float32)
 				coords[frame,encode,...] = coord
+				coord_torch = torch.tensor(coord).to(torch.device('cuda:0'))
 				for smap in range(nsmaps):
 					coiled_image = img_enc[frame,encode,...] * smaps[smap,...]
 
-					coord_torch = torch.tensor(coord).to(torch.device('cuda:0'))
 					coild_image_torch = torch.tensor(coiled_image).to(torch.device('cuda:0')).unsqueeze(0)
 
 					kdata = hasty_py.nufft2(coord_torch,coild_image_torch)

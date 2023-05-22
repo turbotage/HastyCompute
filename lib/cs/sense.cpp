@@ -177,12 +177,12 @@ void BatchedSense::construct()
 }
 
 void BatchedSense::apply(at::Tensor& in,
-	const std::optional<std::vector<int32_t>>& coils,
+	const std::optional<std::vector<std::vector<int32_t>>> &coils,
 	const std::optional<WeightedFreqManipulator>& wmanip,
 	const std::optional<FreqManipulator>& manip)
 {
-	std::cout << "insize: " << in.sizes().size() << std::endl;
-	std::cout << "_ndim: " << _ndim << std::endl;
+	//std::cout << "BatchedSense::apply: " << std::endl;
+	int n_outer_batch = in.size(0);
 
 	if (in.sizes().size() != _ndim + 2) {
 		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
@@ -192,14 +192,16 @@ void BatchedSense::apply(at::Tensor& in,
 
 	ContextThreadPool<DeviceContext> tpool(_dcontexts);
 
-	std::vector<int32_t> coilss;
+	std::vector<std::vector<int32_t>> coilss;
 	if (coils.has_value()) {
 		coilss = coils.value();
 	}
 	else {
 		int num_smaps = _dcontexts[0].smaps.size(0);
-		coilss = std::vector<int32_t>(num_smaps);
-		std::iota(coilss.begin(), coilss.end(), 0);
+		coilss = std::vector<std::vector<int32_t>>(n_outer_batch);
+		for (int i = 0; i < coilss.size(); ++i) {
+			std::iota(coilss[i].begin(), coilss[i].end(), 0);
+		}
 	}
 
 	std::deque<std::future<void>> futures;
@@ -221,12 +223,10 @@ void BatchedSense::apply(at::Tensor& in,
 
 	std::function<void(DeviceContext&)> batch_applier;
 
-	auto outer_capture = [this, &in, &coilss, &wmanip, &manip](DeviceContext& context, int32_t outer_batch)
+	auto outer_capture = [this, &in, &wmanip, &coilss, &manip](DeviceContext& context, int32_t outer_batch)
 	{
-		apply_outer_batch(context, outer_batch, in, coilss, wmanip, manip);
+		apply_outer_batch(context, outer_batch, in, coilss[outer_batch], wmanip, manip);
 	};
-
-	int n_outer_batch = in.size(0);
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
 		batch_applier = [outer_batch, &outer_capture](DeviceContext& context) { outer_capture(context, outer_batch); };
@@ -252,6 +252,8 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 	const std::optional<WeightedFreqManipulator>& wmanip,
 	const std::optional<FreqManipulator>& manip)
 {
+	//std::cout << std::endl << "outer_batch: " << outer_batch << "coils: ";
+
 	c10::InferenceMode inference_guard;
 	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
@@ -287,19 +289,22 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 
 		if (wmanip.has_value()) {
 			freq_manip = [&wmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
+				//std::cout << " " << coil;
 				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				auto weights_coil = weights_cu.select(0, coil).unsqueeze(0);
-				wmanip.value()(in, kdata_coil, weights_coil);
+				wmanip.value()(in, kdata_coil, weights_cu);
 			};
 		}
 		else if (manip.has_value()) {
 			freq_manip = [&manip, &kdata_cu](at::Tensor& in, int32_t coil) {
+				//std::cout << " " << coil;
 				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
 				manip.value()(in, kdata_coil);
 			};
 		}
 
 		sense.apply(in_cu, out_cu, dctxt.smaps, coils, storage_cu, std::nullopt, freq_manip);
+
+		out_cu.div_(std::accumulate(_nmodes.begin(), _nmodes.end(), 1, std::multiplies<int64_t>()));
 
 		at::Tensor out_cpu = out_cu.cpu();
 		{
@@ -312,25 +317,28 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 
 
 
-
-void BatchedSense::apply_toep(at::Tensor& in, const std::optional<std::vector<int32_t>>& coils)
+void BatchedSense::apply_toep(at::Tensor& in, const std::optional<std::vector<std::vector<int32_t>>>& coils)
 {
 	if (in.sizes().size() != _ndim + 2) {
 		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
 	}
 
+	int n_outer_batch = in.size(0);
+
 	c10::InferenceMode im_mode;
 
 	ContextThreadPool<DeviceContext> tpool(_dcontexts);
 
-	std::vector<int32_t> coilss;
+	std::vector<std::vector<int32_t>> coilss;
 	if (coils.has_value()) {
 		coilss = coils.value();
 	}
 	else {
 		int num_smaps = _dcontexts[0].smaps.size(0);
-		coilss = std::vector<int32_t>(num_smaps);
-		std::iota(coilss.begin(), coilss.end(), 0);
+		coilss = std::vector<std::vector<int32_t>>(n_outer_batch);
+		for (int i = 0; i < coilss.size(); ++i) {
+			std::iota(coilss[i].begin(), coilss[i].end(), 0);
+		}
 	}
 
 	std::deque<std::future<void>> futures;
@@ -354,10 +362,8 @@ void BatchedSense::apply_toep(at::Tensor& in, const std::optional<std::vector<in
 
 	auto outer_capture = [this, &in, &coilss](DeviceContext& context, int32_t outer_batch)
 	{
-		apply_outer_batch_toep(context, outer_batch, in, coilss);
+		apply_outer_batch_toep(context, outer_batch, in, coilss[outer_batch]);
 	};
-
-	int n_outer_batch = in.size(0);
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
 		batch_applier = [outer_batch, &outer_capture](DeviceContext& context) { outer_capture(context, outer_batch); };

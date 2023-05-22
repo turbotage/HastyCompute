@@ -86,3 +86,4 @@ def convolve_5d_3x3x3(img, factor = 3, mode='same'):
 			out[i,j,...] = sp.signal.convolve(img[i,j,...], kernel, mode=mode)
 		
 	return out
+

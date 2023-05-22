@@ -3,6 +3,7 @@
 
 #include <iostream>
 
+/*
 void test_llr() {
 	auto device_cuda = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
 	auto device_cpu = c10::Device(c10::DeviceType::CPU);
@@ -36,6 +37,7 @@ void test_llr() {
 	llr(coords, input, smaps, kdata, 1);
 
 }
+*/
 
 void batched_sense() {
 	auto device_cuda = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
@@ -51,9 +53,11 @@ void batched_sense() {
 
 	std::vector<at::Tensor> coords;
 	std::vector<at::Tensor> kdatas;
+	std::vector<std::vector<int64_t>> coils(outer_batches);
 	for (int i = 0; i < outer_batches; ++i) {
 		coords.push_back(-3.141592f + 2.0f * 3.141592f * at::rand({3,nfreq}, options_real_cpu));
 		kdatas.push_back(at::rand({ inner_batches,ncoil,nfreq }, options_complex_cpu));
+		std::iota(coils[i].begin(), coils[i].end(), 0);
 	}
 
 	auto input = at::rand({ outer_batches,inner_batches,nres,nres,nres }, options_complex_cpu);
@@ -62,7 +66,7 @@ void batched_sense() {
 
 	std::cout << "starting batched_sense: " << std::endl;
 	auto start = std::chrono::steady_clock::now();
-	batched_sense(input, smaps, coords, kdatas);
+	batched_sense(input, coils, smaps, coords, kdatas);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
@@ -82,9 +86,11 @@ void batched_sense_toeplitz() {
 
 	std::vector<at::Tensor> coords;
 	std::vector<at::Tensor> kdatas;
+	std::vector<std::vector<int64_t>> coils(outer_batches);
 	for (int i = 0; i < outer_batches; ++i) {
 		coords.push_back(-3.141592f + 2.0f * 3.141592f * at::rand({ 3,nfreq }, options_real_cpu));
 		kdatas.push_back(at::rand({ inner_batches,ncoil,nfreq }, options_complex_cpu));
+		std::iota(coils[i].begin(), coils[i].end(), 0);
 	}
 
 	auto input = at::rand({ outer_batches,inner_batches,nres,nres,nres }, options_complex_cpu);
@@ -93,7 +99,7 @@ void batched_sense_toeplitz() {
 
 	std::cout << "starting batched_sense: " << std::endl;
 	auto start = std::chrono::steady_clock::now();
-	batched_sense(input, smaps, coords, kdatas);
+	batched_sense(input, coils, smaps, coords, kdatas);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";

@@ -133,4 +133,40 @@ namespace hasty {
 
 	};
 
+	class RandomBlocksSVT {
+	public:
+
+		struct DeviceContext {
+
+			DeviceContext(const c10::Device& dev, const c10::Stream& stream) :
+				device(dev), stream(stream) {}
+			DeviceContext(const DeviceContext&) = delete;
+			DeviceContext& operator=(const DeviceContext&) = delete;
+			DeviceContext(DeviceContext&&) = default;
+
+			std::string str();
+
+			c10::Device device;
+			c10::Stream stream;
+
+		};
+	public:
+
+		RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
+			at::Tensor& image, int32_t nblocks, int32_t block_size, int32_t rank);
+
+	private:
+
+		void block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank);
+
+	private:
+		std::unique_ptr<ContextThreadPool<DeviceContext>> _tpool;
+
+		at::Tensor _image;
+
+		std::mutex _copy_back_mutex;
+
+		std::vector<DeviceContext> _dcontexts;
+	};
+
 }

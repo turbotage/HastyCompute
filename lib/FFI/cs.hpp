@@ -8,13 +8,18 @@ namespace hasty {
 	namespace ffi {
 
 		LIB_EXPORT
-		void batched_sense(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords);
-		
-		LIB_EXPORT
-		void batched_sense(at::Tensor input, const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas);
+		void batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, const std::vector<at::Tensor>& coords);
 
-		LIB_EXPORT 
-		void llr(const at::Tensor& coords, at::Tensor& input, const at::Tensor& smaps, const at::Tensor& kdata, int64_t iter);
+		LIB_EXPORT
+		void batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, 
+			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas);
+
+		LIB_EXPORT
+		void batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, 
+			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<at::Tensor>& kdatas);
+
+		LIB_EXPORT
+		void random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t block_size, int32_t rank);
 
 	}
 }

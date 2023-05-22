@@ -326,3 +326,83 @@ void hasty::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int
 	dctxt.sense = nullptr;
 
 }
+
+
+
+
+hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
+	at::Tensor& image, int32_t nblocks, int32_t block_size, int32_t rank)
+	: _dcontexts(std::move(contexts))
+{
+	c10::InferenceMode inference_guard;
+
+	std::deque<std::future<void>> futures;
+
+	std::array<int64_t, 3> lens{ block_size,block_size,block_size };
+	std::array<int64_t, 3> bounds{ image.size(2) - lens[0], image.size(3) - lens[1], image.size(4) - lens[2] };
+
+	std::vector<Block<3>> blocks(nblocks);
+	std::vector<int32_t> ranks(nblocks);
+	for (int i = 0; i < nblocks; ++i) {
+		Block<3>::randomize(blocks[i], bounds, lens);
+		ranks[i] = rank;
+	}
+
+	auto future_catcher = [](std::future<void>& fut) {
+		try {
+			fut.get();
+		}
+		catch (c10::Error& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (std::exception& e) {
+			std::cerr << e.what() << std::endl;
+		}
+		catch (...) {
+			std::cerr << "caught something strange: " << std::endl;
+		}
+	};
+
+	for (int i = 0; i < blocks.size(); ++i) {
+
+		const int16_t& rank = ranks.size() == 1 ? ranks[0] : ranks[i];
+
+		const auto& block = blocks[i];
+
+		auto blockrunner = [this, &block, &rank](DeviceContext& context) { block_svt_step(context, block, rank); };
+
+		futures.emplace_back(_tpool->enqueue(blockrunner));
+
+		if (futures.size() > 32 * _dcontexts.size()) {
+			future_catcher(futures.front());
+			futures.pop_front();
+		}
+
+	}
+
+	// we wait for all promises
+	while (futures.size() > 0) {
+		future_catcher(futures.front());
+		futures.pop_front();
+	}
+}
+
+void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank)
+{
+	c10::InferenceMode inference_guard;
+
+	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
+
+	auto tensor_block = hasty::extract_block(_image, block);
+	auto cuda_block = tensor_block.to(dctxt.device);
+
+	auto low_ranked = hasty::svt(cuda_block, rank, std::nullopt);
+
+	tensor_block.copy_(low_ranked, true);
+
+	{
+		std::lock_guard<std::mutex> lock(_copy_back_mutex);
+		hasty::insert_block(_image, block, tensor_block);
+	}
+
+}

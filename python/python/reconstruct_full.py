@@ -4,6 +4,8 @@ import numpy as np
 import plot_utility as pu
 import simulate_mri as simri
 
+import h5py
+
 coords, kdatas = simri.load_coords_kdatas()
 smaps = simri.load_smaps()
 
@@ -29,18 +31,30 @@ for i in range(nenc):
 
 images = np.ones((nenc,1,150,150,150), dtype=np.complex64)
 
-copied_images = torch.tensor(images.copy())
-
 
 dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
 torch.ops.load_library(dll_path)
 hasty_py = torch.ops.HastyPyInterface
 
-hasty_py.batched_sense(copied_images, torch.tensor(smaps), coord_vec, kdata_vec)
+coil_list = list()
+for i in range(images.shape[0]):
+	inner_coil_list = list()
+	for j in range(smaps.shape[0]):
+		inner_coil_list.append(j)
+	coil_list.append(inner_coil_list)
 
-images = images - copied_images.numpy()
+iters = 50
+for i in range(iters):
+	copied_images = torch.tensor(images.copy())
+	hasty_py.batched_sense(copied_images, coil_list, torch.tensor(smaps), coord_vec, kdata_vec)
+	images = images - np.nan_to_num(0.2*copied_images.numpy(), copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
 pu.image_5d(np.abs(images))
+
+with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "w") as f:
+	f.create_dataset('images', data=images)
+
+
 
 
 
