@@ -25,7 +25,7 @@ void test_nufft2() {
 	torch::cuda::synchronize();
 	auto start = std::chrono::steady_clock::now();
 	for (int i = 0; i < 200; ++i) {
-		output = hasty::ffi::nufft2to1(coords, input);
+		output = hasty::ffi::nufft21(coords, input);
 	}
 	torch::cuda::synchronize();
 	auto end = std::chrono::steady_clock::now();

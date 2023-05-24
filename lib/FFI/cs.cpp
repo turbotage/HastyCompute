@@ -8,7 +8,9 @@
 #include <c10/cuda/CUDAGuard.h>
 
 
-void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, const std::vector<at::Tensor>& coords)
+void hasty::ffi::batched_sense(
+	at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
+	const std::vector<at::Tensor>& coords)
 {
 	std::vector<BatchedSense::DeviceContext> contexts;
 
@@ -18,13 +20,15 @@ void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<
 
 	auto coords_cpy = coords;
 
-	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy));
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::nullopt, std::nullopt);
 
-	bsense.apply_toep(input, coils);
-
+	bsense.apply(input, coils, std::nullopt, std::nullopt, std::nullopt);
 }
 
-void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas)
+void hasty::ffi::batched_sense_kdata(
+	at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
+	const std::vector<at::Tensor>& coords,
+	const std::vector<at::Tensor>& kdatas)
 {
 	std::vector<BatchedSense::DeviceContext> contexts;
 
@@ -37,17 +41,43 @@ void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<
 	auto coords_cpy = coords;
 	auto kdata_cpy = kdatas;
 
-	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::move(kdata_cpy));
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::move(kdata_cpy), std::nullopt);
 
-	BatchedSense::FreqManipulator manip = [](at::Tensor& in, at::Tensor& kdata) {
+	BatchedSense::FreqManipulator fmanip = [](at::Tensor& in, at::Tensor& kdata) {
 		in.sub_(kdata);
 	};
 
-	bsense.apply(input, coils, std::nullopt, manip);
+	bsense.apply(input, coils, std::nullopt, fmanip, std::nullopt);
 }
 
-void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, 
-	const std::vector<at::Tensor>& coords, 
+void hasty::ffi::batched_sense_weighted(
+	at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
+	const std::vector<at::Tensor>& coords,
+	const std::vector<at::Tensor>& weights)
+{
+	std::vector<BatchedSense::DeviceContext> contexts;
+
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+	auto& context1 = contexts.emplace_back(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	context1.smaps = smaps.to(device);
+	//auto& context2 = contexts.emplace_back(device, c10::cuda::getStreamFromPool(false, device.index()));
+	//context2.smaps = contexts[0].smaps;
+
+	auto coords_cpy = coords;
+	auto weights_cpy = weights;
+
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::nullopt, std::move(weights_cpy));
+
+	BatchedSense::WeightedManipulator wmanip = [](at::Tensor& in, at::Tensor& weights) {
+		in.mul_(weights);
+	};
+
+	bsense.apply(input, coils, wmanip, std::nullopt, std::nullopt);
+}
+
+void hasty::ffi::batched_sense_weighted_kdata(
+	at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
+	const std::vector<at::Tensor>& coords,
 	const std::vector<at::Tensor>& weights,
 	const std::vector<at::Tensor>& kdatas)
 {
@@ -65,13 +95,61 @@ void hasty::ffi::batched_sense(at::Tensor& input, const std::vector<std::vector<
 
 	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::move(kdata_cpy), std::move(weights_cpy));
 
-	BatchedSense::WeightedFreqManipulator wmanip = [](at::Tensor& in, at::Tensor& kdata, at::Tensor& weights) {
+	BatchedSense::WeightedFreqManipulator wfmanip = [](at::Tensor& in, at::Tensor& kdata, at::Tensor& weights) {
 		in.sub_(kdata);
 		in.mul_(weights);
 	};
 
-	bsense.apply(input, coils, wmanip, std::nullopt);
+	bsense.apply(input, coils, std::nullopt, std::nullopt, wfmanip);
 }
+
+
+void hasty::ffi::batched_sense_toeplitz(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, 
+	const std::vector<at::Tensor>& coords)
+{
+	std::vector<BatchedSense::DeviceContext> contexts;
+
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+	auto& context = contexts.emplace_back(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	context.smaps = smaps.to(device);
+
+	auto coords_cpy = coords;
+
+	hasty::BatchedSense bsense(std::move(contexts), std::move(coords_cpy), std::nullopt, std::nullopt);
+
+	bsense.apply_toep(input, coils);
+}
+
+void hasty::ffi::batched_sense_toeplitz_diagonals(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
+	const at::Tensor& diagonals)
+{
+	std::vector<BatchedSense::DeviceContext> contexts;
+
+	auto device = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
+	auto& context = contexts.emplace_back(device, c10::cuda::getDefaultCUDAStream(device.index()));
+	context.smaps = smaps.to(device);
+
+	at::Tensor diagonals_cpy = diagonals;
+
+	hasty::BatchedSense bsense(std::move(contexts), std::move(diagonals_cpy));
+
+	bsense.apply(input, coils, std::nullopt, std::nullopt, std::nullopt);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void hasty::ffi::random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t block_size, int32_t rank)
 {

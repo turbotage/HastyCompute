@@ -39,6 +39,7 @@ void test_llr() {
 }
 */
 
+/*
 void batched_sense() {
 	auto device_cuda = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
 	auto device_cpu = c10::Device(c10::DeviceType::CPU);
@@ -71,7 +72,9 @@ void batched_sense() {
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
 }
+*/
 
+/*
 void batched_sense_toeplitz() {
 	auto device_cuda = c10::Device(c10::DeviceType::CUDA, c10::DeviceIndex(0));
 	auto device_cpu = c10::Device(c10::DeviceType::CPU);
@@ -104,10 +107,11 @@ void batched_sense_toeplitz() {
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
 }
+*/
 
 int main() {
 
-	batched_sense();
+	//batched_sense();
 
 	std::cout << "yas:" << std::endl;
 

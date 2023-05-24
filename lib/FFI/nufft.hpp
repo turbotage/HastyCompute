@@ -10,7 +10,9 @@ namespace hasty {
 
 		LIB_EXPORT at::Tensor nufft2(const at::Tensor& coords, const at::Tensor& input);
 
-		LIB_EXPORT at::Tensor nufft2to1(const at::Tensor& coords, const at::Tensor& input);
+		LIB_EXPORT at::Tensor nufft21(const at::Tensor& coords, const at::Tensor& input);
+
+		LIB_EXPORT at::Tensor nufft12(const at::Tensor& coords, const at::Tensor& input, const std::vector<int64_t>& nmodes);
 
 	}
 }

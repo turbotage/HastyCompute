@@ -127,43 +127,26 @@ void SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tenso
 
 
 
-
-
 BatchedSense::BatchedSense(
 	std::vector<DeviceContext>&& contexts,
-	TensorVec&& coords)
+	at::Tensor&& diagonals)
 	:
 	_dcontexts(std::move(contexts)),
-	_coords(std::move(coords)),
-	_nmodes(4)
+	_diagonals(std::move(diagonals))
 {
 	construct();
 }
 
 BatchedSense::BatchedSense(
 	std::vector<DeviceContext>&& contexts,
-	TensorVec&& coords,
-	TensorVec&& kdata)
+	std::optional<TensorVec> coords,
+	std::optional<TensorVec> kdata,
+	std::optional<TensorVec> weights)
 	:
 	_dcontexts(std::move(contexts)),
-	_coords(std::move(coords)),
-	_kdata(std::move(kdata)),
-	_nmodes(4)
-{
-	construct();
-}
-
-BatchedSense::BatchedSense(
-	std::vector<DeviceContext>&& contexts,
-	TensorVec&& coords,
-	TensorVec&& kdata,
-	TensorVec&& weights)
-	: 
-	_dcontexts(std::move(contexts)),
-	_coords(std::move(coords)),
-	_kdata(std::move(kdata)),
-	_weights(std::move(weights)),
-	_nmodes(4)
+	_coords(coords.has_value() ? std::move(*coords) : TensorVec()),
+	_kdata(kdata.has_value() ? std::move(*kdata) : TensorVec()),
+	_weights(weights.has_value() ? std::move(*weights) : TensorVec())
 {
 	construct();
 }
@@ -173,13 +156,18 @@ void BatchedSense::construct()
 	auto& smap = _dcontexts[0].smaps;
 
 	_ndim = _coords[0].size(0);
-	_nmodes[0] = 1; _nmodes[1] = smap.size(1); _nmodes[2] = smap.size(2); _nmodes[3] = smap.size(3);
+	_nmodes.resize(smap.sizes().size());
+	_nmodes[0] = 1; 
+	for (int i = 1; i < _nmodes.size(); ++i) {
+		_nmodes[i] = smap.size(i);
+	}
 }
 
 void BatchedSense::apply(at::Tensor& in,
-	const std::optional<std::vector<std::vector<int32_t>>> &coils,
-	const std::optional<WeightedFreqManipulator>& wmanip,
-	const std::optional<FreqManipulator>& manip)
+	const std::optional<std::vector<std::vector<int32_t>>>& coils,
+	const std::optional<WeightedManipulator>& wmanip,
+	const std::optional<FreqManipulator>& fmanip,
+	const std::optional<WeightedFreqManipulator>& wfmanip)
 {
 	//std::cout << "BatchedSense::apply: " << std::endl;
 	int n_outer_batch = in.size(0);
@@ -223,9 +211,9 @@ void BatchedSense::apply(at::Tensor& in,
 
 	std::function<void(DeviceContext&)> batch_applier;
 
-	auto outer_capture = [this, &in, &wmanip, &coilss, &manip](DeviceContext& context, int32_t outer_batch)
+	auto outer_capture = [this, &in, &coilss, &wmanip, &fmanip, &wfmanip](DeviceContext& context, int32_t outer_batch)
 	{
-		apply_outer_batch(context, outer_batch, in, coilss[outer_batch], wmanip, manip);
+		apply_outer_batch(context, outer_batch, in, coilss[outer_batch], wmanip, fmanip, wfmanip);
 	};
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
@@ -249,8 +237,9 @@ void BatchedSense::apply(at::Tensor& in,
 
 void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
 	const std::vector<int32_t>& coils,
-	const std::optional<WeightedFreqManipulator>& wmanip,
-	const std::optional<FreqManipulator>& manip)
+	const std::optional<WeightedManipulator>& wmanip,
+	const std::optional<FreqManipulator>& fmanip,
+	const std::optional<WeightedFreqManipulator>& wfmanip)
 {
 	//std::cout << std::endl << "outer_batch: " << outer_batch << "coils: ";
 
@@ -270,6 +259,11 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 	at::Tensor out_cu = at::empty_like(in_cu);
 	at::Tensor storage_cu = at::empty_like(in_cu);
 
+	at::Tensor weights_cu;
+	if (_weights.size() > 0) {
+		weights_cu = _weights[outer_batch].to(dctxt.device, true);
+	}
+
 	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
 		
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
@@ -280,25 +274,26 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.device, true);
 		}
 
-		at::Tensor weights_cu;
-		if (_weights.has_value()) {
-			weights_cu = _weights.value()[outer_batch].to(dctxt.device, true);
-		}
-
 		std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip;
 
 		if (wmanip.has_value()) {
-			freq_manip = [&wmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
+			freq_manip = [&wmanip, &weights_cu](at::Tensor& in, int32_t coil) {
 				//std::cout << " " << coil;
-				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				wmanip.value()(in, kdata_coil, weights_cu);
+				wmanip.value()(in, weights_cu);
 			};
 		}
-		else if (manip.has_value()) {
-			freq_manip = [&manip, &kdata_cu](at::Tensor& in, int32_t coil) {
+		else if (fmanip.has_value()) {
+			freq_manip = [&fmanip, &kdata_cu](at::Tensor& in, int32_t coil) {
 				//std::cout << " " << coil;
 				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				manip.value()(in, kdata_coil);
+				fmanip.value()(in, kdata_coil);
+			};
+		}
+		else if (wfmanip.has_value()) {
+			freq_manip = [&wfmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
+				//std::cout << " " << coil;
+				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
+				wfmanip.value()(in, kdata_coil, weights_cu);
 			};
 		}
 
@@ -389,12 +384,16 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	c10::InferenceMode inference_guard;
 	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
-	at::Tensor coord_cu;
-	if (_coords.size() > 0) {
-		coord_cu = _coords[outer_batch].to(dctxt.device, true);
-	}
+	std::unique_ptr<SenseNormalToeplitz> psense;
 
-	SenseNormalToeplitz sense(coord_cu, _nmodes);
+	if (_coords.size()> 0) {
+		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.device, true), _nmodes);
+
+	}
+	else {
+		psense = std::make_unique<SenseNormalToeplitz>(_diagonals.select(0, outer_batch).to(dctxt.device, true), _nmodes);
+	}
+	
 	int n_inner_batches = in.size(1);
 
 	at::Tensor outer_batch_cpu_view = in.select(0, outer_batch);
@@ -410,7 +409,7 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
 		in_cu = inner_batch_cpu_view.to(dctxt.device, true);
 
-		sense.apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);
+		psense->apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);
 
 		at::Tensor out_cpu = out_cu.cpu();
 		{

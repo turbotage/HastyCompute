@@ -51,9 +51,9 @@ print('Time Build Dcomp: ', end - start)
 
 images = np.ones((nenc,1,150,150,150), dtype=np.complex64)
 
-iters = 2
+iters = 4
 
-nsmap_div = 2
+nsmap_div = 1
 nsmaps = smaps.shape[0] // nsmap_div
 
 

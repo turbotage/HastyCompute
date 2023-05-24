@@ -56,7 +56,9 @@ namespace hasty {
 		// i: denotes coil number i
 		// (Tensor: NUFFT(image[frame] * smap_i), Tensor: kdata[frame]_i)
 		typedef std::function<void(at::Tensor&, at::Tensor&)> FreqManipulator;
-		// (Tensor: NUFFT(image[frame] * smap_i), Tensor: kdata[frame]_i, Tensor: weights[frame]_i)
+		// (Tensor: NUFFT(image[frame] * smap_i), Tensor: weights[frame])
+		typedef std::function<void(at::Tensor&, at::Tensor&)> WeightedManipulator;
+		// (Tensor: NUFFT(image[frame] * smap_i), Tensor: kdata[frame]_i, Tensor: weights[frame])
 		typedef std::function<void(at::Tensor&, at::Tensor&, at::Tensor&)> WeightedFreqManipulator;
 		
 	public:
@@ -81,23 +83,19 @@ namespace hasty {
 
 		BatchedSense(
 			std::vector<DeviceContext>&& contexts,
-			TensorVec&& coords);
+			at::Tensor&& diagonals);
 
 		BatchedSense(
 			std::vector<DeviceContext>&& contexts,
-			TensorVec&& coords,
-			TensorVec&& kdata);
-
-		BatchedSense(
-			std::vector<DeviceContext>&& contexts,
-			TensorVec&& coords,
-			TensorVec&& kdata,
-			TensorVec&& weights);
+			std::optional<TensorVec> coords,
+			std::optional<TensorVec> kdata,
+			std::optional<TensorVec> weights);
 
 		void apply(at::Tensor& in,
 			const std::optional<std::vector<std::vector<int32_t>>>& coils,
-			const std::optional<WeightedFreqManipulator>& wmanip,
-			const std::optional<FreqManipulator>& manip);
+			const std::optional<WeightedManipulator>& wmanip,
+			const std::optional<FreqManipulator>& fmanip,
+			const std::optional<WeightedFreqManipulator>& wfmanip);
 
 		void apply_toep(at::Tensor& in,
 			const std::optional<std::vector<std::vector<int32_t>>>& coils);
@@ -108,17 +106,19 @@ namespace hasty {
 
 		void apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
 			const std::vector<int32_t>& coils,
-			const std::optional<WeightedFreqManipulator>& wmanip,
-			const std::optional<FreqManipulator>& manip);
+			const std::optional<WeightedManipulator>& wmanip,
+			const std::optional<FreqManipulator>& fmanip,
+			const std::optional<WeightedFreqManipulator>& wfmanip);
 
 		void apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
 			const std::vector<int32_t>& coils);
 
 	private:
 
+		at::Tensor					_diagonals;
 		TensorVec					_coords;
 		TensorVec					_kdata;
-		std::optional<TensorVec>	_weights;
+		TensorVec					_weights;
 
 		int32_t _ndim;
 		std::vector<int64_t> _nmodes;

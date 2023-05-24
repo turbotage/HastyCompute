@@ -136,6 +136,14 @@ def image_3d(image, relim=False):
 
 	plt.show()
 
+def maxip_5d(image, axis=4, relim=False):
+	mip = np.max(image, axis=axis)
+	image_4d(mip, relim=relim)
+
+def minip_5d(image, axis=4, relim=False):
+	mip = np.min(image, axis=axis)
+	image_4d(mip, relim=relim)
+
 def maxip_4d(image, axis=3, relim=False):
 	mip = np.max(image, axis=axis)
 	image_3d(mip, relim=relim)
