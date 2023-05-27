@@ -1,6 +1,4 @@
 
-#include "../python/cpp/py_interface.hpp"
-
 #include <iostream>
 
 /*

@@ -2,13 +2,9 @@ module;
 
 export module permute;
 
-#ifdef STL_AS_MODULES
-import std.compat;
-#else
 import <memory>;
 import <vector>;
 import <string>;
-#endif
 
 import hasty_util;
 import hasty_compute;
@@ -29,7 +25,7 @@ namespace hasty {
 R"cuda(
 __device__
 int lid(int i, int j) {
-return i*(i+1)/2 + j;
+	return i*(i+1)/2 + j;
 }
 )cuda";
 			}
@@ -57,14 +53,14 @@ R"cuda(
 __device__
 int {{funcid}}(const {{fp_type}}* mat, int offset) 
 {
-{{fp_type}} max_abs = -1.0f;
-int max_index = 0;
-for (int i = offset; i < {{ndim}}; ++i) {
-	if ({{abs_fid}}(mat[i*{{ndim}}+i]) > max_abs) {
-		max_index = i;
+	{{fp_type}} max_abs = -1.0f;
+	int max_index = 0;
+	for (int i = offset; i < {{ndim}}; ++i) {
+		if ({{abs_fid}}(mat[i*{{ndim}}+i]) > max_abs) {
+			max_index = i;
+		}
 	}
-}
-return max_index; 
+	return max_index; 
 }
 )cuda";
 			}
@@ -105,14 +101,14 @@ R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat, int ii, int jj) 
 {
-for (int k = 0; k < {{ndim}}; ++k) {
-	int ikn = ii*{{ndim}}+k;
-	int jkn = jj*{{ndim}}+k;
-	{{fp_type}} temp;
-	temp = mat[ikn];
-	mat[ikn] = mat[jkn];
-	mat[jkn] = temp;
-}
+	for (int k = 0; k < {{ndim}}; ++k) {
+		int ikn = ii*{{ndim}}+k;
+		int jkn = jj*{{ndim}}+k;
+		{{fp_type}} temp;
+		temp = mat[ikn];
+		mat[ikn] = mat[jkn];
+		mat[jkn] = temp;
+	}
 }
 )cuda";
 			}
@@ -153,14 +149,14 @@ R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat, int ii, int jj) 
 {
-for (int k = 0; k < {{ndim}}; ++k) {
-	int kin = k*{{ndim}}+ii;
-	int kjn = k*{{ndim}}+jj;
-	{{fp_type}} temp;
-	temp = mat[kin];
-	mat[kin] = mat[kjn];
-	mat[kjn] = temp;
-}
+	for (int k = 0; k < {{ndim}}; ++k) {
+		int kin = k*{{ndim}}+ii;
+		int kjn = k*{{ndim}}+jj;
+		{{fp_type}} temp;
+		temp = mat[kin];
+		mat[kin] = mat[kjn];
+		mat[kjn] = temp;
+	}
 }
 )cuda";
 			}
@@ -205,17 +201,17 @@ R"cuda(
 __device__
 void {{funcid}}({{fp_type}}* mat, int* perm) 
 {
-for (int i = 0; i < {{ndim}}; ++i) {
-	perm[i] = i;
-}
-for (int i = 0; i < {{ndim}}; ++i) {
-	int max_abs = {{max_diag_abs_fid}}(mat, i);
-	{{row_interchange_fid}}(mat, i, max_abs);
-	{{col_interchange_fid}}(mat, i, max_abs);
-	int temp = perm[i];
-	perm[i] = perm[max_abs];
-	perm[max_abs] = temp;
-}
+	for (int i = 0; i < {{ndim}}; ++i) {
+		perm[i] = i;
+	}
+	for (int i = 0; i < {{ndim}}; ++i) {
+		int max_abs = {{max_diag_abs_fid}}(mat, i);
+		{{row_interchange_fid}}(mat, i, max_abs);
+		{{col_interchange_fid}}(mat, i, max_abs);
+		int temp = perm[i];
+		perm[i] = perm[max_abs];
+		perm[max_abs] = temp;
+	}
 }
 )cuda";
 			}
@@ -265,9 +261,9 @@ R"cuda(
 __device__
 void {{funcid}}(const {{fp_type}}* vec, const int* perm, {{fp_type}}* ovec) 
 {
-for (int i = 0; i < {{ndim}}; ++i) {
-	ovec[i] = vec[perm[i]];
-}
+	for (int i = 0; i < {{ndim}}; ++i) {
+		ovec[i] = vec[perm[i]];
+	}
 }
 )cuda";
 			}
@@ -308,9 +304,9 @@ R"cuda(
 __device__
 void {{funcid}}(const {{fp_type}}* vec, const int* perm, {{fp_type}}* ovec) 
 {
-for (int i = 0; i < {{ndim}}; ++i) {
-	ovec[perm[i]] = vec[i];
-}
+	for (int i = 0; i < {{ndim}}; ++i) {
+		ovec[perm[i]] = vec[i];
+	}
 }
 )cuda";
 			}

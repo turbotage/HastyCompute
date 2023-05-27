@@ -2,14 +2,10 @@ module;
 
 export module hasty_compute;
 
-#ifdef STL_AS_MODULES
-import std;
-#else
 import <memory>;
 import <stdexcept>;
 import <vector>;
 import <string>;
-#endif
 
 import hasty_util;
 

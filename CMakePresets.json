@@ -37,7 +37,7 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",

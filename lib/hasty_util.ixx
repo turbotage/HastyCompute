@@ -2,9 +2,6 @@ module;
 
 export module hasty_util;
 
-#ifdef STL_AS_MODULES
-import std;
-#else
 import <memory>;
 import <stdexcept>;
 import <vector>;
@@ -17,7 +14,6 @@ import <array>;
 import <sstream>;
 import <chrono>;
 import <iterator>;
-#endif
 
 namespace hasty {
 

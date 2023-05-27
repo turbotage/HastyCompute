@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.26)
 
 project("HastyCompute" VERSION 0.1)
 
@@ -60,6 +60,7 @@ set(LINALG_SOURCES
 
 set(NLSQ_SOURCES
 	"lib/nlsq/nlsq_symbolic.ixx"
+	"lib/nlsq/nlsq.ixx"
 )
 
 set(OPTION_SOURCES)
@@ -84,12 +85,6 @@ add_library(HastyComputeLib SHARED
 
 	${FFT_SOURCES}
 
-	${LINALG_SOURCES}
-
-	${NLSQ_SOURCES}
-
-	${OPTIM_SOURCES}
-
 	${THREADING_SOURCES}
 
 	"lib/hasty.ixx"
@@ -98,6 +93,11 @@ add_library(HastyComputeLib SHARED
 	"lib/metadata.ixx"
 	"lib/torch_util.cpp"
 
+	${LINALG_SOURCES}
+
+	${NLSQ_SOURCES}
+
+	${OPTIM_SOURCES}
 )
 
 target_sources(HastyComputeLib PUBLIC 
@@ -117,10 +117,14 @@ if (${BUILD_CUDA})
 		message("CUDA Toolkit Version = ${CUDAToolkit_VERSION}")
 	endif()
 
+	if (NOT TARGET CUDA::nvtx3)
+		message(FATAL_ERROR "Failed to find nvToolsExt here")
+	endif()
+
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::toolkit)
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::nvrtc)
 	target_link_libraries(HastyComputeLib PUBLIC CUDA::cudart)
-	target_link_libraries(HastyComputeLib PUBLIC CUDA::nvToolsExt)
+	#target_link_libraries(HastyComputeLib PUBLIC CUDA::nvToolsExt)
 
 	message("Linked CUDA Libs")
 endif()

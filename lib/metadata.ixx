@@ -2,16 +2,12 @@ module;
 
 export module metadata;
 
-#ifdef STL_AS_MODULES
-import std.compat;
-#else
 import <memory>;
 import <stdexcept>;
 import <vector>;
 import <string>;
 import <unordered_map>;
 import <complex>;
-#endif
 
 import hasty_util;
 
