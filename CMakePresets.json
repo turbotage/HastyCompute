@@ -13,6 +13,9 @@
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
+      "environment": {
+        "NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx"
+      },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
         "CMAKE_CXX_COMPILER": "cl.exe",
@@ -37,7 +40,7 @@
         "strategy": "external"
       },
       "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -74,7 +77,7 @@
       },
       "environment": {
         "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
-        "PYTHON_PATH": "C:\\Users\\TurboTage\\Programs\\miniconda\\envs\\v311torch"
+        "PYTHON_PATH": "D:\\miniconda3\\envs\\v311"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",

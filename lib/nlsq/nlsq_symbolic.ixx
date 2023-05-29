@@ -9,6 +9,7 @@ import <string>;
 
 import hasty_compute;
 import hasty_util;
+import hasty;
 import expr;
 import symbolic;
 
@@ -52,18 +53,22 @@ namespace hasty {
 			std::optional<std::vector<std::string>> _nonlin_pars;
 		};
 
+		/*
 		export class ExprF : public RawCudaFunction {
 		public:
 
-			ExprF(const Expr& expr, int32_t ndata, )
+			ExprF(const Expr& expr, int32_t ndata, ) {}
 
 		private:
 
 
 		};
+		*/
 
 
 
 	}
 
 }
+
+
