@@ -5,9 +5,17 @@ import plot_utility as pu
 import simulate_mri as simri
 
 import h5py
+import torchkbnufft as tkbn
+
+import torch_linop as tlinop
+from torch_cg import TorchCG
 
 coords, kdatas = simri.load_coords_kdatas()
-smaps = simri.load_smaps()
+smaps = torch.tensor(simri.load_smaps())
+
+dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
+torch.ops.load_library(dll_path)
+hasty_sense = torch.ops.HastySense
 
 # mean flow
 nframe = coords.shape[0]
@@ -15,6 +23,10 @@ nfreq = coords.shape[3]
 nenc = coords.shape[1]
 ncoils = kdatas.shape[2]
 
+im_size = (150,150,150)
+
+diagonal_vec = []
+rhs_vec = []
 coord_vec = []
 kdata_vec = []
 for i in range(nenc):
@@ -23,31 +35,60 @@ for i in range(nenc):
 	coord = torch.tensor(coord)
 	coord_vec.append(coord)
 
+	cudev = torch.device('cuda:0')
+
+	coord_cu = coord.to(cudev)
+
+	diagonal = tkbn.calc_toeplitz_kernel(coord_cu, im_size).cpu()
+	diagonal_vec.append(diagonal)
+
 	kdata_enc = kdatas[:,i,...]
 	kdata = np.transpose(kdata_enc, axes=(1,0,2)).reshape(ncoils,nframe*nfreq)
 	kdata = torch.tensor(kdata).unsqueeze(0)
 	kdata_vec.append(kdata)
 
+	rhs = torch.zeros((1,150,150,150), dtype=torch.complex64).to(cudev)
+	for i in range(smaps.shape[0]):
+		rhs += smaps[i,...].conj().to(cudev).unsqueeze(0) * hasty_sense.nufft1(coord_cu, kdata[0,i,...].unsqueeze(0).to(cudev), [1,150,150,150])
 
-images = np.ones((nenc,1,150,150,150), dtype=np.complex64)
+	rhs_vec.append(rhs)
+
+rhs = torch.stack(rhs_vec, dim=0).cpu()
+diagonals = torch.stack(diagonal_vec, dim=0)
 
 
-dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-torch.ops.load_library(dll_path)
-hasty_py = torch.ops.HastyPyInterface
+images = torch.ones((nenc,1,150,150,150), dtype=torch.complex64)
 
-coil_list = list()
-for i in range(images.shape[0]):
-	inner_coil_list = list()
-	for j in range(smaps.shape[0]):
-		inner_coil_list.append(j)
-	coil_list.append(inner_coil_list)
+class ToeplitzLinop(tlinop.TorchLinop):
+	def __init__(self, shape, smaps, diagonals):
+		coil_list = list()
+		for i in range(images.shape[0]):
+			inner_coil_list = list()
+			for j in range(smaps.shape[0]):
+				inner_coil_list.append(j)
+			coil_list.append(inner_coil_list)
+		self.coil_list = coil_list
+		self.smaps = smaps
+		self.diagonals = diagonals
 
-iters = 50
-for i in range(iters):
-	copied_images = torch.tensor(images.copy())
-	hasty_py.batched_sense(copied_images, coil_list, torch.tensor(smaps), coord_vec, kdata_vec)
-	images = images - np.nan_to_num(0.2*copied_images.numpy(), copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+		super().__init__(shape, shape)
+
+	def _apply(self, input):
+		input_copy = input.clone()
+		hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
+		return input_copy
+
+toep_linop = ToeplitzLinop((nenc,1,150,150,150), smaps, diagonals)
+
+tcg = TorchCG(toep_linop, rhs, images, max_iter=50)
+
+i = 0
+while not tcg.done():
+	print('Iter: ', i)
+	tcg.update()
+	i += 1
+
+images = tcg.x
 
 pu.image_5d(np.abs(images))
 

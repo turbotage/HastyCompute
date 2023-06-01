@@ -12,4 +12,8 @@ namespace svt {
 		hasty::ffi::random_blocks_svt(input, nblocks, block_size, rank);
 	}
 
+    TORCH_LIBRARY(HastySVT, m) {
+        m.def("random_blocks_svt", svt::random_blocks_svt);
+    }
+
 }

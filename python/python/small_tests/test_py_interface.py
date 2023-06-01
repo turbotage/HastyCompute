@@ -1,4 +1,4 @@
-import torch
+#import torch
 import numpy as np
 
 import sys
@@ -60,7 +60,6 @@ paths2 = [
 	"vcruntime140.dll",
 	"zlib.dll",
 	"HastyComputeLib.dll",
-	"HastyPyInterface.dll"
 ]
 
 paths3 = [
@@ -74,31 +73,39 @@ paths3 = [
     "KERNEL32.dll"
 ]
 
+print(os.getcwd())
 
 base_path = Path("D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin")
 
-dll_loop = True
-dlls1 = list()
-if dll_loop:
-	for path in paths3:
-		print(path)
-		dll = ct.CDLL(str(path))
-		dlls1.append(dll)
+if False:
+	dll_loop = True
+	dlls1 = list()
+	if dll_loop:
+		for path in paths1:
+			print(path)
 
-print('\nLoaded first dependencies\n')
-dll_loop = True
-dlls2 = list()
-if dll_loop:
-	for path in paths2:
-		tot_path = base_path / path
-		print(tot_path)
-		dll = ct.CDLL(str(tot_path))
-		dlls2.append(dll)
+			dll = ct.CDLL(str(path))
+			dlls1.append(dll)
+
+	print('\nLoaded first dependencies\n')
+	dll_loop = True
+	dlls2 = list()
+	if dll_loop:
+		for path in paths2:
+			tot_path = base_path / path
+			print(tot_path)
+			dll = ct.CDLL(str(tot_path))
+			dlls2.append(dll)
 
 
-dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-dll = ct.CDLL(dll_path)
+hasty_compute_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyComputeLib.dll"
+dll = ct.CDLL(hasty_compute_path)
 
+hasty_py_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
+dll = ct.CDLL(hasty_py_path)
+
+
+print('Hello')
 
 
 

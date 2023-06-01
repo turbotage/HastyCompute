@@ -155,7 +155,7 @@ void BatchedSense::construct()
 {
 	auto& smap = _dcontexts[0].smaps;
 
-	_ndim = _coords[0].size(0);
+	_ndim = smap.sizes().size() - 1;
 	_nmodes.resize(smap.sizes().size());
 	_nmodes[0] = 1; 
 	for (int i = 1; i < _nmodes.size(); ++i) {
@@ -387,11 +387,15 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	std::unique_ptr<SenseNormalToeplitz> psense;
 
 	if (_coords.size()> 0) {
-		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.device, true), _nmodes);
+		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.device, true), _nmodes, 1e-5);
 
 	}
 	else {
-		psense = std::make_unique<SenseNormalToeplitz>(_diagonals.select(0, outer_batch).to(dctxt.device, true), _nmodes);
+		psense = std::make_unique<SenseNormalToeplitz>(
+			std::move(
+				_diagonals.select(0, outer_batch).unsqueeze(0).to(dctxt.device, true)
+			), 
+			_nmodes);
 	}
 	
 	int n_inner_batches = in.size(1);
@@ -401,8 +405,14 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.device, true);
 	at::Tensor out_cu = at::empty_like(in_cu);
 
-	at::Tensor storage1;
-	at::Tensor storage2;
+	std::vector<int64_t> expanded_dims;
+	expanded_dims.push_back(0);
+	for (int i = 1; i < in_cu.sizes().size(); ++i) {
+		expanded_dims.push_back(in_cu.sizes()[i]);
+	}
+
+	at::Tensor storage1 = at::empty(at::makeArrayRef(expanded_dims), in_cu.options());
+	at::Tensor storage2 = at::empty(at::makeArrayRef(expanded_dims), in_cu.options());
 
 	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
 

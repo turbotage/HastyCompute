@@ -36,7 +36,7 @@ namespace hasty {
 	class SenseNormalToeplitz {
 	public:
 
-		SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol = 1e-5);
+		SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol);
 
 		SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
 

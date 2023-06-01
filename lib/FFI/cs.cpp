@@ -133,7 +133,7 @@ void hasty::ffi::batched_sense_toeplitz_diagonals(at::Tensor& input, const std::
 
 	hasty::BatchedSense bsense(std::move(contexts), std::move(diagonals_cpy));
 
-	bsense.apply(input, coils, std::nullopt, std::nullopt, std::nullopt);
+	bsense.apply_toep(input, coils);
 }
 
 

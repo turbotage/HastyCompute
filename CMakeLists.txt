@@ -152,7 +152,6 @@ if (${BUILD_CUDA})
 	target_link_libraries(HastyComputeLib PUBLIC FINUFFT::cufinufft)
 endif()
 
-
 # Linking SymEngine
 find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)

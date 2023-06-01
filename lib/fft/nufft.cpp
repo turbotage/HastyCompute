@@ -646,6 +646,7 @@ NormalNufftToeplitz::NormalNufftToeplitz(at::Tensor&& diagonal, const std::vecto
 {
 	c10::InferenceMode guard;
 	_ntransf = _nmodes[0];
+	_ndim = _diagonal.sizes().size() - 1;
 
 	_transdims.resize(_ndim);
 	for (int i = 0; i < _ndim; ++i) {

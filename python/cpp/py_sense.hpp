@@ -121,14 +121,24 @@ namespace bs {
 
 }
 
+namespace dummy {
+
+    void dummy(at::Tensor& tensor) {
+        std::cout << tensor << std::endl;
+    }
+
+}
+
+
 using namespace at;
 
-TORCH_LIBRARY(HastyPyInterface, m) {
+TORCH_LIBRARY(HastySense, m) {
+    
     m.def("nufft1", nufft::nufft1);
     m.def("nufft2", nufft::nufft2);
     m.def("nufft21", nufft::nufft21);
-    m.def("nufft21", nufft::nufft12);
-
+    m.def("nufft12", nufft::nufft12);
+    
     m.def("batched_sense", bs::batched_sense);
     m.def("batched_sense_weighted", bs::batched_sense_weighted);
     m.def("batched_sense_kdata", bs::batched_sense_kdata);
@@ -136,6 +146,7 @@ TORCH_LIBRARY(HastyPyInterface, m) {
 
     m.def("batched_sense_toeplitz", bs::batched_sense_toeplitz);
     m.def("batched_sense_toeplitz_diagonals", bs::batched_sense_toeplitz_diagonals);
+
 }
 
 

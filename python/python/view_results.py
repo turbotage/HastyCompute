@@ -16,7 +16,6 @@ with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "r") as f:
 	img_full = f['images'][()].squeeze(1)
 	#img_full = f['images'][()]
 
-
 img_mean = np.mean(img, axis=0)
 
 pu.image_4d(np.clip(np.abs(img_full), 0, 1e3))
