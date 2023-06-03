@@ -1,5 +1,9 @@
 module;
 
+#include <symengine/expression.h>
+#include <symengine/simplify.h>
+#include <symengine/parser.h>
+
 export module symbolic;
 
 #ifdef STL_AS_MODULES
@@ -11,6 +15,8 @@ import <vector>;
 import <string>;
 #endif
 
+import expr;
+import defaultexp;
 import hasty_util;
 import metadata;
 
@@ -85,6 +91,58 @@ namespace hasty {
 			std::vector<SymbolicVariable> _vars;
 
 		};
+
+		namespace cuda {
+
+			export class CudaWalker : public ExpressionWalker {
+			public:
+
+				std::string walk(const expr::Expression& expr) {
+					const Node& root = *get_children(expr)[0];
+					return walk(root);
+				}
+
+			private:
+
+				std::string walk(const expr::Node& node) {
+					switch (node.id()) {
+					// Operators
+					case DefaultOperatorIDs::NEG_ID:
+					{
+						return "(-" + walk(*get_children(node)[0]) + ")";
+					}
+					case DefaultOperatorIDs::POW_ID:
+					{
+						throw std::runtime_error("POW not yet implemented");
+					}
+					case DefaultOperatorIDs::MUL_ID:
+					{
+						const auto& children = get_children(node);
+						return "((" + walk(*children[0]) + ") * (" + walk(*children[1]) + "))";
+					}
+					case DefaultOperatorIDs::DIV_ID:
+					{
+						const auto& children = get_children(node);
+						return "((" + walk(*children[0]) + ") / (" + walk(*children[1]) + "))";
+					}
+					case DefaultOperatorIDs::ADD_ID:
+					{
+						const auto& children = get_children(node);
+						return "((" + walk(*children[0]) + ") + (" + walk(*children[1]) + "))";
+					}
+					case DefaultOperatorIDs::SUB_ID:
+					{
+						const auto& children = get_children(node);
+						return "((" + walk(*children[0]) + ") - (" + walk(*children[1]) + "))";
+					}
+					// Unary
+					default:
+						throw std::runtime_error("Not yet implemented");
+				}
+
+			};
+
+		}
 
 	}
 

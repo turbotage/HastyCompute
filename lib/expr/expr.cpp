@@ -180,10 +180,39 @@ std::unique_ptr<Node> node_from_token(const Token& tok, LexContext& context)
 }
 
 // TOKEN NODE
-
 TokenNode::TokenNode(const Token& tok, LexContext& context)
 	: Node(copy_token(tok), context)
 {}
+
+int32_t TokenNode::id() const 
+{
+	switch (pToken->get_token_type()) {
+	case TokenType::NO_TOKEN_TYPE:
+		throw std::runtime_error("An expression graph cannot contain a NO_TOKEN_TYPE token");
+	case TokenType::OPERATOR_TYPE:
+		throw std::runtime_error("Operator type must be more speciallized, unary or binary?");
+		break;
+	case TokenType::UNARY_OPERATOR_TYPE:
+	case TokenType::BINARY_OPERATOR_TYPE:
+	case TokenType::FUNCTION_TYPE:
+	case TokenType::NUMBER_TYPE:
+	case TokenType::ZERO_TYPE:
+	case TokenType::UNITY_TYPE:
+	case TokenType::NEG_UNITY_TYPE:
+	case TokenType::NAN_TYPE:
+	case TokenType::LEFT_PAREN_TYPE:
+	case TokenType::RIGHT_PAREN_TYPE:
+	case TokenType::COMMA_TYPE:
+		{
+			return pToken->get_id();
+		}
+		break;
+	case TokenType::VARIABLE_TYPE:
+		throw std::runtime_error("Variables should be stored in VariableNodes not TokenNodes");
+	default:
+		throw std::runtime_error("Unexpected token type");
+	}
+}
 
 std::string TokenNode::str() const 
 {
@@ -240,10 +269,14 @@ std::unique_ptr<Node> TokenNode::copy(LexContext& context) const
 }
 
 // VARIABLE NODE
-
 VariableNode::VariableNode(const VariableToken& token, LexContext& context)
 	: Node(context), m_VarToken(token)
 {}
+
+int32_t VariableNode::id() const 
+{
+	return FixedIDs::VARIABLE_ID;
+}
 
 std::string VariableNode::str() const
 {
@@ -256,11 +289,15 @@ std::unique_ptr<Node> VariableNode::copy(LexContext& context) const
 }
 
 // NEG NODE
-
 NegNode::NegNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t NegNode::id() const 
+{
+	return DefaultOperatorIDs::NEG_ID;
 }
 
 std::string NegNode::str() const
@@ -281,6 +318,11 @@ MulNode::MulNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 	children.emplace_back(std::move(right_child));
 }
 
+int32_t MulNode::id() const
+{
+	return DefaultOperatorIDs::MUL_ID;
+}
+
 std::string MulNode::str() const
 {
 	return "(" + children[0]->str() + "*" + children[1]->str() + ")";
@@ -297,6 +339,11 @@ DivNode::DivNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 {
 	children.emplace_back(std::move(left_child));
 	children.emplace_back(std::move(right_child));
+}
+
+int32_t DivNode::id() const
+{
+	return DefaultOperatorIDs::DIV_ID;
 }
 
 std::string DivNode::str() const
@@ -317,6 +364,11 @@ AddNode::AddNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 	children.emplace_back(std::move(right_child));
 }
 
+int32_t AddNode::id() const
+{
+	return DefaultOperatorIDs::ADD_ID;
+}
+
 std::string AddNode::str() const
 {
 	return "(" + children[0]->str() + "+" + children[1]->str() + ")";
@@ -333,6 +385,11 @@ SubNode::SubNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 {
 	children.emplace_back(std::move(left_child));
 	children.emplace_back(std::move(right_child));
+}
+
+int32_t SubNode::id() const
+{
+	return DefaultOperatorIDs::SUB_ID;
 }
 
 std::string SubNode::str() const
@@ -353,6 +410,11 @@ PowNode::PowNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_c
 	children.emplace_back(std::move(right_child));
 }
 
+int32_t PowNode::id() const
+{
+	return DefaultOperatorIDs::POW_ID;
+}
+
 std::string PowNode::str() const
 {
 	return "pow(" + children[0]->str() + "," + children[1]->str() + ")";
@@ -368,6 +430,11 @@ SgnNode::SgnNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t SgnNode::id() const
+{
+	return DefaultFunctionIDs::SGN_ID;
 }
 
 std::string SgnNode::str() const
@@ -387,6 +454,11 @@ AbsNode::AbsNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t AbsNode::id() const
+{
+	return DefaultFunctionIDs::ABS_ID;
+}
+
 std::string AbsNode::str() const
 {
 	return "abs(" + children[0]->str() + ")";
@@ -402,6 +474,11 @@ SqrtNode::SqrtNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t SqrtNode::id() const
+{
+	return DefaultFunctionIDs::SQRT_ID;
 }
 
 std::string SqrtNode::str() const
@@ -421,6 +498,11 @@ ExpNode::ExpNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t ExpNode::id() const
+{
+	return DefaultFunctionIDs::EXP_ID;
+}
+
 std::string ExpNode::str() const
 {
 	return "exp(" + children[0]->str() + ")";
@@ -436,6 +518,11 @@ LogNode::LogNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t LogNode::id() const
+{
+	return DefaultFunctionIDs::LOG_ID;
 }
 
 std::string LogNode::str() const
@@ -455,6 +542,11 @@ SinNode::SinNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t SinNode::id() const
+{
+	return DefaultFunctionIDs::SIN_ID;
+}
+
 std::string SinNode::str() const
 {
 	return "sin(" + children[0]->str() + ")";
@@ -470,6 +562,11 @@ CosNode::CosNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t CosNode::id() const
+{
+	return DefaultFunctionIDs::COS_ID;
 }
 
 std::string CosNode::str() const
@@ -489,6 +586,11 @@ TanNode::TanNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t TanNode::id() const
+{
+	return DefaultFunctionIDs::TAN_ID;
+}
+
 std::string TanNode::str() const
 {
 	return "tan(" + children[0]->str() + ")";
@@ -504,6 +606,11 @@ AsinNode::AsinNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t AsinNode::id() const
+{
+	return DefaultFunctionIDs::ASIN_ID;
 }
 
 std::string AsinNode::str() const
@@ -523,6 +630,11 @@ AcosNode::AcosNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t AcosNode::id() const
+{
+	return DefaultFunctionIDs::ACOS_ID;
+}
+
 std::string AcosNode::str() const
 {
 	return "acos(" + children[0]->str() + ")";
@@ -538,6 +650,11 @@ AtanNode::AtanNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t AtanNode::id() const
+{
+	return DefaultFunctionIDs::ATAN_ID;
 }
 
 std::string AtanNode::str() const
@@ -557,6 +674,11 @@ SinhNode::SinhNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t SinhNode::id() const
+{
+	return DefaultFunctionIDs::SINH_ID;
+}
+
 std::string SinhNode::str() const
 {
 	return "sinh(" + children[0]->str() + ")";
@@ -572,6 +694,11 @@ CoshNode::CoshNode(std::unique_ptr<Node> child)
 	: Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t CoshNode::id() const
+{
+	return DefaultFunctionIDs::COSH_ID;
 }
 
 std::string CoshNode::str() const
@@ -591,6 +718,11 @@ TanhNode::TanhNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t TanhNode::id() const
+{
+	return DefaultFunctionIDs::TANH_ID;
+}
+
 std::string TanhNode::str() const
 {
 	return "tanh(" + children[0]->str() + ")";
@@ -606,6 +738,11 @@ AsinhNode::AsinhNode(std::unique_ptr<Node> child)
 : Node(child->context)
 {
 	children.emplace_back(std::move(child));
+}
+
+int32_t AsinhNode::id() const
+{
+	return DefaultFunctionIDs::ASINH_ID;
 }
 
 std::string AsinhNode::str() const
@@ -625,6 +762,11 @@ AcoshNode::AcoshNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t AcoshNode::id() const
+{
+	return DefaultFunctionIDs::ACOSH_ID;
+}
+
 std::string AcoshNode::str() const
 {
 	return "acosh(" + children[0]->str() + ")";
@@ -642,6 +784,11 @@ AtanhNode::AtanhNode(std::unique_ptr<Node> child)
 	children.emplace_back(std::move(child));
 }
 
+int32_t AtanhNode::id() const
+{
+	return DefaultFunctionIDs::ATANH_ID;
+}
+
 std::string AtanhNode::str() const
 {
 	return "atanh(" + children[0]->str() + ")";
@@ -653,7 +800,6 @@ std::unique_ptr<Node> AtanhNode::copy(LexContext& context) const
 }
 
 // DERIVATIVE NODE
-
 DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child)
 	: Node(left_child->context)
 {
@@ -691,6 +837,11 @@ DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr
 	}
 }
 
+int32_t DerivativeNode::id() const
+{
+	return DefaultFunctionIDs::DERIVATIVE_ID;
+}
+
 std::string DerivativeNode::str() const
 {
 	return children[0]->str();
@@ -702,7 +853,6 @@ std::unique_ptr<Node> DerivativeNode::copy(LexContext& context) const
 }
 
 // SUBS NODE
-
 SubsNode::SubsNode(std::vector<std::unique_ptr<Node>>&& childs)
 	: Node(std::move(childs))
 {
@@ -713,6 +863,11 @@ SubsNode::SubsNode(std::vector<std::unique_ptr<Node>>&& childs)
 
 	}
 
+}
+
+int32_t SubsNode::id() const
+{
+	return DefaultFunctionIDs::SUBS_ID;
 }
 
 std::string SubsNode::str() const {
@@ -732,7 +887,6 @@ std::unique_ptr<Node> SubsNode::copy(LexContext& context) const
 }
 
 // EXPRESSION
-
 Expression expression_creator(const std::string& expression, const LexContext& context)
 {
 	std::string expr = util::to_lower_case(util::remove_whitespace(expression));
@@ -818,6 +972,11 @@ Expression::Expression(const LexContext& context, const std::deque<std::unique_p
 	}
 
 	children.emplace_back(std::move(nodes[0]));
+}
+
+int32_t Expression::id() const
+{
+	return children[0]->id();
 }
 
 std::string Expression::str() const
@@ -960,8 +1119,60 @@ ExpressionCreationMap Expression::default_expression_creation_map() {
 				nodes.push_back(std::make_unique<PowNode>(std::move(lc), std::move(rc)));
 			}
 		},
+		{ DefaultFunctionIDs::MUL_ID,
+		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
+			{
+				auto rc = std::move(nodes.back());
+				nodes.pop_back();
+				auto lc = std::move(nodes.back());
+				nodes.pop_back();
+
+				nodes.push_back(std::make_unique<MulNode>(std::move(lc), std::move(rc)));
+			}
+		},
+		{ DefaultFunctionIDs::DIV_ID,
+		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
+			{
+				auto rc = std::move(nodes.back());
+				nodes.pop_back();
+				auto lc = std::move(nodes.back());
+				nodes.pop_back();
+
+				nodes.push_back(std::make_unique<DivNode>(std::move(lc), std::move(rc)));
+			}
+		},
+		{ DefaultFunctionIDs::ADD_ID,
+		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
+			{
+				auto rc = std::move(nodes.back());
+				nodes.pop_back();
+				auto lc = std::move(nodes.back());
+				nodes.pop_back();
+
+				nodes.push_back(std::make_unique<AddNode>(std::move(lc), std::move(rc)));
+			}
+		},
+		{ DefaultFunctionIDs::SUB_ID,
+		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
+			{
+				auto rc = std::move(nodes.back());
+				nodes.pop_back();
+				auto lc = std::move(nodes.back());
+				nodes.pop_back();
+
+				nodes.push_back(std::make_unique<SubNode>(std::move(lc), std::move(rc)));
+			}
+		},
 
 		// Unary
+		{ DefaultFunctionIDs::NEG_ID,
+		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
+			{
+				auto node = std::make_unique<NegNode>(std::move(nodes.back()));
+				nodes.pop_back();
+				nodes.push_back(std::move(node));
+			}
+		},
 		{ DefaultFunctionIDs::ABS_ID,
 		[](LexContext& context, const Token& tok, std::vector<std::unique_ptr<Node>>& nodes)
 			{
@@ -1143,3 +1354,64 @@ const std::string& Expression::get_expression() const
 {
 	return m_Expression;
 }
+
+std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> hasty::expr::Expression::cse(const vec<std::string>& exprs)
+{
+	SymEngine::vec_pair sym_subexprs;
+	SymEngine::vec_basic sym_reduced;
+
+	SymEngine::vec_basic sym_exprs;
+	for (auto& expr : exprs) {
+		auto parsed = SymEngine::simplify(SymEngine::parse(expr));
+		sym_exprs.push_back(parsed);
+	}
+
+	SymEngine::cse(sym_subexprs, sym_reduced, sym_exprs);
+
+	vecp<std::string, uptr<Expression>> subexprs;
+
+	// subexprs
+	for (auto& sym_subexpr : sym_subexprs) {
+		std::string varname = util::to_lower_case(
+			util::remove_whitespace(sym_subexpr.first->__str__()));
+
+		std::set<std::string> vars;
+		symengine_get_args(sym_subexpr.second, vars);
+
+		std::string subexpr_str = util::to_lower_case(
+			util::remove_whitespace(sym_subexpr.second->__str__()));
+
+		uptr<Expression> subexpr = std::make_unique<Expression>(subexpr_str,
+			vec<std::string>(vars.begin(), vars.end()));
+
+		subexprs.emplace_back(varname, std::move(subexpr));
+	}
+
+	vec<uptr<Expression>> reduced;
+
+	// reduced
+	for (auto& sym_red : sym_reduced) {
+		std::set<std::string> vars;
+		symengine_get_args(sym_red, vars);
+
+		std::string red_str = util::to_lower_case(
+			util::remove_whitespace(sym_red->__str__()));
+
+		uptr<Expression> red = std::make_unique<Expression>(red_str,
+			vec<std::string>(vars.begin(), vars.end()));
+
+		reduced.emplace_back(std::move(red));
+	}
+
+	return std::make_pair(std::move(subexprs), std::move(reduced));
+}
+
+
+
+const std::vector<std::unique_ptr<Node>>& hasty::expr::ExpressionWalker::get_children(const Node& node)
+{
+	return node.children;
+}
+
+
+

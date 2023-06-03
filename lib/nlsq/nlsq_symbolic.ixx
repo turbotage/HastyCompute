@@ -45,6 +45,14 @@ namespace hasty {
 
 			}
 
+			size_t hash() {
+				return std::hash<std::string>(_expr);
+			}
+
+			std::pair<vecp<std::string, uptr<expr::Expression>>, uptr<expr::Expression>> get_residuals() {
+				
+			}
+
 		private:
 			std::string _expr;
 			std::vector<std::string> _pars;
@@ -53,17 +61,60 @@ namespace hasty {
 			std::optional<std::vector<std::string>> _nonlin_pars;
 		};
 
-		/*
+	}
+
+	namespace cuda {
+
 		export class ExprF : public RawCudaFunction {
 		public:
 
-			ExprF(const Expr& expr, int32_t ndata, ) {}
+			ExprF(const nlsq::Expr& expr, int32_t ndata, hasty::dtype dtype)
+				: _expr(expr), _ndata(ndata), _dtype(dtype)
+			{}
+
+			std::string dfid() const override {
+				return "exprf_" + hasty::hash_string(_expr.hash());
+			}
+
+			static std::string s_dcode() {
+				return
+R"cuda(
+__device__
+void {{funcid}}(const {{fp_type}}* params, const {{fp_type}}* consts, const {{fp_type}}* data,
+	{{fp_type}}* f, int tid, int Nprobs) 
+{
+	{{fp_type}} pars[{{nparam}}];
+	for (int i = 0; i < {{ndata}}; ++i) {
+		pars[i] = params[i*Nprobs+tid];
+	}
+
+	{{fp_type}} res;
+
+	for (int i = 0; i < {{ndata}}; ++i) {
+{{sub_expr}}
+
+{{res_expr}}
+
+		f[tid] += res * res;
+	}
+}
+)cuda";
+			}
+
+			std::string dcode() const override {
+				vecp<std::string, std::string> rep_dict = {
+					{"n"}
+				};
+
+
+			}
 
 		private:
-
+			nlsq::Expr _expr;
+			int32_t _ndata;
+			hasty::dtype _dtype;
 
 		};
-		*/
 
 
 

@@ -82,8 +82,13 @@ namespace hasty {
 				// 
 				// Binary
 				POW_ID = DefaultOperatorIDs::SUB_ID + 1,
+				MUL_ID,
+				DIV_ID,
+				ADD_ID,
+				SUB_ID,
 
 				// Unary
+				NEG_ID,
 				ABS_ID,
 				SQRT_ID,
 				EXP_ID,
@@ -113,7 +118,12 @@ namespace hasty {
 		export std::unordered_map<int32_t, std::string> DEFAULT_FUNCTION_MAPS = {
 			// FunctionTokens
 			{DefaultFunctionIDs::POW_ID, "pow"},
+			{DefaultFunctionIDs::MUL_ID, "mul"},
+			{DefaultFunctionIDs::DIV_ID, "div"},
+			{DefaultFunctionIDs::ADD_ID, "add"},
+			{DefaultFunctionIDs::SUB_ID, "sub"},
 
+			{DefaultFunctionIDs::NEG_ID, "neg"},
 			{DefaultFunctionIDs::ABS_ID, "abs"},
 			{DefaultFunctionIDs::SQRT_ID, "sqrt"},
 			{DefaultFunctionIDs::EXP_ID, "exp"},

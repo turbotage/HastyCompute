@@ -80,7 +80,7 @@ class ToeplitzLinop(tlinop.TorchLinop):
 
 toep_linop = ToeplitzLinop((nenc,1,150,150,150), smaps, diagonals)
 
-tcg = TorchCG(toep_linop, rhs, images, max_iter=50)
+tcg = TorchCG(toep_linop, rhs, images, max_iter=500)
 
 i = 0
 while not tcg.done():

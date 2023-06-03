@@ -38,6 +38,8 @@ namespace hasty {
 
 			Node(std::unique_ptr<NumberBaseToken> base_token, LexContext& ctext);
 
+			virtual int32_t id() const = 0;
+
 			virtual std::string str() const = 0;
 
 			virtual std::unique_ptr<Node> copy(LexContext& context) const = 0;
@@ -49,6 +51,8 @@ namespace hasty {
 			bool child_is_variable(int i) const;
 
 		public:
+			friend class ExpressionWalker;
+
 			LexContext& context;
 			std::vector<std::unique_ptr<Node>> children;
 			std::unique_ptr<NumberBaseToken> pToken;
@@ -61,6 +65,8 @@ namespace hasty {
 
 			TokenNode(const Token& tok, LexContext& context);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -71,6 +77,8 @@ namespace hasty {
 		public:
 
 			VariableNode(const VariableToken& token, LexContext& context);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -85,6 +93,8 @@ namespace hasty {
 
 			NegNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -95,6 +105,8 @@ namespace hasty {
 		public:
 
 			MulNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -107,6 +119,8 @@ namespace hasty {
 
 			DivNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -117,6 +131,8 @@ namespace hasty {
 		public:
 
 			AddNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -129,6 +145,8 @@ namespace hasty {
 
 			SubNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -139,6 +157,8 @@ namespace hasty {
 		public:
 
 			PowNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -153,6 +173,8 @@ namespace hasty {
 
 			SgnNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -164,6 +186,8 @@ namespace hasty {
 
 			AbsNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -174,6 +198,8 @@ namespace hasty {
 		public:
 
 			SqrtNode(std::unique_ptr<Node> child);
+			
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -190,6 +216,8 @@ namespace hasty {
 				children.emplace_back(std::move(child));
 			}
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -200,6 +228,8 @@ namespace hasty {
 		public:
 
 			LogNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -212,6 +242,8 @@ namespace hasty {
 
 			SinNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -222,6 +254,8 @@ namespace hasty {
 		public:
 
 			CosNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -234,6 +268,8 @@ namespace hasty {
 
 			TanNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -244,6 +280,8 @@ namespace hasty {
 		public:
 
 			AsinNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -256,6 +294,8 @@ namespace hasty {
 
 			AcosNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -266,6 +306,8 @@ namespace hasty {
 		public:
 
 			AtanNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -282,6 +324,8 @@ namespace hasty {
 				children.emplace_back(std::move(child));
 			}
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -292,6 +336,8 @@ namespace hasty {
 		public:
 
 			CoshNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -304,6 +350,8 @@ namespace hasty {
 
 			TanhNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -314,6 +362,8 @@ namespace hasty {
 		public:
 
 			AsinhNode(std::unique_ptr<Node> child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -326,6 +376,8 @@ namespace hasty {
 
 			AcoshNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -337,6 +389,8 @@ namespace hasty {
 
 			AtanhNode(std::unique_ptr<Node> child);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
@@ -347,6 +401,8 @@ namespace hasty {
 		public:
 
 			DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr<Node> right_child);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -360,6 +416,8 @@ namespace hasty {
 		public:
 
 			SubsNode(std::vector<std::unique_ptr<Node>>&& childs);
+
+			int32_t id() const override;
 
 			std::string str() const override;
 
@@ -390,6 +448,8 @@ namespace hasty {
 			Expression(const LexContext& context, const std::deque<std::unique_ptr<Token>>& tokens,
 				const ExpressionCreationMap& creation_map);
 
+			int32_t id() const override;
+
 			std::string str() const override;
 
 			bool is_zero() const;
@@ -402,8 +462,10 @@ namespace hasty {
 
 			const std::string& get_expression() const;
 
+			static std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> cse(const vec<std::string>& exprs);
 
 		private:
+			friend class ExpressionWalker;
 
 			LexContext m_Context;
 			std::string m_Expression;
@@ -412,6 +474,15 @@ namespace hasty {
 
 		//export Expression expression_creator(const std::string& expression, const LexContext& context);
 		//export Expression expression_creator(const std::string& expression, const std::vector<std::string>& variables);
+
+		export class ExpressionWalker {
+		public:
+
+		protected:
+
+			const std::vector<std::unique_ptr<Node>>& get_children(const Node& node);
+
+		};
 
 	}
 }

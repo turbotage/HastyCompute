@@ -89,7 +89,12 @@ namespace hasty {
 
 
 				functions.emplace_back(DefaultFunctionIDs::POW_ID, 2);
+				functions.emplace_back(DefaultFunctionIDs::MUL_ID, 2);
+				functions.emplace_back(DefaultFunctionIDs::DIV_ID, 2);
+				functions.emplace_back(DefaultFunctionIDs::ADD_ID, 2);
+				functions.emplace_back(DefaultFunctionIDs::SUB_ID, 2);
 
+				functions.emplace_back(DefaultFunctionIDs::NEG_ID, 1);
 				functions.emplace_back(DefaultFunctionIDs::ABS_ID, 1);
 				functions.emplace_back(DefaultFunctionIDs::SQRT_ID, 1);
 				functions.emplace_back(DefaultFunctionIDs::EXP_ID, 1);

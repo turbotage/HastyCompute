@@ -395,12 +395,14 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 				_deps.emplace_back(std::make_shared<BackwardSubsUnitT>(_ndim, _dtype));
 			}
 
-			std::string dfid() const override {
+			std::string dfid() const override 
+			{
 				return "ldl_solve" +
 					dims_type({ _ndim }, _dtype);
 			}
 
-			static std::string s_dcode() {
+			static std::string s_dcode() 
+			{
 				return
 R"cuda(
 __device__
