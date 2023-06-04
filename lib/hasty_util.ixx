@@ -250,6 +250,20 @@ namespace hasty {
             return std::find(c.begin(), c.end(), v) != c.end();
         }
 
+        export std::string hash_string(size_t num, size_t len)
+        {
+            std::string numstr = std::to_string(num);
+            static std::string lookup("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
+            std::string ret;
+            for (int i = 0; i < numstr.size(); i += 2) {
+                std::string substr = numstr.substr(i, 2);
+                int index = std::atoi(substr.c_str());
+                index = index % lookup.size();
+                ret += lookup[index];
+            }
+            return ret.substr(0, len);
+        }
+
         export std::string stupid_compress(std::uint64_t num)
         {
             std::string basec = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -277,6 +291,16 @@ namespace hasty {
                 num = rem;
             }
 
+            return ret;
+        }
+
+        export template<typename T>
+        std::vector<T> vec_concat(const std::vector<T>& left, const std::vector<T>& right)
+        {
+            std::vector<T> ret;
+            ret.reserve(left.size() + right.size());
+            ret.insert(ret.end(), left.begin(), left.end());
+            ret.insert(ret.end(), right.begin(), right.end());
             return ret;
         }
 

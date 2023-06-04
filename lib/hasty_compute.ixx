@@ -13,18 +13,23 @@ namespace hasty {
 
 	export enum class dtype {
 		f32,
-		c64
+		f64,
+		c64,
+		c128
 	};
 
 	export std::string dtype_to_string(hasty::dtype dtype) {
 		switch (dtype) {
 		case hasty::dtype::f32:
 			return "float";
+		case hasty::dtype::f64:
+			return "double";
 		case hasty::dtype::c64:
 			return "complex<float>";
+		case hasty::dtype::c128:
+			return "complex<double>";
 		}
 		throw NotImplementedError();
-		//return "";
 	}
 
 	export std::string dims_type(const vec<i32>& ndims, hasty::dtype dtype)

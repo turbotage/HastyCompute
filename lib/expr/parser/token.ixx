@@ -135,8 +135,7 @@ namespace hasty {
 
 			NumberBaseToken(const std::vector<std::int64_t>& sizes)
 				: sizes(sizes)
-			{
-			}
+			{}
 
 			std::vector<std::int64_t> sizes;
 
@@ -299,7 +298,6 @@ namespace hasty {
 				: NumberBaseToken({ 1 })
 			{
 			}
-
 
 			UnityToken(const std::vector<int64_t>& sizes)
 				: NumberBaseToken(sizes)

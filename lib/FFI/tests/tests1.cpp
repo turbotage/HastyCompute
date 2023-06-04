@@ -1,6 +1,6 @@
 #include "tests1.hpp"
 
-#include "../fft/nufft.hpp"
+#include "../../fft/nufft.hpp"
 
 import hasty_util;
 import hasty_compute;
@@ -717,4 +717,9 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nres, int nrun) {
 			tot_time += time;
 	}
 	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
+}
+
+void hasty::tests::test_expression()
+{
+
 }

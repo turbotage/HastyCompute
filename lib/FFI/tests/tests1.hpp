@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ffi_defines.hpp"
+#include "../ffi_defines.hpp"
 
 namespace hasty {
 	namespace tests {
@@ -28,6 +28,8 @@ namespace hasty {
 		LIB_EXPORT int test_speed(int n, int nc, int nf = 200000);
 
 		LIB_EXPORT void speed_comparisons_torch_af_cufinufft(int nres, int nrun);
+
+		LIB_EXPORT void test_expression();
 
 	}
 }

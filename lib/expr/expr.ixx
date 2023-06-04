@@ -12,9 +12,11 @@ import <string>;
 import <set>;
 import <functional>;
 import <deque>;
+import <optional>;
 #endif
 
 import hasty_util;
+import hasty_compute;
 import token;
 import lexer;
 
@@ -26,6 +28,16 @@ namespace hasty {
 		export class Expression;
 
 		export class Node {
+		public:
+
+			typedef std::function<std::string(int32_t)> TokenReplacer;
+			typedef std::function<std::string(const Node&)> TokenPrinter;
+
+			struct PrinterContext {
+				std::optional<TokenPrinter> tokenPrinter;
+				std::optional<TokenReplacer> tokenReplacer;
+			};
+
 		public:
 
 			Node(Node&&) = default;
@@ -40,7 +52,7 @@ namespace hasty {
 
 			virtual int32_t id() const = 0;
 
-			virtual std::string str() const = 0;
+			virtual std::string str(const std::optional<PrinterContext>& printer) const = 0;
 
 			virtual std::unique_ptr<Node> copy(LexContext& context) const = 0;
 
@@ -49,6 +61,16 @@ namespace hasty {
 			std::unique_ptr<Expression> diff(const std::string& x) const;
 
 			bool child_is_variable(int i) const;
+
+			std::optional<crefw<NumberBaseToken>> get_number_token() const;
+
+			bool is_zero() const;
+
+			bool is_unity() const;
+
+			bool is_neg_unity() const;
+
+			bool is_complex() const;
 
 		public:
 			friend class ExpressionWalker;
@@ -67,7 +89,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -80,7 +102,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -95,7 +117,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -108,7 +130,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -121,7 +143,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -134,7 +156,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -147,7 +169,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -160,7 +182,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -175,7 +197,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -188,7 +210,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -201,7 +223,7 @@ namespace hasty {
 			
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -218,7 +240,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -231,7 +253,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -244,7 +266,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -257,7 +279,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -270,7 +292,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -283,7 +305,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -296,7 +318,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -309,7 +331,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -326,7 +348,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -339,7 +361,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -352,7 +374,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -365,7 +387,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -378,7 +400,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -391,7 +413,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -404,7 +426,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -419,7 +441,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			std::unique_ptr<Node> copy(LexContext& context) const override;
 
@@ -450,7 +472,7 @@ namespace hasty {
 
 			int32_t id() const override;
 
-			std::string str() const override;
+			std::string str(const std::optional<PrinterContext>& printer) const override;
 
 			bool is_zero() const;
 

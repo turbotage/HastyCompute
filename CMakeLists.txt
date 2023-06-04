@@ -46,7 +46,9 @@ set(EXPR_SOURCES
 set(FFI_SOURCES
 	"lib/FFI/nufft.cpp"
 	"lib/FFI/cs.cpp"
-	"lib/FFI/tests1.cpp"
+
+	"lib/FFI/tests/tests1.cpp"
+	"lib/FFI/tests/tests2.cpp"
 )
 
 set(FFT_SOURCES

@@ -131,7 +131,7 @@ void Node::fill_variable_list(std::set<std::string>& vars)
 {
 	VariableNode* var_node = dynamic_cast<VariableNode*>(this);
 	if (var_node != nullptr) {
-		vars.insert(var_node->str());
+		vars.insert(var_node->str(std::nullopt));
 	}
 
 	for (auto& child : children) {
@@ -141,7 +141,7 @@ void Node::fill_variable_list(std::set<std::string>& vars)
 
 std::unique_ptr<Expression> Node::diff(const std::string& x) const
 {
-	std::string expr_str = util::to_lower_case(util::remove_whitespace(str()));
+	std::string expr_str = util::to_lower_case(util::remove_whitespace(str(std::nullopt)));
 
 	LexContext new_context(context);
 
@@ -173,6 +173,42 @@ bool Node::child_is_variable(int i) const
 	const VariableNode* var_node = dynamic_cast<const VariableNode*>(children.at(i).get());
 	return var_node != nullptr;
 }
+
+std::optional<crefw<NumberBaseToken>> Node::get_number_token() const
+{
+	if (pToken != nullptr) {
+		return std::make_optional<crefw<NumberBaseToken>>(*pToken);
+	}
+	return std::optional<crefw<NumberBaseToken>>();
+}
+
+bool Node::is_zero() const
+{
+	return pToken == nullptr ? false : pToken->get_token_type() == TokenType::ZERO_TYPE;
+}
+
+bool Node::is_unity() const
+{
+	return pToken == nullptr ? false : pToken->get_token_type() == TokenType::UNITY_TYPE;
+}
+
+bool Node::is_neg_unity() const
+{
+	return pToken == nullptr ? false : pToken->get_token_type() == TokenType::NEG_UNITY_TYPE;
+}
+
+bool Node::is_complex() const
+{
+	if (pToken != nullptr) {
+		NumberToken* token = dynamic_cast<NumberToken*>(&*pToken);
+		if (token != nullptr) {
+			return token->is_imaginary;
+		}
+		return false;
+	}
+	return false;
+}
+
 
 std::unique_ptr<Node> node_from_token(const Token& tok, LexContext& context)
 {
@@ -214,8 +250,19 @@ int32_t TokenNode::id() const
 	}
 }
 
-std::string TokenNode::str() const 
+std::string TokenNode::str(const std::optional<PrinterContext>& printer) const
 {
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
 	switch (pToken->get_token_type()) {
 	case TokenType::NO_TOKEN_TYPE:
 		throw std::runtime_error("An expression graph cannot contain a NO_TOKEN_TYPE token");
@@ -278,8 +325,19 @@ int32_t VariableNode::id() const
 	return FixedIDs::VARIABLE_ID;
 }
 
-std::string VariableNode::str() const
+std::string VariableNode::str(const std::optional<PrinterContext>& printer) const
 {
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
 	return m_VarToken.name;
 }
 
@@ -300,9 +358,20 @@ int32_t NegNode::id() const
 	return DefaultOperatorIDs::NEG_ID;
 }
 
-std::string NegNode::str() const
+std::string NegNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "(-" + children[0]->str() + ")";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tr = *pc.tokenPrinter;
+			std::string ret = tr(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return "(-" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> NegNode::copy(LexContext& context) const
@@ -323,9 +392,20 @@ int32_t MulNode::id() const
 	return DefaultOperatorIDs::MUL_ID;
 }
 
-std::string MulNode::str() const
+std::string MulNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "(" + children[0]->str() + "*" + children[1]->str() + ")";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tr = *pc.tokenPrinter;
+			std::string ret = tr(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return "(" + children[0]->str(printer) + "*" + children[1]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> MulNode::copy(LexContext& context) const
@@ -346,9 +426,20 @@ int32_t DivNode::id() const
 	return DefaultOperatorIDs::DIV_ID;
 }
 
-std::string DivNode::str() const
+std::string DivNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "(" + children[0]->str() + "/" + children[1]->str() + ")";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tr = *pc.tokenPrinter;
+			std::string ret = tr(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return "(" + children[0]->str(printer) + "/" + children[1]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> DivNode::copy(LexContext& context) const
@@ -369,9 +460,20 @@ int32_t AddNode::id() const
 	return DefaultOperatorIDs::ADD_ID;
 }
 
-std::string AddNode::str() const
+std::string AddNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "(" + children[0]->str() + "+" + children[1]->str() + ")";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tr = *pc.tokenPrinter;
+			std::string ret = tr(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return "(" + children[0]->str(printer) + "+" + children[1]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AddNode::copy(LexContext& context) const
@@ -392,9 +494,20 @@ int32_t SubNode::id() const
 	return DefaultOperatorIDs::SUB_ID;
 }
 
-std::string SubNode::str() const
+std::string SubNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "(" + children[0]->str() + "-" + children[1]->str() + ")";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tr = *pc.tokenPrinter;
+			std::string ret = tr(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return "(" + children[0]->str(printer) + "-" + children[1]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> SubNode::copy(LexContext& context) const
@@ -415,9 +528,31 @@ int32_t PowNode::id() const
 	return DefaultOperatorIDs::POW_ID;
 }
 
-std::string PowNode::str() const
+std::string PowNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "pow(" + children[0]->str() + "," + children[1]->str() + ")";
+	std::string name = "pow";
+
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+
+	}
+
+	return name + "(" + children[0]->str(printer) + "," + children[1]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> PowNode::copy(LexContext& context) const
@@ -437,9 +572,30 @@ int32_t SgnNode::id() const
 	return DefaultFunctionIDs::SGN_ID;
 }
 
-std::string SgnNode::str() const
+std::string SgnNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "sgn(" + children[0]->str() + ")";
+	std::string name = "sgn";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> SgnNode::copy(LexContext& context) const
@@ -459,9 +615,30 @@ int32_t AbsNode::id() const
 	return DefaultFunctionIDs::ABS_ID;
 }
 
-std::string AbsNode::str() const
+std::string AbsNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "abs(" + children[0]->str() + ")";
+	std::string name = "abs";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AbsNode::copy(LexContext& context) const
@@ -481,9 +658,30 @@ int32_t SqrtNode::id() const
 	return DefaultFunctionIDs::SQRT_ID;
 }
 
-std::string SqrtNode::str() const
+std::string SqrtNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "sqrt(" + children[0]->str() + ")";
+	std::string name = "sqrt";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> SqrtNode::copy(LexContext& context) const
@@ -503,9 +701,30 @@ int32_t ExpNode::id() const
 	return DefaultFunctionIDs::EXP_ID;
 }
 
-std::string ExpNode::str() const
+std::string ExpNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "exp(" + children[0]->str() + ")";
+	std::string name = "exp";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> ExpNode::copy(LexContext& context) const
@@ -525,9 +744,29 @@ int32_t LogNode::id() const
 	return DefaultFunctionIDs::LOG_ID;
 }
 
-std::string LogNode::str() const
+std::string LogNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "log(" + children[0]->str() + ")";
+	std::string name = "log";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> LogNode::copy(LexContext& context) const
@@ -547,9 +786,29 @@ int32_t SinNode::id() const
 	return DefaultFunctionIDs::SIN_ID;
 }
 
-std::string SinNode::str() const
+std::string SinNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "sin(" + children[0]->str() + ")";
+	std::string name = "sin";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> SinNode::copy(LexContext& context) const
@@ -569,9 +828,29 @@ int32_t CosNode::id() const
 	return DefaultFunctionIDs::COS_ID;
 }
 
-std::string CosNode::str() const
+std::string CosNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "cos(" + children[0]->str() + ")";
+	std::string name = "cos";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> CosNode::copy(LexContext& context) const
@@ -591,9 +870,29 @@ int32_t TanNode::id() const
 	return DefaultFunctionIDs::TAN_ID;
 }
 
-std::string TanNode::str() const
+std::string TanNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "tan(" + children[0]->str() + ")";
+	std::string name = "tan";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> TanNode::copy(LexContext& context) const
@@ -613,9 +912,29 @@ int32_t AsinNode::id() const
 	return DefaultFunctionIDs::ASIN_ID;
 }
 
-std::string AsinNode::str() const
+std::string AsinNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "asin(" + children[0]->str() + ")";
+	std::string name = "asin";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AsinNode::copy(LexContext& context) const
@@ -635,9 +954,29 @@ int32_t AcosNode::id() const
 	return DefaultFunctionIDs::ACOS_ID;
 }
 
-std::string AcosNode::str() const
+std::string AcosNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "acos(" + children[0]->str() + ")";
+	std::string name = "asin";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AcosNode::copy(LexContext& context) const
@@ -657,9 +996,29 @@ int32_t AtanNode::id() const
 	return DefaultFunctionIDs::ATAN_ID;
 }
 
-std::string AtanNode::str() const
+std::string AtanNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "atan(" + children[0]->str() + ")";
+	std::string name = "atan";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AtanNode::copy(LexContext& context) const
@@ -679,9 +1038,29 @@ int32_t SinhNode::id() const
 	return DefaultFunctionIDs::SINH_ID;
 }
 
-std::string SinhNode::str() const
+std::string SinhNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "sinh(" + children[0]->str() + ")";
+	std::string name = "sinh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> SinhNode::copy(LexContext& context) const
@@ -701,9 +1080,29 @@ int32_t CoshNode::id() const
 	return DefaultFunctionIDs::COSH_ID;
 }
 
-std::string CoshNode::str() const
+std::string CoshNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "cosh(" + children[0]->str() + ")";
+	std::string name = "cosh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> CoshNode::copy(LexContext& context) const
@@ -723,9 +1122,29 @@ int32_t TanhNode::id() const
 	return DefaultFunctionIDs::TANH_ID;
 }
 
-std::string TanhNode::str() const
+std::string TanhNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "tanh(" + children[0]->str() + ")";
+	std::string name = "tanh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> TanhNode::copy(LexContext& context) const
@@ -745,9 +1164,29 @@ int32_t AsinhNode::id() const
 	return DefaultFunctionIDs::ASINH_ID;
 }
 
-std::string AsinhNode::str() const
+std::string AsinhNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "asinh(" + children[0]->str() + ")";
+	std::string name = "asinh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AsinhNode::copy(LexContext& context) const
@@ -767,9 +1206,29 @@ int32_t AcoshNode::id() const
 	return DefaultFunctionIDs::ACOSH_ID;
 }
 
-std::string AcoshNode::str() const
+std::string AcoshNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "acosh(" + children[0]->str() + ")";
+	std::string name = "acosh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AcoshNode::copy(LexContext& context) const
@@ -789,9 +1248,29 @@ int32_t AtanhNode::id() const
 	return DefaultFunctionIDs::ATANH_ID;
 }
 
-std::string AtanhNode::str() const
+std::string AtanhNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return "atanh(" + children[0]->str() + ")";
+	std::string name = "atanh";
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+
+		if (pc.tokenReplacer.has_value()) {
+			const TokenReplacer& tr = *pc.tokenReplacer;
+			std::string ret = tr(id());
+			if (ret != "") {
+				name = ret;
+			}
+		}
+	}
+
+	return name + "(" + children[0]->str(printer) + ")";
 }
 
 std::unique_ptr<Node> AtanhNode::copy(LexContext& context) const
@@ -811,7 +1290,7 @@ DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr
 	auto abs_ptr = dynamic_cast<const AbsNode*>(left_child.get());
 	if (abs_ptr != nullptr) {
 		std::unique_ptr<Node> lc = std::move(left_child->children[0]);
-		std::unique_ptr<Node> rc = lc->diff(right_child->str());
+		std::unique_ptr<Node> rc = lc->diff(right_child->str(std::nullopt));
 
 		std::unique_ptr<Node> schild = std::make_unique<SgnNode>(std::move(lc));
 
@@ -831,7 +1310,7 @@ DerivativeNode::DerivativeNode(std::unique_ptr<Node> left_child, std::unique_ptr
 
 	// This is the derivative of something non special
 	{
-		auto child = left_child->diff(right_child->str());
+		auto child = left_child->diff(right_child->str(std::nullopt));
 		children.clear();
 		children.emplace_back(std::move(child));
 	}
@@ -842,9 +1321,20 @@ int32_t DerivativeNode::id() const
 	return DefaultFunctionIDs::DERIVATIVE_ID;
 }
 
-std::string DerivativeNode::str() const
+std::string DerivativeNode::str(const std::optional<PrinterContext>& printer) const
 {
-	return children[0]->str();
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return children[0]->str(printer);
 }
 
 std::unique_ptr<Node> DerivativeNode::copy(LexContext& context) const
@@ -870,8 +1360,20 @@ int32_t SubsNode::id() const
 	return DefaultFunctionIDs::SUBS_ID;
 }
 
-std::string SubsNode::str() const {
-	return children[0]->str();
+std::string SubsNode::str(const std::optional<PrinterContext>& printer) const 
+{
+	if (printer.has_value()) {
+		const PrinterContext& pc = *printer;
+		if (pc.tokenPrinter.has_value()) {
+			const TokenPrinter& tp = *pc.tokenPrinter;
+			std::string ret = tp(*this);
+			if (ret != "") {
+				return ret;
+			}
+		}
+	}
+
+	return children[0]->str(printer);
 }
 
 std::unique_ptr<Node> SubsNode::copy(LexContext& context) const
@@ -942,7 +1444,7 @@ Expression::Expression(const std::unique_ptr<Node>& root_child, const LexContext
 	: m_Context(context), Node(m_Context)
 {
 	children.emplace_back(root_child->copy(m_Context));
-	m_Expression = root_child->str();
+	m_Expression = root_child->str(std::nullopt);
 }
 
 Expression::Expression(const std::unique_ptr<Node>& root_child, const LexContext& context, const std::string& expr)
@@ -979,9 +1481,9 @@ int32_t Expression::id() const
 	return children[0]->id();
 }
 
-std::string Expression::str() const
+std::string Expression::str(const std::optional<PrinterContext>& printer) const
 {
-	return children[0]->str();
+	return children[0]->str(tokrep);
 }
 
 bool Expression::is_zero() const
@@ -1405,7 +1907,6 @@ std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> hasty::exp
 
 	return std::make_pair(std::move(subexprs), std::move(reduced));
 }
-
 
 
 const std::vector<std::unique_ptr<Node>>& hasty::expr::ExpressionWalker::get_children(const Node& node)

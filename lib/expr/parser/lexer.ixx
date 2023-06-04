@@ -199,15 +199,12 @@ namespace hasty {
 			return ret;
 		}
 
-		namespace {
-			static std::regex scientific_regex("^([\\d]+(.\\d+)?(?:e-?\\d+)?)?(i?)", std::regex_constants::ECMAScript | std::regex_constants::icase);
-		}
-
 		export class Lexer {
 		public:
 
 			Lexer(const LexContext& lex_context)
-				: m_LexContext(lex_context)
+				: m_LexContext(lex_context), 
+				_scientific_regex("^([\\d]+(.\\d+)?(?:e-?\\d+)?)?(i?)", std::regex_constants::ECMAScript | std::regex_constants::icase)
 			{
 			}
 
@@ -428,7 +425,7 @@ namespace hasty {
 			{
 				std::cmatch m;
 				std::string exprstr(expr);
-				if (std::regex_search(exprstr.c_str(), m, scientific_regex, std::regex_constants::match_not_null)) {
+				if (std::regex_search(exprstr.c_str(), m, _scientific_regex, std::regex_constants::match_not_null)) {
 					bool is_imaginary = m[3].str().length();
 					return std::make_pair(expr.substr(m[0].str().length()), NumberToken(m[1].str(), is_imaginary));
 				}
@@ -460,6 +457,8 @@ namespace hasty {
 		private:
 
 			LexContext m_LexContext;
+
+			std::regex _scientific_regex;
 
 		};
 
