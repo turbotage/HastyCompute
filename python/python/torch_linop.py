@@ -23,7 +23,6 @@ class TorchLinop:
 	def __call__(self, input: torch.Tensor):
 		return self.apply(input)
 
-
 class TorchMatrixLinop(TorchLinop):
 	def __init__(self, matrix: torch.Tensor):
 		self.matrix = matrix
@@ -31,3 +30,12 @@ class TorchMatrixLinop(TorchLinop):
 
 	def _apply(self, input: torch.Tensor):
 		return self.matrix @ input
+	
+class TorchScaleLinop(TorchLinop):
+	def __init__(self, linop: TorchLinop, scaling: torch.Tensor):
+		self.scaling = scaling
+		self.linop = linop
+		super().__init__(linop.ishape, linop.oshape)
+
+	def _apply(self, input: torch.Tensor):
+		return self.linop(input * self.scaling)

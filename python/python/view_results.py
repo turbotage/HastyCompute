@@ -12,7 +12,7 @@ with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_15f_cropped_interpolated.h5'
 	img = f['images'][()]
 
 img_full = np.array([0])
-with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "r") as f:
+with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed_weighted.h5', "r") as f:
 	img_full = f['images'][()].squeeze(1)
 	#img_full = f['images'][()]
 

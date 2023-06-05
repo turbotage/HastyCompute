@@ -3,33 +3,9 @@ import torch
 import torch_linop as tl
 from torch_linop import TorchLinop, TorchMatrixLinop
 
-class IterativeAlg:
-	def __init__(self, max_iter):
-		self.max_iter = max_iter
-		self.iter = 0
-                
-	def _update(self):
-		raise NotImplementedError
+from torch_iterative_alg import TorchIterativeAlg
 
-	def _done(self):
-		return self.iter >= self.max_iter
-
-	def update(self):
-		"""Perform one update step.
-
-		Call the user-defined _update() function and increment iter.
-		"""
-		self._update()
-		self.iter += 1
-
-	def done(self):
-		"""Return whether the algorithm is done.
-
-		Call the user-defined _done() function.
-		"""
-		return self._done()	
-
-class TorchCG(IterativeAlg):
+class TorchCG(TorchIterativeAlg):
 	def __init__(self, A: TorchLinop, b: torch.Tensor, x: torch.Tensor, P: TorchLinop | None = None, tol = 0.0, max_iter=100):
 		self.A = A
 		self.b = b
@@ -55,7 +31,6 @@ class TorchCG(IterativeAlg):
 		self.resid = torch.sqrt(self.rzold)
 
 		super().__init__(max_iter)
-
 	
 	def _update(self):
 		Ap = self.A(self.p)
@@ -92,6 +67,14 @@ class TorchCG(IterativeAlg):
 			not self.positive_definite or
 			self.resid <= self.tol
 		)
+
+	def run(self):
+		i = 0
+		while not self.done():
+			print('CG Iter: ', i, '/', self.max_iter)
+			self.update()
+			i += 1
+		return self.x
 
 
 def test_cg():
