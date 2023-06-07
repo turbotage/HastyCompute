@@ -1,5 +1,8 @@
 import torch
 
+import math
+import numpy as np
+
 import torch_linop as tl
 from torch_linop import TorchLinop, TorchMatrixLinop
 
@@ -75,6 +78,55 @@ class TorchCG(TorchIterativeAlg):
 			self.update()
 			i += 1
 		return self.x
+
+
+class TorchGD(TorchIterativeAlg):
+	def __init__(self, gradf, x, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):
+		self.gradf = gradf
+		self.x = x
+		self.alpha = alpha
+		self.accelerate = accelerate
+		self.tol = 0.0
+		
+		super().__init__(max_iter)
+
+		self.resid = np.infty
+		if self.accelerate:
+			self.z = self.x.clone()
+			self.t = 1
+
+	def _update(self):
+		x_old = self.x.clone()
+
+		if self.accelerate:
+			self.x = self.z
+
+		self.x -= self.alpha * self.gradf(self.x)
+
+		if self.accelerate:
+			t_old = self.t
+			self.t = (1.0 + math.sqrt(1.0 + 4.0 * t_old*t_old)) / 2.0
+
+			self.z = self.x + ((t_old - 1) / self.t) * (self.x - x_old)
+
+		if self.tol != 0.0:
+			self.resid = torch.norm(self.x - x_old).item() / self.alpha
+
+	def _done(self):
+		return self.iter >= self.max_iter or self.resid < self.tol
+	
+	def run(self):
+		i = 0
+		while not self.done():
+			print('CG Iter: ', i, '/', self.max_iter)
+			self.update()
+			i += 1
+		return self.x
+
+
+
+
+
 
 
 def test_cg():
