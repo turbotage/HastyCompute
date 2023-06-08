@@ -3,6 +3,8 @@ import torch
 import math
 import numpy as np
 
+import plot_utility as pu
+
 import torch_linop as tl
 from torch_linop import TorchLinop, TorchMatrixLinop
 
@@ -71,11 +73,29 @@ class TorchCG(TorchIterativeAlg):
 			self.resid <= self.tol
 		)
 
-	def run(self):
+	def run(self, plot=False):
 		i = 0
 		while not self.done():
 			print('CG Iter: ', i, '/', self.max_iter)
 			self.update()
+
+			if plot:
+				pu.image_nd(self.x.numpy())
+
+			i += 1
+		return self.x
+	
+	def run_with_prox(self, prox, plot=False):
+		i = 0
+		while not self.done():
+			print('CG Iter: ', i, '/', self.max_iter)
+			self.update()
+
+			self.x = prox(self.x)
+
+			if plot:
+				pu.image_nd(self.x.numpy())
+
 			i += 1
 		return self.x
 
@@ -115,14 +135,31 @@ class TorchGD(TorchIterativeAlg):
 	def _done(self):
 		return self.iter >= self.max_iter or self.resid < self.tol
 	
-	def run(self):
+	def run(self, plot=False):
 		i = 0
 		while not self.done():
-			print('CG Iter: ', i, '/', self.max_iter)
+			print('GD Iter: ', i, '/', self.max_iter)
 			self.update()
+
+			if plot:
+				pu.image_nd(self.x.numpy())
+
 			i += 1
 		return self.x
+	
+	def run_with_prox(self, prox, plot=False):
+		i = 0
+		while not self.done():
+			print('GD Iter: ', i, '/', self.max_iter)
+			self.update()
 
+			self.x = prox(self.x)
+
+			if plot:
+				pu.image_nd(self.x.numpy())
+
+			i += 1
+		return self.x
 
 
 

@@ -22,7 +22,7 @@ class TorchMaxEig(TorchIterativeAlg):
 	def run(self):
 		i = 0
 		while not self.done():
-			print('MaxEig Iter: ', i,'/', self.max_iter)
+			print('MaxEig Iter: ', i,'/', self.max_iter, ' MaxEig: ', self.max_eig)
 			self.update()
 			i += 1
 		return self.max_eig

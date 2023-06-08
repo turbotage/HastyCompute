@@ -8,10 +8,11 @@ import math
 import torch
 
 import os
+import fnmatch
+import re
 
 def rename_h5(name, appending):
 	return name[:-3] + appending + '.h5'
-
 
 def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=False, just_plot=False):
 	map_joiner = lambda path: os.path.join(dirpath, path)
@@ -156,13 +157,18 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 
 	return img_enc, img_mvel
 
-def nufft_of_enced_image(img_enc, smaps, nfreq, dirpath,
+def nufft_of_enced_image(img_enc, smaps, dirpath, 
+	nspokes, nsamp_per_spoke, method, crop_factor=1.0,
 	create_nufft_of_enced_image=False, load_nufft_of_neced_image=False):
 	
+	nfreq = nspokes * nsamp_per_spoke
 	map_joiner = lambda path: os.path.join(dirpath, path)
 
 	if create_nufft_of_enced_image and load_nufft_of_neced_image:
 		raise RuntimeError('Can not both load and create nufft_of_enced_image images')
+
+	frame_coords = []
+	frame_kdatas = []
 
 	if create_nufft_of_enced_image:
 		dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
@@ -174,8 +180,8 @@ def nufft_of_enced_image(img_enc, smaps, nfreq, dirpath,
 		nenc = img_enc.shape[1]
 		nsmaps = smaps.shape[0]
 
-		coords = np.empty((nframes, nenc,3,nfreq), dtype=np.float32)
-		kdatas = np.empty((nframes,nenc,nsmaps,nfreq), dtype=np.complex64)
+		#coords = np.empty((nframes,nenc,3,nfreq), dtype=np.float32)
+		#kdatas = np.empty((nframes,nenc,nsmaps,nfreq), dtype=np.complex64)
 
 		im_size = (img_enc.shape[2], img_enc.shape[3], img_enc.shape[4])
 		num_voxels = math.prod(list(im_size))
@@ -183,55 +189,63 @@ def nufft_of_enced_image(img_enc, smaps, nfreq, dirpath,
 		print('Simulating MRI camera')
 		for frame in range(nframes):
 			print('Frame: ', frame, '/', nframes)
+
+			encode_coords = []
+			encode_kdatas = []
 			for encode in range(nenc):
 				print('Encode: ', encode, '/', nenc)
-				# Random a large fraction in the middle
 				print('Creating coordinates')
-				coord_vec = []
-				if True:
-					L = np.pi / 8
-					coord_vec.append(-L + 2*L*np.random.rand(3,nfreq // 4).astype(np.float32))
-					L = np.pi / 4
-					coord_vec.append(-L + 2*L*np.random.rand(3,nfreq // 4).astype(np.float32))
-					L = np.pi / 2
-					coord_vec.append(-L + 2*L*np.random.rand(3,nfreq // 4).astype(np.float32))
-					L = np.pi
-					coord_vec.append(-L + 2*L*np.random.rand(3,nfreq // 4).astype(np.float32))
-					coord = np.concatenate(coord_vec, axis=1)
-					del coord_vec
 
-				coords[frame,encode,...] = coord
-				coord_torch = torch.tensor(coord).to(torch.device('cuda:0'))
+				coil_kdatas = []
+
+				coord = np.ascontiguousarray(ic.create_coords(nspokes, nsamp_per_spoke, method, False, crop_factor))
+				coord_torch = torch.tensor(coord).to(torch.device('cuda:0')).contiguous()
 				for smap in range(nsmaps):
 					print('Coil: ', smap, '/', nsmaps)
 					coiled_image = img_enc[frame,encode,...] * smaps[smap,...]
 
-					coild_image_torch = torch.tensor(coiled_image).to(torch.device('cuda:0')).unsqueeze(0)
+					coild_image_torch = torch.tensor(coiled_image).to(torch.device('cuda:0')).unsqueeze(0).contiguous()
 
 					kdata = hasty_sense.nufft2(coord_torch,coild_image_torch) / math.sqrt(num_voxels)
-					kdatas[frame,encode,smap,...] = kdata.cpu().numpy()
+					coil_kdatas.append(kdata.cpu().numpy())
+
+				encode_coords.append(coord)
+				encode_kdatas.append(np.stack(coil_kdatas, axis=0))
+
+			frame_coords.append(encode_coords)
+			frame_kdatas.append(encode_kdatas)
 
 		with h5py.File(map_joiner('simulated_coords_kdatas.h5'), "w") as f:
-			f.create_dataset('coords', data=coords)
-			f.create_dataset('kdatas', data=kdatas)
+			for i in range(nframes):
+				for j in range(nenc):
+					ijstr = str(i)+'_e'+str(j)
+					f.create_dataset('coords_f'+ijstr, data=frame_coords[i][j])
+					f.create_dataset('kdatas_f'+ijstr, data=frame_kdatas[i][j])
 
 		print('\nCreated coords and kdatas\n')
 	elif load_nufft_of_neced_image:
+		frame_coords = np.array([], dtype=object)
+		frame_kdatas = np.array([], dtype=object)
 		with h5py.File(map_joiner('simulated_coords_kdatas.h5'), "r") as f:
-			coords = f['coords'][()]
-			kdatas = f['kdatas'][()]
+			for i in range(nframes):
+				encode_coords = np.array([], dtype=object)
+				encode_kdatas = np.array([], dtype=object)
+				for j in range(nenc):
+					ijstr = str(i)+'_e'+str(j)
+					np.append(encode_coords, f['coords_f'+ijstr])
+					np.append(encode_kdatas, f['kdatas_f'+ijstr])
 		print('\nLoaded coords and kdatas\n')
 
-	return coords, kdatas
-
-
-
-
+	return frame_coords, frame_kdatas
 
 def simulate(dirpath='D:\\4DRecon\\dat\\dat2', imagefile='images_6f.h5',
 		create_crop_image=False, load_crop_image=False, 
 	    create_enc_image=False, load_enc_image=False,
 	    create_nufft_of_enced_image=False, load_nufft_of_neced_image=False,
+	    nspokes=500,
+	    samp_per_spoke=489,
+		method='PCVIPR',
+		crop_factor=2.0,
 		just_plot=False):
 
 	img, img_mag, smaps = crop_image(dirpath, imagefile, create_crop_image, load_crop_image, just_plot)
@@ -244,19 +258,47 @@ def simulate(dirpath='D:\\4DRecon\\dat\\dat2', imagefile='images_6f.h5',
 	pu.image_5d(np.abs(img_enc))
 	pu.maxip_4d(ic.get_CD(img_mvel))
 
-	coords, kdatas = nufft_of_enced_image(img_enc, smaps, 400000, dirpath, create_nufft_of_enced_image, load_nufft_of_neced_image)
+	coords, kdatas = nufft_of_enced_image(img_enc, smaps, dirpath, 
+		nspokes, samp_per_spoke, method, crop_factor,
+		create_nufft_of_enced_image, load_nufft_of_neced_image)
 
+def load_coords_kdatas(dirpath):
+	map_joiner = lambda path: os.path.join(dirpath, path)
 
-def load_coords_kdatas():
-	coords = np.array([])
-	kdatas = np.array([])
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\simulated_coords_kdatas.h5', "r") as f:
-		coords = f['coords'][()]
-		kdatas = f['kdatas'][()]
-	return (coords, kdatas)
+	def frames_and_encodes(keys):
+		framelist = list()
+		encodelist = list()
+		for key in keys:
+			m = re.findall(r'coords_f\d+_e0', key)
+			if len(m) != 0:
+				framelist.append(m[0])
+			m = re.findall(r'coords_f0_e\d+', key)
+			if len(m) != 0:
+				encodelist.append(m[0])
 
-def load_smaps():
+		return (len(framelist), len(encodelist))
+		
+	nframes = 0
+	nenc = 0
+	frame_coords = []
+	frame_kdatas = []
+	with h5py.File(map_joiner('simulated_coords_kdatas.h5'), "r") as f:
+		nframes, nenc = frames_and_encodes(list(f.keys()))
+		for i in range(nframes):
+			encode_coords = []
+			encode_kdatas = []
+			for j in range(nenc):
+				ijstr = str(i)+'_e'+str(j)
+				encode_coords.append(f['coords_f'+ijstr][()])
+				encode_kdatas.append(f['kdatas_f'+ijstr][()])
+			frame_coords.append(encode_coords)
+			frame_kdatas.append(encode_kdatas)
+	print('\nLoaded coords and kdatas\n')
+	return (frame_coords, frame_kdatas, nframes, nenc)
+
+def load_smaps(dirpath):
+	map_joiner = lambda path: os.path.join(dirpath, path)
 	smaps = np.array([])
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\SenseMapsCpp_cropped.h5', "r") as f:
+	with h5py.File(map_joiner('SenseMapsCpp_cropped.h5'), "r") as f:
 		smaps = f['Maps'][()]
 	return smaps
