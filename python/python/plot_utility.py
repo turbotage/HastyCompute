@@ -218,6 +218,16 @@ def image_nd(image, relim=False):
 	elif len(image.shape) == 2:
 		image_2d(image, relim)
 
+def scatter_3d(coord):
+	fig = plt.figure()
+	ax = fig.add_subplot(projection='3d')
+	
+	ax.scatter(coord[0,:], coord[1,:], coord[2,:], marker='*')
+	ax.set_xlabel('X Label')
+	ax.set_ylabel('Y Label')
+	ax.set_zlabel('Z Label')
+
+	plt.show()
 
 def maxip_5d(image, axis=4, relim=False):
 	mip = np.max(image, axis=axis)
@@ -234,3 +244,21 @@ def maxip_4d(image, axis=3, relim=False):
 def minip_4d(image, axis=3, relim=False):
 	mip = np.min(image, axis=axis)
 	image_3d(mip, relim=relim)
+
+def plot_1vec(vec1):
+	fig = plt.figure()
+	plt.plot(vec1, 'r-*')
+	plt.show()
+
+def plot_2vec(vec1, vec2):
+	fig = plt.figure()
+	plt.plot(vec1, 'r-*')
+	plt.plot(vec2, 'g-o')
+	plt.show()
+
+def plot_3vec(vec1, vec2, vec3):
+	fig = plt.figure()
+	plt.plot(vec1, 'r-*')
+	plt.plot(vec2, 'g-o')
+	plt.plot(vec3, 'b-^')
+	plt.show()

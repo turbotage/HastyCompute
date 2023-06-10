@@ -9,7 +9,7 @@ import math
 import matplotlib.pyplot as plt
 
 
-def create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=1.0):
+def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, crop_factor=1.0):
 	if method == 'PCVIPR':
 
 		def rx(angle):
@@ -27,8 +27,10 @@ def create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=1.0):
 			]).astype(np.float32)
 
 		spoke = np.zeros((3,samp_per_spoke), dtype=np.float32)
+		spoke[0,:] = np.random.normal(scale=noise, size=samp_per_spoke)
+		spoke[1,:] = np.random.normal(scale=noise, size=samp_per_spoke)
 		spoke[2,:] = 2*np.pi*np.linspace(-(1.0/3.0), 1.0, samp_per_spoke).astype(np.float32)
-		
+
 		xangle = np.pi*np.random.rand(1).astype(np.float32).item()
 		zangle = 2*np.pi*np.random.rand(1).astype(np.float32).item()
 
@@ -52,18 +54,6 @@ def create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=1.0):
 def create_coords(nspokes, samp_per_spoke, method='MidRandom', plot=False, crop_factor=1.0):
 	nfreq = nspokes * samp_per_spoke
 
-	def plot_coords(coord):
-		fig = plt.figure()
-		ax = fig.add_subplot(projection='3d')
-		
-		ax.scatter(coord[0,:], coord[1,:], coord[2,:], marker='*')
-		ax.set_xlabel('X Label')
-		ax.set_ylabel('Y Label')
-		ax.set_zlabel('Z Label')
-
-		plt.show()
-
-
 	if method == 'MidRandom':
 		coord_vec = []
 		L = np.pi / 8
@@ -78,7 +68,7 @@ def create_coords(nspokes, samp_per_spoke, method='MidRandom', plot=False, crop_
 		coord = np.concatenate(coord_vec, axis=1)
 
 		if plot:
-			plot_coords(coord)
+			pu.scatter_3d(coord)
 
 		return coord
 	elif method == 'PCVIPR':
@@ -182,5 +172,5 @@ def convolve_5d_3x3x3(img, factor = 3, mode='same'):
 		
 	return out
 
-#coord = create_coords(500, 50, method='PCVIPR', plot=True, crop_factor=1.0)
+#coord = create_coords(10, 200, method='PCVIPR', plot=True, crop_factor=1.5)
 #print(coord.shape)

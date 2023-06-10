@@ -11,6 +11,10 @@ import os
 import fnmatch
 import re
 
+dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
+torch.ops.load_library(dll_path)
+hasty_sense = torch.ops.HastySense
+
 def rename_h5(name, appending):
 	return name[:-3] + appending + '.h5'
 
@@ -171,11 +175,6 @@ def nufft_of_enced_image(img_enc, smaps, dirpath,
 	frame_kdatas = []
 
 	if create_nufft_of_enced_image:
-		dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-		torch.ops.load_library(dll_path)
-
-		hasty_sense = torch.ops.HastySense
-
 		nframes = img_enc.shape[0]
 		nenc = img_enc.shape[1]
 		nsmaps = smaps.shape[0]
@@ -302,3 +301,76 @@ def load_smaps(dirpath):
 	with h5py.File(map_joiner('SenseMapsCpp_cropped.h5'), "r") as f:
 		smaps = f['Maps'][()]
 	return smaps
+
+def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=0):
+	# mean flow
+	ncoils = smaps.shape[0]
+
+	coord_vec = []
+	kdata_vec = []
+	for encode in range(nenc):
+		frame_coords = []
+		frame_kdatas = []
+		for frame in range(nframes):
+			frame_coords.append(coords[frame][encode])
+			frame_kdatas.append(kdatas[frame][encode])
+
+		coord = np.concatenate(frame_coords, axis=1)
+		kdata = np.concatenate(frame_kdatas, axis=2)
+		coord_vec.append(torch.tensor(coord))
+		kdata_vec.append(torch.tensor(kdata))
+
+	diagonal_vec = []
+	rhs_vec = []
+
+	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
+	nvoxels = math.prod(list(im_size))
+	cudev = torch.device('cuda:0')
+
+	for i in range(nenc):
+		print('Encoding: ', i)
+		coord = coord_vec[i]
+		kdata = kdata_vec[i]
+
+		coord_cu = coord.to(cudev)
+
+		weights: torch.Tensor
+		if use_weights:
+			print('Calculating density compensation')
+			weights = tkbn.calc_density_compensation_function(ktraj=coord_cu, 
+				im_size=im_size).to(torch.float32)
+			
+			for _ in range(root):
+				weights = torch.sqrt(weights)
+			
+			print('Building toeplitz kernel')
+			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, weights=weights.squeeze(0), im_size=im_size).cpu()
+			diagonal_vec.append(diagonal)
+
+			weights = torch.sqrt(weights).squeeze(0)
+		else:
+			print('Building toeplitz kernel')
+			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size).cpu()
+			diagonal_vec.append(diagonal)
+
+		uimsize = [1,im_size[0],im_size[1],im_size[2]]
+
+		print('Calculating RHS')
+		rhs = torch.zeros(tuple(uimsize), dtype=torch.complex64).to(cudev)
+		for j in range(ncoils): #range(nsmaps):
+			print('Coil: ', j, '/', ncoils)
+			SH = smaps[j,...].conj().to(cudev).unsqueeze(0)
+			b = kdata[j,0,...].unsqueeze(0).to(cudev)
+			if use_weights:
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights * b, uimsize) / math.sqrt(nvoxels)
+				rhs += rhs_j
+			else:
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize) / math.sqrt(nvoxels)
+				rhs += rhs_j
+
+		rhs_vec.append(rhs)
+
+	rhs = torch.stack(rhs_vec, dim=0).cpu()
+	diagonals = torch.stack(diagonal_vec, dim=0)
+
+	return diagonals, rhs
