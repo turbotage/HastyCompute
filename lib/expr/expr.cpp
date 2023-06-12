@@ -1483,7 +1483,7 @@ int32_t Expression::id() const
 
 std::string Expression::str(const std::optional<PrinterContext>& printer) const
 {
-	return children[0]->str(tokrep);
+	return children[0]->str(printer);
 }
 
 bool Expression::is_zero() const

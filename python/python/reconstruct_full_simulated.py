@@ -44,7 +44,7 @@ if False:
 
 if True:
 	print('Beginning unweighted load')
-	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=1)
+	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=True, root=1)
 	print('Beginning unweighted reconstruct')
 	images = ru.reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter=100, lamda=5e4, images=images, plot=False)
 

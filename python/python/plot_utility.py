@@ -262,3 +262,8 @@ def plot_3vec(vec1, vec2, vec3):
 	plt.plot(vec2, 'g-o')
 	plt.plot(vec3, 'b-^')
 	plt.show()
+
+
+
+
+

@@ -87,7 +87,7 @@ def create_coords(nspokes, samp_per_spoke, method='MidRandom', plot=False, crop_
 			coord = np.concatenate([coord, nsamp_to_add], axis=1)
 
 		if plot:
-			plot_coords(coord)
+			pu.scatter_3d(coord)
 
 		return coord
 	else:
@@ -172,5 +172,5 @@ def convolve_5d_3x3x3(img, factor = 3, mode='same'):
 		
 	return out
 
-#coord = create_coords(10, 200, method='PCVIPR', plot=True, crop_factor=1.5)
+#coord = create_coords(500, 50, method='PCVIPR', plot=True, crop_factor=1.5)
 #print(coord.shape)

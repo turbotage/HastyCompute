@@ -2,8 +2,7 @@
 #include <iostream>
 #include "../python/cpp/py_sense.hpp"
 
-int main() {
-	
+void diagonal_test() {
 	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
 
 	auto input = at::rand({ 5,1,32,32,32 }, complex_options);
@@ -23,6 +22,17 @@ int main() {
 	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals);
 
 	std::cout << "yas:" << std::endl;
+}
+
+int main() {
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat).device(c10::Device("cuda:0"));
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float).device(c10::Device("cuda:0"));
+
+	auto coord = at::rand({ 3, 30000000 }, real_options);
+	auto input = at::rand({ 1, 30000000 }, complex_options);
+
+	auto output = hasty::ffi::nufft1(coord, input, { 1, 256, 256, 256 });
 
 	return 0;
 }
