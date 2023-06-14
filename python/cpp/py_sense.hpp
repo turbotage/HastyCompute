@@ -143,7 +143,7 @@ TORCH_LIBRARY(HastySense, m) {
     m.def("batched_sense_weighted", bs::batched_sense_weighted);
     m.def("batched_sense_kdata", bs::batched_sense_kdata);
     m.def("batched_sense_weighted_kdata", bs::batched_sense_weighted_kdata);
-
+    
     m.def("batched_sense_toeplitz", bs::batched_sense_toeplitz);
     m.def("batched_sense_toeplitz_diagonals", bs::batched_sense_toeplitz_diagonals);
 

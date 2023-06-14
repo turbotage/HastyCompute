@@ -11,9 +11,10 @@ import simulate_mri as simri
 import h5py
 import torchkbnufft as tkbn
 
-from torch_linop import TorchLinop, TorchScaleLinop
+from torch_linop import TorchLinop, TorchScaleLinop, TorchL2Reg
 from torch_grad_methods import TorchCG, TorchGD
 from torch_maxeig import TorchMaxEig
+import torch_precond as tprcnd
 
 dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
 torch.ops.load_library(dll_path)
@@ -152,6 +153,24 @@ def load_real():
 
 	return (torch.tensor(smaps), coord, kdata, weights, gating)
 
+def load_full_real(coord, kdata, weights):
+	coord_vec = []
+	kdata_vec = []
+	weights_vec = []
+	
+	nlast = coord.shape[-1] * coord.shape[-2]
+	ncoil = kdata.shape[1]
+	coordf = coord[:,:,0,:,:].reshape((3,5,nlast))
+	kdataf = kdata[:,:,0,:,:].reshape((5,ncoil,nlast))
+	weightsf = weights[:,0,:,:].reshape((5,nlast))
+	for j in range(5):
+		coord_vec.append(torch.tensor(coordf[:,j,:]))
+		kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
+		weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+
+	return coord_vec, kdata_vec, weights_vec
+
+
 def gate(coord, kdata, weights, gating, nframes):
 	mean = np.mean(gating)
 	upper_bound = 2*mean
@@ -228,6 +247,43 @@ def gated_full(coord_vec, kdata_vec, weights_vec, nframes):
 
 	return coord_vec_full, kdata_vec_full, weights_vec_full
 
+def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0):
+	max = 0.0
+	for i in range(len(coord_vec)):
+		maxi = coord_vec[i].abs().max().item()
+		if maxi > max:
+			max = maxi
+
+	kim_size = tuple((e / 2) * crop_factor for e in im_size)
+
+
+	for i in range(len(coord_vec)):
+		coord = coord_vec[i]
+		idxx = coord[0,:] < kim_size[0]
+		idxy = coord[1,:] < kim_size[1]
+		idxz = coord[2,:] < kim_size[2]
+
+		idx = torch.logical_and(idxx, torch.logical_and(idxy, idxz))
+
+		coord_vec[i] = torch.pi * coord[:,idx] / maxi
+		kdata_vec[i] = kdata_vec[i][:,:,idx]
+		weights_vec[i] = weights_vec[i][:,idx]
+	
+	return (coord_vec, kdata_vec, weights_vec)
+
+def translate(coord_vec, kdata_vec, translation):
+	for i in range(len(coord_vec)):
+		coord = coord_vec[i]
+		kdata = kdata_vec[i]
+		mult = torch.tensor(list(translation)).unsqueeze(0)
+
+		kdata *= torch.exp(1j*(mult @ coord)).unsqueeze(0)
+
+		kdata_vec[i] = kdata
+		coord_vec[i] = coord
+
+	return coord_vec, kdata_vec
+
 def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0):
 	nenc = 5
 	diagonal_vec = []
@@ -244,18 +300,19 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 		kdata = kdata_vec[i]
 
 		if use_weights:
-			weights_cu = weights_vec[i].to(cudev)
+			weights_cu = weights_vec[i].to(cudev).contiguous()
 
 			for _ in range(root):
 				weights_cu = torch.sqrt(weights_cu)
 
-			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, weights=weights_cu, im_size=im_size).cpu()
+			diagonal = torch.real(tkbn.calc_toeplitz_kernel(omega=coord_cu, weights=weights_cu, im_size=im_size)).cpu()
 			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
 			weights_cu = torch.sqrt(weights_cu)
 		else:
-			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size).cpu()
+			diagonal = torch.real(tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size)).cpu()
+			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
 		uimsize = [1,im_size[0],im_size[1],im_size[2]]
@@ -263,16 +320,14 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 		rhs = torch.zeros(tuple(uimsize), dtype=torch.complex64).to(cudev)
 		for j in range(ncoils):
-			SH = smaps[j,...].conj().to(cudev).unsqueeze(0)
-			b = kdata[j,0,...].to(cudev).unsqueeze(0)
+			SH = smaps[j,...].conj().to(cudev).unsqueeze(0).contiguous()
+			b = kdata[0,j,...].to(cudev).unsqueeze(0).contiguous()
 			if use_weights:
 				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights_cu*b, uimsize) / math.sqrt(nvoxel)
 				rhs += rhs_j
 			else:
 				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize) / math.sqrt(nvoxel)
 				rhs += rhs_j
-
-			rhs_vec.append(rhs)
 
 		rhs_vec.append(rhs)
 
@@ -283,7 +338,7 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 
 class ToeplitzLinop(TorchLinop):
-	def __init__(self, shape, smaps, nenc, diagonals):
+	def __init__(self, shape, smaps, nenc, diagonals, clone=True):
 		coil_list = list()
 		for i in range(nenc):
 			inner_coil_list = list()
@@ -293,13 +348,31 @@ class ToeplitzLinop(TorchLinop):
 		self.coil_list = coil_list
 		self.smaps = smaps
 		self.diagonals = diagonals
+		self.clone = clone
 
 		super().__init__(shape, shape)
 
 	def _apply(self, input):
-		input_copy = input.clone()
-		hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
-		return input_copy
+		if self.clone:
+			input_copy = input.data
+			hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
+			return input_copy
+		else:
+			hasty_sense.batched_sense_toeplitz_diagonals(input, self.coil_list, self.smaps, self.diagonals)
+
+class PrecondLinop(TorchLinop):
+	def __init__(self, shape, smaps, coord_vec, weights_vec = None):
+		Pvec = []
+		for i in range(len(coord_vec)):
+			if weights_vec is not None:
+				Pvec.append(tprcnd.circulant_precond(smaps, coord_vec[i], weights_vec[i]))
+			else:
+				Pvec.append(tprcnd.circulant_precond(smaps, coord_vec[i]))
+		self.Pvec = Pvec
+		super().__init__(shape, shape)
+				
+
+
 
 def dct_l1_prox(image, lamda):
 	for i in range(image.shape[0]):
@@ -319,12 +392,19 @@ def reconstruct_cg_full(diagonals, rhs, smaps, nenc, iter = 50, lamda=0.1, image
 
 	toep_linop = ToeplitzLinop(vec_size, smaps, nenc, diagonals)
 
-	scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=12).run()).to(torch.float32)
-
+	scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=5).run()).to(torch.float32)
 	scaled_linop = TorchScaleLinop(toep_linop, scaling)
-	rhs *= torch.sqrt(scaling)
+	l2_regd_linop = TorchL2Reg(scaled_linop, lamda=0.0)
 
-	tcg = TorchCG(scaled_linop, rhs, images, max_iter=iter)
+	rhs *= torch.sqrt(scaling)
+	print('Scaling image')
+	rhs_scalar = torch.sum(images.conj() * rhs)
+	lhs_scalar = torch.sum(images.conj() * toep_linop(images))
+	scalar = (rhs_scalar / lhs_scalar)
+	images *= torch.real(scalar).nan_to_num(nan = 1.0, posinf=1.0, neginf=1.0) + 1j*torch.imag(
+		scalar).nan_to_num(nan = 0.0, posinf=0.0, neginf=0.0)
+
+	tcg = TorchCG(l2_regd_linop, rhs, images, max_iter=iter)
 	
 	prox = lambda x: dct_l1_prox(x, lamda)
 
@@ -342,12 +422,16 @@ def reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter = 50, lamda=0.1, image
 
 	toep_linop = ToeplitzLinop(vec_size, smaps, nenc, diagonals)
 
-	scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=12).run()).to(torch.float32)
-	rhs *= torch.sqrt(scaling)
+	#scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=12).run()).to(torch.float32)
+	#rhs *= torch.sqrt(scaling)
 
-	scaled_linop = TorchScaleLinop(toep_linop, scaling)
+	#scaled_linop = TorchScaleLinop(toep_linop, scaling)
+	print('Scaling image')
+	rhs_scalar = torch.sum(images.conj() * rhs)
+	lhs_scalar = torch.sum(images.conj() * toep_linop(images))
+	images *= (rhs_scalar / lhs_scalar)
 
-	gradf = lambda x: scaled_linop(x) -  rhs
+	gradf = lambda x: (toep_linop(x) - rhs)
 
 	tgd = TorchGD(gradf, images, alpha=1.0, accelerate=True, max_iter=iter)
 
@@ -357,3 +441,25 @@ def reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter = 50, lamda=0.1, image
 		return tgd.run_with_prox(prox, plot)
 	else:
 		return tgd.run(plot)
+
+def direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, im_size):
+	ncoils = kdata_vec[0].shape[1]
+	cudev = torch.device('cuda:0')
+
+	image = torch.empty(5, im_size[0], im_size[1], im_size[2], dtype=torch.complex64)
+	nvoxels = im_size[0] * im_size[1] * im_size[2]
+
+	for i in range(5):
+		L = torch.zeros((ncoils, im_size[0], im_size[1], im_size[2]), dtype=torch.complex64)
+		coord_cu = coord_vec[i].to(cudev)
+		weights_cu = weights_vec[i].to(cudev)
+		for j in range(ncoils):
+			kdata_cu = kdata_vec[i][:,j,:].to(cudev)
+			L[j, ...] = (hasty_sense.nufft1(coord_cu, weights_cu * kdata_cu, 
+		    	[1, im_size[0], im_size[1], im_size[2]]) / math.sqrt(nvoxels)).cpu().squeeze(0)
+			
+
+		I = torch.sum(smaps.conj() * L, dim=0) / torch.sum(smaps.conj() * smaps, dim=0)
+		image[i,...] = I.squeeze(0)
+
+	return image.unsqueeze(1)

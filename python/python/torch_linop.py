@@ -39,3 +39,18 @@ class TorchScaleLinop(TorchLinop):
 
 	def _apply(self, input: torch.Tensor):
 		return self.linop(input * self.scaling)
+	
+class TorchL2Reg(TorchLinop):
+	def __init__(self, linop: TorchLinop, lamda = 0.01):
+		self.lamda = lamda
+		self.linop = linop
+		if linop.ishape is not linop.oshape:
+			raise RuntimeError("L2Reg linop must have equal input and output shapes")
+		super().__init__(linop.ishape, linop.oshape)
+
+	def _apply(self, input: torch.Tensor):
+		if self.lamda == 0.0:
+			return self.linop(input)
+		else:
+			ret = self.lamda * input
+			return self.linop(input) + ret

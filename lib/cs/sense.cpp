@@ -268,6 +268,7 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 		
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
 		in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+		inner_batch_cpu_view.zero_();
 
 		at::Tensor kdata_cu;
 		if (_kdata.size() > 0) {
@@ -344,12 +345,15 @@ void BatchedSense::apply_toep(at::Tensor& in, const std::optional<std::vector<st
 		}
 		catch (c10::Error& e) {
 			std::cerr << e.what() << std::endl;
+			throw e;
 		}
 		catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
+			throw e;
 		}
 		catch (...) {
 			std::cerr << "caught something strange: " << std::endl;
+			throw;
 		}
 	};
 
@@ -418,6 +422,7 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
 		in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+		inner_batch_cpu_view.zero_();
 
 		psense->apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);
 
@@ -426,6 +431,7 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 			std::lock_guard<std::mutex> lock(_copy_back_mutex);
 			inner_batch_cpu_view.add_(out_cpu);
 		}
+
 	}
 }
 

@@ -44,7 +44,7 @@ if False:
 
 if True:
 	print('Beginning unweighted load')
-	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=True, root=1)
+	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=1)
 	print('Beginning unweighted reconstruct')
 	images = ru.reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter=100, lamda=5e4, images=images, plot=False)
 
@@ -52,7 +52,7 @@ if True:
 	pu.image_4d(np.mean(np.abs(images.numpy()), axis=0))
 
 
-with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed_weighted.h5', "w") as f:
+with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "w") as f:
 	f.create_dataset('images', data=images)
 
 

@@ -26,13 +26,35 @@ void diagonal_test() {
 
 int main() {
 
-	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat).device(c10::Device("cuda:0"));
-	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float).device(c10::Device("cuda:0"));
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat); // .device(c10::Device("cuda:0"));
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float); // .device(c10::Device("cuda:0"));
 
-	auto coord = at::rand({ 3, 30000000 }, real_options);
-	auto input = at::rand({ 1, 30000000 }, complex_options);
+	int nenc = 1;
+	int ncoils = 4;
+	int nx = 2;
 
-	auto output = hasty::ffi::nufft1(coord, input, { 1, 256, 256, 256 });
+
+	auto input = at::ones({ nenc,1,nx,nx,nx }, complex_options);
+	auto smaps = at::rand({ ncoils,nx,nx,nx }, complex_options);
+	auto diagonals = at::ones({ nenc,2*nx,2*nx,2*nx }, real_options);
+
+	std::vector<std::vector<int64_t>> coil_list;
+	coil_list.reserve(nenc);
+	for (int i = 0; i < nenc; ++i) {
+		std::vector<int64_t> coils(ncoils);
+		for (int j = 0; j < ncoils; ++j) {
+			coils[j] = j;
+		}
+		coil_list.emplace_back(std::move(coils));
+	}
+
+	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals);
+
+	std::cout << input << std::endl;
+
+	std::cout << (smaps.conj() * smaps).sum(0) << std::endl;
+
+	std::cout << "yas:" << std::endl;
 
 	return 0;
 }
