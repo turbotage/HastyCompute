@@ -305,13 +305,13 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 			for _ in range(root):
 				weights_cu = torch.sqrt(weights_cu)
 
-			diagonal = torch.real(tkbn.calc_toeplitz_kernel(omega=coord_cu, weights=weights_cu, im_size=im_size)).cpu()
+			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, weights=weights_cu, im_size=im_size).cpu()
 			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
 			weights_cu = torch.sqrt(weights_cu)
 		else:
-			diagonal = torch.real(tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size)).cpu()
+			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size).cpu()
 			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
@@ -337,8 +337,46 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 	return diagonals, rhs
 
 
-class ToeplitzLinop(TorchLinop):
-	def __init__(self, smaps, nenc, diagonals, clone=True):
+class SenseLinop(TorchLinop):
+	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, clone=True):
+		nenc = len(coord_vec)
+		shape = tuple([nenc, 1] + list(smaps.shape[1:]))
+		coil_list = list()
+		for i in range(nenc):
+			inner_coil_list = list()
+			for j in range(smaps.shape[0]):
+				inner_coil_list.append(j)
+			coil_list.append(inner_coil_list)
+		self.coil_list = coil_list
+		self.smaps = smaps
+		self.coord_vec = coord_vec
+		self.kdata_vec = kdata_vec
+		self.weights_vec = weights_vec
+		self.clone = clone
+
+		super().__init__(shape, shape)
+
+	def _apply(self, input):
+		input_copy: torch.Tensor
+		if self.clone:
+			input_copy = input.detach().clone()
+		else:
+			input_copy = input
+
+		if self.weights_vec is not None:
+			#hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
+			#	self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec)
+			hasty_sense.batched_sense_weighted(input_copy, self.coil_list, self.smaps,
+				self.coord_vec, self.weights_vec)
+		else:
+			#hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
+			#	self.smaps, self.coord_vec, self.kdata_vec)
+			hasty_sense.batched_sense(input_copy, self.coil_list, self.smaps, self.coord_vec)
+		return input_copy
+		
+class ToeplitzSenseLinop(TorchLinop):
+	def __init__(self, smaps, diagonals, clone=True):
+		nenc = diagonals.shape[0]
 		shape = tuple([nenc, 1] + list(smaps.shape[1:]))
 		coil_list = list()
 		for i in range(nenc):
@@ -354,12 +392,13 @@ class ToeplitzLinop(TorchLinop):
 		super().__init__(shape, shape)
 
 	def _apply(self, input):
+		input_copy: torch.Tensor
 		if self.clone:
-			input_copy = input.data
-			hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
-			return input_copy
+			input_copy = input.detach().clone()
 		else:
-			hasty_sense.batched_sense_toeplitz_diagonals(input, self.coil_list, self.smaps, self.diagonals)
+			input_copy = input
+		hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
+		return input_copy
 
 class PrecondLinop(TorchLinop):
 	def __init__(self, smaps, coord_vec, weights_vec = None, clone = True):
@@ -409,7 +448,7 @@ def reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd = None, iter = 50, la
 	if images is None:
 		images = torch.zeros(vec_size, dtype=torch.complex64)
 
-	toep_linop = ToeplitzLinop(smaps, nenc, diagonals)
+	toep_linop = ToeplitzSenseLinop(smaps, diagonals)
 
 	#scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=5).run()).to(torch.float32)
 	#scaled_linop = TorchScaleLinop(toep_linop, scaling)

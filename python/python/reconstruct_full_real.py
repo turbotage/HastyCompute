@@ -65,7 +65,7 @@ def run():
 	print('Translate')
 	coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, (-50, 0.0, 0.0))
 
-	#images = ru.direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, (256,256,256))
+	images = ru.direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, (256,256,256))
 	
 	#ming = torch.abs(torch.mean(images, dim=0)).numpy()
 
@@ -75,10 +75,17 @@ def run():
 
 	diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0)
 
+	toep_sense = ru.ToeplitzSenseLinop(smaps, diagonals)
+	sense = ru.SenseLinop(smaps, coord_vec, kdata_vec)
+
+	images1 = toep_sense(images)
+	images2 = sense(images)
+
+
 	#pu.image_5d(np.abs(rhs))
 
-	images = ru.reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd_linop, 
-				 iter=20, lamda=0.0, images=None, plot=True)
+	#images = ru.reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd_linop, 
+	#			 iter=20, lamda=0.0, images=None, plot=True)
 
 	pu.image_5d(np.abs(images))
 
