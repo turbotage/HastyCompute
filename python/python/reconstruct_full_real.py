@@ -61,21 +61,24 @@ def run():
 	#	coord_vec[i] = coord_vec[0]
 
 	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(
-		coord_vec, kdata_vec, weights_vec, (256,256,256), crop_factor=1.0)
+		coord_vec, kdata_vec, weights_vec, (256,256,256), crop_factor=1.5)
 	print('Translate')
-	coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, (-50.0, 0.0, 0.0))
+	coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, (-50, 0.0, 0.0))
 
-	images = ru.direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, (256,256,256))
+	#images = ru.direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, (256,256,256))
 	
-	ming = torch.abs(torch.mean(images, dim=0)).numpy()
+	#ming = torch.abs(torch.mean(images, dim=0)).numpy()
 
-	pu.image_5d(np.abs(images)) 
-	
+	#pu.image_5d(np.abs(images)) 
+
+	Prcnd_linop = None #ru.PrecondLinop(smaps, coord_vec, None)
+
 	diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0)
 
-	pu.image_5d(np.abs(rhs))
+	#pu.image_5d(np.abs(rhs))
 
-	images = ru.reconstruct_cg_full(diagonals, rhs, smaps, nenc, iter=200, lamda=0.0, images=None, plot=False)
+	images = ru.reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd_linop, 
+				 iter=20, lamda=0.0, images=None, plot=True)
 
 	pu.image_5d(np.abs(images))
 

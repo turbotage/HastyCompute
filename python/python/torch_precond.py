@@ -72,9 +72,13 @@ def circulant_precond(smaps, coord, weights=None):
 	ndim = len(img_shape)
 	cudev = torch.device('cuda:0')
 
+	weigths_cu: torch.Tensor
+	if weights is not None:
+		weights_cu = weights.to(cudev)
+
 	ones_cu = torch.ones((1,coord.shape[1]), dtype=torch.complex64).to(cudev)
 	if weights is not None:
-		ones *= torch.sqrt(weights)
+		ones_cu *= torch.sqrt(weights_cu)
 
 	coord_cu = coord.to(cudev)
 	psf = hasty_sense.nufft1(coord_cu, ones_cu, [1] + list(expanded_shape)).squeeze(0)
@@ -95,14 +99,16 @@ def circulant_precond(smaps, coord, weights=None):
 		pinvi = torch.fft.fftn(corr)
 		pinvi = pinvi[idx]
 		pinvi *= scale
-		if weights is not None:
-			pinvi *= torch.sqrt(weights)
+		#if weights is not None:
+			#pinvi *= torch.sqrt(weights_cu)
 		
 		pinv += pinvi
 
 	pinv[pinv == 0] = 1
 	ret = (1 / pinv).cpu()
 	del pinv, psf, smaps_cu
+	if weights is not None:
+		del weigths_cu
 	torch.cuda.empty_cache()
 	return ret
 

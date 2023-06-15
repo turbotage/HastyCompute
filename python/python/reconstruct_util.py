@@ -338,7 +338,8 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 
 class ToeplitzLinop(TorchLinop):
-	def __init__(self, shape, smaps, nenc, diagonals, clone=True):
+	def __init__(self, smaps, nenc, diagonals, clone=True):
+		shape = tuple([nenc, 1] + list(smaps.shape[1:]))
 		coil_list = list()
 		for i in range(nenc):
 			inner_coil_list = list()
@@ -361,7 +362,9 @@ class ToeplitzLinop(TorchLinop):
 			hasty_sense.batched_sense_toeplitz_diagonals(input, self.coil_list, self.smaps, self.diagonals)
 
 class PrecondLinop(TorchLinop):
-	def __init__(self, shape, smaps, coord_vec, weights_vec = None):
+	def __init__(self, smaps, coord_vec, weights_vec = None, clone = True):
+		shape = tuple([len(coord_vec), 1] + list(smaps.shape[1:]))
+		self.clone = clone
 		Pvec = []
 		for i in range(len(coord_vec)):
 			if weights_vec is not None:
@@ -371,8 +374,24 @@ class PrecondLinop(TorchLinop):
 		self.Pvec = Pvec
 		super().__init__(shape, shape)
 				
+	def _apply(self, input):
+		output: torch.Tensor
+		if self.clone:
+			output = torch.empty_like(input)
 
-
+		for i in range(input.shape[0]):
+			for j in range(input.shape[1]):
+				if self.clone:
+					output[i,j,...] = torch.fft.fftn(
+						torch.fft.ifftn(input[i,j,...]) * self.Pvec[i])
+				else:
+					input[i,j,...] = torch.fft.fftn(
+						torch.fft.ifftn(input[i,j,...]) * self.Pvec[i])
+		
+		if self.clone:
+			return output
+		else:
+			return input
 
 def dct_l1_prox(image, lamda):
 	for i in range(image.shape[0]):
@@ -383,28 +402,30 @@ def dct_l1_prox(image, lamda):
 	
 	return image
 
-def reconstruct_cg_full(diagonals, rhs, smaps, nenc, iter = 50, lamda=0.1, images=None, plot=False):
+def reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd = None, iter = 50, lamda=0.1, images=None, plot=False):
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
 
 	if images is None:
 		images = torch.zeros(vec_size, dtype=torch.complex64)
 
-	toep_linop = ToeplitzLinop(vec_size, smaps, nenc, diagonals)
+	toep_linop = ToeplitzLinop(smaps, nenc, diagonals)
 
-	scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=5).run()).to(torch.float32)
-	scaled_linop = TorchScaleLinop(toep_linop, scaling)
-	l2_regd_linop = TorchL2Reg(scaled_linop, lamda=0.0)
+	#scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=5).run()).to(torch.float32)
+	#scaled_linop = TorchScaleLinop(toep_linop, scaling)
+	#l2_regd_linop = TorchL2Reg(scaled_linop, lamda=0.0001)
 
-	rhs *= torch.sqrt(scaling)
+	final_linop = toep_linop
+
+	#rhs *= torch.sqrt(scaling)
 	print('Scaling image')
-	rhs_scalar = torch.sum(images.conj() * rhs)
-	lhs_scalar = torch.sum(images.conj() * toep_linop(images))
-	scalar = (rhs_scalar / lhs_scalar)
-	images *= torch.real(scalar).nan_to_num(nan = 1.0, posinf=1.0, neginf=1.0) + 1j*torch.imag(
-		scalar).nan_to_num(nan = 0.0, posinf=0.0, neginf=0.0)
+	#rhs_scalar = torch.sum(images.conj() * rhs)
+	#lhs_scalar = torch.sum(images.conj() * final_linop(images))
+	#scalar = (rhs_scalar / lhs_scalar)
+	#images *= torch.real(scalar).nan_to_num(nan = 1.0, posinf=1.0, neginf=1.0) + 1j*torch.imag(
+	#	scalar).nan_to_num(nan = 0.0, posinf=0.0, neginf=0.0)
 
-	tcg = TorchCG(l2_regd_linop, rhs, images, max_iter=iter)
+	tcg = TorchCG(final_linop, rhs, images, Prcnd, max_iter=iter)
 	
 	prox = lambda x: dct_l1_prox(x, lamda)
 
