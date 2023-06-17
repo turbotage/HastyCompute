@@ -96,6 +96,7 @@ void Nufft::apply(const at::Tensor& in, at::Tensor& out) const
 		apply_type2(in, out);
 	}
 	break;
+
 	default:
 		throw std::runtime_error("Only Nufft Type 1 and Type 2 is supported");
 	}

@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.26)
 
 project("HastyCompute" VERSION 0.1)
 
-
+#include(FetchContent)
+#include(cmake/CPM.cmake)
 
 set(BUILD_SHARED_LIBS ON)
 if (MSVC)
@@ -191,25 +192,22 @@ target_compile_features(HastyTest PRIVATE cxx_std_23)
 
 
 # Python Interface
-
-#set(PYBIND11_PYTHON_VERSION "3.11")
-find_package(Python3 3.11 EXACT COMPONENTS Development REQUIRED)
-#find_package(pybind11 REQUIRED)
-
-
-
+find_package(Python3 3.11 EXACT COMPONENTS Interpreter Development REQUIRED)
 add_library(HastyPyInterface SHARED 
 	"python/cpp/py_interface.cpp"
 )
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
-target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
+#target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
+target_link_libraries(HastyPyInterface PUBLIC ${Python3_LIBRARY_RELEASE})
+target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
 set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
 
-
+find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
 # Tests of the Python Interface
 add_executable(HastyPyTest "tests/py_test.cpp")
 target_link_libraries(HastyPyTest PUBLIC HastyComputeLib)
 target_link_libraries(HastyPyTest PUBLIC HastyPyInterface)
+target_include_directories(HastyPyTest PRIVATE ${MATPLOTLIB_CPP_INCLUDE_DIRS})
 set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
 
 

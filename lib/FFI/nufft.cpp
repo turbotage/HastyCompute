@@ -27,8 +27,9 @@ at::Tensor hasty::ffi::nufft2(const at::Tensor& coords, const at::Tensor& input)
 at::Tensor hasty::ffi::nufft21(const at::Tensor& coords, const at::Tensor& input)
 {
 	using namespace hasty;
-	NufftNormal normal_nufft(coords, input.sizes().vec(), NufftOptions::type2(), NufftOptions::type1());
-	auto out = at::empty(at::makeArrayRef(input.sizes()), input.options());
+	NufftNormal normal_nufft(coords, input.sizes().vec(), NufftOptions::type2(false), NufftOptions::type1(true));
+	//auto out = at::empty(at::makeArrayRef(input.sizes()), input.options());
+	auto out = at::empty_like(input);
 
 	auto storage = at::empty({ input.size(0), coords.size(1)}, input.options());
 

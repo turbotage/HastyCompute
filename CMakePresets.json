@@ -13,8 +13,15 @@
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
       "environment": {
-        "NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx"
+        "NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx",
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
+        //"PYTHON_PATH": "D:\\miniconda3\\envs\\v311",
+        //"PYTHONHOME": "D:\\miniconda3\\envs\\v311"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
@@ -22,6 +29,22 @@
         "CMAKE_CONFIGURATION_TYPES": {
           "type": "STRING",
           "value": "Release;Debug"
+        },
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
         }
       },
       "condition": {
@@ -35,34 +58,11 @@
       "displayName": "x64 Debug CUDA",
       "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Debug)",
       "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
-      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": {
-          "type": "FILEPATH",
-          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        },
-        "VCPKG_TARGET_TRIPLET": {
-          "type": "STRING",
-          "value": "x64-windows"
-        },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
           "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
-        },
-        "BUILD_CUDA": {
-          "type": "BOOL",
-          "value": "ON"
-        },
-        "CMAKE_CUDA_ARCHITECTURES": {
-          "type": "STRING",
-          "value": "60;75;89"
         }
       }
     },
@@ -71,39 +71,11 @@
       "displayName": "x64 Release CUDA",
       "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Release)",
       "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "environment": {
-        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake",
-        "PYTHON_PATH": "D:\\miniconda3\\envs\\v311"
-      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": {
-          "type": "FILEPATH",
-          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        },
-        "VCPKG_TARGET_TRIPLET": {
-          "type": "STRING",
-          "value": "x64-windows"
-        },
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
           "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
-        },
-        "BUILD_CUDA": {
-          "type": "BOOL",
-          "value": "ON"
-        },
-        "CMAKE_CUDA_ARCHITECTURES": {
-          "type": "STRING",
-          "value": "60;75;89"
-        },
-        "Python3_ROOT": {
-          "type": "FILEPATH",
-          "value": "$env{PYTHON_PATH}"
         }
       }
     }

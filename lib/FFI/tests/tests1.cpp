@@ -718,8 +718,3 @@ void hasty::tests::speed_comparisons_torch_af_cufinufft(int nres, int nrun) {
 	}
 	std::cout << "AverageTime (ms): " << tot_time / (nrun - 1) << std::endl;
 }
-
-void hasty::tests::test_expression()
-{
-
-}
