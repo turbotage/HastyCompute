@@ -310,9 +310,9 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
-			weights_cu = torch.sqrt(weights_cu)
+			#weights_cu = torch.sqrt(weights_cu)
 		else:
-			diagonal = tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size).cpu()
+			diagonal = (8 * tkbn.calc_toeplitz_kernel(omega=coord_cu, im_size=im_size)).cpu()
 			torch.cuda.empty_cache()
 			diagonal_vec.append(diagonal)
 
@@ -442,7 +442,8 @@ def dct_l1_prox(image, lamda):
 	
 	return image
 
-def reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd = None, iter = 50, lamda=0.1, images=None, plot=False):
+def reconstruct_cg_full(diagonals, rhs, smaps, Prcnd = None, iter = 50, lamda=0.1, images=None, plot=False):
+	nenc = diagonals.shape[0]
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
 
@@ -489,7 +490,7 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	#rhs *= torch.sqrt(scaling)
 	final_linop = sense_linop
 
-	gradf = lambda x: final_linop(x) / nvoxels
+	gradf = lambda x: final_linop(x) #/ nvoxels
 
 	tgd = TorchGD(gradf, images, alpha=1.0, accelerate=True, max_iter=iter)
 

@@ -63,28 +63,21 @@ def run():
 	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(
 		coord_vec, kdata_vec, weights_vec, (256,256,256), crop_factor=1.5)
 	print('Translate')
-	coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, (-50, 0.0, 0.0))
+	#coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, (-50, 0.0, 0.0))
 
+	print('Direct reconstruction')
 	images = ru.direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, (256,256,256))
-	
-	#ming = torch.abs(torch.mean(images, dim=0)).numpy()
 
-	#pu.image_5d(np.abs(images)) 
+	print('Load toeplitz diagonal and rhs')
+	diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, 
+					     weights_vec, use_weights=False, root=0)
 
-	#Prcnd_linop = None #ru.PrecondLinop(smaps, coord_vec, None)
+	print('Reconstruct')
+	images = ru.reconstruct_cg_full(diagonals, rhs, smaps, None,
+				 iter=20, lamda=0.0, images=images, plot=True)
 
-	#diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0)
-
-	#toep_sense = ru.ToeplitzSenseLinop(smaps, diagonals)
-	#sense = ru.SenseLinop(smaps, coord_vec, kdata_vec)
-
-	#images1 = toep_sense(images)
-	#images2 = sense(images)
-
-	#pu.image_5d(np.abs(rhs))
-
-	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
-				 iter=20, lamda=0.0, images=None, plot=True)
+	#images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
+	#			 iter=20, lamda=0.0, images=None, plot=True)
 
 	pu.image_5d(np.abs(images))
 
