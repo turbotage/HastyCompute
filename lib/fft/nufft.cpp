@@ -167,8 +167,8 @@ void Nufft::make_plan_set_pts()
 		break;
 		case 2:
 		{
-			auto tx = _coords.select(0, 0);
-			auto ty = _coords.select(0, 1);
+			auto ty = _coords.select(0, 0);
+			auto tx = _coords.select(0, 1);
 			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL, _planf)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
@@ -176,9 +176,9 @@ void Nufft::make_plan_set_pts()
 		break;
 		case 3:
 		{
-			auto tx = _coords.select(0, 0);
+			auto tz = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
-			auto tz = _coords.select(0, 2);
+			auto tx = _coords.select(0, 2);
 			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), (float*)tz.data_ptr(), 0, NULL, NULL, NULL, _planf)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
@@ -210,8 +210,8 @@ void Nufft::make_plan_set_pts()
 		break;
 		case 2:
 		{
-			auto tx = _coords.select(0, 0);
-			auto ty = _coords.select(0, 1);
+			auto ty = _coords.select(0, 0);
+			auto tx = _coords.select(0, 1);
 			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL, _plan)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
@@ -219,9 +219,9 @@ void Nufft::make_plan_set_pts()
 		break;
 		case 3:
 		{
-			auto tx = _coords.select(0, 0);
+			auto tz = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
-			auto tz = _coords.select(0, 2);
+			auto tx = _coords.select(0, 2);
 			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), (double*)tz.data_ptr(), 0, NULL, NULL, NULL, _plan)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}

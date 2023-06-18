@@ -71,21 +71,20 @@ def run():
 
 	#pu.image_5d(np.abs(images)) 
 
-	Prcnd_linop = None #ru.PrecondLinop(smaps, coord_vec, None)
+	#Prcnd_linop = None #ru.PrecondLinop(smaps, coord_vec, None)
 
-	diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0)
+	#diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0)
 
-	toep_sense = ru.ToeplitzSenseLinop(smaps, diagonals)
-	sense = ru.SenseLinop(smaps, coord_vec, kdata_vec)
+	#toep_sense = ru.ToeplitzSenseLinop(smaps, diagonals)
+	#sense = ru.SenseLinop(smaps, coord_vec, kdata_vec)
 
-	images1 = toep_sense(images)
-	images2 = sense(images)
-
+	#images1 = toep_sense(images)
+	#images2 = sense(images)
 
 	#pu.image_5d(np.abs(rhs))
 
-	#images = ru.reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd_linop, 
-	#			 iter=20, lamda=0.0, images=None, plot=True)
+	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
+				 iter=20, lamda=0.0, images=None, plot=True)
 
 	pu.image_5d(np.abs(images))
 

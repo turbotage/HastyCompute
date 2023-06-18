@@ -99,20 +99,20 @@ void nufft_tests()
 	}
 	coord = coord.to(cudev);
 	
-	auto input1 = at::rand({ 1,nx,ny,nz }, complex_options.device(cudev));
-	auto input2 = input1.detach().clone();
+	auto input1 = at::ones({ 1,nx,ny,nz }, complex_options.device(cudev));
+	//auto input2 = input1.detach().clone();
 	
-	auto back1 = (nufft::nufft21(coord, input1)).cpu();
-	auto back2 = (nufft::nufft1(coord, nufft::nufft2(coord, input2), {1, nx, ny, nz})).cpu();
+	auto back1 = (nufft::nufft21(coord, input1) / nf).cpu();
+	//auto back2 = (nufft::nufft1(coord, nufft::nufft2(coord, input2), {1, nx, ny, nz})).cpu();
 
 	auto b1mean = at::mean(back1);
-	auto b2mean = at::mean(back2);
+	//auto b2mean = at::mean(back2);
 
 	std::cout << at::real(b1mean) << " " << at::imag(b1mean) << std::endl;
-	std::cout << at::real(b2mean) << " " << at::imag(b2mean) << std::endl;
+	//std::cout << at::real(b2mean) << " " << at::imag(b2mean) << std::endl;
 
 	//plot1_1(coord.cpu(), -1);
-	plot2_1(back1, back2, 0);
+	plot2_1(back1, input1.cpu(), 0);
 }
 
 

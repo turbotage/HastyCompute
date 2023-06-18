@@ -12,16 +12,21 @@ import matplotlib.pyplot as plt
 torch.ops.load_library(dll_path)
 hasty_sense = torch.ops.HastySense
 
-N1 = 10
-N2 = 10
-N3 = 10
-NF = N1*N2*N3
+N1 = 16
+N2 = 16
+N3 = 16
+NF = N1*N2*N3 // 2
 
-coord = np.empty((3,NF), dtype=np.float32)
+coord = np.zeros((3,NF), dtype=np.float32)
 l = 0
 for x in range(N1):
 	for y in range(N2):
 		for z in range(N3):
+			if l % 2 == 0:
+				continue
+			if l >= NF:
+				break
+
 			kx = -np.pi + x * 2 * np.pi / N1
 			ky = -np.pi + y * 2 * np.pi / N2
 			kz = -np.pi + z * 2 * np.pi / N3
@@ -40,7 +45,7 @@ for x in range(N1):
 cudev = torch.device('cuda:0')
 
 coord = torch.tensor(coord).to(cudev)
-input = torch.rand((1,N1,N2,N3), dtype=torch.complex64).to(cudev)
+input = torch.ones((1,N1,N2,N3), dtype=torch.complex64).to(cudev)
 
 temp = hasty_sense.nufft2(coord, input) / math.sqrt(NF)
 output = hasty_sense.nufft1(coord, temp, (1,N1,N2,N3)) / math.sqrt(NF)

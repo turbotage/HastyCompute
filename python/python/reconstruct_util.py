@@ -272,15 +272,16 @@ def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0):
 	return (coord_vec, kdata_vec, weights_vec)
 
 def translate(coord_vec, kdata_vec, translation):
+	cudev = torch.device('cuda:0')
 	for i in range(len(coord_vec)):
-		coord = coord_vec[i]
-		kdata = kdata_vec[i]
-		mult = torch.tensor(list(translation)).unsqueeze(0)
+		coord = coord_vec[i].to(cudev)
+		kdata = kdata_vec[i].to(cudev)
+		mult = torch.tensor(list(translation)).unsqueeze(0).to(cudev)
 
 		kdata *= torch.exp(1j*(mult @ coord)).unsqueeze(0)
 
-		kdata_vec[i] = kdata
-		coord_vec[i] = coord
+		kdata_vec[i] = kdata.cpu()
+		#coord_vec[i] = coord
 
 	return coord_vec, kdata_vec
 
@@ -364,14 +365,14 @@ class SenseLinop(TorchLinop):
 			input_copy = input
 
 		if self.weights_vec is not None:
-			#hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
-			#	self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec)
-			hasty_sense.batched_sense_weighted(input_copy, self.coil_list, self.smaps,
-				self.coord_vec, self.weights_vec)
+			hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
+				self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec)
+			#hasty_sense.batched_sense_weighted(input_copy, self.coil_list, self.smaps,
+			#	self.coord_vec, self.weights_vec)
 		else:
-			#hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
-			#	self.smaps, self.coord_vec, self.kdata_vec)
-			hasty_sense.batched_sense(input_copy, self.coil_list, self.smaps, self.coord_vec)
+			hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
+				self.smaps, self.coord_vec, self.kdata_vec)
+			#hasty_sense.batched_sense(input_copy, self.coil_list, self.smaps, self.coord_vec)
 		return input_copy
 		
 class ToeplitzSenseLinop(TorchLinop):
@@ -458,11 +459,11 @@ def reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd = None, iter = 50, la
 
 	#rhs *= torch.sqrt(scaling)
 	print('Scaling image')
-	#rhs_scalar = torch.sum(images.conj() * rhs)
-	#lhs_scalar = torch.sum(images.conj() * final_linop(images))
-	#scalar = (rhs_scalar / lhs_scalar)
-	#images *= torch.real(scalar).nan_to_num(nan = 1.0, posinf=1.0, neginf=1.0) + 1j*torch.imag(
-	#	scalar).nan_to_num(nan = 0.0, posinf=0.0, neginf=0.0)
+	rhs_scalar = torch.sum(images.conj() * rhs)
+	lhs_scalar = torch.sum(images.conj() * final_linop(images))
+	scalar = (rhs_scalar / lhs_scalar)
+	images *= torch.real(scalar).nan_to_num(nan = 1.0, posinf=1.0, neginf=1.0) + 1j*torch.imag(
+		scalar).nan_to_num(nan = 0.0, posinf=0.0, neginf=0.0)
 
 	tcg = TorchCG(final_linop, rhs, images, Prcnd, max_iter=iter)
 	
@@ -473,25 +474,22 @@ def reconstruct_cg_full(diagonals, rhs, smaps, nenc, Prcnd = None, iter = 50, la
 	else:
 		return tcg.run(plot)
 
-def reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter = 50, lamda=0.1, images=None, plot=False):
+def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50, lamda=0.1, images=None, plot=False):
+	nenc = len(coord_vec)
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
+	nvoxels = smaps.shape[1] * smaps.shape[2] * smaps.shape[3]
 
 	if images is None:
 		images = torch.zeros(vec_size, dtype=torch.complex64)
 
-	toep_linop = ToeplitzLinop(vec_size, smaps, nenc, diagonals)
+	sense_linop = SenseLinop(smaps, coord_vec, kdata_vec, weights_vec)
 
 	#scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=12).run()).to(torch.float32)
 	#rhs *= torch.sqrt(scaling)
+	final_linop = sense_linop
 
-	#scaled_linop = TorchScaleLinop(toep_linop, scaling)
-	print('Scaling image')
-	rhs_scalar = torch.sum(images.conj() * rhs)
-	lhs_scalar = torch.sum(images.conj() * toep_linop(images))
-	images *= (rhs_scalar / lhs_scalar)
-
-	gradf = lambda x: (toep_linop(x) - rhs)
+	gradf = lambda x: final_linop(x) / nvoxels
 
 	tgd = TorchGD(gradf, images, alpha=1.0, accelerate=True, max_iter=iter)
 

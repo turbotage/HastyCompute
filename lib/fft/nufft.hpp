@@ -22,13 +22,21 @@ namespace hasty {
 	class NufftOptions {
 	public:
 
-		inline static NufftOptions type1(double tol = 1e-5) { return { NufftType::eType1, false, tol }; }
+		inline static NufftOptions type1() { return { NufftType::eType1, true, 1e-5 }; }
 
-		inline static NufftOptions type2(double tol = 1e-5) { return { NufftType::eType2, true, tol }; }
+		inline static NufftOptions type2() { return { NufftType::eType2, false, 1e-5 }; }
+
+		inline static NufftOptions type1(double tol) { return { NufftType::eType1, true, tol }; }
+
+		inline static NufftOptions type2(double tol) { return { NufftType::eType2, false, tol }; }
 
 		inline static NufftOptions type1(bool positive) { return { NufftType::eType1, positive, 1e-5 }; }
 
 		inline static NufftOptions type2(bool positive) { return { NufftType::eType2, positive, 1e-5 }; }
+
+		inline static NufftOptions type1(bool positive, double tol) { return { NufftType::eType1, positive, tol }; }
+
+		inline static NufftOptions type2(bool positive, double tol) { return { NufftType::eType2, positive, tol }; }
 
 	public:
 		NufftType type = NufftType::eType1;
