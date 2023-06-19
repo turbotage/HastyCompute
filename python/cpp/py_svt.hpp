@@ -1,21 +1,13 @@
 #pragma once
 
-#ifdef _DEBUG
-#undef _DEBUG
-#include <torch/extension.h>
-#define _DEBUG
-#else
-#include <torch/extension.h>
-#endif
-#include <torch/library.h>
-
-#include "../../lib/FFI/ffi.hpp"
+#include "py_util.hpp"
 
 namespace svt {
 
-	void random_blocks_svt(at::Tensor& input, int64_t nblocks, int64_t block_size, int64_t rank)
+	void random_blocks_svt(at::Tensor& input, int64_t nblocks, int64_t block_size, 
+		double thresh, bool soft, const at::optional<std::vector<c10::Stream>>& streams)
 	{
-		hasty::ffi::random_blocks_svt(input, nblocks, block_size, rank);
+		hasty::ffi::random_blocks_svt(input, nblocks, block_size, thresh, soft, hasty::ffi::get_streams(streams));
 	}
 
     TORCH_LIBRARY(HastySVT, m) {

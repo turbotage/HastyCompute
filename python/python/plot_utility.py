@@ -12,7 +12,7 @@ def image_5d(image):
 	fig.set_figheight(10)
 	fig.subplots_adjust(left=0.05, bottom=0.12)
 
-	figdata = ax.imshow(image[0, 0, lens[2] // 2, :,:])
+	figdata = ax.imshow(np.real(image[0, 0, lens[2] // 2, :,:]))
 
 	def disc_slider(axis, name, length, color="red"):
 		return Slider(axis, name, 0,length-1, valinit=0, 
@@ -20,7 +20,7 @@ def image_5d(image):
 
 	leftboxx = [0.2, 0.4]
 	sliderh = 0.025
-	rightboxx1 = [0.7, 0.05]
+	rightboxx1 = [0.7, 0.03]
 	boxh = 0.05
 
 	ax0 = fig.add_axes([leftboxx[0], 0.025, leftboxx[1], sliderh])
@@ -32,17 +32,22 @@ def image_5d(image):
 	ax_xyz = fig.add_axes([leftboxx[0], 0.075, leftboxx[1], sliderh])
 	slider_xyz = disc_slider(ax_xyz, "XYZ", lens[2], color="red")
 
-	boxax = fig.add_axes([rightboxx1[0], 0.035, rightboxx1[1], boxh])
-	radbutton = RadioButtons(boxax, ('x', 'y', 'z'))
+	boxax1 = fig.add_axes([rightboxx1[0], 0.035, rightboxx1[1], boxh])
+	radbutton1 = RadioButtons(boxax1, ('x', 'y', 'z'))
+
+	boxax2 = fig.add_axes([rightboxx1[0] - 0.05, 0.035, rightboxx1[1]+0.01, boxh])
+	radbutton2 = RadioButtons(boxax2, ('real', 'imag', 'abs'))
 
 	limax = fig.add_axes([0.15, 0.2, 0.015, 0.5])
-	imin, imax = image.min(), image.max()
+	imin = np.minimum(np.real(image).min(), np.imag(image).min())
+	imax = np.maximum(np.real(image).max(), np.imag(image).max())
 	limslider = RangeSlider(limax, "CLim", imin, imax, orientation="vertical", valinit=(imin,imax))
 
 	figdata.set_clim(limslider.val[0], limslider.val[1])
 
 	def update(val):
-		xyz = radbutton.value_selected
+		xyz = radbutton1.value_selected
+		ria = radbutton2.value_selected
 
 		s0 = slider0.val
 		s1 = slider1.val
@@ -56,6 +61,13 @@ def image_5d(image):
 		elif xyz == 'z':
 			img = image[s0,s1,:,:,s_xyz]
 
+		if ria == 'real':
+			img = np.real(img)
+		elif ria == 'imag':
+			img = np.imag(img)
+		elif ria == 'abs':
+			img = np.abs(img)
+
 		figdata.set_data(img)
 		clim = limslider.val
 		figdata.set_clim(clim[0], clim[1])
@@ -65,7 +77,8 @@ def image_5d(image):
 	slider0.on_changed(update)
 	slider1.on_changed(update)
 	slider_xyz.on_changed(update)
-	radbutton.on_clicked(update)
+	radbutton1.on_clicked(update)
+	radbutton2.on_clicked(update)
 	limslider.on_changed(update)
 
 	plt.show()

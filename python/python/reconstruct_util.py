@@ -93,7 +93,7 @@ def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=Fa
 
 	return diagonals, rhs
 
-def load_real():
+def load_real(smaps):
 	smaps = np.array([0])
 	with h5py.File('D:/4DRecon/dat/dat2/SenseMapsCpp.h5') as f:
 		smap_vec = []
@@ -191,12 +191,14 @@ def gate(coord, kdata, weights, gating, nframes):
 
 		coordf = coord[:,:,0,idx,:].reshape((3,5,nlast))
 		kdataf = kdata[:,:,0,idx,:].reshape((5,ncoil,nlast))
-		weightsf = weights[:,0,idx,:].reshape((5,nlast))
+		if weights is not None:
+			weightsf = weights[:,0,idx,:].reshape((5,nlast))
 
 		for j in range(5):
 			coord_vec.append(torch.tensor(coordf[:,j,:]))
 			kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
-			weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+			if weights is not None:
+				weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
 
 	len_start = length + length/2
 	gates = [len_start]
@@ -228,14 +230,17 @@ def gated_full(coord_vec, kdata_vec, weights_vec, nframes):
 		coord_vec[0],coord_vec[1],coord_vec[2],coord_vec[3],coord_vec[4]]
 	kdata_vec_full1 = [
 		kdata_vec[0],kdata_vec[1],kdata_vec[2],kdata_vec[3],kdata_vec[4]]
-	weights_vec_full1 = [
-		weights_vec[0],weights_vec[1],weights_vec[2],weights_vec[3],weights_vec[4]]
+	if weights_vec is not None:
+		weights_vec_full1 = [
+			weights_vec[0],weights_vec[1],weights_vec[2],
+			weights_vec[3],weights_vec[4]]
 
 	for i in range(1,nframes):
 		for j in range(i*nenc,(i+1)*nenc):
 			coord_vec_full1.append(coord_vec[j])
 			kdata_vec_full1.append(kdata_vec[j])
-			weights_vec_full1.append(weights_vec[j])
+			if weights_vec is not None:
+				weights_vec_full1.append(weights_vec[j])
 
 	coord_vec_full = []
 	kdata_vec_full = []
@@ -243,7 +248,8 @@ def gated_full(coord_vec, kdata_vec, weights_vec, nframes):
 	for i in range(0,nenc):
 		coord_vec_full.append(torch.concat(coord_vec_full1, dim=-1))
 		kdata_vec_full.append(torch.concat(kdata_vec_full1, dim=-1))
-		weights_vec_full.append(torch.concat(weights_vec_full1, dim=-1))
+		if weights_vec is not None:
+			weights_vec_full.append(torch.concat(weights_vec_full1, dim=-1))
 
 	return coord_vec_full, kdata_vec_full, weights_vec_full
 
@@ -501,14 +507,16 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	else:
 		return tgd.run(plot)
 
-def direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, im_size):
+def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size):
+	nframes = len(coord_vec)
 	ncoils = kdata_vec[0].shape[1]
 	cudev = torch.device('cuda:0')
 
-	image = torch.empty(5, im_size[0], im_size[1], im_size[2], dtype=torch.complex64)
+	image = torch.empty(nframes, im_size[0], im_size[1], im_size[2], dtype=torch.complex64)
 	nvoxels = im_size[0] * im_size[1] * im_size[2]
 
-	for i in range(5):
+	for i in range(nframes):
+		print('Encoding: ', i, '/', nframes)
 		L = torch.zeros((ncoils, im_size[0], im_size[1], im_size[2]), dtype=torch.complex64)
 		coord_cu = coord_vec[i].to(cudev)
 		weights_cu = weights_vec[i].to(cudev)
@@ -522,3 +530,14 @@ def direct_nufft_reconstruct(smaps, coord_vec, kdata_vec, weights_vec, im_size):
 		image[i,...] = I.squeeze(0)
 
 	return image.unsqueeze(1)
+
+def reconstruct_frames(images, nframes, smaps, coord, kdata):
+	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
+	ncoil = smaps.shape[0]
+	nenc = images.shape[0]
+
+	
+	
+
+
+

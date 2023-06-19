@@ -30,7 +30,7 @@ at::Tensor hasty::extract_block(const at::Tensor& in, const Block<3>& block)
 	return in.index(at::makeArrayRef(idx)).flatten(1);
 }
 
-at::Tensor hasty::svt(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
+at::Tensor hasty::svt_hard(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
 {
 	using namespace at::indexing;
 
@@ -54,7 +54,7 @@ at::Tensor hasty::svt(const at::Tensor& in, int rank, std::optional<std::tuple<a
 	return at::mm(U, Vh);
 }
 
-void hasty::svt_inplace(at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
+void hasty::svt_hard_inplace(at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
 {
 	using namespace at::indexing;
 
@@ -72,6 +72,56 @@ void hasty::svt_inplace(at::Tensor& in, int rank, std::optional<std::tuple<at::T
 	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
 
 	S.index_put_({ Slice(rank,None) }, 0.0f);
+
+	Vh.mul_(S.unsqueeze(1));
+
+	at::mm_out(in, U, Vh);
+}
+
+at::Tensor hasty::svt_soft(const at::Tensor& in, float lambda, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
+{
+	using namespace at::indexing;
+
+	at::Tensor U;
+	at::Tensor S;
+	at::Tensor Vh;
+
+	if (storage.has_value()) {
+		auto& sval = storage.value();
+		U = std::get<0>(sval);
+		S = std::get<1>(sval);
+		Vh = std::get<2>(sval);
+	}
+
+	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+
+	auto ldiff = at::abs(S) - lambda;
+	S = at::sign(S) * at::abs(0.5f * (at::abs(ldiff) + ldiff));
+
+	Vh.mul_(S.unsqueeze(1));
+
+	return at::mm(U, Vh);
+}
+
+void hasty::svt_soft_inplace(at::Tensor& in, float lambda, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
+{
+	using namespace at::indexing;
+
+	at::Tensor U;
+	at::Tensor S;
+	at::Tensor Vh;
+
+	if (storage.has_value()) {
+		auto& sval = storage.value();
+		U = std::get<0>(sval);
+		S = std::get<1>(sval);
+		Vh = std::get<2>(sval);
+	}
+
+	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+
+	auto ldiff = at::abs(S) - lambda;
+	S = at::sign(S) * at::abs(0.5f * (at::abs(ldiff) + ldiff));
 
 	Vh.mul_(S.unsqueeze(1));
 

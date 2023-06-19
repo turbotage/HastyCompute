@@ -248,31 +248,31 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 
 	at::Tensor coord_cu;
 	if (_coords.size() > 0) {
-		coord_cu = _coords[outer_batch].to(dctxt.device, true);
+		coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
 	}
 	SenseNormal sense(coord_cu, _nmodes);
 	int n_inner_batches = in.size(1);
 
 	at::Tensor outer_batch_cpu_view = in.select(0, outer_batch);
 	at::Tensor inner_batch_cpu_view = outer_batch_cpu_view.select(0, 0).unsqueeze(0);
-	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
 	at::Tensor out_cu = at::empty_like(in_cu);
 	at::Tensor storage_cu = at::empty_like(in_cu);
 
 	at::Tensor weights_cu;
 	if (_weights.size() > 0) {
-		weights_cu = _weights[outer_batch].to(dctxt.device, true);
+		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
 	}
 
 	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
 		
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
-		in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+		in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
 		inner_batch_cpu_view.zero_();
 
 		at::Tensor kdata_cu;
 		if (_kdata.size() > 0) {
-			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.device, true);
+			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
 		}
 
 		std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip;
@@ -391,13 +391,13 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	std::unique_ptr<SenseNormalToeplitz> psense;
 
 	if (_coords.size()> 0) {
-		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.device, true), _nmodes, 1e-5);
+		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.stream.device(), true), _nmodes, 1e-5);
 
 	}
 	else {
 		psense = std::make_unique<SenseNormalToeplitz>(
 			std::move(
-				_diagonals.select(0, outer_batch).unsqueeze(0).to(dctxt.device, true)
+				_diagonals.select(0, outer_batch).unsqueeze(0).to(dctxt.stream.device(), true)
 			), 
 			_nmodes);
 	}
@@ -406,7 +406,7 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 
 	at::Tensor outer_batch_cpu_view = in.select(0, outer_batch);
 	at::Tensor inner_batch_cpu_view = outer_batch_cpu_view.select(0, 0).unsqueeze(0);
-	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
 	at::Tensor out_cu = at::empty_like(in_cu);
 
 	std::vector<int64_t> expanded_dims;
@@ -421,7 +421,7 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
 
 		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
-		in_cu = inner_batch_cpu_view.to(dctxt.device, true);
+		in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
 		inner_batch_cpu_view.zero_();
 
 		psense->apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);

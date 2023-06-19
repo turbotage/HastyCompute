@@ -11,22 +11,23 @@ namespace hasty {
 		LIB_EXPORT
 		void batched_sense(
 			at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
-			const std::vector<at::Tensor>& coords);
+			const std::vector<at::Tensor>& coords, const std::vector<c10::Stream>& streams);
 
 		// A^HWAx
 		LIB_EXPORT
 		void batched_sense_weighted(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
-			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights);
+			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<c10::Stream>& streams);
 
 		// A^H(Ax-b)
 		LIB_EXPORT
 		void batched_sense_kdata(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
-			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas);
+			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas, const std::vector<c10::Stream>& streams);
 
 		// A^HW(Ax-b)
 		LIB_EXPORT
 		void batched_sense_weighted_kdata(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
-			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<at::Tensor>& kdatas);
+			const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, 
+			const std::vector<at::Tensor>& kdatas, const std::vector<c10::Stream>& streams);
 
 
 
@@ -34,20 +35,19 @@ namespace hasty {
 		LIB_EXPORT
 		void batched_sense_toeplitz(
 			at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps, 
-			const std::vector<at::Tensor>& coords);
+			const std::vector<at::Tensor>& coords, const std::vector<c10::Stream>& streams);
 
 		// A^HA = F^HDF with D given
 		LIB_EXPORT
 		void batched_sense_toeplitz_diagonals(at::Tensor& input, const std::vector<std::vector<int32_t>>& coils, const at::Tensor& smaps,
-			const at::Tensor& diagonals);
-
-
+			const at::Tensor& diagonals, const std::vector<c10::Stream>& streams);
 
 
 
 
 		LIB_EXPORT
-		void random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t block_size, int32_t rank);
+		void random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t block_size, 
+			double thresh, bool soft, const std::vector<c10::Stream>& streams);
 
 	}
 }

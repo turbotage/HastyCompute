@@ -23,7 +23,7 @@ void diagonal_test() {
 		coil_list.emplace_back(std::move(coils));
 	}
 
-	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals);
+	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals, at::nullopt);
 
 	std::cout << "yas:" << std::endl;
 }
@@ -52,7 +52,7 @@ void diagonal_ones_gives_shs()
 		coil_list.emplace_back(std::move(coils));
 	}
 
-	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals);
+	bs::batched_sense_toeplitz_diagonals(input, coil_list, smaps, diagonals, at::nullopt);
 
 	std::cout << input << std::endl;
 

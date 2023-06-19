@@ -1,17 +1,6 @@
 #pragma once
 
-#ifdef _DEBUG
-#undef _DEBUG
-#include <torch/extension.h>
-#define _DEBUG
-#else
-#include <torch/extension.h>
-#endif
-#include <torch/library.h>
-#include <torch/script.h>
-
-
-#include "../../lib/FFI/ffi.hpp"
+#include "py_util.hpp"
 
 namespace nufft {
 
@@ -41,7 +30,7 @@ namespace nufft {
 namespace bs {
 
     void batched_sense(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const std::vector<at::Tensor>& coords)
+        const std::vector<at::Tensor>& coords, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -51,11 +40,11 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense(input, coilss, smaps, coords);
+        hasty::ffi::batched_sense(input, coilss, smaps, coords, hasty::ffi::get_streams(streams));
     }
 
     void batched_sense_weighted(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights)
+        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -65,11 +54,11 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense_weighted(input, coilss, smaps, coords, weights);
+        hasty::ffi::batched_sense_weighted(input, coilss, smaps, coords, weights, hasty::ffi::get_streams(streams));
     }
 
     void batched_sense_kdata(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas)
+        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -79,11 +68,12 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense_kdata(input, coilss, smaps, coords, kdatas);
+        hasty::ffi::batched_sense_kdata(input, coilss, smaps, coords, kdatas, hasty::ffi::get_streams(streams));
     }
 
     void batched_sense_weighted_kdata(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<at::Tensor>& kdatas)
+        const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, 
+        const std::vector<at::Tensor>& kdatas, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -93,13 +83,13 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense_weighted_kdata(input, coilss, smaps, coords, weights, kdatas);
+        hasty::ffi::batched_sense_weighted_kdata(input, coilss, smaps, coords, weights, kdatas, hasty::ffi::get_streams(streams));
     }
 
 
 
     void batched_sense_toeplitz(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const std::vector<at::Tensor>& coords)
+        const std::vector<at::Tensor>& coords, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -109,11 +99,11 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense_toeplitz(input, coilss, smaps, coords);
+        hasty::ffi::batched_sense_toeplitz(input, coilss, smaps, coords, hasty::ffi::get_streams(streams));
     }
 
     void batched_sense_toeplitz_diagonals(at::Tensor& input, const std::vector<std::vector<int64_t>>& coils, const at::Tensor& smaps,
-        const at::Tensor& diagonals)
+        const at::Tensor& diagonals, const at::optional<std::vector<c10::Stream>>& streams)
     {
         std::vector<std::vector<int32_t>> coilss;
         coilss.reserve(coils.size());
@@ -123,7 +113,7 @@ namespace bs {
             return ret_coil;
             });
 
-        hasty::ffi::batched_sense_toeplitz_diagonals(input, coilss, smaps, diagonals);
+        hasty::ffi::batched_sense_toeplitz_diagonals(input, coilss, smaps, diagonals, hasty::ffi::get_streams(streams));
     }
 
 }

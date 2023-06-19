@@ -2,6 +2,15 @@
 
 #include <memory>
 
+std::vector<c10::Stream> hasty::torch_util::get_streams(const at::optional<std::vector<c10::Stream>>& streams)
+{
+	if (streams.has_value()) {
+		return *streams;
+	}
+	else {
+		return { c10::cuda::getDefaultCUDAStream() };
+	}
+}
 
 std::stringstream hasty::torch_util::print_4d_xyz(const at::Tensor& toprint)
 {

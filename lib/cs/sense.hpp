@@ -65,15 +65,14 @@ namespace hasty {
 
 		struct DeviceContext {
 
-			DeviceContext(const c10::Device& dev, const c10::Stream& stream) :
-				device(dev), stream(stream) {}
+			DeviceContext(const c10::Stream& stream) :
+				stream(stream) {}
 
 			//DeviceContext(DeviceContext&&) = default;
 			//DeviceContext& operator=(DeviceContext&&) = default;
 
 			std::string str();
 
-			c10::Device device;
 			c10::Stream stream;
 
 			at::Tensor smaps;

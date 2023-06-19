@@ -195,7 +195,7 @@ void hasty::LLR_4DEncodes::block_svt_step(DeviceContext& dctxt, const Block<3>& 
 	auto tensor_block = hasty::extract_block(_image, block);
 	auto cuda_block = tensor_block.to(dctxt.device);
 
-	auto low_ranked = hasty::svt(cuda_block, rank, std::nullopt);
+	auto low_ranked = hasty::svt_hard(cuda_block, rank, std::nullopt);
 
 	tensor_block.copy_(low_ranked, true);
 
@@ -331,7 +331,7 @@ void hasty::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int
 
 
 hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
-	at::Tensor& image, int32_t nblocks, int32_t block_size, int32_t rank)
+	at::Tensor& image, int32_t nblocks, int32_t block_size, double thresh, bool soft)
 	: _dcontexts(std::move(contexts))
 {
 	c10::InferenceMode inference_guard;
@@ -342,10 +342,8 @@ hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
 	std::array<int64_t, 3> bounds{ image.size(2) - lens[0], image.size(3) - lens[1], image.size(4) - lens[2] };
 
 	std::vector<Block<3>> blocks(nblocks);
-	std::vector<int32_t> ranks(nblocks);
 	for (int i = 0; i < nblocks; ++i) {
 		Block<3>::randomize(blocks[i], bounds, lens);
-		ranks[i] = rank;
 	}
 
 	auto future_catcher = [](std::future<void>& fut) {
@@ -363,13 +361,16 @@ hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
 		}
 	};
 
-	for (int i = 0; i < blocks.size(); ++i) {
+	auto base_blockrunner = [this, thresh, soft](const Block<3>& block, DeviceContext& context) {
+		block_svt_step(context, block, thresh, soft);
+	};
 
-		const int16_t& rank = ranks.size() == 1 ? ranks[0] : ranks[i];
+	for (int i = 0; i < blocks.size(); ++i) {
 
 		const auto& block = blocks[i];
 
-		auto blockrunner = [this, &block, &rank](DeviceContext& context) { block_svt_step(context, block, rank); };
+		auto blockrunner = [&block, &base_blockrunner](DeviceContext& context) 
+			{ base_blockrunner(block, context); };
 
 		futures.emplace_back(_tpool->enqueue(blockrunner));
 
@@ -387,22 +388,26 @@ hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
 	}
 }
 
-void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>& block, int16_t rank)
+void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>& block, double thresh, bool soft)
 {
 	c10::InferenceMode inference_guard;
 
 	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
-	auto tensor_block = hasty::extract_block(_image, block);
-	auto cuda_block = tensor_block.to(dctxt.device);
-
-	auto low_ranked = hasty::svt(cuda_block, rank, std::nullopt);
-
-	tensor_block.copy_(low_ranked, true);
-
+	at::Tensor cuda_block;
 	{
-		std::lock_guard<std::mutex> lock(_copy_back_mutex);
-		hasty::insert_block(_image, block, tensor_block);
+		std::lock_guard<std::mutex> lock(_mutex);
+		cuda_block = hasty::extract_block(_image, block).to(dctxt.stream.device());
 	}
 
+	at::Tensor low_ranked = soft ?
+		hasty::svt_soft(cuda_block, (int)(thresh + 0.5), std::nullopt) :
+		hasty::svt_hard(cuda_block, (float)thresh, std::nullopt);
+
+	at::Tensor back_block = low_ranked.cpu();
+
+	{
+		std::lock_guard<std::mutex> lock(_mutex);
+		hasty::insert_block(_image, block, back_block);
+	}
 }
