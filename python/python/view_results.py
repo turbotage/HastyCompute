@@ -18,7 +18,7 @@ with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_15f_cropped_interpolated.h5'
 
 #img_mean = np.mean(img, axis=0)
 
-pu.image_5d(img)
+pu.image_nd(img)
 
 #pu.image_4d(np.abs(img_full))
 

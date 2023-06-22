@@ -119,9 +119,9 @@ def load_real():
 			ky_vec = []
 			kz_vec = []
 			for i in range(5):
-				kx_vec.append(kdataset['KX_E' + str(i)][()])
+				kx_vec.append(kdataset['KZ_E' + str(i)][()])
 				ky_vec.append(kdataset['KY_E' + str(i)][()])
-				kz_vec.append(kdataset['KZ_E' + str(i)][()])
+				kz_vec.append(kdataset['KX_E' + str(i)][()])
 			kx = np.stack(kx_vec, axis=0)
 			ky = np.stack(ky_vec, axis=0)
 			kz = np.stack(kz_vec, axis=0)
@@ -253,7 +253,7 @@ def gated_full(coord_vec, kdata_vec, weights_vec, nframes):
 
 	return coord_vec_full, kdata_vec_full, weights_vec_full
 
-def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0):
+def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0, prefovkmul=1.0, postfovkmul=1.0):
 	max = 0.0
 	for i in range(len(coord_vec)):
 		maxi = coord_vec[i].abs().max().item()
@@ -264,14 +264,14 @@ def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0):
 
 
 	for i in range(len(coord_vec)):
-		coord = coord_vec[i]
+		coord = coord_vec[i] * prefovkmul
 		idxx = coord[0,:] < kim_size[0]
 		idxy = coord[1,:] < kim_size[1]
 		idxz = coord[2,:] < kim_size[2]
 
 		idx = torch.logical_and(idxx, torch.logical_and(idxy, idxz))
 
-		coord_vec[i] = torch.pi * coord[:,idx] / maxi
+		coord_vec[i] = postfovkmul * torch.pi * coord[:,idx] / maxi
 		kdata_vec[i] = kdata_vec[i][:,:,idx]
 		if weights_vec is not None:
 			weights_vec[i] = weights_vec[i][:,idx]

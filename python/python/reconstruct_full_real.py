@@ -20,7 +20,7 @@ from torch_maxeig import TorchMaxEig
 import reconstruct_util as ru
 
 def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.0, 0.0), 
-		crop_factor=1.5, store=True, plot=False):
+		crop_factor=1.5, fovkmul=1.0, store=True, plot=False):
 	nenc = 5
 	im_size = (images_full.shape[2], images_full.shape[3], images_full.shape[4])
 	print('Gating')
@@ -32,9 +32,10 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 	del coord, kdata, gating
 	print('Crop kspace')
 	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(
-		coord_vec, kdata_vec, None, im_size, crop_factor=crop_factor)
+		coord_vec, kdata_vec, None, im_size, crop_factor=crop_factor, fovkmul=fovkmul)
 	print('Translate')
-	coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
+	if shift != (0.0, 0.0, 0.0):
+		coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
 
 	images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
 		      im_size[2], dtype=torch.complex64)
@@ -46,7 +47,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes)
 	
 	if plot:
-		pu.image_5d(images.numpy())
+		pu.image_nd(images.numpy())
 
 	if store:
 		print('Storing frame reconstructed')
@@ -55,7 +56,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 
 	return images
 
-def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, plot=False):
+def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefovkmul=1.0, postfovkmul=1.0, plot=False):
 	print('Loading coords, kdata, weights')
 	smaps, coord, kdata, weights, gating = ru.load_real()
 
@@ -70,26 +71,34 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, plot=
 	print('Crop kspace')
 
 	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(
-		coord_vec, kdata_vec, weights_vec, im_size, crop_factor=crop_factor)
+		coord_vec, kdata_vec, weights_vec, im_size, crop_factor=crop_factor, 
+		prefovkmul=prefovkmul, postfovkmul=postfovkmul)
 	print('Translate')
+
+	kdatapoints = 0
+	for kdata in kdata_vec:
+		kdatapoints += kdata.shape[2]
+	print(kdatapoints)
 	#coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
 
 	print('Direct reconstruction')
 	images = ru.direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size)
 
 	if plot:
-		pu.image_5d(images.numpy())
+		pu.image_nd(images.numpy())
 
-	print('Load toeplitz diagonal and rhs')
-	diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, 
-					     weights_vec, use_weights=False, root=0)
 
-	print('Reconstruct')
-	images = ru.reconstruct_cg_full(diagonals, rhs, smaps, None,
-				 iter=5, lamda=0.0, images=images, plot=False)
+
+	#print('Load toeplitz diagonal and rhs')
+	#diagonals, rhs = ru.load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, 
+	#				     weights_vec, use_weights=False, root=0)
+	#
+	#print('Reconstruct')
+	#images = ru.reconstruct_cg_full(diagonals, rhs, smaps, None,
+	#			 iter=5, lamda=0.0, images=images, plot=False)
 	
 	if plot:
-		pu.image_5d(images.numpy())
+		pu.image_nd(images.numpy())
 
 	if store:
 		print('Storing fully reconstructed')
@@ -101,5 +110,5 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, plot=
 
 if __name__ == "__main__":
 	images, smaps, coord, kdata, gating = run_full((256,256,256),
-		shift=(-50.0,0.0,10.0), crop_factor=1.0, plot=True)
+		shift=(-50.0,0.0,10.0), crop_factor=1.0, prefovkmul=1.0, postfovkmul=1.0, plot=True)
 	images = run_framed(images, smaps, coord, kdata, gating, 15, plot=True)
