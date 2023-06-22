@@ -83,7 +83,6 @@ def image_5d(image):
 
 	plt.show()
 
-
 def image_6d(image, relim=False):
 
 	wlen = image.shape[0]
@@ -238,7 +237,7 @@ def image_nd(image, relim=False):
 		image = np.abs(image)
 
 	if len(image.shape) == 5:
-		image_5d(image, relim)
+		image_5d(image)
 	elif len(image.shape) == 4:
 		image_4d(image, relim)
 	elif len(image.shape) == 3:
@@ -291,7 +290,12 @@ def plot_3vec(vec1, vec2, vec3):
 	plt.plot(vec3, 'b-^')
 	plt.show()
 
-
+def plot_gating(gating, bounds):
+	plt.figure()
+	plt.plot(gating, 'r-*')
+	for bound in bounds:
+		plt.plot(bound*np.ones(gating.shape), 'b-')
+	plt.show()
 
 
 

@@ -18,7 +18,8 @@ std::vector<hasty::BatchedSense::DeviceContext> get_batch_contexts(const std::ve
 			context.smaps = smaps_dict.at(device);
 		}
 		else {
-			smaps_dict.insert({ device, smaps.to(device, true) });
+			context.smaps = smaps.to(device, true);
+			smaps_dict.insert({ device, context.smaps });
 		}
 	}
 	return contexts;

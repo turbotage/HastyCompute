@@ -115,11 +115,27 @@ void nufft_tests()
 	plot2_1(back1, input1.cpu(), 0);
 }
 
+void batched_test() {
+	at::Tensor inp = at::rand({ 5,1,128,128,128 }, c10::ScalarType::ComplexFloat);
+	at::Tensor smaps = at::rand({ 32,128,128,128 }, c10::ScalarType::ComplexFloat);
+	at::Tensor diagonals = at::rand({ 5,256,256,256 }, c10::ScalarType::ComplexFloat);
 
+	std::vector<std::vector<int64_t>> coils;
+	for (int i = 0; i < 5; ++i) {
+		auto& inner_coils = coils.emplace_back();
+		for (int j = 0; j < 32; ++j) {
+			inner_coils.emplace_back(j);
+		}
+	}
+
+	bs::batched_sense_toeplitz_diagonals(inp, coils, smaps, diagonals, at::nullopt);
+}
 
 int main() {
 
-	nufft_tests();
+	//nufft_tests();
+
+	batched_test();
 
 	return 0;
 }

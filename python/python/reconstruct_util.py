@@ -93,7 +93,7 @@ def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=Fa
 
 	return diagonals, rhs
 
-def load_real(smaps):
+def load_real():
 	smaps = np.array([0])
 	with h5py.File('D:/4DRecon/dat/dat2/SenseMapsCpp.h5') as f:
 		smap_vec = []
@@ -273,7 +273,8 @@ def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0):
 
 		coord_vec[i] = torch.pi * coord[:,idx] / maxi
 		kdata_vec[i] = kdata_vec[i][:,:,idx]
-		weights_vec[i] = weights_vec[i][:,idx]
+		if weights_vec is not None:
+			weights_vec[i] = weights_vec[i][:,idx]
 	
 	return (coord_vec, kdata_vec, weights_vec)
 
@@ -345,23 +346,32 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 
 class SenseLinop(TorchLinop):
-	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, clone=True):
-		nenc = len(coord_vec)
-		shape = tuple([nenc, 1] + list(smaps.shape[1:]))
-		coil_list = list()
-		for i in range(nenc):
-			inner_coil_list = list()
-			for j in range(smaps.shape[0]):
-				inner_coil_list.append(j)
-			coil_list.append(inner_coil_list)
-		self.coil_list = coil_list
+	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, clone=True, randomize_coils=False, num_rand_coils=16):
 		self.smaps = smaps
+		self.nframes = len(coord_vec)
+		self.shape = tuple([self.nframes, 1] + list(smaps.shape[1:]))
+		self.ncoils = self.smaps.shape[0]
+		self.randomize_coils = randomize_coils
+		self.num_rand_coils = num_rand_coils
 		self.coord_vec = coord_vec
 		self.kdata_vec = kdata_vec
 		self.weights_vec = weights_vec
 		self.clone = clone
+		self.coil_list = self.create_coil_list()
 
-		super().__init__(shape, shape)
+		super().__init__(self.shape, self.shape)
+
+	def create_coil_list(self):
+		if self.randomize_coils:
+			coil_list = list()
+			for i in range(self.nframes):
+				permuted = np.random.permutation(self.ncoils).astype(np.int32)
+				coil_list.append(permuted[:self.num_rand_coils].tolist())
+			return coil_list
+		else:
+			coil_list = list()
+			for i in range(self.nframes):
+				coil_list.append(np.arange(self.nframes).tolist())
 
 	def _apply(self, input):
 		input_copy: torch.Tensor
@@ -370,15 +380,15 @@ class SenseLinop(TorchLinop):
 		else:
 			input_copy = input
 
+		if self.randomize_coils:
+			self.coil_list = self.create_coil_list()
+
 		if self.weights_vec is not None:
 			hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
-				self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec)
-			#hasty_sense.batched_sense_weighted(input_copy, self.coil_list, self.smaps,
-			#	self.coord_vec, self.weights_vec)
+				self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec, None)
 		else:
 			hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
-				self.smaps, self.coord_vec, self.kdata_vec)
-			#hasty_sense.batched_sense(input_copy, self.coil_list, self.smaps, self.coord_vec)
+				self.smaps, self.coord_vec, self.kdata_vec, None)
 		return input_copy
 		
 class ToeplitzSenseLinop(TorchLinop):
@@ -404,7 +414,7 @@ class ToeplitzSenseLinop(TorchLinop):
 			input_copy = input.detach().clone()
 		else:
 			input_copy = input
-		hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals)
+		hasty_sense.batched_sense_toeplitz_diagonals(input_copy, self.coil_list, self.smaps, self.diagonals, None)
 		return input_copy
 
 class PrecondLinop(TorchLinop):
@@ -464,7 +474,6 @@ def reconstruct_cg_full(diagonals, rhs, smaps, Prcnd = None, iter = 50, lamda=0.
 
 	final_linop = toep_linop
 
-	#rhs *= torch.sqrt(scaling)
 	print('Scaling image')
 	rhs_scalar = torch.sum(images.conj() * rhs)
 	lhs_scalar = torch.sum(images.conj() * final_linop(images))
@@ -531,10 +540,30 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 
 	return image.unsqueeze(1)
 
-def reconstruct_frames(images, nframes, smaps, coord, kdata):
+def reconstruct_frames(images, smaps, coord, kdata, nenc, nframes):
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	ncoil = smaps.shape[0]
-	nenc = images.shape[0]
+	nframes = images.shape[0]
+	nenc = images.shape[1]
+	grad_shape = (nframes*nenc,1,im_size[0], im_size[1], im_size[2])
+	svt_shape = (nframes,nenc,im_size[0], im_size[1], im_size[2])
+
+	sense_linop = SenseLinop(smaps, coord, kdata, randomize_coils=True, num_rand_coils=16)
+	gradf = lambda x: sense_linop(x)
+
+	images = images.view(grad_shape)
+
+	print('Scaling')
+	f1 = torch.sum(gradf(images*0.0)**2) #k+m
+	f2 = torch.sum(gradf(images)**2) # m
+	scaling = -(f2 / (f1 - f2))
+	images *= scaling
+
+	sgd = TorchGD(gradf, images,alpha=1.0, accelerate=True, max_iter=10)
+
+	sgd.run(plot=True)
+
+	return images.view(svt_shape)
 
 	
 	

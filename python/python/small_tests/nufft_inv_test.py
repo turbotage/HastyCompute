@@ -14,18 +14,18 @@ hasty_sense = torch.ops.HastySense
 
 N1 = 16
 N2 = 16
-N3 = 16
-NF = N1*N2*N3 // 2
+N3 = 13
+NF = N1*N2*N3
 
 coord = np.zeros((3,NF), dtype=np.float32)
 l = 0
 for x in range(N1):
 	for y in range(N2):
 		for z in range(N3):
-			if l % 2 == 0:
-				continue
-			if l >= NF:
-				break
+			#if l % 2 == 0:
+			#	continue
+			#if l >= NF:
+			#	break
 
 			kx = -np.pi + x * 2 * np.pi / N1
 			ky = -np.pi + y * 2 * np.pi / N2
