@@ -8,7 +8,7 @@ import plot_utility as pu
 import torch_linop as tl
 from torch_linop import TorchLinop, TorchMatrixLinop
 
-from torch_iterative_alg import TorchIterativeAlg
+from torch_basics import TorchIterativeAlg
 
 class TorchCG(TorchIterativeAlg):
 	def __init__(self, A: TorchLinop, b: torch.Tensor, x: torch.Tensor, P: TorchLinop | None = None, tol = 0.0, max_iter=100):
@@ -98,7 +98,6 @@ class TorchCG(TorchIterativeAlg):
 
 			i += 1
 		return self.x
-
 
 class TorchGD(TorchIterativeAlg):
 	def __init__(self, gradf, x, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):

@@ -45,7 +45,7 @@ for x in range(N1):
 cudev = torch.device('cuda:0')
 
 coord = torch.tensor(coord).to(cudev)
-input = torch.ones((1,N1,N2,N3), dtype=torch.complex64).to(cudev)
+input = torch.rand((1,N1,N2,N3), dtype=torch.complex64).to(cudev)
 
 temp = hasty_sense.nufft2(coord, input) / math.sqrt(NF)
 output = hasty_sense.nufft1(coord, temp, (1,N1,N2,N3)) / math.sqrt(NF)

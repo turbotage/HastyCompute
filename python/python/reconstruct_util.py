@@ -119,9 +119,9 @@ def load_real():
 			ky_vec = []
 			kz_vec = []
 			for i in range(5):
-				kx_vec.append(kdataset['KZ_E' + str(i)][()])
+				kx_vec.append(kdataset['KX_E' + str(i)][()])
 				ky_vec.append(kdataset['KY_E' + str(i)][()])
-				kz_vec.append(kdataset['KX_E' + str(i)][()])
+				kz_vec.append(kdataset['KZ_E' + str(i)][()])
 			kx = np.stack(kx_vec, axis=0)
 			ky = np.stack(ky_vec, axis=0)
 			kz = np.stack(kz_vec, axis=0)
@@ -288,7 +288,6 @@ def translate(coord_vec, kdata_vec, translation):
 		kdata *= torch.exp(1j*(mult @ coord)).unsqueeze(0)
 
 		kdata_vec[i] = kdata.cpu()
-		#coord_vec[i] = coord
 
 	return coord_vec, kdata_vec
 
@@ -344,6 +343,11 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 	return diagonals, rhs
 
+def center_weights(im_size, width, coord, weights):
+	scaled_coords = coord * torch.tensor(list(im_size))[:,None] / (2*torch.pi)
+	idx = scaled_coords < width
+	idx = torch.logical_and(idx[0,:], torch.logical_and(idx[1,:], idx[2,:]))
+	return weights[0,idx]
 
 class SenseLinop(TorchLinop):
 	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, clone=True, randomize_coils=False, num_rand_coils=16):
@@ -372,6 +376,7 @@ class SenseLinop(TorchLinop):
 			coil_list = list()
 			for i in range(self.nframes):
 				coil_list.append(np.arange(self.nframes).tolist())
+			return coil_list
 
 	def _apply(self, input):
 		input_copy: torch.Tensor
@@ -505,7 +510,7 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	#rhs *= torch.sqrt(scaling)
 	final_linop = sense_linop
 
-	gradf = lambda x: final_linop(x) #/ nvoxels
+	gradf = lambda x: final_linop(x) # /nvoxels
 
 	tgd = TorchGD(gradf, images, alpha=1.0, accelerate=True, max_iter=iter)
 
@@ -534,8 +539,11 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 			L[j, ...] = (hasty_sense.nufft1(coord_cu, weights_cu * kdata_cu, 
 		    	[1, im_size[0], im_size[1], im_size[2]]) / math.sqrt(nvoxels)).cpu().squeeze(0)
 			
-
-		I = torch.sum(smaps.conj() * L, dim=0) / torch.sum(smaps.conj() * smaps, dim=0)
+		I: torch.Tensor
+		if smaps == None:
+			I = torch.sum(L,dim=0)
+		else:
+			I = torch.sum(smaps.conj() * L, dim=0) / torch.sum(smaps.conj() * smaps, dim=0)
 		image[i,...] = I.squeeze(0)
 
 	return image.unsqueeze(1)
@@ -552,12 +560,6 @@ def reconstruct_frames(images, smaps, coord, kdata, nenc, nframes):
 	gradf = lambda x: sense_linop(x)
 
 	images = images.view(grad_shape)
-
-	print('Scaling')
-	f1 = torch.sum(gradf(images*0.0)**2) #k+m
-	f2 = torch.sum(gradf(images)**2) # m
-	scaling = -(f2 / (f1 - f2))
-	images *= scaling
 
 	sgd = TorchGD(gradf, images,alpha=1.0, accelerate=True, max_iter=10)
 

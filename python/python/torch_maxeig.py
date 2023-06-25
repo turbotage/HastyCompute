@@ -1,6 +1,6 @@
 import torch
 
-from torch_iterative_alg import TorchIterativeAlg
+from torch_basics import TorchIterativeAlg
 from torch_linop import TorchLinop
 
 # This is not perfect, should use Rayleigh instead but this way uses less memory

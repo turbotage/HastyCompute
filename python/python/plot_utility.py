@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button, RadioButtons, RangeSlider, CheckButtons
+from matplotlib.widgets import Slider, Button, RadioButtons, RangeSlider, CheckButtons, TextBox
 
 
 def image_5d(image):
@@ -13,7 +13,7 @@ def image_5d(image):
 	fig.set_figheight(10)
 	fig.subplots_adjust(left=0.05, bottom=0.12)
 
-	figdata = ax.imshow(np.real(image[0, 0,:,:,lens[4]//2]))
+	figdata = ax.imshow(np.real(image[0, 0,:,:,0]))
 
 	def disc_slider(axis, name, length, color="red"):
 		return Slider(axis, name, 0,length-1, valinit=0, 
@@ -47,6 +47,12 @@ def image_5d(image):
 	imax = np.maximum(np.real(image).max(), np.imag(image).max())
 	limslider = RangeSlider(limax, "CLim", imin, imax, orientation="vertical", valinit=(imin,imax))
 
+	pretextax = fig.add_axes([0.2, 0.93, 0.55, 0.04])
+	pretextbox = TextBox(pretextax, 'Pre Options', initial='')
+
+	posttextax = fig.add_axes([0.2, 0.89, 0.55, 0.04])
+	posttextbox = TextBox(posttextax, 'Post Options', initial='')
+
 	figdata.set_clim(limslider.val[0], limslider.val[1])
 
 	def update(val):
@@ -71,20 +77,31 @@ def image_5d(image):
 		img: np.array
 		maxip = maxipbutton.get_status()[0]
 
+		if pretextbox.text != '':
+			try:
+				mod_image = eval(pretextbox.text)
+			except:
+				print('Failed to evalueate PreTextbox')
+				pretextbox.set_val('')
+				pretextbox.stop_typing()
+				mod_image = image
+		else:
+			mod_image = image
+
 		if maxip:
 			if xyz == 'x':
-				img = np.max(image[s0,s1,:(s_xyz+1),:,:],axis=0)
+				img = np.max(mod_image[s0,s1,:(s_xyz+1),:,:],axis=0)
 			elif xyz == 'y':
-				img = np.max(image[s0,s1,:,:(s_xyz+1),:],axis=1)
+				img = np.max(mod_image[s0,s1,:,:(s_xyz+1),:],axis=1)
 			elif xyz == 'z':
-				img = np.max(image[s0,s1,:,:,:(s_xyz+1)],axis=2)
+				img = np.max(mod_image[s0,s1,:,:,:(s_xyz+1)],axis=2)
 		else:
 			if xyz == 'x':
-				img = image[s0,s1,s_xyz,:,:]
+				img = mod_image[s0,s1,s_xyz,:,:]
 			elif xyz == 'y':
-				img = image[s0,s1,:,s_xyz,:]
+				img = mod_image[s0,s1,:,s_xyz,:]
 			elif xyz == 'z':
-				img = image[s0,s1,:,:,s_xyz]
+				img = mod_image[s0,s1,:,:,s_xyz]
 
 		if ria == 'real':
 			img = np.real(img)
@@ -92,6 +109,15 @@ def image_5d(image):
 			img = np.imag(img)
 		elif ria == 'abs':
 			img = np.abs(img)
+
+		if posttextbox.text != '':
+			try:
+				img = eval(posttextbox.text)
+			except:
+				posttextbox.set_val('')
+				posttextbox.stop_typing()
+				print('Failed to evalueate PostTextbox')
+
 
 		ax.set(xlim=(0,img.shape[0]), ylim=(0,img.shape[1]))
 		figdata.set_data(img)
@@ -107,6 +133,8 @@ def image_5d(image):
 	radbutton2.on_clicked(update)
 	limslider.on_changed(update)
 	maxipbutton.on_clicked(update)
+	pretextbox.on_submit(update)
+	posttextbox.on_submit(update)
 
 	plt.show()
 

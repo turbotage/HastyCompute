@@ -27,3 +27,28 @@ class TorchIterativeAlg:
 		Call the user-defined _done() function.
 		"""
 		return self._done()	
+	
+
+class TorchApp(object):
+	def __init__(self, alg):
+		self.alg = alg
+
+	def _pre_update(self):
+		return
+	
+	def _post_update(self):
+		return
+	
+	def _summarize(self):
+		return
+	
+	def _output(self):
+		return
+	
+	def run(self):
+		while not self.alg.done():
+			self._pre_update()
+			self.alg.update()
+			self._post_update()
+
+		return self._output()
