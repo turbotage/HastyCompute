@@ -91,6 +91,7 @@ namespace hasty {
 
 		cufinufft_opts _finufft_opts;
 
+		int32_t _nvoxels;
 	};
 
 	class NufftNormal {

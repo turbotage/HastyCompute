@@ -19,8 +19,11 @@ from torch_maxeig import TorchMaxEig
 
 import reconstruct_util as ru
 
+#shift=shift, 
+#		crop_factor=1.0, prefovkmul=1.0, postfovkmul=1.0, plot=True
+
 def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.0, 0.0), 
-		crop_factor=1.5, fovkmul=1.0, store=True, plot=False):
+		crop_factor=1.5, prefovkmul=1.0,  postfovkmul=1.0, store=True, plot=False):
 	nenc = 5
 	im_size = (images_full.shape[2], images_full.shape[3], images_full.shape[4])
 	print('Gating')
@@ -31,11 +34,11 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 
 	del coord, kdata, gating
 	print('Crop kspace')
-	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(
-		coord_vec, kdata_vec, None, im_size, crop_factor=crop_factor, fovkmul=fovkmul)
+	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, 
+		crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul)
 	print('Translate')
 	if shift != (0.0, 0.0, 0.0):
-		coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
+		data_vec = ru.translate(coord_vec, kdata_vec, shift)
 
 	images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
 		      im_size[2], dtype=torch.complex64)
@@ -44,7 +47,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 		for j in range(nenc):
 			images[i,j,...] = images_full[j,...]
 	print('Reconstructing frames')
-	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes)
+	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=5, lamda=0.0, plot=plot)
 	
 	if plot:
 		pu.image_nd(images.numpy())
@@ -74,15 +77,15 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 		prefovkmul=prefovkmul, postfovkmul=postfovkmul)
 	
 	kdatapoints = 0
-	for kdata in kdata_vec:
-		kdatapoints += kdata.shape[2]
+	for kdatai in kdata_vec:
+		kdatapoints += kdatai.shape[2]
 	print(kdatapoints)
 
 	print('Translate')
 	if shift != (0.0, 0.0, 0.0):
-		coord_vec, kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
+		kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
 
-	center_weights = ru.center_weights(im_size, 1, coord_vec[0], weights_vec[0])
+	center_weights = ru.center_weights(im_size, 0.1, coord_vec[0], weights_vec[0])
 
 	#print('Direct reconstruction without Smaps')
 	#images = ru.direct_nufft_reconstruct_encs(None, coord_vec, kdata_vec, weights_vec, im_size)
@@ -90,16 +93,21 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 	#	pu.image_nd(images.numpy())
 
 	print('Direct reconstruction with Smaps')
-	images = ru.direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size)
+	#images = ru.direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size)
 
-	if plot:
-		pu.image_nd(images.numpy())
+	#if plot:
+	#	pu.image_nd(images.numpy())
 	
 	#images *= torch.mean(center_weights)
-	images /= torch.mean(images)
+	#images *= torch.mean(center_weights)
 
-	ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None,
-			iter=50, lamda=0.0, images=images, plot=True)
+	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
+			iter=3, lamda=0.0005, images=None, plot=False)
+
+	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None,
+			iter=4, lamda=0.0001, images=images, plot=False)
+
+	del center_weights, coord_vec, kdata_vec, weights_vec
 
 	if plot:
 		pu.image_nd(images.numpy())
@@ -112,10 +120,14 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 	return images, smaps, coord, kdata, gating
 
 
-
 if __name__ == "__main__":
-	#shift = (-50.0,0.0,10.0)
+	#shift = (0.0,0.0,0.0)
 	shift = (-2*25.6, 0.0, 0.0)
+	crop_factor=1.0
+	prefovkmul=1.0
+	postfovkmul=1.0
+
 	images, smaps, coord, kdata, gating = run_full((256,256,256), shift=shift, 
-		crop_factor=1.1, prefovkmul=1.1, postfovkmul=1.0, plot=True)
-	#images = run_framed(images, smaps, coord, kdata, gating, 15, plot=True)
+		crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul, plot=False)
+	images = run_framed(images, smaps, coord, kdata, gating, 15,
+		shift=shift, crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul, plot=True)

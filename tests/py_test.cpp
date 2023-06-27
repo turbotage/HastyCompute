@@ -131,11 +131,76 @@ void batched_test() {
 	bs::batched_sense_toeplitz_diagonals(inp, coils, smaps, diagonals, at::nullopt);
 }
 
+void batched_sense_test() 
+{
+
+	int nx = 32;
+	int nf = 100000;
+	at::Tensor inp1 = at::rand({ 1,1,nx,nx,nx }, c10::ScalarType::ComplexFloat);
+	at::Tensor inp2 = inp1.detach().clone();
+
+	at::Tensor smaps = at::rand({ 32,nx,nx,nx }, c10::ScalarType::ComplexFloat);
+	at::Tensor weights = at::ones({ 1,nf }, c10::ScalarType::ComplexFloat);
+	at::Tensor coord = at::rand({ 3,nf }, c10::ScalarType::Float);
+	at::Tensor kdata = at::rand({ 1,32,nf }, c10::ScalarType::Float);
+
+	std::vector<std::vector<int64_t>> coils;
+	for (int i = 0; i < 5; ++i) {
+		auto& inner_coils = coils.emplace_back();
+		for (int j = 0; j < 32; ++j) {
+			inner_coils.emplace_back(j);
+		}
+	}
+
+	std::vector<at::Tensor> weights_vec = { weights };
+	std::vector<at::Tensor> coord_vec = { coord };
+	std::vector<at::Tensor> kdata_vec = { coord };
+
+	bs::batched_sense(inp1, coils, smaps, coord_vec, at::nullopt);
+	bs::batched_sense_weighted(inp2, coils, smaps, coord_vec, weights_vec, at::nullopt);
+
+	std::cout << "Relerr: " << torch::norm(inp1 - inp2) / torch::norm(inp1) << std::endl;
+
+	bs::batched_sense_kdata(inp1, coils, smaps, coord_vec, kdata_vec, at::nullopt);
+	bs::batched_sense_weighted_kdata(inp2, coils, smaps, coord_vec, weights_vec, kdata_vec, at::nullopt);
+
+	std::cout << "Relerr: " << torch::norm(inp1 - inp2) / torch::norm(inp1) << std::endl;
+}
+
+void test_large_batched() {
+
+	int nx = 256;
+	int nf = 300000;
+	int nt = 75;
+	at::Tensor inp1 = at::empty({ nt,1,nx,nx,nx }, c10::ScalarType::ComplexFloat);
+
+	at::Tensor smaps = at::empty({ 32,nx,nx,nx }, c10::ScalarType::ComplexFloat);
+	at::Tensor coord = -3.141592f + 2*3.141592f*at::rand({ 3,nf }, c10::ScalarType::Float);
+	at::Tensor kdata = at::empty({ 1,32,nf }, c10::ScalarType::ComplexFloat);
+
+	std::vector<std::vector<int64_t>> coils;
+	for (int i = 0; i < nt; ++i) {
+		auto& inner_coils = coils.emplace_back();
+		for (int j = 0; j < 32; ++j) {
+			inner_coils.emplace_back(j);
+		}
+	}
+
+	//std::vector<at::Tensor> weights_vec = { weights };
+	std::vector<at::Tensor> coord_vec;
+	std::vector<at::Tensor> kdata_vec;
+	for (int i = 0; i < nt; ++i) {
+		coord_vec.push_back(coord.detach().clone());
+		kdata_vec.push_back(kdata.detach().clone());
+	}
+
+	bs::batched_sense_kdata(inp1, coils, smaps, coord_vec, kdata_vec, at::nullopt);
+
+}
+
 int main() {
 
-	//nufft_tests();
-
-	batched_test();
-
+	//batched_sense_test();
+	test_large_batched();
 	return 0;
 }

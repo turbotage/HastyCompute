@@ -16,6 +16,7 @@ Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const
 	_ntransf = _nmodes[0];
 	_ndim = _coords.size(0);
 	_nfreq = _coords.size(1);
+	_nvoxels = _nmodes[1] * _nmodes[2] * _nmodes[3];
 
 	if (_opts.get_type() == NufftType::eType3) {
 		throw std::runtime_error("Type 3 Nufft is not yet supported");
@@ -89,11 +90,13 @@ void Nufft::apply(const at::Tensor& in, at::Tensor& out) const
 	case eType1:
 	{
 		apply_type1(in, out);
+		out.div_((float)std::sqrt(_nvoxels));
 	}
 	break;
 	case eType2:
 	{
 		apply_type2(in, out);
+		out.div_((float)std::sqrt(_nvoxels));
 	}
 	break;
 

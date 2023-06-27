@@ -13,7 +13,7 @@ def image_5d(image):
 	fig.set_figheight(10)
 	fig.subplots_adjust(left=0.05, bottom=0.12)
 
-	figdata = ax.imshow(np.real(image[0, 0,:,:,0]))
+	figdata = ax.imshow(np.abs(image[0, 0,:,:,0]))
 
 	def disc_slider(axis, name, length, color="red"):
 		return Slider(axis, name, 0,length-1, valinit=0, 
@@ -34,17 +34,17 @@ def image_5d(image):
 	slider_xyz = disc_slider(ax_xyz, "XYZ", lens[2], color="red")
 
 	boxax1 = fig.add_axes([rightboxx1[0], 0.035, rightboxx1[1], boxh])
-	radbutton1 = RadioButtons(boxax1, ('x', 'y', 'z'), 2)
+	radbutton1 = RadioButtons(boxax1, ('x', 'y', 'z'), active=2)
 
 	boxax2 = fig.add_axes([rightboxx1[0] - 0.04, 0.035, rightboxx1[1]+0.01, boxh])
-	radbutton2 = RadioButtons(boxax2, ('real', 'imag', 'abs'))
+	radbutton2 = RadioButtons(boxax2, ('real', 'imag', 'abs'), active=2)
 
 	maxipax = fig.add_axes([rightboxx1[0] + 0.03, 0.035, rightboxx1[1]+0.01, boxh])
 	maxipbutton = CheckButtons(maxipax, labels=['Maxip'])
 
 	limax = fig.add_axes([0.15, 0.2, 0.015, 0.5])
 	imin = np.minimum(np.real(image).min(), np.imag(image).min())
-	imax = np.maximum(np.real(image).max(), np.imag(image).max())
+	imax = np.maximum(np.real(image).max(), np.maximum(np.imag(image).max(), np.abs(image).max()))
 	limslider = RangeSlider(limax, "CLim", imin, imax, orientation="vertical", valinit=(imin,imax))
 
 	pretextax = fig.add_axes([0.2, 0.93, 0.55, 0.04])
@@ -52,6 +52,10 @@ def image_5d(image):
 
 	posttextax = fig.add_axes([0.2, 0.89, 0.55, 0.04])
 	posttextbox = TextBox(posttextax, 'Post Options', initial='')
+
+	labels = ['Direct Command']
+	checkboxax = fig.add_axes([0.77, 0.89, 0.15, 0.1])
+	checkbox = CheckButtons(checkboxax, labels=labels)
 
 	figdata.set_clim(limslider.val[0], limslider.val[1])
 
@@ -77,6 +81,33 @@ def image_5d(image):
 		img: np.array
 		maxip = maxipbutton.get_status()[0]
 
+		def riafunc(ria, input):
+			if ria == 'real':
+				return np.real(input)
+			elif ria == 'imag':
+				return np.imag(input)
+			elif ria == 'abs':
+				return np.abs(input)
+
+		def modimgfunc(xyz, maxip, mod_image):
+			if maxip:
+				if xyz == 'x':
+					return np.max(riafunc(ria, mod_image[s0,s1,:(s_xyz+1),:,:]),axis=0)
+				elif xyz == 'y':
+					return np.max(riafunc(ria, mod_image[s0,s1,:,:(s_xyz+1),:]),axis=1)
+				elif xyz == 'z':
+					return np.max(riafunc(ria, mod_image[s0,s1,:,:,:(s_xyz+1)]),axis=2)
+			else:
+				if xyz == 'x':
+					return riafunc(ria, mod_image[s0,s1,s_xyz,:,:])
+				elif xyz == 'y':
+					return riafunc(ria, mod_image[s0,s1,:,s_xyz,:])
+				elif xyz == 'z':
+					return riafunc(ria, mod_image[s0,s1,:,:,s_xyz])
+
+
+		mod_image: np.array
+		img: np.array
 		if pretextbox.text != '':
 			try:
 				mod_image = eval(pretextbox.text)
@@ -88,27 +119,12 @@ def image_5d(image):
 		else:
 			mod_image = image
 
-		if maxip:
-			if xyz == 'x':
-				img = np.max(mod_image[s0,s1,:(s_xyz+1),:,:],axis=0)
-			elif xyz == 'y':
-				img = np.max(mod_image[s0,s1,:,:(s_xyz+1),:],axis=1)
-			elif xyz == 'z':
-				img = np.max(mod_image[s0,s1,:,:,:(s_xyz+1)],axis=2)
+		checked = checkbox.get_status()
+		if not checked[0]:
+			img = modimgfunc(xyz, maxip, mod_image)
 		else:
-			if xyz == 'x':
-				img = mod_image[s0,s1,s_xyz,:,:]
-			elif xyz == 'y':
-				img = mod_image[s0,s1,:,s_xyz,:]
-			elif xyz == 'z':
-				img = mod_image[s0,s1,:,:,s_xyz]
-
-		if ria == 'real':
-			img = np.real(img)
-		elif ria == 'imag':
-			img = np.imag(img)
-		elif ria == 'abs':
-			img = np.abs(img)
+			if pretextbox.text == '':
+				return
 
 		if posttextbox.text != '':
 			try:
@@ -135,13 +151,11 @@ def image_5d(image):
 	maxipbutton.on_clicked(update)
 	pretextbox.on_submit(update)
 	posttextbox.on_submit(update)
+	checkbox.on_clicked(update)
 
 	plt.show()
 
 def image_nd(image):
-	if image.dtype == np.complex64 or image.dtype == np.complex128:
-		image = np.abs(image)
-
 	if len(image.shape) == 5:
 		image_5d(image)
 	elif len(image.shape) == 4:

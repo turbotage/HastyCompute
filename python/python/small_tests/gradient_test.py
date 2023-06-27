@@ -26,3 +26,5 @@ input = torch.rand((1,N1,N2,N3), dtype=torch.complex64).to(cudev)
 smaps = torch.rand((32,N1,N2,N3), dtype=torch.complex64)
 
 output = hasty_sense.nufft2(coord, input * smaps)
+
+

@@ -221,7 +221,7 @@ def gate(coord, kdata, weights, gating, nframes):
 		idx = len_start <= gating
 		add_idx_spokes(idx)
 
-	return (coord_vec, kdata_vec, weights_vec, gates)
+	return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates)
 
 def gated_full(coord_vec, kdata_vec, weights_vec, nframes):
 	nenc = 5
@@ -265,9 +265,9 @@ def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0, pre
 
 	for i in range(len(coord_vec)):
 		coord = coord_vec[i] * prefovkmul
-		idxx = coord[0,:] < kim_size[0]
-		idxy = coord[1,:] < kim_size[1]
-		idxz = coord[2,:] < kim_size[2]
+		idxx = torch.abs(coord[0,:]) < kim_size[0]
+		idxy = torch.abs(coord[1,:]) < kim_size[1]
+		idxz = torch.abs(coord[2,:]) < kim_size[2]
 
 		idx = torch.logical_and(idxx, torch.logical_and(idxy, idxz))
 
@@ -289,7 +289,7 @@ def translate(coord_vec, kdata_vec, translation):
 
 		kdata_vec[i] = kdata.cpu()
 
-	return coord_vec, kdata_vec
+	return kdata_vec
 
 def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weights=False, root=0):
 	nenc = 5
@@ -330,10 +330,10 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 			SH = smaps[j,...].conj().to(cudev).unsqueeze(0).contiguous()
 			b = kdata[0,j,...].to(cudev).unsqueeze(0).contiguous()
 			if use_weights:
-				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights_cu*b, uimsize) / math.sqrt(nvoxel)
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights_cu*b, uimsize)
 				rhs += rhs_j
 			else:
-				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize) / math.sqrt(nvoxel)
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize)
 				rhs += rhs_j
 
 		rhs_vec.append(rhs)
@@ -345,12 +345,13 @@ def load_real_full_diag_rhs(smaps, coord_vec, kdata_vec, weights_vec, use_weight
 
 def center_weights(im_size, width, coord, weights):
 	scaled_coords = coord * torch.tensor(list(im_size))[:,None] / (2*torch.pi)
-	idx = scaled_coords < width
+	idx = torch.abs(scaled_coords) < width
 	idx = torch.logical_and(idx[0,:], torch.logical_and(idx[1,:], idx[2,:]))
 	return weights[0,idx]
 
 class SenseLinop(TorchLinop):
 	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, clone=True, randomize_coils=False, num_rand_coils=16):
+		self.nvoxels = smaps.shape[0] * smaps.shape[1] * smaps.shape[2]
 		self.smaps = smaps
 		self.nframes = len(coord_vec)
 		self.shape = tuple([self.nframes, 1] + list(smaps.shape[1:]))
@@ -368,14 +369,14 @@ class SenseLinop(TorchLinop):
 	def create_coil_list(self):
 		if self.randomize_coils:
 			coil_list = list()
-			for i in range(self.nframes):
+			for i in range(self.ncoils):
 				permuted = np.random.permutation(self.ncoils).astype(np.int32)
 				coil_list.append(permuted[:self.num_rand_coils].tolist())
 			return coil_list
 		else:
 			coil_list = list()
-			for i in range(self.nframes):
-				coil_list.append(np.arange(self.nframes).tolist())
+			for i in range(self.ncoils):
+				coil_list.append(np.arange(self.ncoils).tolist())
 			return coil_list
 
 	def _apply(self, input):
@@ -389,11 +390,20 @@ class SenseLinop(TorchLinop):
 			self.coil_list = self.create_coil_list()
 
 		if self.weights_vec is not None:
-			hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
-				self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec, None)
+			if self.kdata_vec is not None:
+				hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
+					self.smaps, self.coord_vec, self.weights_vec, self.kdata_vec, None)
+			else:
+				hasty_sense.batched_sense_weighted(input_copy, self.coil_list,
+					self.smaps, self.coord_vec, self.weights_vec, None)
 		else:
-			hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
-				self.smaps, self.coord_vec, self.kdata_vec, None)
+			if self.kdata_vec is not None:
+				hasty_sense.batched_sense_kdata(input_copy, self.coil_list,
+					self.smaps, self.coord_vec, self.kdata_vec, None)
+			else:
+				hasty_sense.batched_sense(input_copy, self.coil_list,
+			    	self.smaps, self.coord_vec, None)
+				
 		return input_copy
 		
 class ToeplitzSenseLinop(TorchLinop):
@@ -455,6 +465,7 @@ class PrecondLinop(TorchLinop):
 			return input
 
 def dct_l1_prox(image, lamda):
+	lamda = cp.array(lamda)
 	for i in range(image.shape[0]):
 		for j in range(image.shape[1]):
 			gpuimg = cupyx.scipy.fft.dctn(cp.array(image[i,j,...].numpy()))
@@ -504,17 +515,20 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	if images is None:
 		images = torch.zeros(vec_size, dtype=torch.complex64)
 
-	sense_linop = SenseLinop(smaps, coord_vec, kdata_vec, weights_vec)
+	gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, weights_vec)
 
-	#scaling = (1 / TorchMaxEig(toep_linop, torch.complex64, max_iter=12).run()).to(torch.float32)
-	#rhs *= torch.sqrt(scaling)
-	final_linop = sense_linop
+	max_eig: torch.Tensor
+	if True:
+		one_enc_normal_mat = SenseLinop(smaps, [coord_vec[0]], None, [weights_vec[0]] if weights_vec is not None else None)
+		max_eig = TorchMaxEig(one_enc_normal_mat, torch.complex64, max_iter=5).run().to(torch.float32)
 
-	gradf = lambda x: final_linop(x) # /nvoxels
+	final_linop = gradf_linop
 
-	tgd = TorchGD(gradf, images, alpha=1.0, accelerate=True, max_iter=iter)
+	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
-	prox = lambda x: dct_l1_prox(x, lamda)
+	tgd = TorchGD(gradf, images, alpha= (1 / max_eig), accelerate=True, max_iter=iter)
+
+	prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
 
 	if lamda != 0.0:
 		return tgd.run_with_prox(prox, plot)
@@ -537,7 +551,7 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 		for j in range(ncoils):
 			kdata_cu = kdata_vec[i][:,j,:].to(cudev)
 			L[j, ...] = (hasty_sense.nufft1(coord_cu, weights_cu * kdata_cu, 
-		    	[1, im_size[0], im_size[1], im_size[2]]) / math.sqrt(nvoxels)).cpu().squeeze(0)
+		    	[1, im_size[0], im_size[1], im_size[2]])).cpu().squeeze(0)
 			
 		I: torch.Tensor
 		if smaps == None:
@@ -548,7 +562,7 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 
 	return image.unsqueeze(1)
 
-def reconstruct_frames(images, smaps, coord, kdata, nenc, nframes):
+def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=10, lamda=0.0, plot=False):
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	ncoil = smaps.shape[0]
 	nframes = images.shape[0]
@@ -556,16 +570,29 @@ def reconstruct_frames(images, smaps, coord, kdata, nenc, nframes):
 	grad_shape = (nframes*nenc,1,im_size[0], im_size[1], im_size[2])
 	svt_shape = (nframes,nenc,im_size[0], im_size[1], im_size[2])
 
-	sense_linop = SenseLinop(smaps, coord, kdata, randomize_coils=True, num_rand_coils=16)
-	gradf = lambda x: sense_linop(x)
+	gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=True, num_rand_coils=16)
+	gradf = lambda x: gradf_linop(x)
+
+	max_eig: torch.Tensor
+	if True:
+		one_enc_normal_mat = SenseLinop(smaps, [coord_vec[0]], None, None)
+		max_eig = TorchMaxEig(one_enc_normal_mat, torch.complex64, max_iter=5).run().to(torch.float32)
+	print('MaxEig: ', max_eig)
 
 	images = images.view(grad_shape)
 
-	sgd = TorchGD(gradf, images,alpha=1.0, accelerate=True, max_iter=10)
+	final_linop = gradf_linop
 
-	sgd.run(plot=True)
+	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
-	return images.view(svt_shape)
+	tgd = TorchGD(gradf, images, alpha= 1 / max_eig, accelerate=True, max_iter=iter)
+
+	prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
+
+	if lamda != 0.0:
+		return tgd.run_with_prox(prox, plot)
+	else:
+		return tgd.run(plot)
 
 	
 	
