@@ -134,19 +134,19 @@ class TorchGD(TorchIterativeAlg):
 	def _done(self):
 		return self.iter >= self.max_iter or self.resid < self.tol
 	
-	def run(self, plot=False):
+	def run(self, callback=None):
 		i = 0
 		while not self.done():
 			print('GD Iter: ', i, '/', self.max_iter)
 			self.update()
 
-			if plot:
-				pu.image_nd(self.x.numpy())
+			if callback is not None:
+				callback(self.x)
 
 			i += 1
 		return self.x
 	
-	def run_with_prox(self, prox, plot=False):
+	def run_with_prox(self, prox, callback=None):
 		i = 0
 		while not self.done():
 			print('GD Iter: ', i, '/', self.max_iter)
@@ -154,8 +154,8 @@ class TorchGD(TorchIterativeAlg):
 
 			self.x = prox(self.x)
 
-			if plot:
-				pu.image_nd(self.x.numpy())
+			if callback is not None:
+				callback(self.x)
 
 			i += 1
 		return self.x

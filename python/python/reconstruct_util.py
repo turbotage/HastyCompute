@@ -19,6 +19,7 @@ import torch_precond as tprcnd
 dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
 torch.ops.load_library(dll_path)
 hasty_sense = torch.ops.HastySense
+hasty_svt = torch.ops.HastySVT
 
 def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=0):
 	# mean flow
@@ -369,13 +370,13 @@ class SenseLinop(TorchLinop):
 	def create_coil_list(self):
 		if self.randomize_coils:
 			coil_list = list()
-			for i in range(self.ncoils):
+			for i in range(self.nframes):
 				permuted = np.random.permutation(self.ncoils).astype(np.int32)
 				coil_list.append(permuted[:self.num_rand_coils].tolist())
 			return coil_list
 		else:
 			coil_list = list()
-			for i in range(self.ncoils):
+			for i in range(self.nframes):
 				coil_list.append(np.arange(self.ncoils).tolist())
 			return coil_list
 
@@ -530,10 +531,14 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 
 	prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
 
+	def plot_callback(img):
+		pu.image_nd(img.numpy())
+
+	torch.cuda.empty_cache()
 	if lamda != 0.0:
-		return tgd.run_with_prox(prox, plot)
+		return tgd.run_with_prox(prox, plot_callback if plot else None)
 	else:
-		return tgd.run(plot)
+		return tgd.run(plot_callback if plot else None)
 
 def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size):
 	nframes = len(coord_vec)
@@ -562,6 +567,11 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 
 	return image.unsqueeze(1)
 
+def svt_l1_prox(images, lamda, svt_shape, grad_shape):
+	images = images.view(svt_shape)
+	hasty_svt.random_blocks_svt(images, 10000, 16, lamda, True, None)
+	images = images.view(grad_shape)
+
 def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=10, lamda=0.0, plot=False):
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	ncoil = smaps.shape[0]
@@ -573,26 +583,31 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=
 	gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=True, num_rand_coils=16)
 	gradf = lambda x: gradf_linop(x)
 
+	images = images.view(grad_shape)
 	max_eig: torch.Tensor
 	if True:
 		one_enc_normal_mat = SenseLinop(smaps, [coord_vec[0]], None, None)
 		max_eig = TorchMaxEig(one_enc_normal_mat, torch.complex64, max_iter=5).run().to(torch.float32)
 	print('MaxEig: ', max_eig)
 
-	images = images.view(grad_shape)
 
 	final_linop = gradf_linop
 
 	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
-	tgd = TorchGD(gradf, images, alpha= 1 / max_eig, accelerate=True, max_iter=iter)
+	tgd = TorchGD(gradf, images, alpha= 5*(1 / max_eig), accelerate=True, max_iter=iter)
 
-	prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
+	#prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
+	prox = lambda x: svt_l1_prox(x, (lamda * max_eig))
 
+	def plot_callback(img):
+		pu.image_nd(img.view(svt_shape).numpy())
+
+	torch.cuda.empty_cache()
 	if lamda != 0.0:
-		return tgd.run_with_prox(prox, plot)
+		return tgd.run_with_prox(prox, plot_callback if plot else None)
 	else:
-		return tgd.run(plot)
+		return tgd.run(plot_callback if plot else None)
 
 	
 	
