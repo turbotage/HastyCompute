@@ -19,10 +19,17 @@ def image_5d(image):
 		return Slider(axis, name, 0,length-1, valinit=0, 
 			valstep=np.arange(0, length, dtype=np.int32), color=color)
 
+	minmaxpairs = []
+	minmaxpairs.append([np.real(image).min(), np.real(image).max()])
+	minmaxpairs.append([np.imag(image).min(), np.imag(image).max()])
+	minmaxpairs.append([np.abs(image).min(), np.abs(image).max()])
+	minmaxpairs.append([np.angle(image).min(), np.angle(image).max()])
+
+
 	leftboxx = [0.2, 0.4]
 	sliderh = 0.025
 	rightboxx1 = [0.68, 0.03]
-	boxh = 0.05
+	boxh = 0.08
 
 	ax0 = fig.add_axes([leftboxx[0], 0.025, leftboxx[1], sliderh])
 	slider0 = disc_slider(ax0, "Slicer 0", lens[0], color="green")
@@ -37,14 +44,14 @@ def image_5d(image):
 	radbutton1 = RadioButtons(boxax1, ('x', 'y', 'z'), active=2)
 
 	boxax2 = fig.add_axes([rightboxx1[0] - 0.04, 0.035, rightboxx1[1]+0.01, boxh])
-	radbutton2 = RadioButtons(boxax2, ('real', 'imag', 'abs'), active=2)
+	radbutton2 = RadioButtons(boxax2, ('real', 'imag', 'abs', 'phase'), active=2)
 
 	maxipax = fig.add_axes([rightboxx1[0] + 0.03, 0.035, rightboxx1[1]+0.01, boxh])
 	maxipbutton = CheckButtons(maxipax, labels=['Maxip'])
 
 	limax = fig.add_axes([0.15, 0.2, 0.015, 0.5])
-	imin = np.minimum(np.real(image).min(), np.imag(image).min())
-	imax = np.maximum(np.real(image).max(), np.maximum(np.imag(image).max(), np.abs(image).max()))
+	imin = minmaxpairs[2][0]
+	imax = minmaxpairs[2][1]
 	limslider = RangeSlider(limax, "CLim", imin, imax, orientation="vertical", valinit=(imin,imax))
 
 	pretextax = fig.add_axes([0.2, 0.93, 0.55, 0.04])
@@ -61,7 +68,7 @@ def image_5d(image):
 
 	def update(val):
 		xyz = radbutton1.value_selected
-		ria = radbutton2.value_selected
+		riap = radbutton2.value_selected
 
 		s0 = slider0.val
 		s1 = slider1.val
@@ -81,29 +88,31 @@ def image_5d(image):
 		img: np.array
 		maxip = maxipbutton.get_status()[0]
 
-		def riafunc(ria, input):
-			if ria == 'real':
+		def riafunc(riap, input):
+			if riap == 'real':
 				return np.real(input)
-			elif ria == 'imag':
+			elif riap == 'imag':
 				return np.imag(input)
-			elif ria == 'abs':
+			elif riap == 'abs':
 				return np.abs(input)
+			elif riap == 'phase':
+				return np.angle(input)
 
 		def modimgfunc(xyz, maxip, mod_image):
 			if maxip:
 				if xyz == 'x':
-					return np.max(riafunc(ria, mod_image[s0,s1,:(s_xyz+1),:,:]),axis=0)
+					return np.max(riafunc(riap, mod_image[s0,s1,:(s_xyz+1),:,:]),axis=0)
 				elif xyz == 'y':
-					return np.max(riafunc(ria, mod_image[s0,s1,:,:(s_xyz+1),:]),axis=1)
+					return np.max(riafunc(riap, mod_image[s0,s1,:,:(s_xyz+1),:]),axis=1)
 				elif xyz == 'z':
-					return np.max(riafunc(ria, mod_image[s0,s1,:,:,:(s_xyz+1)]),axis=2)
+					return np.max(riafunc(riap, mod_image[s0,s1,:,:,:(s_xyz+1)]),axis=2)
 			else:
 				if xyz == 'x':
-					return riafunc(ria, mod_image[s0,s1,s_xyz,:,:])
+					return riafunc(riap, mod_image[s0,s1,s_xyz,:,:])
 				elif xyz == 'y':
-					return riafunc(ria, mod_image[s0,s1,:,s_xyz,:])
+					return riafunc(riap, mod_image[s0,s1,:,s_xyz,:])
 				elif xyz == 'z':
-					return riafunc(ria, mod_image[s0,s1,:,:,s_xyz])
+					return riafunc(riap, mod_image[s0,s1,:,:,s_xyz])
 
 
 		mod_image: np.array
@@ -137,6 +146,27 @@ def image_5d(image):
 
 		ax.set(xlim=(0,img.shape[0]), ylim=(0,img.shape[1]))
 		figdata.set_data(img)
+
+		def set_limits(limits):
+			limslider.valmin = limits[0]
+			limslider.valmax = limits[1]
+			limval = list(limslider.val)
+			if limslider.val[0] < limits[0]:
+				limval[0] = limits[0]
+			if limslider.val[1] > limits[1]:
+				limval[1] = limits[1]
+			limslider.ax.set_ylim(limslider.valmin, limslider.valmax)
+			limslider.val = tuple(limval)
+
+		if riap == 'real':
+			set_limits(minmaxpairs[0])
+		elif riap == 'imag':
+			set_limits(minmaxpairs[1])
+		elif riap == 'abs':
+			set_limits(minmaxpairs[2])
+		elif riap == 'phase':
+			set_limits(minmaxpairs[3])
+
 		clim = limslider.val
 		figdata.set_clim(clim[0], clim[1])
 

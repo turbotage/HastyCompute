@@ -580,7 +580,7 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=
 	grad_shape = (nframes*nenc,1,im_size[0], im_size[1], im_size[2])
 	svt_shape = (nframes,nenc,im_size[0], im_size[1], im_size[2])
 
-	gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=True, num_rand_coils=16)
+	gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=False, num_rand_coils=16)
 	gradf = lambda x: gradf_linop(x)
 
 	images = images.view(grad_shape)
@@ -595,7 +595,7 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=
 
 	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
-	tgd = TorchGD(gradf, images, alpha= 5*(1 / max_eig), accelerate=True, max_iter=iter)
+	tgd = TorchGD(gradf, images, alpha=0.5*(1 / max_eig), accelerate=True, max_iter=iter)
 
 	#prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
 	prox = lambda x: svt_l1_prox(x, (lamda * max_eig))
@@ -605,9 +605,9 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=
 
 	torch.cuda.empty_cache()
 	if lamda != 0.0:
-		return tgd.run_with_prox(prox, plot_callback if plot else None)
+		return tgd.run_with_prox(prox, plot_callback if plot else None).view(svt_shape)
 	else:
-		return tgd.run(plot_callback if plot else None)
+		return tgd.run(plot_callback if plot else None).view(svt_shape)
 
 	
 	

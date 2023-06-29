@@ -14,9 +14,11 @@ import torchkbnufft as tkbn
 #	#img_full = f['images'][()]
 
 img_full = np.array([0])
-with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_framed.h5', "r") as f:
+with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
 	img_full = f['images'][()]
 
-pu.image_4d(np.abs(img_full))
+img_full *= np.exp(-1j*np.angle(img_full[:,0,...]))[:,np.newaxis,...]
+
+pu.image_nd(img_full)
 
 
