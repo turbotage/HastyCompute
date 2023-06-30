@@ -38,11 +38,12 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	float vz = params[3*Nprobs+tid];
 
 	if (tid == 0) {
-		printf("M0: %f, vx: %f, vy: %f, vz: %f \n", M0, vx, vy, vz);
+		printf("M0: %f, vx: %f, vy: %f, vz: %f\n", M0, vx, vy, vz);
 		for (int i = 0; i < 9; ++i) {
 			printf("%f, ", data[i*Nprobs+tid]);
 		}
-		printf("\n");
+		printf("
+");
 	}
 
 	float k = 1.813799f;

@@ -129,6 +129,14 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
+	if (tid == 0) {
+		printf("M0: %f, vx: %f, vy: %f, vz: %f \\n", M0, vx, vy, vz);
+		for (int i = 0; i < 9; ++i) {
+			printf("%f, ", data[i*Nprobs+tid]);
+		}
+		printf("\\n");
+	}
+
 	float k = 1.813799f;
 
 	float vt[8];
@@ -159,6 +167,9 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		hes[i] = 0.0f;
 	}
 
+	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
+
+	
 	// Encoding 1 Real
 	res = M0*vt[0] - data[Nprobs+tid];
 	f[tid] += res * res;
@@ -168,6 +179,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[1]*k*res;
 	hes[2] = -M0*vt[0]*k*k*res;
@@ -177,7 +189,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[6] = hes[1];
 	hes[7] = hes[2];
 	hes[8] = hes[2];
-	hes[9] = hes[2];
+	hes[9] = hes[1];
+	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -191,6 +204,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[0]*k*res;
 	hes[2] = -M0*vt[1]*k*k*res;
@@ -201,7 +215,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-
+	*/
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 	
@@ -214,6 +229,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[3]*k*res;
 	hes[2] = -M0*vt[2]*k*k*res;
@@ -224,7 +240,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-
+	*/
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 
@@ -237,6 +254,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[2]*k*res;
 	hes[2] = -M0*vt[3]*k*k*res;
@@ -247,7 +265,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-
+	*/
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 	// Encoding 3 Real
@@ -259,6 +278,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[5]*k*res;
 	hes[2] = -M0*vt[4]*k*k*res;
@@ -269,6 +289,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -282,6 +303,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[6]*k*res;
 	hes[2] = -M0*vt[5]*k*k*res;
@@ -292,6 +314,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -305,6 +328,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[7]*k*res;
 	hes[2] = -M0*vt[6]*k*k*res;
@@ -315,6 +339,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
+	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -328,6 +353,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
+	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[6]*k*res;
 	hes[2] = -M0*vt[7]*k*k*res;
@@ -338,6 +364,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
+	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 	
@@ -362,7 +389,7 @@ A = (np.pi / np.sqrt(3)) * np.array(
 
 nvox = 200
 
-vel = (-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
+vel = 0.5*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
 
 phase = A @ vel
 
@@ -371,7 +398,7 @@ mag = np.random.rand(1,nvox).astype(np.float32)
 pars_true = np.concatenate([mag, vel], axis=0)
 
 enc = mag * (np.cos(phase) + 1j*np.sin(phase))
-enc = enc * (np.cos(phase[0,:]) - 1j*np.sin(phase))
+enc = enc * (np.cos(phase[0,:]) - 1j*np.sin(phase[0,:]))[np.newaxis,:]
 
 Edata = np.empty((9,nvox), dtype=np.float32)
 Edata[0,:] = np.real(enc[0,:])
@@ -390,11 +417,14 @@ gradfobj = EncVelF_GradF()
 fgradfobj = F_GradF(fobj, gradfobj, 4, 0, "enc_vel_fgradf")
 
 
-parscu = cp.random.rand(4,nvox).astype(cp.float32)
-lower_bound_cu = -1e6*cp.ones((4,nvox), dtype=np.float32)
-upper_bound_cu = 1e6*cp.ones((4,nvox), dtype=np.float32)
+parscu = cp.ascontiguousarray(cp.random.rand(4,nvox).astype(cp.float32))
+lower_bound_cu = cp.ascontiguousarray(-1e6*cp.ones((4,nvox), dtype=np.float32))
+upper_bound_cu = cp.ascontiguousarray(1e6*cp.ones((4,nvox), dtype=np.float32))
+datacu = cp.ascontiguousarray(cp.array(Edata))
 
-datacu = cp.array(Edata)
+print('pars_before: ', parscu[:,0].get())
+print('data_before: ', datacu[:,0].get())
+
 
 solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
 
