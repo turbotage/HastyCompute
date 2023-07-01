@@ -39,10 +39,10 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \n", M0, vx, vy, vz);
-		for (int i = 0; i < 9; ++i) {
-			printf("%f, ", data[i*Nprobs+tid]);
-		}
-		printf("\n");
+		//for (int i = 0; i < 9; ++i) {
+		//	printf("%f, ", data[i*Nprobs+tid]);
+		//}
+		//printf("\n");
 	}
 
 	float k = 1.813799f;
@@ -87,7 +87,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[1]*k*res;
 	hes[2] = -M0*vt[0]*k*k*res;
@@ -98,7 +97,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[1];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -112,7 +110,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[0]*k*res;
 	hes[2] = -M0*vt[1]*k*k*res;
@@ -123,7 +120,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -137,7 +133,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[3]*k*res;
 	hes[2] = -M0*vt[2]*k*k*res;
@@ -148,7 +143,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -162,7 +156,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[2]*k*res;
 	hes[2] = -M0*vt[3]*k*k*res;
@@ -173,7 +166,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -182,11 +174,10 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	f[tid] += res * res;
 
 	jac[0] = vt[4];
-	jac[1] = M0*vt[5]*k;
+	jac[1] = -M0*vt[5]*k;
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[5]*k*res;
 	hes[2] = -M0*vt[4]*k*k*res;
@@ -197,7 +188,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -211,7 +201,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[6]*k*res;
 	hes[2] = -M0*vt[5]*k*k*res;
@@ -222,7 +211,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -236,7 +224,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[7]*k*res;
 	hes[2] = -M0*vt[6]*k*k*res;
@@ -247,7 +234,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -261,7 +247,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[6]*k*res;
 	hes[2] = -M0*vt[7]*k*k*res;
@@ -272,7 +257,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 	

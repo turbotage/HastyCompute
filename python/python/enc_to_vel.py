@@ -131,10 +131,10 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \\n", M0, vx, vy, vz);
-		for (int i = 0; i < 9; ++i) {
-			printf("%f, ", data[i*Nprobs+tid]);
-		}
-		printf("\\n");
+		//for (int i = 0; i < 9; ++i) {
+		//	printf("%f, ", data[i*Nprobs+tid]);
+		//}
+		//printf("\\n");
 	}
 
 	float k = 1.813799f;
@@ -179,7 +179,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[1]*k*res;
 	hes[2] = -M0*vt[0]*k*k*res;
@@ -190,7 +189,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[1];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -204,7 +202,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[0]*k*res;
 	hes[2] = -M0*vt[1]*k*k*res;
@@ -215,7 +212,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -229,7 +225,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[3]*k*res;
 	hes[2] = -M0*vt[2]*k*k*res;
@@ -240,7 +235,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -254,7 +248,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[2]*k*res;
 	hes[2] = -M0*vt[3]*k*k*res;
@@ -265,7 +258,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -274,11 +266,10 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	f[tid] += res * res;
 
 	jac[0] = vt[4];
-	jac[1] = M0*vt[5]*k;
+	jac[1] = -M0*vt[5]*k;
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[5]*k*res;
 	hes[2] = -M0*vt[4]*k*k*res;
@@ -289,7 +280,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -303,7 +293,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[6]*k*res;
 	hes[2] = -M0*vt[5]*k*k*res;
@@ -314,7 +303,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -328,7 +316,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = vt[7]*k*res;
 	hes[2] = -M0*vt[6]*k*k*res;
@@ -339,7 +326,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -353,7 +339,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
-	/*
 	hes[0] = 0.0f;
 	hes[1] = -vt[6]*k*res;
 	hes[2] = -M0*vt[7]*k*k*res;
@@ -364,7 +349,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	*/
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 	
@@ -377,7 +361,6 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		return list()
 
 
-v_enc = 1100
 A = (np.pi / np.sqrt(3)) * np.array(
 	[
 	[ 0,  0,  0],
@@ -387,13 +370,14 @@ A = (np.pi / np.sqrt(3)) * np.array(
 	[-1,  1,  1]
 	], dtype=np.float32)
 
-nvox = 200
-
-vel = 0.5*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
+nvox = 40000
+venc = 0.15
+true_venc = 1 / np.sqrt(3)
+vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
 
 phase = A @ vel
 
-mag = np.random.rand(1,nvox).astype(np.float32)
+mag = 10*np.random.rand(1,nvox).astype(np.float32)
 
 pars_true = np.concatenate([mag, vel], axis=0)
 
@@ -418,8 +402,10 @@ fgradfobj = F_GradF(fobj, gradfobj, 4, 0, "enc_vel_fgradf")
 
 
 parscu = cp.ascontiguousarray(cp.random.rand(4,nvox).astype(cp.float32))
-lower_bound_cu = cp.ascontiguousarray(-1e6*cp.ones((4,nvox), dtype=np.float32))
-upper_bound_cu = cp.ascontiguousarray(1e6*cp.ones((4,nvox), dtype=np.float32))
+lower_bound_cu = cp.ascontiguousarray(-true_venc*cp.ones((4,nvox), dtype=np.float32))
+lower_bound_cu[0,:] = 0.0
+upper_bound_cu = cp.ascontiguousarray(true_venc*cp.ones((4,nvox), dtype=np.float32))
+upper_bound_cu[0,:] = 1e6
 datacu = cp.ascontiguousarray(cp.array(Edata))
 
 print('pars_before: ', parscu[:,0].get())
@@ -430,11 +416,16 @@ solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_fi
 
 
 solm.setup(parscu, None, datacu, lower_bound_cu, upper_bound_cu)
-solm.run(20)
+solm.run(500)
+last_error = solm.last_f.get()
 
 pars_out = parscu.get()
 
-print(np.linalg.norm(pars_out - pars_true) / np.linalg.norm(pars_true))
+print('pars_true: ', pars_true[:,0])
 
-
+print('Relative error: ', np.linalg.norm(pars_out - pars_true) / np.linalg.norm(pars_true))
+print('Maximum Velocity Parameter error: ', np.abs(pars_out[1:3,:] - pars_true[1:3,:]).max())
+print('Maximum Magnitude Parameter error: ', np.abs(pars_out[0,:] - pars_true[0,:]).max())
+print('Maximum Objective Error: ', np.abs(last_error).max())
+print('Maximum Velocity Value: ', np.abs(pars_out[1:3,:]).max())
 print('Hello')
