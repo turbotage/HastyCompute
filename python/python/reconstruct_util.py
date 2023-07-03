@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import gc
 
 import cupy as cp
 import cupyx
@@ -528,6 +529,8 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
 	tgd = TorchGD(gradf, images, alpha= (1 / max_eig), accelerate=True, max_iter=iter)
+	del images
+	gc.collect()
 
 	prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
 
@@ -588,14 +591,15 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=
 	if True:
 		one_enc_normal_mat = SenseLinop(smaps, [coord_vec[0]], None, None)
 		max_eig = TorchMaxEig(one_enc_normal_mat, torch.complex64, max_iter=5).run().to(torch.float32)
-	print('MaxEig: ', max_eig)
-
+	gc.collect()
 
 	final_linop = gradf_linop
 
 	gradf = lambda x: final_linop(x) #+ 0.0001*x# /nvoxels
 
-	tgd = TorchGD(gradf, images, alpha=0.5*(1 / max_eig), accelerate=True, max_iter=iter)
+	tgd = TorchGD(gradf, images, alpha=(1 / max_eig), accelerate=True, max_iter=iter)
+	del images
+	gc.collect()
 
 	#prox = lambda x: dct_l1_prox(x, (lamda * max_eig).numpy())
 	prox = lambda x: svt_l1_prox(x, (lamda * max_eig))

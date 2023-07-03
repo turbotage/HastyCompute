@@ -330,20 +330,26 @@ void hasty::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int
 
 
 
-hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
+hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>& contexts,
 	at::Tensor& image, int32_t nblocks, int32_t block_size, double thresh, bool soft)
-	: _dcontexts(std::move(contexts))
+	: _image(image)
 {
 	c10::InferenceMode inference_guard;
 
 	std::deque<std::future<void>> futures;
+	ContextThreadPool<DeviceContext> tpool(contexts);
 
 	std::array<int64_t, 3> lens{ block_size,block_size,block_size };
 	std::array<int64_t, 3> bounds{ image.size(2) - lens[0], image.size(3) - lens[1], image.size(4) - lens[2] };
 
 	std::vector<Block<3>> blocks(nblocks);
-	for (int i = 0; i < nblocks; ++i) {
-		Block<3>::randomize(blocks[i], bounds, lens);
+	try {
+		for (int i = 0; i < nblocks; ++i) {
+			Block<3>::randomize(blocks[i], bounds, lens);
+		}
+	}
+	catch (...) {
+		std::cerr << "Oh No!";
 	}
 
 	auto future_catcher = [](std::future<void>& fut) {
@@ -361,6 +367,8 @@ hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
 		}
 	};
 
+	std::function<void(DeviceContext&)> blockrunner;
+
 	auto base_blockrunner = [this, thresh, soft](const Block<3>& block, DeviceContext& context) {
 		block_svt_step(context, block, thresh, soft);
 	};
@@ -369,12 +377,12 @@ hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
 
 		const auto& block = blocks[i];
 
-		auto blockrunner = [&block, &base_blockrunner](DeviceContext& context) 
+		 blockrunner = [&block, &base_blockrunner](DeviceContext& context) 
 			{ base_blockrunner(block, context); };
 
-		futures.emplace_back(_tpool->enqueue(blockrunner));
+		futures.emplace_back(tpool.enqueue(blockrunner));
 
-		if (futures.size() > 32 * _dcontexts.size()) {
+		if (futures.size() > 32 * contexts.size()) {
 			future_catcher(futures.front());
 			futures.pop_front();
 		}
@@ -396,8 +404,12 @@ void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>
 
 	at::Tensor cuda_block;
 	{
-		std::lock_guard<std::mutex> lock(_mutex);
-		cuda_block = hasty::extract_block(_image, block).to(dctxt.stream.device());
+		at::Tensor tmp_block;
+		{
+			std::lock_guard<std::mutex> lock(_mutex);
+			tmp_block = hasty::extract_block(_image, block).detach().clone();
+		}
+		cuda_block = tmp_block.to(dctxt.stream.device());
 	}
 
 	at::Tensor low_ranked = soft ?

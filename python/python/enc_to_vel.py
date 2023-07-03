@@ -2,6 +2,11 @@ import sys
 import numpy as np
 import cupy as cp
 
+import math
+import h5py
+import plot_utility as pu
+import image_creation as ic
+
 sys.path.append('C:\\Users\\TurboTage\\Documents\\GitHub\\pycompute')
 
 from jinja2 import Template
@@ -28,7 +33,7 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
-	float k = 1.813799f;
+	float k = consts[0];
 
 	float vel_term;
 	float res;
@@ -129,6 +134,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
+	/*
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \\n", M0, vx, vy, vz);
 		//for (int i = 0; i < 9; ++i) {
@@ -136,8 +142,9 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		//}
 		//printf("\\n");
 	}
+	*/
 
-	float k = 1.813799f;
+	float k = consts[0];
 
 	float vt[8];
 	// Encoding 1
@@ -361,71 +368,147 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		return list()
 
 
-A = (np.pi / np.sqrt(3)) * np.array(
-	[
-	[ 0,  0,  0],
-	[-1, -1, -1],
-	[ 1,  1, -1],
-	[ 1, -1,  1],
-	[-1,  1,  1]
-	], dtype=np.float32)
+def constant_from_venc(venc):
+	return venc
 
-nvox = 40000
-venc = 0.15
-true_venc = 1 / np.sqrt(3)
-vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
+def get_encode_matrix(k):
+	Emat = k * np.array(
+		[
+			[ 0,  0,  0],
+			[-1, -1, -1],
+			[ 1,  1, -1],
+			[ 1, -1,  1],
+			[-1,  1,  1]
+		], dtype=np.float32)
+	return Emat
 
-phase = A @ vel
+def _enc_to_vel_linear(image, venc):
+	Emat = get_encode_matrix(constant_from_venc(venc))
+	pEmat = np.linalg.pinv(Emat)
 
-mag = 10*np.random.rand(1,nvox).astype(np.float32)
+	im_size = (image.shape[1], image.shape[2], image.shape[3])
+	nvoxel = math.prod(list(im_size))
 
-pars_true = np.concatenate([mag, vel], axis=0)
+	base_phase = np.angle(image[0,...])
+	base_corrected = (image * np.exp(-1j*base_phase)[np.newaxis,...]).reshape((5,nvoxel))
 
-enc = mag * (np.cos(phase) + 1j*np.sin(phase))
-enc = enc * (np.cos(phase[0,:]) - 1j*np.sin(phase[0,:]))[np.newaxis,:]
+	phases = np.angle(base_corrected)
+	imageout = pEmat @ phases
 
-Edata = np.empty((9,nvox), dtype=np.float32)
-Edata[0,:] = np.real(enc[0,:])
-Edata[1,:] = np.real(enc[1,:])
-Edata[2,:] = np.imag(enc[1,:])
-Edata[3,:] = np.real(enc[2,:])
-Edata[4,:] = np.imag(enc[2,:])
-Edata[5,:] = np.real(enc[3,:])
-Edata[6,:] = np.imag(enc[3,:])
-Edata[7,:] = np.real(enc[4,:])
-Edata[8,:] = np.imag(enc[4,:])
+	mag = np.mean(np.abs(base_corrected), axis=0)[np.newaxis,:]
 
-fobj = EncVelF()
-gradfobj = EncVelF_GradF()
+	imageout = np.concatenate([mag, imageout], axis=0)
 
-fgradfobj = F_GradF(fobj, gradfobj, 4, 0, "enc_vel_fgradf")
+	return (imageout, base_corrected)
+
+def enc_to_vel_linear(images, venc):
+	images_out = np.empty((images.shape[0], 4, images.shape[2], images.shape[3], images.shape[4]))
+	for i in range(images.shape[0]):
+		print('Frame: ', i)
+		image = images[i,...]
+		images_out[i,...] = _enc_to_vel_linear(image, venc)[0].reshape((4,images.shape[2], 
+								  images.shape[3], images.shape[4]))
+
+	return images_out
+
+def _enc_to_vel_nonlinear(image, venc):
+	im_size = (image.shape[1], image.shape[2], image.shape[3])
+	nvoxel = math.prod(list(im_size))
+
+	imageout, base_corrected = _enc_to_vel_linear(image, venc)
+
+	parscu = cp.array(imageout)
+	datacu: cp.array
+	constscu = cp.array([constant_from_venc(venc)])
+	lower_bound_cu = -1e6*cp.ones_like(parscu)
+	upper_bound_cu = 1e6*cp.ones_like(parscu)
+
+	if True:
+		Edata = np.empty((9,nvoxel), dtype=np.float32)
+		Edata[0,:] = np.real(base_corrected[0,:])
+		Edata[1,:] = np.real(base_corrected[1,:])
+		Edata[2,:] = np.imag(base_corrected[1,:])
+		Edata[3,:] = np.real(base_corrected[2,:])
+		Edata[4,:] = np.imag(base_corrected[2,:])
+		Edata[5,:] = np.real(base_corrected[3,:])
+		Edata[6,:] = np.imag(base_corrected[3,:])
+		Edata[7,:] = np.real(base_corrected[4,:])
+		Edata[8,:] = np.imag(base_corrected[4,:])
+		datacu = cp.array(Edata)
+
+	fobj = EncVelF()
+	gradfobj = EncVelF_GradF()
+
+	fgradfobj = F_GradF(fobj, gradfobj, 4, 0, "enc_vel_fgradf")
+	solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
+
+	solm.setup(parscu, constscu, datacu, lower_bound_cu, upper_bound_cu)
+	solm.run(100)
+	#last_error = solm.last_f.get()
+
+	pars_out = parscu.get()
+
+	return pars_out.reshape((4,im_size[0],im_size[1],im_size[2]))
+
+def enc_to_vel_nonlinear(images, venc):
+	images_out = np.empty((images.shape[0], 4, images.shape[2], images.shape[3], images.shape[4]))
+	for i in range(images.shape[0]):
+		print('Frame: ', i)
+		image = images[i,...]
+		images_out[i,...] = _enc_to_vel_nonlinear(image, venc)
+
+	return images_out
 
 
-parscu = cp.ascontiguousarray(cp.random.rand(4,nvox).astype(cp.float32))
-lower_bound_cu = cp.ascontiguousarray(-true_venc*cp.ones((4,nvox), dtype=np.float32))
-lower_bound_cu[0,:] = 0.0
-upper_bound_cu = cp.ascontiguousarray(true_venc*cp.ones((4,nvox), dtype=np.float32))
-upper_bound_cu[0,:] = 1e6
-datacu = cp.ascontiguousarray(cp.array(Edata))
 
-print('pars_before: ', parscu[:,0].get())
-print('data_before: ', datacu[:,0].get())
+def test_data():
+	nvox = 40000
+	venc = 0.15
+	true_venc = 1 / np.sqrt(3)
+	vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
+
+	phase = A @ vel
+
+	mag = 10*np.random.rand(1,nvox).astype(np.float32)
+
+	pars_true = np.concatenate([mag, vel], axis=0)
+
+	enc = mag * (np.cos(phase) + 1j*np.sin(phase))
 
 
-solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
+	parscu = cp.ascontiguousarray(cp.random.rand(4,nvox).astype(cp.float32))
+	lower_bound_cu = cp.ascontiguousarray(-true_venc*cp.ones((4,nvox), dtype=np.float32))
+	lower_bound_cu[0,:] = 0.0
+	upper_bound_cu = cp.ascontiguousarray(true_venc*cp.ones((4,nvox), dtype=np.float32))
+	upper_bound_cu[0,:] = 1e6
+	datacu = cp.ascontiguousarray(cp.array(Edata))
+
+	#print('pars_before: ', parscu[:,0].get())
+	#print('data_before: ', datacu[:,0].get())
+	#print('pars_true: ', pars_true[:,0])
+	#print('Relative error: ', np.linalg.norm(pars_out - pars_true) / np.linalg.norm(pars_true))
+	#print('Maximum Velocity Parameter error: ', np.abs(pars_out[1:3,:] - pars_true[1:3,:]).max())
+	#print('Maximum Magnitude Parameter error: ', np.abs(pars_out[0,:] - pars_true[0,:]).max())
+	#print('Maximum Objective Error: ', np.abs(last_error).max())
+	#print('Maximum Velocity Value: ', np.abs(pars_out[1:3,:]).max())
+	#print('Hello')
 
 
-solm.setup(parscu, None, datacu, lower_bound_cu, upper_bound_cu)
-solm.run(500)
-last_error = solm.last_f.get()
 
-pars_out = parscu.get()
+img_full = np.array([0])
+with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
+	img_full = f['images'][()]
 
-print('pars_true: ', pars_true[:,0])
+img_full = img_full / np.mean(np.abs(img_full))
 
-print('Relative error: ', np.linalg.norm(pars_out - pars_true) / np.linalg.norm(pars_true))
-print('Maximum Velocity Parameter error: ', np.abs(pars_out[1:3,:] - pars_true[1:3,:]).max())
-print('Maximum Magnitude Parameter error: ', np.abs(pars_out[0,:] - pars_true[0,:]).max())
-print('Maximum Objective Error: ', np.abs(last_error).max())
-print('Maximum Velocity Value: ', np.abs(pars_out[1:3,:]).max())
+pu.image_nd(img_full)
+
+img_vel = enc_to_vel_nonlinear(img_full, 1)
+
+pu.image_nd(img_vel)
+
+cd = ic.get_CD(img_vel, 1)
+
+pu.image_nd(cd)
+
 print('Hello')

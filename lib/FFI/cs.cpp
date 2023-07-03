@@ -136,6 +136,6 @@ void hasty::ffi::random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t b
 {
 	std::vector<RandomBlocksSVT::DeviceContext> contexts(streams.begin(), streams.end());
 
-	RandomBlocksSVT(std::move(contexts), input, nblocks, block_size, thresh, soft);
+	RandomBlocksSVT(contexts, input, nblocks, block_size, thresh, soft);
 }
 

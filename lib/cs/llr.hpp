@@ -151,7 +151,7 @@ namespace hasty {
 		};
 	public:
 
-		RandomBlocksSVT(std::vector<DeviceContext>&& contexts,
+		RandomBlocksSVT(std::vector<DeviceContext>& contexts,
 			at::Tensor& image, int32_t nblocks, int32_t block_size, double thresh, bool soft);
 
 	private:
@@ -159,13 +159,8 @@ namespace hasty {
 		void block_svt_step(DeviceContext& dctxt, const Block<3>& block, double thresh, bool soft);
 
 	private:
-		std::unique_ptr<ContextThreadPool<DeviceContext>> _tpool;
-
-		at::Tensor _image;
-
 		std::mutex _mutex;
-
-		std::vector<DeviceContext> _dcontexts;
+		at::Tensor _image;
 	};
 
 }

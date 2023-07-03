@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import gc
 
 import cupy as cp
 import cupyx
@@ -33,6 +34,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 		pu.plot_gating(gating, gates)
 
 	del coord, kdata, gating
+	gc.collect()
 	print('Crop kspace')
 	coord_vec, kdata_vec, weights_vec = ru.crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, 
 		crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul)
@@ -101,14 +103,18 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 	
 	#images *= torch.mean(center_weights)
 	#images *= torch.mean(center_weights)
+	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
 			iter=3, lamda=0.0005, images=None, plot=False)
+	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None,
 			iter=4, lamda=0.0001, images=images, plot=False)
+	gc.collect()
 
 	del center_weights, coord_vec, kdata_vec, weights_vec
+	gc.collect()
 
 	if plot:
 		pu.image_nd(images.numpy())
@@ -129,6 +135,8 @@ if __name__ == "__main__":
 	postfovkmul=1.0
 
 	images, smaps, coord, kdata, gating = run_full((256,256,256), shift=shift, 
-		crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul, plot=False)
-	images = run_framed(images, smaps, coord, kdata, gating, 15,
-		shift=shift, crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul, plot=False)
+		crop_factor=crop_factor, prefovkmul=prefovkmul, 
+		postfovkmul=postfovkmul, store=True, plot=False)
+	images = run_framed(images, smaps, coord, kdata, gating, 30,
+		shift=shift, crop_factor=crop_factor, prefovkmul=prefovkmul, 
+		postfovkmul=postfovkmul, store=True, plot=False)

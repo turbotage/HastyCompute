@@ -45,7 +45,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		//printf("\n");
 	}
 
-	float k = 1.813799f;
+	float k = consts[0];
 
 	float vt[8];
 	// Encoding 1
@@ -271,7 +271,7 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
-	float k = 1.813799f;
+	float k = consts[0];
 
 	float vel_term;
 	float res;
@@ -564,9 +564,11 @@ void gain_ratio_step_4_f(const float* f, const float* ftp, const float* pars_tp,
 		for (int i = 0; i < 4; ++i) {
 			int iidx = i*Nprobs+tid;
 			pars[iidx] = pars_tp[iidx];
+			/*
 			if (tid == 0) {
 				printf("pars copied ");
 			}
+			*/
 		}
 		if (rho > eta) {
 			lam[tid] *= acc;
@@ -584,10 +586,11 @@ void gain_ratio_step_4_f(const float* f, const float* ftp, const float* pars_tp,
 		step_type[tid] |= 8;
 	}
 
+	/*
 	if (tid == 0) {
 		printf(" rho=%f, actual=%f, f=%f, \n", rho, actual, f[tid]);
 	}
-
+	*/
 }
 
 __device__

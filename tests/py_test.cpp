@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include "../python/cpp/py_sense.hpp"
+#include "../python/cpp/py_svt.hpp"
 
 #include "py_test.hpp"
 
@@ -198,9 +199,18 @@ void test_large_batched() {
 
 }
 
+void svt_test() {
+
+	auto image = at::empty({ 30,5,256,256,256 }, c10::ScalarType::ComplexFloat);
+
+	svt::random_blocks_svt(image, 1000, 16, 40, false, at::nullopt);
+
+}
+
 int main() {
 
 	//batched_sense_test();
-	test_large_batched();
+	//test_large_batched();
+	svt_test();
 	return 0;
 }

@@ -1,6 +1,7 @@
 import torch
 
 import math
+import gc
 import numpy as np
 
 import plot_utility as pu
@@ -144,6 +145,8 @@ class TorchGD(TorchIterativeAlg):
 				callback(self.x)
 
 			i += 1
+			gc.collect()
+
 		return self.x
 	
 	def run_with_prox(self, prox, callback=None):
@@ -158,6 +161,8 @@ class TorchGD(TorchIterativeAlg):
 				callback(self.x)
 
 			i += 1
+			gc.collect()
+
 		return self.x
 
 
