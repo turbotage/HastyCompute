@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import math
 import gc
+import time
 
 import cupy as cp
 import cupyx
@@ -40,7 +41,9 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 		crop_factor=crop_factor, prefovkmul=prefovkmul, postfovkmul=postfovkmul)
 	print('Translate')
 	if shift != (0.0, 0.0, 0.0):
-		data_vec = ru.translate(coord_vec, kdata_vec, shift)
+		kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
+	del weights_vec
+	gc.collect()
 
 	images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
 		      im_size[2], dtype=torch.complex64)
@@ -50,7 +53,8 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 			images[i,j,...] = images_full[j,...]
 	torch.cuda.empty_cache()
 	print('Reconstructing frames')
-	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, iter=30, lamda=0.0, plot=plot)
+	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, 
+				nframes, stepmul=1.0, rand_iter=0, iter=50, singular_index=2, lamda=0.1, plot=plot)
 
 	if plot:
 		pu.image_nd(images.numpy())
@@ -65,6 +69,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefovkmul=1.0, postfovkmul=1.0, plot=False):
 	print('Loading coords, kdata, weights')
 	smaps, coord, kdata, weights, gating = ru.load_real()
+	kdata /= torch.mean(torch.mean(torch.tensor(kdata))).numpy()
 
 	smaps = torch.permute(smaps, (0,3,2,1))
 	#if plot:
@@ -88,32 +93,17 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 	if shift != (0.0, 0.0, 0.0):
 		kdata_vec = ru.translate(coord_vec, kdata_vec, shift)
 
-	center_weights = ru.center_weights(im_size, 0.1, coord_vec[0], weights_vec[0])
-
-	#print('Direct reconstruction without Smaps')
-	#images = ru.direct_nufft_reconstruct_encs(None, coord_vec, kdata_vec, weights_vec, im_size)
-	#if plot:
-	#	pu.image_nd(images.numpy())
-
-	print('Direct reconstruction with Smaps')
-	#images = ru.direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size)
-
-	#if plot:
-	#	pu.image_nd(images.numpy())
-	
-	#images *= torch.mean(center_weights)
-	#images *= torch.mean(center_weights)
 	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
-			iter=3, lamda=0.0005, images=None, plot=False)
+			iter=3, lamda=0.0001, images=None, plot=plot)
 	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None,
-			iter=4, lamda=0.0001, images=images, plot=False)
+			iter=5, lamda=0.0001, images=images, plot=plot)
 	gc.collect()
 
-	del center_weights, coord_vec, kdata_vec, weights_vec
+	del coord_vec, kdata_vec, weights_vec
 	gc.collect()
 
 	if plot:
@@ -134,9 +124,23 @@ if __name__ == "__main__":
 	prefovkmul=1.0
 	postfovkmul=1.0
 
+	store_full = False
+	plot_full = False
+
+	store_framed = True
+	plot_framed = False
+
+	nframes = 20
+
+	start = time.time()
 	images, smaps, coord, kdata, gating = run_full((256,256,256), shift=shift, 
 		crop_factor=crop_factor, prefovkmul=prefovkmul, 
-		postfovkmul=postfovkmul, store=True, plot=False)
-	images = run_framed(images, smaps, coord, kdata, gating, 30,
+		postfovkmul=postfovkmul, store=store_full, plot=plot_full)
+	end = time.time()
+	print('Full scan took: ', end - start)
+	start = time.time()
+	images = run_framed(images, smaps, coord, kdata, gating, nframes,
 		shift=shift, crop_factor=crop_factor, prefovkmul=prefovkmul, 
-		postfovkmul=postfovkmul, store=True, plot=False)
+		postfovkmul=postfovkmul, store=store_framed, plot=plot_framed)
+	end = time.time()
+	print('Framed took: ', end - start)

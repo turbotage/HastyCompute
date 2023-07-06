@@ -507,6 +507,10 @@ img_vel = enc_to_vel_nonlinear(img_full, 1)
 
 pu.image_nd(img_vel)
 
+vmag = np.sqrt(img_vel[:,1,...]**2 + img_vel[:,2,...]**2 + img_vel[:,3,...]**2)
+
+pu.image_nd(vmag)
+
 cd = ic.get_CD(img_vel, 1)
 
 pu.image_nd(cd)

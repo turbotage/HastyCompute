@@ -201,9 +201,9 @@ void test_large_batched() {
 
 void svt_test() {
 
-	auto image = at::empty({ 30,5,256,256,256 }, c10::ScalarType::ComplexFloat);
+	auto image = at::rand({ 30,5,64,64,64 }, c10::ScalarType::ComplexFloat);
 
-	svt::random_blocks_svt(image, 1000, 16, 40, false, at::nullopt);
+	svt::random_blocks_svt(image, 5000, 16, 15, false, at::nullopt);
 
 }
 

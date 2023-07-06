@@ -155,6 +155,7 @@ void BatchedSense::construct()
 {
 	auto& smap = _dcontexts[0].smaps;
 
+	_nctxt = _dcontexts.size();
 	_ndim = smap.sizes().size() - 1;
 	_nmodes.resize(smap.sizes().size());
 	_nmodes[0] = 1; 
@@ -302,10 +303,16 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 
 		out_cu.div_(std::accumulate(_nmodes.begin(), _nmodes.end(), 1, std::multiplies<int64_t>()));
 
-		at::Tensor out_cpu = out_cu.cpu();
+		if (_nctxt > 1)
 		{
-			std::lock_guard<std::mutex> lock(_copy_back_mutex);
-			inner_batch_cpu_view.add_(out_cpu);
+			at::Tensor out_cpu = out_cu.cpu();
+			{
+				std::lock_guard<std::mutex> lock(_copy_back_mutex);
+				inner_batch_cpu_view.add_(out_cpu);
+			}
+		}
+		else {
+			inner_batch_cpu_view.add_(out_cu.cpu());
 		}
 	}
 
@@ -426,10 +433,16 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 
 		psense->apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);
 
-		at::Tensor out_cpu = out_cu.cpu();
+		if (_nctxt > 1)
 		{
-			std::lock_guard<std::mutex> lock(_copy_back_mutex);
-			inner_batch_cpu_view.add_(out_cpu);
+			at::Tensor out_cpu = out_cu.cpu();
+			{
+				std::lock_guard<std::mutex> lock(_copy_back_mutex);
+				inner_batch_cpu_view.add_(out_cpu);
+			}
+		}
+		else {
+			inner_batch_cpu_view.add_(out_cu.cpu());
 		}
 
 	}

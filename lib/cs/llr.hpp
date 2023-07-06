@@ -161,6 +161,7 @@ namespace hasty {
 	private:
 		std::mutex _mutex;
 		at::Tensor _image;
+		int32_t _nctxt;
 	};
 
 }

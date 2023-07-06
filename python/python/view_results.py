@@ -8,7 +8,7 @@ import image_creation as ic
 import torchkbnufft as tkbn
 
 img = np.array([0])
-with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_15f_cropped_interpolated.h5', "r") as f:
+with h5py.File('D:\\4DRecon\\dat\\dat2\\images_mvel_15f_cropped_interpolated.h5', "r") as f:
 	img = f['images'][()]
 
 #img_full = np.array([0])
@@ -19,6 +19,10 @@ with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_15f_cropped_interpolated.h5'
 #img_mean = np.mean(img, axis=0)
 
 pu.image_nd(img)
+
+mvel = np.sqrt(img[:,1,...]**2 + img[:,2,...]**2 + img[:,3,...]**2)
+
+pu.image_nd(mvel)
 
 #pu.image_4d(np.abs(img_full))
 

@@ -332,7 +332,7 @@ void hasty::LLR_4DEncodes::coil_encode_step(DeviceContext& dctxt, int frame, int
 
 hasty::RandomBlocksSVT::RandomBlocksSVT(std::vector<DeviceContext>& contexts,
 	at::Tensor& image, int32_t nblocks, int32_t block_size, double thresh, bool soft)
-	: _image(image)
+	: _image(image), _nctxt(contexts.size())
 {
 	c10::InferenceMode inference_guard;
 
@@ -403,6 +403,7 @@ void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>
 	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
 
 	at::Tensor cuda_block;
+	if (_nctxt > 1)
 	{
 		at::Tensor tmp_block;
 		{
@@ -411,15 +412,28 @@ void hasty::RandomBlocksSVT::block_svt_step(DeviceContext& dctxt, const Block<3>
 		}
 		cuda_block = tmp_block.to(dctxt.stream.device());
 	}
+	else {
+		cuda_block = hasty::extract_block(_image, block).to(dctxt.stream.device());
+	}
+
+	//std::cout << cuda_block << std::endl;
 
 	at::Tensor low_ranked = soft ?
-		hasty::svt_soft(cuda_block, (int)(thresh + 0.5), std::nullopt) :
-		hasty::svt_hard(cuda_block, (float)thresh, std::nullopt);
+		hasty::svt_soft(cuda_block, (float)(thresh), std::nullopt) :
+		hasty::svt_hard(cuda_block, (int)(thresh + 0.5), std::nullopt);
 
-	at::Tensor back_block = low_ranked.cpu();
+	//std::cout << low_ranked << std::endl;
 
+
+	if (_nctxt > 1)
 	{
-		std::lock_guard<std::mutex> lock(_mutex);
-		hasty::insert_block(_image, block, back_block);
+		at::Tensor back_block = low_ranked.cpu();
+		{
+			std::lock_guard<std::mutex> lock(_mutex);
+			hasty::insert_block(_image, block, back_block);
+		}
+	}
+	else {
+		hasty::insert_block(_image, block, low_ranked.cpu());
 	}
 }

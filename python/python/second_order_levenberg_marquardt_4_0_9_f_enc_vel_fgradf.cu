@@ -37,6 +37,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
+	/*
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \n", M0, vx, vy, vz);
 		//for (int i = 0; i < 9; ++i) {
@@ -44,6 +45,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		//}
 		//printf("\n");
 	}
+	*/
 
 	float k = consts[0];
 

@@ -101,19 +101,20 @@ class TorchCG(TorchIterativeAlg):
 		return self.x
 
 class TorchGD(TorchIterativeAlg):
-	def __init__(self, gradf, x, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):
+	def __init__(self, gradf, x, prox=None, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):
 		self.gradf = gradf
 		self.x = x
 		self.alpha = alpha
 		self.accelerate = accelerate
 		self.tol = 0.0
-		
-		super().__init__(max_iter)
-
-		self.resid = np.infty
+		self.prox = prox
+		self.resids = [np.infty]
+		self.rel_resids = [np.infty]
 		if self.accelerate:
 			self.z = self.x.clone()
 			self.t = 1
+		
+		super().__init__(max_iter)
 
 	def _update(self):
 		x_old = self.x.clone()
@@ -123,14 +124,21 @@ class TorchGD(TorchIterativeAlg):
 
 		self.x -= self.alpha * self.gradf(self.x)
 
+		if self.prox is not None:
+			self.x = self.prox(self.alpha, self.x)
+
 		if self.accelerate:
 			t_old = self.t
 			self.t = (1.0 + math.sqrt(1.0 + 4.0 * t_old*t_old)) / 2.0
 
-			self.z = self.x + ((t_old - 1) / self.t) * (self.x - x_old)
+			self.z = self.x - x_old
+			self.resids.append(torch.norm(self.z))
+			self.z = self.x + ((t_old - 1) / self.t) * self.z
+		else:
+			self.resids.append(torch.norm(self.x - x_old))
 
 		if self.tol != 0.0:
-			self.resid = torch.norm(self.x - x_old).item() / self.alpha
+			self.rel_resids.append(self.resids[-1] / torch.norm(self.x))
 
 	def _done(self):
 		return self.iter >= self.max_iter or self.resid < self.tol
@@ -138,24 +146,8 @@ class TorchGD(TorchIterativeAlg):
 	def run(self, callback=None):
 		i = 0
 		while not self.done():
-			print('GD Iter: ', i, '/', self.max_iter)
+			print('GD Iter: ', i, '/', self.max_iter, ' Res: ', self.resids[-1], ' RelRes: ', self.rel_resids[-1])
 			self.update()
-
-			if callback is not None:
-				callback(self.x)
-
-			i += 1
-			gc.collect()
-
-		return self.x
-	
-	def run_with_prox(self, prox, callback=None):
-		i = 0
-		while not self.done():
-			print('GD Iter: ', i, '/', self.max_iter)
-			self.update()
-
-			self.x = prox(self.x)
 
 			if callback is not None:
 				callback(self.x)

@@ -47,7 +47,11 @@ at::Tensor hasty::svt_hard(const at::Tensor& in, int rank, std::optional<std::tu
 
 	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
 
+	//std::cout << S << std::endl;
+
 	S.index_put_({ Slice(rank,None) }, 0.0f);
+
+	//std::cout << S << std::endl;
 
 	Vh.mul_(S.unsqueeze(1));
 
@@ -95,8 +99,12 @@ at::Tensor hasty::svt_soft(const at::Tensor& in, float lambda, std::optional<std
 
 	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
 
+	//std::cout << S << std::endl;
+
 	auto ldiff = at::abs(S) - lambda;
 	S = at::sign(S) * at::abs(0.5f * (at::abs(ldiff) + ldiff));
+
+	//std::cout << S << std::endl;
 
 	Vh.mul_(S.unsqueeze(1));
 

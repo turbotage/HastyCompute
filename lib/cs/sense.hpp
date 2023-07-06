@@ -123,6 +123,7 @@ namespace hasty {
 
 		std::mutex _copy_back_mutex;
 		std::vector<DeviceContext> _dcontexts;
+		int32_t _nctxt;
 	};
 
 }
