@@ -11,7 +11,7 @@ sys.path.append('C:\\Users\\TurboTage\\Documents\\GitHub\\pycompute')
 
 from jinja2 import Template
 
-from pycompute.cuda.lsqnonlin import F_GradF, SecondOrderLevenbergMarquardt
+from pycompute.cuda.lsqnonlin import F, GradF, F_GradF, SecondOrderLevenbergMarquardt, SecondOrderRandomSearch
 from pycompute.cuda.cuda_program import CudaFunction, CudaTensor
 
 class EncVelF(CudaFunction):
@@ -113,12 +113,19 @@ void ghhl_add(const float* jac, const float* hes, float res, float lambda, float
 				hl[lidx] += hjtemp + fmaxf(lambda*jtemp, 1e-4f);
 			}
 			++l;
+
+			/*
+			if (tid == 0) {
+				printf("h: %f, ", hl[lidx]);
+			}
+			*/
 		}
 
 		g[j*Nprobs+tid] += jac[j] * res;
 	}
 }
 
+//#define FULL_HESS
 
 __device__
 void enc_to_vel_fghhl(const float* params, const float* consts, const float* data, const float* lam,
@@ -134,18 +141,19 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
-	/*
+	float k = consts[0];
+	
+	
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \\n", M0, vx, vy, vz);
 		//for (int i = 0; i < 9; ++i) {
 		//	printf("%f, ", data[i*Nprobs+tid]);
 		//}
 		//printf("\\n");
+		//printf("k: %f", consts[0]);
 	}
-	*/
-
-	float k = consts[0];
-
+	
+	
 	float vt[8];
 	// Encoding 1
 	vt[0] = cosf(-k*(vx+vy+vz));
@@ -186,6 +194,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = vt[1]*k*res;
 	hes[2] = -M0*vt[0]*k*k*res;
@@ -196,7 +205,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[1];
-
+#endif
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 
@@ -209,6 +219,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = -vt[0]*k*res;
 	hes[2] = -M0*vt[1]*k*k*res;
@@ -219,7 +230,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-	
+#endif
+
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 	
@@ -232,6 +244,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = -vt[3]*k*res;
 	hes[2] = -M0*vt[2]*k*k*res;
@@ -242,6 +255,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+#endif
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -255,6 +269,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = jac[1];
 	jac[3] = -jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = vt[2]*k*res;
 	hes[2] = -M0*vt[3]*k*k*res;
@@ -265,6 +280,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+#endif
 	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -277,6 +293,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = vt[5]*k*res;
 	hes[2] = -M0*vt[4]*k*k*res;
@@ -287,6 +304,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+#endif
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -300,6 +318,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = vt[6]*k*res;
 	hes[2] = -M0*vt[5]*k*k*res;
@@ -310,6 +329,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = hes[2];
 	hes[8] = -hes[2];
 	hes[9] = hes[2];
+#endif
 
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
@@ -323,6 +343,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = vt[7]*k*res;
 	hes[2] = -M0*vt[6]*k*k*res;
@@ -333,7 +354,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-
+#endif
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 
 	
@@ -346,6 +368,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	jac[2] = -jac[1];
 	jac[3] = -jac[1];
 
+#ifdef FULL_HESS
 	hes[0] = 0.0f;
 	hes[1] = -vt[6]*k*res;
 	hes[2] = -M0*vt[7]*k*k*res;
@@ -356,7 +379,8 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 	hes[7] = -hes[2];
 	hes[8] = hes[2];
 	hes[9] = hes[2];
-
+#endif
+	
 	ghhl_add(jac, hes, res, lambda, h, hl, g, tid, Nprobs);
 	
 }
@@ -369,7 +393,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 
 
 def constant_from_venc(venc):
-	return venc
+	return (np.pi / (venc * np.sqrt(3)))
 
 def get_encode_matrix(k):
 	Emat = k * np.array(
@@ -394,6 +418,9 @@ def _enc_to_vel_linear(image, venc):
 
 	phases = np.angle(base_corrected)
 	imageout = pEmat @ phases
+	print(imageout.min())
+	print(imageout.max())
+	print(venc * np.sqrt(3))
 
 	mag = np.mean(np.abs(base_corrected), axis=0)[np.newaxis,:]
 
@@ -419,9 +446,12 @@ def _enc_to_vel_nonlinear(image, venc):
 
 	parscu = cp.array(imageout)
 	datacu: cp.array
-	constscu = cp.array([constant_from_venc(venc)])
-	lower_bound_cu = -1e6*cp.ones_like(parscu)
-	upper_bound_cu = 1e6*cp.ones_like(parscu)
+	constscu = cp.array([constant_from_venc(venc)]).astype(cp.float32)
+	lower_bound_cu = cp.zeros_like(parscu)
+	lower_bound_cu[1:,...] = -np.sqrt(3)*venc
+	upper_bound_cu = cp.empty_like(parscu)
+	upper_bound_cu[0,...] = cp.array(imageout[0,...] * 3)
+	upper_bound_cu[1:,...] = np.sqrt(3)*venc
 
 	if True:
 		Edata = np.empty((9,nvoxel), dtype=np.float32)
@@ -439,14 +469,19 @@ def _enc_to_vel_nonlinear(image, venc):
 	fobj = EncVelF()
 	gradfobj = EncVelF_GradF()
 
-	fgradfobj = F_GradF(fobj, gradfobj, 4, 0, "enc_vel_fgradf")
-	solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
+	fgradfobj = F_GradF(F(fobj, 4, "enc_vel_f"), GradF(gradfobj, 4, "enc_vel_gradf"), "enc_vel_fgradf")
+	
+	#solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
 
-	solm.setup(parscu, constscu, datacu, lower_bound_cu, upper_bound_cu)
-	solm.run(100)
+	solm = SecondOrderRandomSearch(None, fgradfobj, 9, cp.float32, write_to_file=True)
+	solm.setup(constscu, datacu, lower_bound_cu, upper_bound_cu)
+	solm.run(iters=30, lm_iters=40)
+	#solm.setup(parscu, constscu, datacu, lower_bound_cu, upper_bound_cu)
+	#solm.run(100)
 	#last_error = solm.last_f.get()
 
-	pars_out = parscu.get()
+	#pars_out = parscu.get()
+	pars_out = solm.best_pars_t.get()
 
 	return pars_out.reshape((4,im_size[0],im_size[1],im_size[2]))
 
@@ -461,58 +496,69 @@ def enc_to_vel_nonlinear(images, venc):
 
 
 
-def test_data():
-	nvox = 40000
+def test_data(noiceperc=0.0):
+	nx = 32
+	nvox = nx*nx*nx
 	venc = 0.15
 	true_venc = 1 / np.sqrt(3)
-	vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32)
+	vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32) / np.sqrt(3)
 
-	phase = A @ vel
+	phase = get_encode_matrix(constant_from_venc(venc)) @ vel
 
 	mag = 10*np.random.rand(1,nvox).astype(np.float32)
 
 	pars_true = np.concatenate([mag, vel], axis=0)
 
 	enc = mag * (np.cos(phase) + 1j*np.sin(phase))
+	enc = np.reshape(enc, (1,5,nx,nx,nx))
 
+	noice: np.array
+	if noiceperc != 0.0:
+		real_noice = np.random.normal(scale=np.abs(np.real(enc))*noiceperc)
+		imag_noice = np.random.normal(scale=np.abs(np.imag(enc))*noiceperc)
 
-	parscu = cp.ascontiguousarray(cp.random.rand(4,nvox).astype(cp.float32))
-	lower_bound_cu = cp.ascontiguousarray(-true_venc*cp.ones((4,nvox), dtype=np.float32))
-	lower_bound_cu[0,:] = 0.0
-	upper_bound_cu = cp.ascontiguousarray(true_venc*cp.ones((4,nvox), dtype=np.float32))
-	upper_bound_cu[0,:] = 1e6
-	datacu = cp.ascontiguousarray(cp.array(Edata))
+		enc += (real_noice + 1j*imag_noice)
 
-	#print('pars_before: ', parscu[:,0].get())
-	#print('data_before: ', datacu[:,0].get())
-	#print('pars_true: ', pars_true[:,0])
-	#print('Relative error: ', np.linalg.norm(pars_out - pars_true) / np.linalg.norm(pars_true))
-	#print('Maximum Velocity Parameter error: ', np.abs(pars_out[1:3,:] - pars_true[1:3,:]).max())
-	#print('Maximum Magnitude Parameter error: ', np.abs(pars_out[0,:] - pars_true[0,:]).max())
-	#print('Maximum Objective Error: ', np.abs(last_error).max())
-	#print('Maximum Velocity Value: ', np.abs(pars_out[1:3,:]).max())
+	linear_pars = enc_to_vel_linear(enc, venc)
+	nonlinear_pars = enc_to_vel_nonlinear(enc, venc)
+
+	linear_pars = np.reshape(linear_pars, (4, nvox))
+	nonlinear_pars = np.reshape(nonlinear_pars, (4, nvox))
+
+	linear_err = np.linalg.norm(pars_true - linear_pars) / np.linalg.norm(pars_true)
+	nonlinear_err = np.linalg.norm(pars_true - nonlinear_pars) / np.linalg.norm(pars_true)
+
+	print(linear_err)
+	print(nonlinear_err)
+
 	#print('Hello')
 
 
+def test():
 
-img_full = np.array([0])
-with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
-	img_full = f['images'][()]
+	img_full = np.array([0])
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
+		img_full = f['images'][()]
 
-img_full = img_full / np.mean(np.abs(img_full))
+	img_full = img_full / np.mean(np.abs(img_full))
 
-pu.image_nd(img_full)
+	pu.image_nd(img_full)
 
-img_vel = enc_to_vel_nonlinear(img_full, 1)
+	img_vel = enc_to_vel_nonlinear(img_full, 1)
 
-pu.image_nd(img_vel)
+	pu.image_nd(img_vel)
 
-vmag = np.sqrt(img_vel[:,1,...]**2 + img_vel[:,2,...]**2 + img_vel[:,3,...]**2)
+	vmag = np.sqrt(img_vel[:,1,...]**2 + img_vel[:,2,...]**2 + img_vel[:,3,...]**2)
 
-pu.image_nd(vmag)
+	pu.image_nd(vmag)
 
-cd = ic.get_CD(img_vel, 1)
+	cd = ic.get_CD(img_vel, 1)
 
-pu.image_nd(cd)
+	pu.image_nd(cd)
 
-print('Hello')
+	print('Hello')
+
+
+if __name__ == '__main__':
+	test_data(noiceperc=0.0)
+	#test()w
