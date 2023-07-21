@@ -141,7 +141,7 @@ class TorchGD(TorchIterativeAlg):
 			self.rel_resids.append(self.resids[-1] / torch.norm(self.x))
 
 	def _done(self):
-		return self.iter >= self.max_iter or self.resid < self.tol
+		return self.iter >= self.max_iter or self.resids[-1] < self.tol
 	
 	def run(self, callback=None):
 		i = 0

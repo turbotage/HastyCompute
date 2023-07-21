@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons, RangeSlider, CheckButtons, TextBox
-
+from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
 
 def image_5d(image):
 	lens = []
@@ -231,5 +232,13 @@ def plot_gating(gating, bounds):
 		plt.plot(bound*np.ones(gating.shape), 'b-')
 	plt.show()
 
+def obj_surface(xy, z):
+	fig = plt.figure()
+	#ax = Axes3D(fig)
+	ax = plt.axes(projection ='3d')
+
+	ax.plot_trisurf(xy[0,:], xy[1,:], z[0,:], linewidth=0.1, antialiased = True, vmax=1.0) #cmap='viridis', edgecolor='none')
+	#fig.colorbar(surf, shrink=0.5, aspect=5)
+	plt.show()
 
 

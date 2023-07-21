@@ -297,12 +297,10 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
 
-	/*
 	if (tid == 0) {
-		printf("M0: %f, vx: %f, vy: %f, vz: %f, ", M0, vx, vy, vz);
-		printf(" k: %f,  ", consts[0]);
+		printf("M0: %f, vx: %f, vy: %f, vz: %f \n", M0, vx, vy, vz);
+		printf("k: %f", consts[0]);
 	}
-	*/
 
 	float k = consts[0];
 
@@ -349,11 +347,10 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	res = M0*sinf(vel_term) - data[8*Nprobs+tid];
 	f[tid] += res * res;
 	
-	/*
 	if (tid == 0) {
-		printf("  f: %f \n", f[tid]);
+		printf("f: %f, f[tid]);
 	}
-	*/
+
 }
 
 __device__

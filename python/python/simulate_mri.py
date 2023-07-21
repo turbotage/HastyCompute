@@ -18,7 +18,7 @@ hasty_sense = torch.ops.HastySense
 def rename_h5(name, appending):
 	return name[:-3] + appending + '.h5'
 
-def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=False, just_plot=False):
+def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=False, just_plot=False, also_plot=False):
 	map_joiner = lambda path: os.path.join(dirpath, path)
 
 	img = np.array([0])
@@ -62,15 +62,13 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 		new_img_mag = ic.crop_3d_3d(img_mag, crop_box).astype(np.float32)
 		new_smaps = ic.crop_4d_3d(smaps, crop_box).astype(np.complex64)
 
-		if just_plot:
-			pu.image_5d(new_img)
-
+		if just_plot or also_plot:
+			pu.image_nd(new_img)
 			cd = ic.get_CD(new_img)
-			pu.maxip_4d(cd, axis=1)
-			pu.maxip_4d(cd, axis=2)
-			pu.maxip_4d(cd, axis=3)
+			pu.image_nd(cd)
 			
-			return (None, None, None)
+			if just_plot:
+				return (None, None, None)
 
 		print('Writing cropped images')
 		with h5py.File(map_joiner(rename_h5(imagefile, '_cropped')), "w") as f:
@@ -103,7 +101,7 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 	return img, img_mag, smaps
 
 def enc_image(img, img_mag, out_images, dirpath, imagefile, 
-	create_enc_image=False, load_enc_image=False):
+	create_enc_image=False, load_enc_image=False, also_plot=False):
 	
 	map_joiner = lambda path: os.path.join(dirpath, path)
 
@@ -118,15 +116,17 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 
 		img[:,0,...] *= (2.0 * np.expand_dims(img_mag, axis=0) / np.max(img_mag, axis=(0,1,2)))
 
-		print('Interpolating')
-		img = np.real(ic.interpolate_images(img, out_images).astype(np.complex64)).astype(np.float32)
+		
+		if img.shape[0] != out_images:
+			print('Interpolating')
+			img = np.real(ic.interpolate_images(img, out_images).astype(np.complex64)).astype(np.float32)
 
 		with h5py.File(map_joiner('images_mvel_' + str(out_images) + 'f_cropped_interpolated.h5'), "w") as f:
 			f.create_dataset('images', data=img)
 		img_mvel = img
 
-		v_enc = 1100
-		A = (1.0/v_enc) * np.array(
+		v_enc = 1.0
+		A = (np.pi/(v_enc*np.sqrt(3))) * np.array(
 			[
 			[ 0,  0,  0],
 			[-1, -1, -1],
@@ -142,6 +142,9 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 		imenc = np.transpose(imenc, axes=(3,4,0,1,2))
 
 		imenc = (np.expand_dims(img[:,0], axis=1) * (np.cos(imenc) + 1j*np.sin(imenc))).astype(np.complex64)
+
+		if also_plot:
+			pu.image_nd(imenc)
 
 		print('Writing interpolated encoded')
 		with h5py.File(map_joiner('images_encs_' + str(out_images) + 'f_cropped_interpolated.h5'), "w") as f:
@@ -241,21 +244,23 @@ def simulate(dirpath='D:\\4DRecon\\dat\\dat2', imagefile='images_6f.h5',
 		create_crop_image=False, load_crop_image=False, 
 	    create_enc_image=False, load_enc_image=False,
 	    create_nufft_of_enced_image=False, load_nufft_of_neced_image=False,
+	    nimgout=20,
 	    nspokes=500,
 	    samp_per_spoke=489,
 		method='PCVIPR',
 		crop_factor=2.0,
-		just_plot=False):
+		just_plot=False,
+		also_plot=True):
 
-	img, img_mag, smaps = crop_image(dirpath, imagefile, create_crop_image, load_crop_image, just_plot)
+	img, img_mag, smaps = crop_image(dirpath, imagefile, create_crop_image, load_crop_image, just_plot, also_plot)
 
 	if just_plot:
 		return
 
-	img_enc, img_mvel = enc_image(img, img_mag, 15, dirpath, imagefile, create_enc_image, load_enc_image)
+	img_enc, img_mvel = enc_image(img, img_mag, nimgout, dirpath, imagefile, create_enc_image, load_enc_image)
 
-	pu.image_5d(np.abs(img_enc))
-	pu.maxip_4d(ic.get_CD(img_mvel))
+	pu.image_nd(img_enc)
+	pu.image_nd(ic.get_CD(img_mvel))
 
 	coords, kdatas = nufft_of_enced_image(img_enc, smaps, dirpath, 
 		nspokes, samp_per_spoke, method, crop_factor,

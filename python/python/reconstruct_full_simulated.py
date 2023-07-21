@@ -17,13 +17,13 @@ from torch_maxeig import TorchMaxEig
 
 import reconstruct_util as ru
 
-coords, kdatas, nframes, nenc = simri.load_coords_kdatas('D:/4DRecon/dat/dat2')
+coords, kdatas, nframes, nenc = simri.load_coords_kdatas(dirpath='D:/4DRecon/dat/dat2')
 smaps = torch.tensor(simri.load_smaps('D:/4DRecon/dat/dat2'))
 
 im_size = (smaps.shape[1],smaps.shape[2],smaps.shape[3])
 
 vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
-images = torch.zeros(vec_size, dtype=torch.complex64)
+#images = torch.zeros(vec_size, dtype=torch.complex64)
 
 
 if False:
@@ -42,7 +42,7 @@ if False:
 
 	pu.image_5d(np.abs(images))
 
-if True:
+if False:
 	print('Beginning unweighted load')
 	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=1)
 	print('Beginning unweighted reconstruct')
@@ -50,6 +50,26 @@ if True:
 
 	pu.image_5d(np.abs(images))
 	pu.image_4d(np.mean(np.abs(images.numpy()), axis=0))
+
+coord_vec = []
+kdata_vec = []
+for encode in range(nenc):
+	frame_coords = []
+	frame_kdatas = []
+	for frame in range(nframes):
+		frame_coords.append(coords[frame][encode])
+		frame_kdatas.append(kdatas[frame][encode])
+
+	coord = np.concatenate(frame_coords, axis=1)
+	kdata = np.concatenate(frame_kdatas, axis=2)
+	coord_vec.append(torch.tensor(coord))
+	kdata_vec.append(torch.tensor(kdata))
+
+images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, lamda=0.0)
+
+#ru.reconstruct_gd_full(smaps, 
+
+
 
 
 with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "w") as f:

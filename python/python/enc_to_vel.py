@@ -11,16 +11,22 @@ sys.path.append('C:\\Users\\TurboTage\\Documents\\GitHub\\pycompute')
 
 from jinja2 import Template
 
-from pycompute.cuda.lsqnonlin import F, GradF, F_GradF, SecondOrderLevenbergMarquardt, SecondOrderRandomSearch
+from pycompute.cuda.lsqnonlin import F, FGradF, F_FGradF, SecondOrderLevenbergMarquardt, SecondOrderRandomSearch
 from pycompute.cuda.cuda_program import CudaFunction, CudaTensor
+from pycompute.cuda import cuda_program as cudap
 
 class EncVelF(CudaFunction):
 	def __init__(self):
-		return
+		self.run_func = None
+		self.write_to_file = False
 	
 	def get_device_funcid(self):
 		return 'enc_to_vel_f'
 	
+	def get_kernel_funcid(self):
+		funcid = self.get_device_funcid()
+		return 'k_' + funcid
+
 	def get_device_code(self):
 		f_temp = Template(
 """
@@ -32,6 +38,13 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	float vx = params[Nprobs+tid];
 	float vy = params[2*Nprobs+tid];
 	float vz = params[3*Nprobs+tid];
+
+	/*
+	if (tid == 0) {
+		printf("M0: %f, vx: %f, vy: %f, vz: %f, ", M0, vx, vy, vz);
+		printf(" k: %f,  ", consts[0]);
+	}
+	*/
 
 	float k = consts[0];
 
@@ -78,21 +91,78 @@ void enc_to_vel_f(const float* params, const float* consts, const float* data,
 	res = M0*sinf(vel_term) - data[8*Nprobs+tid];
 	f[tid] += res * res;
 	
+	/*
+	if (tid == 0) {
+		printf("  f: %f \\n", f[tid]);
+	}
+	*/
 }
 """)
 
 		return f_temp.render()
 
+	def get_kernel_code(self):
+		temp = Template(
+"""
+extern \"C\" __global__
+void {{funcid}}(const float* params, const float* consts, const float* data, 
+	float* f, int Nprobs)
+{
+	int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	if (tid < Nprobs) {
+		{{dfuncid}}(params, consts, data, f, tid, Nprobs);
+	}
+}
+""")
+		fid = self.get_kernel_funcid()
+		dfid = self.get_device_funcid()
+		return temp.render(funcid=fid, dfuncid=dfid)
+
+	def get_full_code(self):
+		code = self.get_device_code() + '\n'
+		code += self.get_kernel_code()
+		return code
+
+	def build(self):
+		cc = cudap.code_gen_walking(self, "")
+		if self.write_to_file:
+			with open(self.get_device_funcid() + '.cu', "w") as f:
+				f.write(cc)
+		try:
+			self.mod = cp.RawModule(code=cc)
+			self.run_func = self.mod.get_function(self.get_kernel_funcid())
+		except:
+			with open("on_compile_fail.cu", "w") as f:
+				f.write(cc)
+			raise
+		return cc
+
 	def get_deps(self):
 		return list()
 
-class EncVelF_GradF(CudaFunction):
+	def run(self, pars, consts, data, f):
+		if self.run_func == None:
+			self.build()
+
+		Nprobs = pars.shape[1]
+
+		Nthreads = 32
+		blockSize = math.ceil(Nprobs / Nthreads)
+
+		self.run_func((blockSize,),(Nthreads,),(pars, consts, data, f, Nprobs))
+
+
+class EncVel_FGradF(CudaFunction):
 	def __init__(self):
 		return
 	
 	def get_device_funcid(self):
 		return 'enc_to_vel_fghhl'
 	
+	def get_kernel_funcid(self):
+		funcid = self.get_device_funcid()
+		return 'k_' + funcid
+
 	def get_device_code(self):
 		fghhl_temp = Template(
 """
@@ -125,7 +195,7 @@ void ghhl_add(const float* jac, const float* hes, float res, float lambda, float
 	}
 }
 
-//#define FULL_HESS
+#define FULL_HESS
 
 __device__
 void enc_to_vel_fghhl(const float* params, const float* consts, const float* data, const float* lam,
@@ -143,7 +213,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 
 	float k = consts[0];
 	
-	
+	/*
 	if (tid == 0) {
 		printf("M0: %f, vx: %f, vy: %f, vz: %f \\n", M0, vx, vy, vz);
 		//for (int i = 0; i < 9; ++i) {
@@ -152,7 +222,7 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 		//printf("\\n");
 		//printf("k: %f", consts[0]);
 	}
-	
+	*/
 	
 	float vt[8];
 	// Encoding 1
@@ -388,6 +458,42 @@ void enc_to_vel_fghhl(const float* params, const float* consts, const float* dat
 
 		return fghhl_temp.render()
 
+	def get_kernel_code(self):
+		temp = Template(
+"""
+extern \"C\" __global__
+void {{funcid}}(const float* params, const float* consts, const float* data, const float* lam,
+	float* f, float* g, float* h, float* hl, int Nprobs)
+{
+	int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	if (tid < Nprobs) {
+		{{dfuncid}}(params, consts, data, lam, f, g, h, hl, tid, Nprobs);
+	}
+}
+""")
+		fid = self.get_kernel_funcid()
+		dfid = self.get_device_funcid()
+		return temp.render(funcid=fid, dfuncid=dfid)
+
+	def get_full_code(self):
+		code = self.get_device_code() + '\n'
+		code += self.get_kernel_code()
+		return code
+	
+	def build(self):
+		cc = cudap.code_gen_walking(self, "")
+		if self.write_to_file:
+			with open(self.get_device_funcid() + '.cu', "w") as f:
+				f.write(cc)
+		try:
+			self.mod = cp.RawModule(code=cc)
+			self.run_func = self.mod.get_function(self.get_kernel_funcid())
+		except:
+			with open("on_compile_fail.cu", "w") as f:
+				f.write(cc)
+			raise
+		return cc
+
 	def get_deps(self):
 		return list()
 
@@ -447,11 +553,13 @@ def _enc_to_vel_nonlinear(image, venc):
 	parscu = cp.array(imageout)
 	datacu: cp.array
 	constscu = cp.array([constant_from_venc(venc)]).astype(cp.float32)
-	lower_bound_cu = cp.zeros_like(parscu)
-	lower_bound_cu[1:,...] = -np.sqrt(3)*venc
+	lower_bound_cu = cp.empty_like(parscu)
+	lower_bound_cu[0,...] = cp.array(imageout[0,...] / 3)
+	lower_bound_cu[1:,...] = -venc / 2 #-np.sqrt(3)*venc / 5
+
 	upper_bound_cu = cp.empty_like(parscu)
 	upper_bound_cu[0,...] = cp.array(imageout[0,...] * 3)
-	upper_bound_cu[1:,...] = np.sqrt(3)*venc
+	upper_bound_cu[1:,...] = venc / 2 #np.sqrt(3)*venc / 5
 
 	if True:
 		Edata = np.empty((9,nvoxel), dtype=np.float32)
@@ -467,18 +575,28 @@ def _enc_to_vel_nonlinear(image, venc):
 		datacu = cp.array(Edata)
 
 	fobj = EncVelF()
-	gradfobj = EncVelF_GradF()
+	gradfobj = EncVel_FGradF()
 
-	fgradfobj = F_GradF(F(fobj, 4, "enc_vel_f"), GradF(gradfobj, 4, "enc_vel_gradf"), "enc_vel_fgradf")
+	fgradfobj = F_FGradF(F(fobj, 4, "enc_vel_f"), FGradF(gradfobj, 4, "enc_vel_gradf"), "enc_vel_fgradf")
 	
 	#solm = SecondOrderLevenbergMarquardt(None, fgradfobj, 9, cp.float32, write_to_file=True)
 
 	solm = SecondOrderRandomSearch(None, fgradfobj, 9, cp.float32, write_to_file=True)
 	solm.setup(constscu, datacu, lower_bound_cu, upper_bound_cu)
-	solm.run(iters=30, lm_iters=40)
-	#solm.setup(parscu, constscu, datacu, lower_bound_cu, upper_bound_cu)
-	#solm.run(100)
-	#last_error = solm.last_f.get()
+	solm.run(iters=100, lm_iters=80, tol=cp.float32(0.0))
+	solm.test(cp.array(imageout), lm_iters=80, tol=cp.float32(0.0))
+	solm.direct_test(cp.array(imageout))
+
+	#f = cp.zeros((1, parscu.shape[1]), dtype=cp.float32)
+	#fobj.run(cp.array(imageout), constscu, datacu, f)
+
+	#print('f: ', f[0,0])
+
+
+	f = cp.zeros((1, parscu.shape[1]), dtype=cp.float32)
+	fobj.run(cp.array(imageout), constscu, datacu, f)
+
+	print('linear pars: ', imageout[:,0], '  f: ', f[0,0])
 
 	#pars_out = parscu.get()
 	pars_out = solm.best_pars_t.get()
@@ -494,11 +612,10 @@ def enc_to_vel_nonlinear(images, venc):
 
 	return images_out
 
+def objective_surface(noiceperc=0.0):
+	nsamps = 20000
 
-
-def test_data(noiceperc=0.0):
-	nx = 32
-	nvox = nx*nx*nx
+	nvox = 1
 	venc = 0.15
 	true_venc = 1 / np.sqrt(3)
 	vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32) / np.sqrt(3)
@@ -510,7 +627,6 @@ def test_data(noiceperc=0.0):
 	pars_true = np.concatenate([mag, vel], axis=0)
 
 	enc = mag * (np.cos(phase) + 1j*np.sin(phase))
-	enc = np.reshape(enc, (1,5,nx,nx,nx))
 
 	noice: np.array
 	if noiceperc != 0.0:
@@ -519,14 +635,81 @@ def test_data(noiceperc=0.0):
 
 		enc += (real_noice + 1j*imag_noice)
 
+	datacu: cp.array
+	if True:
+		angle = np.angle(enc[0,0])
+		enc *= np.exp(-1j*angle)
+
+		Edata = np.empty((9,nsamps), dtype=np.float32)
+		Edata[0,:] = np.real(enc[0,:])
+		Edata[1,:] = np.real(enc[1,:])
+		Edata[2,:] = np.imag(enc[1,:])
+		Edata[3,:] = np.real(enc[2,:])
+		Edata[4,:] = np.imag(enc[2,:])
+		Edata[5,:] = np.real(enc[3,:])
+		Edata[6,:] = np.imag(enc[3,:])
+		Edata[7,:] = np.real(enc[4,:])
+		Edata[8,:] = np.imag(enc[4,:])
+		datacu = cp.array(Edata)
+
+	#datacu = cp.repeat(datacu, nsamps, axis=1)
+	constscu = cp.array([constant_from_venc(venc)]).astype(cp.float32)
+	parscu = cp.empty((4, nsamps), dtype=cp.float32)
+	parscu[0,:] = pars_true[0,0]
+	parscu[1,:] = pars_true[1,0]
+	#parscu[2,:] = -np.sqrt(3)*venc + 2*np.sqrt(3)*venc*cp.random.rand(nsamps).astype(cp.float32)
+	#parscu[3,:] = -np.sqrt(3)*venc + 2*np.sqrt(3)*venc*cp.random.rand(nsamps).astype(cp.float32)
+	parscu[2,:] = -venc + 2*venc*cp.random.rand(nsamps).astype(cp.float32)
+	parscu[3,:] = -venc + 2*venc*cp.random.rand(nsamps).astype(cp.float32)
+
+	fobj = EncVelF()
+	f = cp.empty((1, nsamps), dtype=cp.float32)
+	fobj.run(parscu, constscu, datacu, f)
+	f = cp.nan_to_num(f, nan=1e28, posinf=1e28, neginf=1e28)
+
+	pu.obj_surface(parscu[2:,:].get(), f.get())
+
+def test_data(noiceperc=0.0):
+	nx = 32
+	nvox = nx*nx*nx
+	venc = 0.15
+	true_venc = 1 / np.sqrt(3)
+	vel = venc*(-1.0 + 2*np.random.rand(3,nvox)).astype(np.float32) / 10.0 #np.sqrt(3) / 5
+
+	phase = get_encode_matrix(constant_from_venc(venc)) @ vel
+
+	mag = 10*np.random.rand(1,nvox).astype(np.float32)
+
+	pars_true = np.concatenate([mag, vel], axis=0)
+
+	enc = mag * (np.cos(phase) + 1j*np.sin(phase))
+	enc = np.reshape(enc, (1,5,nx,nx,nx))
+
+	noise: np.array
+	if noiceperc != 0.0:
+		real_noise = np.random.normal(scale=0.5*np.sqrt(2), size=enc.shape)
+		imag_noise = np.random.normal(scale=0.5*np.sqrt(2), size=enc.shape)
+		noise = (real_noise + 1j*imag_noise)
+		noise *= np.sqrt(noiceperc)*np.mean(np.abs(enc))
+
+		enc += noise
+
 	linear_pars = enc_to_vel_linear(enc, venc)
 	nonlinear_pars = enc_to_vel_nonlinear(enc, venc)
+
+	print('true_pars: ', pars_true[:,0])
 
 	linear_pars = np.reshape(linear_pars, (4, nvox))
 	nonlinear_pars = np.reshape(nonlinear_pars, (4, nvox))
 
-	linear_err = np.linalg.norm(pars_true - linear_pars) / np.linalg.norm(pars_true)
-	nonlinear_err = np.linalg.norm(pars_true - nonlinear_pars) / np.linalg.norm(pars_true)
+	if False:
+		true_norm = np.linalg.norm(pars_true[1:,...])
+		linear_err = np.linalg.norm((pars_true - linear_pars)[1:,...]) / true_norm
+		nonlinear_err = np.linalg.norm((pars_true - nonlinear_pars)[1:,...]) / true_norm
+	else:
+		true_norm = np.linalg.norm(pars_true)
+		linear_err = np.linalg.norm((pars_true - linear_pars)) / true_norm
+		nonlinear_err = np.linalg.norm((pars_true - nonlinear_pars)) / true_norm
 
 	print(linear_err)
 	print(nonlinear_err)
@@ -544,7 +727,14 @@ def test():
 
 	pu.image_nd(img_full)
 
-	img_vel = enc_to_vel_nonlinear(img_full, 1)
+	img_vel = enc_to_vel_linear(img_full, 1)
+
+	mean_mag = np.mean(img_full, axis=(0,1))
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f_mag.h5', "w") as f:
+		f.create_dataset('images', data=np.transpose(mean_mag, (2,1,0)))
+	
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f.h5', "w") as f:
+		f.create_dataset('images', data=np.transpose(img_vel, (4,3,2,1,0)))
 
 	pu.image_nd(img_vel)
 
@@ -560,5 +750,6 @@ def test():
 
 
 if __name__ == '__main__':
-	test_data(noiceperc=0.0)
-	#test()w
+	#objective_surface(0.0)
+	#test_data(noiceperc=0.2)
+	test()
