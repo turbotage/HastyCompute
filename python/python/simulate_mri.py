@@ -166,7 +166,7 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 
 def nufft_of_enced_image(img_enc, smaps, dirpath, 
 	nspokes, nsamp_per_spoke, method, crop_factor=1.0,
-	create_nufft_of_enced_image=False, load_nufft_of_neced_image=False):
+	create_nufft_of_enced_image=False, load_nufft_of_neced_image=False, also_plot=False):
 	
 	nfreq = nspokes * nsamp_per_spoke
 	map_joiner = lambda path: os.path.join(dirpath, path)
@@ -201,6 +201,10 @@ def nufft_of_enced_image(img_enc, smaps, dirpath,
 				coil_kdatas = []
 
 				coord = np.ascontiguousarray(ic.create_coords(nspokes, nsamp_per_spoke, method, False, crop_factor))
+
+				if also_plot:
+					pu.scatter_3d(coord)
+
 				coord_torch = torch.tensor(coord).to(torch.device('cuda:0')).contiguous()
 				for smap in range(nsmaps):
 					print('Coil: ', smap, '/', nsmaps)
@@ -208,11 +212,11 @@ def nufft_of_enced_image(img_enc, smaps, dirpath,
 
 					coild_image_torch = torch.tensor(coiled_image).to(torch.device('cuda:0')).unsqueeze(0).contiguous()
 
-					kdata = hasty_sense.nufft2(coord_torch,coild_image_torch) / math.sqrt(num_voxels)
+					kdata = hasty_sense.nufft2(coord_torch,coild_image_torch)
 					coil_kdatas.append(kdata.cpu().numpy())
 
 				encode_coords.append(coord)
-				encode_kdatas.append(np.stack(coil_kdatas, axis=0))
+				encode_kdatas.append(np.stack(coil_kdatas, axis=1))
 
 			frame_coords.append(encode_coords)
 			frame_kdatas.append(encode_kdatas)
@@ -250,21 +254,22 @@ def simulate(dirpath='D:\\4DRecon\\dat\\dat2', imagefile='images_6f.h5',
 		method='PCVIPR',
 		crop_factor=2.0,
 		just_plot=False,
-		also_plot=True):
+		also_plot=False):
 
 	img, img_mag, smaps = crop_image(dirpath, imagefile, create_crop_image, load_crop_image, just_plot, also_plot)
 
 	if just_plot:
 		return
 
-	img_enc, img_mvel = enc_image(img, img_mag, nimgout, dirpath, imagefile, create_enc_image, load_enc_image)
+	img_enc, img_mvel = enc_image(img, img_mag, nimgout, dirpath, imagefile, create_enc_image, load_enc_image, also_plot)
 
-	pu.image_nd(img_enc)
-	pu.image_nd(ic.get_CD(img_mvel))
+	if also_plot:
+		pu.image_nd(img_enc)
+		pu.image_nd(ic.get_CD(img_mvel))
 
 	coords, kdatas = nufft_of_enced_image(img_enc, smaps, dirpath, 
 		nspokes, samp_per_spoke, method, crop_factor,
-		create_nufft_of_enced_image, load_nufft_of_neced_image)
+		create_nufft_of_enced_image, load_nufft_of_neced_image, also_plot)
 
 def load_coords_kdatas(dirpath):
 	map_joiner = lambda path: os.path.join(dirpath, path)
@@ -367,10 +372,10 @@ def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=Fa
 			SH = smaps[j,...].conj().to(cudev).unsqueeze(0)
 			b = kdata[j,0,...].unsqueeze(0).to(cudev)
 			if use_weights:
-				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights * b, uimsize) / math.sqrt(nvoxels)
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, weights * b, uimsize)
 				rhs += rhs_j
 			else:
-				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize) / math.sqrt(nvoxels)
+				rhs_j = SH * hasty_sense.nufft1(coord_cu, b, uimsize)
 				rhs += rhs_j
 
 		rhs_vec.append(rhs)

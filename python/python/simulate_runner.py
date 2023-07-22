@@ -10,5 +10,5 @@ simri.simulate(dirpath='D:\\4DRecon\\dat\\dat2', imagefile='my_framed_20f.h5',
 	method='PCVIPR', # PCVIPR, MidRandom
 	crop_factor=1.5,
     just_plot=False,
-    also_plot=True)
+    also_plot=False)
 

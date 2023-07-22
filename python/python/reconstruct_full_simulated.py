@@ -25,6 +25,7 @@ im_size = (smaps.shape[1],smaps.shape[2],smaps.shape[3])
 vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
 #images = torch.zeros(vec_size, dtype=torch.complex64)
 
+#smaps = torch.permute(smaps, (0,1,2,1))
 
 if False:
 	print('Beginning weighted load')
@@ -65,12 +66,35 @@ for encode in range(nenc):
 	coord_vec.append(torch.tensor(coord))
 	kdata_vec.append(torch.tensor(kdata))
 
-images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, lamda=0.0)
+weights_vec = []
+for coord in coord_vec:
+	weights = tkbn.calc_density_compensation_function(ktraj=coord.to(torch.device('cuda:0')), im_size=im_size).cpu()
+	weights_vec.append(weights.squeeze(0))
 
-#ru.reconstruct_gd_full(smaps, 
+images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec, iter=3, lamda=0.0, plot=False)
 
+images_full = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None, iter=4, images=images, lamda=0.0, plot=True)
 
+pu.image_nd(images)
 
+coord_vec = []
+kdata_vec = []
+for i in range(nframes):
+	for j in range(nenc):
+		coord_vec.append(torch.tensor(coords[frame][encode]))
+		kdata_vec.append(torch.tensor(kdatas[frame][encode]))
+
+images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
+		      im_size[2], dtype=torch.complex64)
+
+for i in range(nframes):
+		for j in range(nenc):
+			images[i,j,...] = images_full[j,...]
+
+images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, 
+			nframes, stepmul=1.0, rand_iter=0, iter=25, singular_index=2, lamda=0.1)
+
+pu.image_nd(images)
 
 with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "w") as f:
 	f.create_dataset('images', data=images)
