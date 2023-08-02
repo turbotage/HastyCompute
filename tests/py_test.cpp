@@ -203,7 +203,7 @@ void svt_test() {
 
 	auto image = at::rand({ 30,5,64,64,64 }, c10::ScalarType::ComplexFloat);
 
-	svt::random_blocks_svt(image, 5000, 16, 15, false, at::nullopt);
+	svt::random_blocks_svt(image, 5000, 16, 0.05, true, at::nullopt);
 
 }
 

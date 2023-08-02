@@ -509,7 +509,8 @@ def reconstruct_cg_full(diagonals, rhs, smaps, Prcnd = None, iter = 50, lamda=0.
 	else:
 		return tcg.run(plot)
 
-def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50, lamda=0.1, images=None, plot=False):
+def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50, lamda=0.1, images=None, 
+		plot=False, callback=None):
 	nenc = len(coord_vec)
 	ncoils = smaps.shape[0]
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
@@ -539,11 +540,14 @@ def reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec=None, iter = 50
 	def plot_callback(img):
 		pu.image_nd(img.numpy())
 
+	def runner_callback(images):
+		if plot:
+			plot_callback(images)
+		if callback is not None:
+			callback(images)
+
 	torch.cuda.empty_cache()
-	if lamda != 0.0:
-		return tgd.run_with_prox(prox, plot_callback if plot else None)
-	else:
-		return tgd.run(plot_callback if plot else None)
+	return tgd.run(runner_callback)
 
 def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_size):
 	nframes = len(coord_vec)
@@ -572,9 +576,9 @@ def direct_nufft_reconstruct_encs(smaps, coord_vec, kdata_vec, weights_vec, im_s
 
 	return image.unsqueeze(1)
 
-def svt_l1_prox(images, lamda, svt_shape, grad_shape, block_size=16):
+def svt_l1_prox(images, lamda, nblocks, svt_shape, grad_shape, block_size=16):
 	images = images.view(svt_shape)
-	hasty_svt.random_blocks_svt(images, 10000, block_size, lamda, True, None)
+	hasty_svt.random_blocks_svt(images, nblocks, block_size, lamda, True, None)
 	images = images.view(grad_shape)
 	return images
 
@@ -587,8 +591,9 @@ def extract_mean_block(images, imsize, blocksize):
 				random.randint(imsize[2]//4, 3*imsize[2]//4 - blocksize[2])
 			)
 
-		block = images[:,:,rb[0]:(rb[0]+blocksize[0]),rb[1]:(rb[1]+blocksize[1]),rb[2]:(rb[2]+blocksize[2])]
-		block = block.flatten(1,-1)
+		block = images[:,:,rb[0]:(rb[0]+blocksize[0]),rb[1]:(rb[1]+blocksize[1]),rb[2]:(rb[2]+blocksize[2])].contiguous()
+		block = block.flatten(0,1).flatten(1).contiguous()
+		block = block.transpose(0,1).contiguous()
 
 		Ss.append(torch.linalg.svdvals(block))
 	Stensor = torch.concat(Ss, dim=0)
@@ -601,31 +606,43 @@ def extract_mean_block(images, imsize, blocksize):
 	return (torch.min(Stensor), torch.median(Stensor), torch.max(Stensor), Smean)
 
 def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, stepmul=1.0, rand_iter=10, 
-		iter=10, singular_index=None, lamda=0.0, plot=False):
+		iter=10, nrestarts=0, singular_index=None, lamda=0.0, plot=False, callback=None):
 	
+	blocksize = 10
+	nblocks = 500
+
 	im_size = (smaps.shape[1], smaps.shape[2], smaps.shape[3])
 	ncoil = smaps.shape[0]
 	nframes = images.shape[0]
 	nenc = images.shape[1]
 	grad_shape = (nframes*nenc,1,im_size[0], im_size[1], im_size[2])
 	svt_shape = (nframes,nenc,im_size[0], im_size[1], im_size[2])
-	mean_block_vals = extract_mean_block(images, im_size, (16,16,16))
+	if lamda != 0.0:
+		mean_block_vals = extract_mean_block(images, im_size, (blocksize,blocksize,blocksize))
+		median_lamda = lamda * mean_block_vals[1]
+		final_lamda: torch.tensor
+		if singular_index is not None:
+			final_lamda = mean_block_vals[3][singular_index] * lamda
+		else:
+			final_lamda = median_lamda if median_lamda < mean_block_vals[2] else mean_block_vals[2] / lamda
 
-	median_lamda = lamda * mean_block_vals[1]
-	final_lamda: torch.tensor
-	if singular_index is not None:
-		final_lamda = mean_block_vals[3][singular_index] * lamda
+		print('Mean Singular Values: ', mean_block_vals[3])
+		print('Min Singular Value: ', mean_block_vals[0], ' Median Singular Value: ', mean_block_vals[1], 
+			' Max Singular Value: ', mean_block_vals[2], ' Final Lambda: ', final_lamda)
+
+	if lamda != 0.0:
+		prox = lambda alpha, x: svt_l1_prox(x, final_lamda, nblocks, svt_shape, grad_shape, blocksize)
 	else:
-		final_lamda = median_lamda if median_lamda < mean_block_vals[2] else mean_block_vals[2] / lamda
-
-	print('Mean Singular Values: ', mean_block_vals[3])
-	print('Min Singular Value: ', mean_block_vals[0], ' Median Singular Value: ', mean_block_vals[1], 
-       	' Max Singular Value: ', mean_block_vals[2], ' Final Lambda: ', final_lamda)
-
-	prox = lambda x: svt_l1_prox(x, final_lamda, svt_shape, grad_shape, 16)
+		prox = None
 	
 	def plot_callback(img):
 		pu.image_nd(img.view(svt_shape).numpy())
+
+	def runner_callback(images):
+		if plot:
+			plot_callback(images)
+		if callback is not None:
+			callback(images)
 
 
 	max_eig: torch.Tensor
@@ -635,31 +652,28 @@ def reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, nframes, stepm
 	images = images.view(svt_shape)
 	gc.collect()
 
-	
+	nrandcoils = 16
+
+
 	images = images.view(grad_shape)
 	if True and rand_iter > 0:
-		gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=True, num_rand_coils=20)
+		gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=True, num_rand_coils=nrandcoils)
 		gradf = lambda x: gradf_linop(x)
 		
-		tgd = TorchGD(gradf, images, alpha=stepmul*0.25*(1 / max_eig), accelerate=True, max_iter=rand_iter)
-		if lamda != 0.0:
-			images = tgd.run_with_prox(prox, plot_callback if plot else None).view(svt_shape)
-		else:
-			images = tgd.run(plot_callback if plot else None).view(svt_shape)
+		tgd = TorchGD(gradf, images, prox=prox, alpha=stepmul*(nrandcoils / ncoil)*0.5*(1 / max_eig), accelerate=False, max_iter=rand_iter)
+		images = tgd.run(runner_callback).view(svt_shape)
 
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	images = images.view(grad_shape)
-	if True and iter > 0:
-		gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=False, num_rand_coils=32)
-		gradf = lambda x: gradf_linop(x)
-		
-		tgd = TorchGD(gradf, images, alpha=stepmul*0.5*(1 / max_eig), accelerate=True, max_iter=iter)
-		if lamda != 0.0:
-			images = tgd.run_with_prox(prox, plot_callback if plot else None).view(svt_shape)
-		else:
-			images = tgd.run(plot_callback if plot else None).view(svt_shape)
+	for i in range(nrestarts+1):
+		images = images.view(grad_shape)
+		if True and iter > 0:
+			gradf_linop = SenseLinop(smaps, coord_vec, kdata_vec, randomize_coils=False, num_rand_coils=32)
+			gradf = lambda x: gradf_linop(x)
+			
+			tgd = TorchGD(gradf, images, prox=prox, alpha=stepmul*0.5*(1 / max_eig), accelerate=True, max_iter=iter)
+			images = tgd.run(runner_callback).view(svt_shape)
 
 	gc.collect()
 	torch.cuda.empty_cache()

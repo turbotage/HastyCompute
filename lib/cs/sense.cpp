@@ -5,15 +5,103 @@
 
 using namespace hasty;
 
+Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes, bool adjoint = false)
+	: _nufft(coords, nmodes, adjoint ? NufftOptions::type1() : NufftOptions::type2()), _adjoint(adjoint)
+{
+
+}
+
+/*
+void hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps,
+	const std::optional<at::Tensor>& in_storage,
+	const std::optional<std::function<void(at::Tensor&, int32_t)>>& freq_manip, bool sumnorm)
+{
+	c10::InferenceMode inference_guard;
+
+	out.zero_();
+
+	at::Tensor xstore;
+	at::Tensor fstore;
+
+	if (in_storage.has_value()) {
+		xstore = *in_storage;
+	}
+	else {
+		xstore = at::empty_like(in);
+	}
+
+	int smaps_len = smaps.size();
+	bool has_freq_manip = freq_manip.has_value();
+
+	if (_adjoint) {
+		for (int i = 0; i < smaps_len; ++i) {
+			const at::Tensor& smap = smaps[i];
+			at::mul_out(xstore, in, smap);
+			fstore = out.select(0, i);
+			_nufft.apply(xstore, fstore);
+			if (has_freq_manip) {
+				(*freq_manip)(fstore, i);
+			}
+		}
+	}
+}
+*/
+
+at::Tensor hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int32_t>& coils,
+	const std::optional<at::Tensor>& in_storage,
+	const std::optional<std::function<void(at::Tensor&, int32_t)>>& freq_manip, bool sumnorm)
+{
+	c10::InferenceMode inference_guard;
+
+	out.zero_();
+
+	at::Tensor instore;
+
+	if (in_storage.has_value()) {
+		instore = *in_storage;
+	}
+	else {
+		instore = at::empty_like(in);
+	}
+
+	bool has_freq_manip = freq_manip.has_value();
+
+	at::Tensor sum = at::scalar_tensor(at::Scalar((double)0.0));
+
+	if (_adjoint) {
+		at::Tensor fstore;
+
+		for (auto coil : coils) {
+			at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+			at::mul_out(instore, in, smap);
+			fstore = out.select(0, coil);
+			_nufft.apply(instore, fstore);
+			if (has_freq_manip) {
+				(*freq_manip)(fstore, coil);
+			} 
+
+			auto norm = at::linalg_norm(fstore);
+			sum += norm * norm;
+		}
+	}
+	else {
+
+	}
+}
+
+
+
+
 SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1())
 {
 	
 }
 
+/*
 void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps,
-	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
-	std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip)
+	const std::optional<at::Tensor>& in_storage, const std::optional<at::Tensor>& freq_storage,
+	const std::optional<std::function<void(at::Tensor&, int32_t)>>& freq_manip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -23,12 +111,12 @@ void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const std::vector
 	at::Tensor fstore;
 
 	if (in_storage.has_value()) {
-		xstore = in_storage.value();
+		xstore = *in_storage;
 	} else {
 		xstore = at::empty_like(in);
 	}
 	if (freq_storage.has_value()) {
-		fstore = freq_storage.value();
+		fstore = *freq_storage;
 	} else {
 		fstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
 	}
@@ -49,10 +137,11 @@ void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const std::vector
 	}
 
 }
+*/
 
 void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int32_t>& coils,
-	std::optional<at::Tensor> in_storage, std::optional<at::Tensor> freq_storage,
-	std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip)
+	const std::optional<at::Tensor>& in_storage, const std::optional<at::Tensor>& freq_storage,
+	const std::optional<std::function<void(at::Tensor&, int32_t)>>& freq_manip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -139,9 +228,9 @@ BatchedSense::BatchedSense(
 
 BatchedSense::BatchedSense(
 	std::vector<DeviceContext>&& contexts,
-	std::optional<TensorVec> coords,
-	std::optional<TensorVec> kdata,
-	std::optional<TensorVec> weights)
+	const std::optional<TensorVec>& coords,
+	const std::optional<TensorVec>& kdata,
+	const std::optional<TensorVec>& weights)
 	:
 	_dcontexts(std::move(contexts)),
 	_coords(coords.has_value() ? std::move(*coords) : TensorVec()),
@@ -281,21 +370,21 @@ void BatchedSense::apply_outer_batch(DeviceContext& dctxt, int32_t outer_batch, 
 		if (wmanip.has_value()) {
 			freq_manip = [&wmanip, &weights_cu](at::Tensor& in, int32_t coil) {
 				//std::cout << " " << coil;
-				wmanip.value()(in, weights_cu);
+				(*wmanip)(in, weights_cu);
 			};
 		}
 		else if (fmanip.has_value()) {
 			freq_manip = [&fmanip, &kdata_cu](at::Tensor& in, int32_t coil) {
 				//std::cout << " " << coil;
 				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				fmanip.value()(in, kdata_coil);
+				(*fmanip)(in, kdata_coil);
 			};
 		}
 		else if (wfmanip.has_value()) {
 			freq_manip = [&wfmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
 				//std::cout << " " << coil;
 				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				wfmanip.value()(in, kdata_coil, weights_cu);
+				(*wfmanip)(in, kdata_coil, weights_cu);
 			};
 		}
 
@@ -448,3 +537,4 @@ void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_ba
 	}
 }
 
+ 

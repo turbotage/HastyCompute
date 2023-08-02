@@ -167,6 +167,8 @@ class TorchGD(TorchIterativeAlg):
 
 		return self.x
 
+class TorchPDHG(TorchIterativeAlg):
+	
 
 
 

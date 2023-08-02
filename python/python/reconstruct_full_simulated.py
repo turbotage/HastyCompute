@@ -17,89 +17,101 @@ from torch_maxeig import TorchMaxEig
 
 import reconstruct_util as ru
 
-coords, kdatas, nframes, nenc = simri.load_coords_kdatas(dirpath='D:/4DRecon/dat/dat2')
-smaps = torch.tensor(simri.load_smaps('D:/4DRecon/dat/dat2'))
+def run():
+	coords, kdatas, nframes, nenc = simri.load_coords_kdatas(dirpath='D:/4DRecon/dat/dat2')
+	smaps = torch.tensor(simri.load_smaps('D:/4DRecon/dat/dat2'))
 
-im_size = (smaps.shape[1],smaps.shape[2],smaps.shape[3])
+	im_size = (smaps.shape[1],smaps.shape[2],smaps.shape[3])
 
-vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
-#images = torch.zeros(vec_size, dtype=torch.complex64)
+	vec_size = (nenc,1,im_size[0],im_size[1],im_size[2])
 
-#smaps = torch.permute(smaps, (0,1,2,1))
+	true_images: torch.Tensor
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5', "r") as f:
+		true_images = torch.tensor(f['images'][()])
+	true_norm = torch.norm(true_images)
+	true_full_images = torch.mean(true_images, dim=0).view((nenc, 1, im_size[0], im_size[1], im_size[2]))
+	true_full_norm = torch.norm(true_full_images)
 
-if False:
-	print('Beginning weighted load')
-	diagonals, rhs = load_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=0)
-	print('Beginning weighted reconstruct')
-	images = reconstruct_cg(diagonals, rhs, smaps, nenc, iter=100, lamda=100.0, images=images, plot=False)
+	#pu.image_nd(true_images.numpy())
 
-	pu.image_5d(np.abs(images))
+	#true_mvel: np.array
+	#with h5py.File('D:\\4DRecon\\dat\\dat2\\images_mvel_20f_cropped_interpolated.h5', "r") as f:
+	#	true_mvel = f['images'][()]
 
-if False:
-	print('Beginning unweighted load')
-	diagonals, rhs = load_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=True, root=2)
-	print('Beginning unweighted reconstruct')
-	images = reconstruct_gd(diagonals, rhs, smaps, nenc, iter=100, lamda=5e5, images=images, plot=False)
-
-	pu.image_5d(np.abs(images))
-
-if False:
-	print('Beginning unweighted load')
-	diagonals, rhs = ru.load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=1)
-	print('Beginning unweighted reconstruct')
-	images = ru.reconstruct_gd_full(diagonals, rhs, smaps, nenc, iter=100, lamda=0.0, images=images, plot=True)
-
-	pu.image_5d(np.abs(images))
-	pu.image_4d(np.mean(np.abs(images.numpy()), axis=0))
-
-coord_vec = []
-kdata_vec = []
-for encode in range(nenc):
-	frame_coords = []
-	frame_kdatas = []
-	for frame in range(nframes):
-		frame_coords.append(coords[frame][encode])
-		frame_kdatas.append(kdatas[frame][encode])
-
-	coord = np.concatenate(frame_coords, axis=1)
-	kdata = np.concatenate(frame_kdatas, axis=2)
-	coord_vec.append(torch.tensor(coord))
-	kdata_vec.append(torch.tensor(kdata))
-
-weights_vec = []
-for coord in coord_vec:
-	weights = tkbn.calc_density_compensation_function(ktraj=coord.to(torch.device('cuda:0')), im_size=im_size).cpu()
-	weights_vec.append(weights.squeeze(0))
-
-images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec, iter=3, lamda=0.0, plot=False)
-
-images_full = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None, iter=4, images=images, lamda=0.0, plot=True)
-
-pu.image_nd(images)
-
-coord_vec = []
-kdata_vec = []
-for i in range(nframes):
-	for j in range(nenc):
-		coord_vec.append(torch.tensor(coords[frame][encode]))
-		kdata_vec.append(torch.tensor(kdatas[frame][encode]))
-
-images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
-		      im_size[2], dtype=torch.complex64)
-
-for i in range(nframes):
-		for j in range(nenc):
-			images[i,j,...] = images_full[j,...]
-
-images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, 
-			nframes, stepmul=1.0, rand_iter=0, iter=25, singular_index=2, lamda=0.1)
-
-pu.image_nd(images)
-
-with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed.h5', "w") as f:
-	f.create_dataset('images', data=images)
+	#pu.image_nd(true_mvel.numpy())
+	#pu.image_nd(np.sqrt(true_mvel[:,1,...]**2 + true_mvel[:,2,...]**2 + true_mvel[:,3,...]**2))
 
 
+	coord_vec = []
+	kdata_vec = []
+	weights_vec = []
+	if True:
+		for encode in range(nenc):
+			frame_coords = []
+			frame_kdatas = []
+			for frame in range(nframes):
+				frame_coords.append(coords[frame][encode])
+				frame_kdatas.append(kdatas[frame][encode])
 
+			coord = np.concatenate(frame_coords, axis=1)
+			kdata = np.concatenate(frame_kdatas, axis=2)
+			coord_vec.append(torch.tensor(coord))
+			kdata_vec.append(torch.tensor(kdata))
+
+		for coord in coord_vec:
+			weights = tkbn.calc_density_compensation_function(ktraj=coord.to(torch.device('cuda:0')), im_size=im_size).cpu()
+			weights_vec.append(weights.squeeze(0))
+
+	relerr = []
+	def full_error_callback(images):
+		relerr.append(torch.norm(images - true_full_images) / true_full_norm)
+		print('True RelErr: ', relerr[-1])
+
+	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec, iter=40, lamda=0.0, 
+				plot=False, callback=full_error_callback)
+
+	#pu.image_nd(images.numpy())
+
+	relerr = []
+	images_full = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None, iter=10, images=images, lamda=0.0, 
+					plot=False, callback=full_error_callback)
+
+	#pu.image_nd(images_full.numpy())
+
+	coord_vec = []
+	kdata_vec = []
+	if True:
+		for frame in range(nframes):
+			for encode in range(nenc):
+				coord_vec.append(torch.tensor(coords[frame][encode]))
+				kdata_vec.append(torch.tensor(kdatas[frame][encode]))
+
+	images = torch.empty(nframes, nenc, im_size[0], im_size[1], 
+				im_size[2], dtype=torch.complex64)
+	if True:
+		for frame in range(nframes):
+			for enc in range(nenc):
+				images[frame,enc,...] = images_full[enc,...]
+
+
+	relerr = []
+	def framed_error_callback(images):
+		svt_shape = (nframes, nenc, im_size[0], im_size[1], im_size[2])
+		relerr.append(torch.norm(images.view(svt_shape) - true_images) / true_norm)
+		print('True RelErr: ', relerr[-1])
+
+
+	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, 
+		nframes, stepmul=1.5, rand_iter=0, iter=40, nrestarts=1, singular_index=5, lamda=0.1,
+		plot=False, callback=framed_error_callback)
+
+	pu.image_nd(images.numpy())
+
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_simulated.h5', "w") as f:
+		f.create_dataset('images', data=images)
+
+
+with torch.no_grad():
+	run()
 
 

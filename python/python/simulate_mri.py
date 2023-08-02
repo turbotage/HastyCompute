@@ -52,10 +52,10 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 
 			smaps = np.stack(smap_list, axis=0)
 
-		nlen = 128
-		nx = 40
+		nlen = 64
+		nx = 120
 		ny = 40
-		nz = 40 #45
+		nz = 60 #45
 		crop_box = [(nx,nx+nlen),(ny,ny+nlen),(nz,nz+nlen)]
 		print('Cropping')
 		new_img = ic.crop_5d_3d(img, crop_box).astype(np.float32)

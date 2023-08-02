@@ -139,3 +139,16 @@ void hasty::ffi::random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t b
 	RandomBlocksSVT(contexts, input, nblocks, block_size, thresh, soft);
 }
 
+void hasty::ffi::normal_blocks_svt(at::Tensor& input, std::vector<int64_t> block_strides, std::vector<int64_t> block_shapes,
+	int block_iter, double thresh, bool soft, const std::vector<c10::Stream>& streams)
+{
+	std::vector<NormalBlocksSVT::DeviceContext> contexts(streams.begin(), streams.end());
+
+	std::array<int64_t, 3> ablock_strides;
+	std::copy_n(block_strides.begin(), 3, ablock_strides.begin());
+
+	std::array<int64_t, 3> ablock_shapes;
+	std::copy_n(block_shapes.begin(), 3, ablock_shapes.begin());
+
+	NormalBlocksSVT(contexts, input, ablock_strides, ablock_shapes, block_iter, thresh, soft);
+}

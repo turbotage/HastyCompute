@@ -720,21 +720,28 @@ def test_data(noiceperc=0.0):
 def test():
 
 	img_full = np.array([0])
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_simulated.h5', "r") as f:
 		img_full = f['images'][()]
 
-	img_full = img_full / np.mean(np.abs(img_full))
+	img_full = img_full# / np.mean(np.abs(img_full))
 
 	pu.image_nd(img_full)
+
+	true_images: np.array([0])
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5', "r") as f:
+		true_images = f['images'][()]
+
+	pu.image_nd(true_images - img_full)
+
 
 	img_vel = enc_to_vel_linear(img_full, 1)
 
 	mean_mag = np.mean(img_full, axis=(0,1))
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f_mag.h5', "w") as f:
-		f.create_dataset('images', data=np.transpose(mean_mag, (2,1,0)))
+	#with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f_mag.h5', "w") as f:
+	#	f.create_dataset('images', data=np.transpose(mean_mag, (2,1,0)))
 	
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f.h5', "w") as f:
-		f.create_dataset('images', data=np.transpose(img_vel, (4,3,2,1,0)))
+	#with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_20f.h5', "w") as f:
+	#	f.create_dataset('images', data=np.transpose(img_vel, (4,3,2,1,0)))
 
 	pu.image_nd(img_vel)
 

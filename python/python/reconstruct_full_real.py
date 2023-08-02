@@ -54,7 +54,7 @@ def run_framed(images_full, smaps, coord, kdata, gating, nframes, shift=(0.0, 0.
 	torch.cuda.empty_cache()
 	print('Reconstructing frames')
 	images = ru.reconstruct_frames(images, smaps, coord_vec, kdata_vec, nenc, 
-				nframes, stepmul=1.0, rand_iter=0, iter=50, singular_index=2, lamda=0.1, plot=plot)
+				nframes, stepmul=1.0, rand_iter=0, iter=100, singular_index=2, lamda=0.2, plot=plot)
 
 	if plot:
 		pu.image_nd(images.numpy())
@@ -96,11 +96,11 @@ def run_full(im_size, store=False, shift=(0.0, 0.0, 0.0), crop_factor=1.5, prefo
 	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, weights_vec,
-			iter=3, lamda=0.0001, images=None, plot=plot)
+			iter=10, lamda=0.0, images=None, plot=plot)
 	gc.collect()
 	torch.cuda.empty_cache()
 	images = ru.reconstruct_gd_full(smaps, coord_vec, kdata_vec, None,
-			iter=5, lamda=0.0001, images=images, plot=plot)
+			iter=10, lamda=0.0, images=images, plot=plot)
 	gc.collect()
 
 	del coord_vec, kdata_vec, weights_vec
@@ -130,7 +130,7 @@ if __name__ == "__main__":
 	store_framed = True
 	plot_framed = False
 
-	nframes = 20
+	nframes = 15
 
 	start = time.time()
 	images, smaps, coord, kdata, gating = run_full((256,256,256), shift=shift, 

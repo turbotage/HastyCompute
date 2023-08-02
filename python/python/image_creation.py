@@ -9,7 +9,7 @@ import math
 import matplotlib.pyplot as plt
 
 
-def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, crop_factor=1.0):
+def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0, crop_factor=1.0):
 	if method == 'PCVIPR':
 
 		def rx(angle):
@@ -32,7 +32,7 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, crop_factor=1.0):
 		spoke[2,:] = 2*np.pi*np.linspace(-(1.0/3.0), 1.0, samp_per_spoke).astype(np.float32)
 
 		xangle = np.pi*np.random.rand(1).astype(np.float32).item()
-		zangle = 2*np.pi*np.random.rand(1).astype(np.float32).item()
+		zangle = scale_factor*2*np.pi*np.random.rand(1).astype(np.float32).item()
 
 		spoke = rz(zangle) @ rx(xangle) @ spoke
 		

@@ -1,7 +1,7 @@
 #include "svt.hpp"
 
 
-at::Tensor hasty::extract_block(const at::Tensor& in, const Block<4>& block)
+at::Tensor hasty::extract_block(const at::Tensor& in, const Block<4>& block, const std::optional<std::vector<int64_t>>& perms, int flatten_split, bool transpose)
 {
 	using namespace at::indexing;
 	std::array<TensorIndex, 5> idx = {
@@ -12,11 +12,22 @@ at::Tensor hasty::extract_block(const at::Tensor& in, const Block<4>& block)
 		Slice(block.first_corner[3], block.second_corner[3])
 	};
 
-	// Flatten the all but the first dimension
-	return in.index(at::makeArrayRef(idx)).flatten(1);
+	auto extracted_block = in.index(at::makeArrayRef(idx));
+
+	if (perms.has_value()) {
+		extracted_block = at::permute(extracted_block, at::makeArrayRef(*perms));
+	}
+
+	extracted_block = extracted_block.flatten(0, flatten_split).flatten(1);
+
+	if (transpose) {
+		extracted_block.transpose_(0, 1);
+	}
+
+	return extracted_block;
 }
 
-at::Tensor hasty::extract_block(const at::Tensor& in, const Block<3>& block)
+at::Tensor hasty::extract_block(const at::Tensor& in, const Block<3>& block, const std::optional<std::vector<int64_t>>& perms, int flatten_split, bool transpose)
 {
 	using namespace at::indexing;
 	std::array<TensorIndex, 4> idx = {
@@ -26,8 +37,19 @@ at::Tensor hasty::extract_block(const at::Tensor& in, const Block<3>& block)
 		Slice(block.first_corner[2], block.second_corner[2])
 	};
 
-	// Flatten the all but the first dimension
-	return in.index(at::makeArrayRef(idx)).flatten(1);
+	auto extracted_block = in.index(at::makeArrayRef(idx));
+
+	if (perms.has_value()) {
+		extracted_block = at::permute(extracted_block, at::makeArrayRef(*perms)).contiguous();
+	}
+
+	extracted_block = extracted_block.flatten(0, flatten_split).flatten(1).contiguous();
+
+	if (transpose) {
+		extracted_block.transpose_(0, 1).contiguous();
+	}
+
+	return extracted_block;
 }
 
 at::Tensor hasty::svt_hard(const at::Tensor& in, int rank, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
@@ -45,7 +67,8 @@ at::Tensor hasty::svt_hard(const at::Tensor& in, int rank, std::optional<std::tu
 		Vh = std::get<2>(sval);
 	}
 
-	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+
+	std::tie(U, S, Vh) = at::linalg_svd(in, false);
 
 	//std::cout << S << std::endl;
 
@@ -54,6 +77,7 @@ at::Tensor hasty::svt_hard(const at::Tensor& in, int rank, std::optional<std::tu
 	//std::cout << S << std::endl;
 
 	Vh.mul_(S.unsqueeze(1));
+
 
 	return at::mm(U, Vh);
 }
@@ -73,13 +97,14 @@ void hasty::svt_hard_inplace(at::Tensor& in, int rank, std::optional<std::tuple<
 		Vh = std::get<2>(sval);
 	}
 
-	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+	std::tie(U, S, Vh) = at::linalg_svd(in, false);
 
 	S.index_put_({ Slice(rank,None) }, 0.0f);
 
 	Vh.mul_(S.unsqueeze(1));
 
 	at::mm_out(in, U, Vh);
+
 }
 
 at::Tensor hasty::svt_soft(const at::Tensor& in, float lambda, std::optional<std::tuple<at::Tensor, at::Tensor, at::Tensor>> storage)
@@ -97,7 +122,7 @@ at::Tensor hasty::svt_soft(const at::Tensor& in, float lambda, std::optional<std
 		Vh = std::get<2>(sval);
 	}
 
-	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+	std::tie(U, S, Vh) = at::linalg_svd(in, false);
 
 	//std::cout << S << std::endl;
 
@@ -126,7 +151,7 @@ void hasty::svt_soft_inplace(at::Tensor& in, float lambda, std::optional<std::tu
 		Vh = std::get<2>(sval);
 	}
 
-	std::tie(U, S, Vh) = at::linalg_svd(in, false, "gesvd");
+	std::tie(U, S, Vh) = at::linalg_svd(in, false);
 
 	auto ldiff = at::abs(S) - lambda;
 	S = at::sign(S) * at::abs(0.5f * (at::abs(ldiff) + ldiff));
@@ -136,7 +161,7 @@ void hasty::svt_soft_inplace(at::Tensor& in, float lambda, std::optional<std::tu
 	at::mm_out(in, U, Vh);
 }
 
-void hasty::insert_block(at::Tensor& in, const Block<4>& block, const at::Tensor& block_tensor)
+void hasty::insert_block(at::Tensor& in, const Block<4>& block, at::Tensor& block_tensor, const std::optional<std::vector<int64_t>>& perms, bool transpose)
 {
 	using namespace at::indexing;
 
@@ -157,10 +182,23 @@ void hasty::insert_block(at::Tensor& in, const Block<4>& block, const at::Tensor
 		++i;
 	}
 
-	in.index_put_(at::makeArrayRef(idx), block_tensor.view(at::makeArrayRef(view_lens)));
+	block_tensor = block_tensor.contiguous();
+
+	if (transpose) {
+		block_tensor = block_tensor.transpose(0, 1).contiguous();
+	}
+
+	if (perms.has_value()) {
+		auto permuted_view = torch_util::apply_permutation(view_lens, *perms);
+		block_tensor = at::permute(block_tensor.view(permuted_view), torch_util::argsort(*perms)).contiguous();
+		in.index_put_(at::makeArrayRef(idx), block_tensor);
+	}
+	else {
+		in.index_put_(at::makeArrayRef(idx), block_tensor.view(at::makeArrayRef(view_lens)));
+	}
 }
 
-void hasty::insert_block(at::Tensor& in, const Block<3>& block, const at::Tensor& block_tensor)
+void hasty::insert_block(at::Tensor& in, const Block<3>& block, at::Tensor& block_tensor, const std::optional<std::vector<int64_t>>& perms, bool transpose)
 {
 	using namespace at::indexing;
 
@@ -181,6 +219,19 @@ void hasty::insert_block(at::Tensor& in, const Block<3>& block, const at::Tensor
 		++i;
 	}
 
-	in.index_put_(at::makeArrayRef(idx), block_tensor.view(at::makeArrayRef(view_lens)));
+	block_tensor = block_tensor.contiguous();
+
+	if (transpose) {
+		block_tensor = block_tensor.transpose(0, 1).contiguous();
+	}
+
+	if (perms.has_value()) {
+		auto permuted_view = torch_util::apply_permutation(view_lens, *perms);
+		block_tensor = at::permute(block_tensor.view(permuted_view), torch_util::argsort(*perms)).contiguous();
+		in.index_put_(at::makeArrayRef(idx), block_tensor);
+	}
+	else {
+		in.index_put_(at::makeArrayRef(idx), block_tensor.view(at::makeArrayRef(view_lens)));
+	}
 }
 

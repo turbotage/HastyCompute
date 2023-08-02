@@ -49,5 +49,9 @@ namespace hasty {
 		void random_blocks_svt(at::Tensor& input, int32_t nblocks, int32_t block_size, 
 			double thresh, bool soft, const std::vector<c10::Stream>& streams);
 
+		LIB_EXPORT
+		void normal_blocks_svt(at::Tensor& input, std::vector<int64_t> block_strides, std::vector<int64_t> block_shapes,
+			int block_iter, double thresh, bool soft, const std::vector<c10::Stream>& streams);
+
 	}
 }

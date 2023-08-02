@@ -188,13 +188,13 @@ def image_5d(image):
 
 def image_nd(image):
 	if len(image.shape) == 5:
-		image_5d(image)
+		image_5d(image.astype(np.complex64))
 	elif len(image.shape) == 4:
-		image_5d(image[np.newaxis,...])
+		image_5d(image[np.newaxis,...].astype(np.complex64))
 	elif len(image.shape) == 3:
-		image_5d(image[np.newaxis,np.newaxis,...])
+		image_5d(image[np.newaxis,np.newaxis,...].astype(np.complex64))
 	elif len(image.shape) == 2:
-		image_5d(image[np.newaxis,np.newaxis,np.newaxis,...])
+		image_5d(image[np.newaxis,np.newaxis,np.newaxis,...].astype(np.complex64))
 	else:
 		raise RuntimeError("Only 2 <= n <= 5 is supported for image_nd")
 

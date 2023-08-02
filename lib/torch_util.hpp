@@ -13,6 +13,29 @@ namespace hasty {
 
 		std::vector<int64_t> nmodes_from_tensor(const at::Tensor& tensor);
 
+        template<typename T>
+        std::vector<int64_t> argsort(const std::vector<T>& array) {
+            std::vector<int64_t> indices(array.size());
+            std::iota(indices.begin(), indices.end(), 0);
+            std::sort(indices.begin(), indices.end(),
+                [&array](int left, int right) -> bool {
+                    // sort indices according to corresponding array element
+                    return array[left] < array[right];
+                });
+
+            return indices;
+        }
+
+        template<typename T>
+        std::vector<T> apply_permutation(const std::vector<T>& v, const std::vector<int64_t>& indices)
+        {
+            std::vector<T> v2(v.size());
+            for (size_t i = 0; i < v.size(); i++) {
+                v2[i] = v[indices[i]];
+            }
+            return v2;
+        }
+
 	}
 
 }
