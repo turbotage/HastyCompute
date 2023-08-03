@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../torch_util.hpp"
 #include "sense.hpp"
 #include "../threading/thread_pool.hpp"
 

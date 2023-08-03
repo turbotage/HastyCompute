@@ -97,3 +97,19 @@ std::vector<int64_t> hasty::torch_util::nmodes_from_tensor(const at::Tensor& ten
 	ret[0] = 1;
 	return ret;
 }
+
+void hasty::torch_util::future_catcher(std::future<void>& fut)
+{
+	try {
+		fut.get();
+	}
+	catch (c10::Error& e) {
+		std::cerr << e.what() << std::endl;
+	}
+	catch (std::exception& e) {
+		std::cerr << e.what() << std::endl;
+	}
+	catch (...) {
+		std::cerr << "caught something strange: " << std::endl;
+	}
+}

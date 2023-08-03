@@ -3,6 +3,8 @@
 #include <torch/torch.h>
 #include <c10/cuda/CUDAGuard.h>
 
+#include <future>
+
 namespace hasty {
 
 	namespace torch_util {
@@ -35,6 +37,8 @@ namespace hasty {
             }
             return v2;
         }
+
+        void future_catcher(std::future<void>& fut);
 
 	}
 

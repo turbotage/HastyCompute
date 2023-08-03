@@ -157,13 +157,13 @@ void batched_sense_test()
 	std::vector<at::Tensor> coord_vec = { coord };
 	std::vector<at::Tensor> kdata_vec = { coord };
 
-	bs::batched_sense(inp1, coils, smaps, coord_vec, at::nullopt);
-	bs::batched_sense_weighted(inp2, coils, smaps, coord_vec, weights_vec, at::nullopt);
+	bs::batched_sense_normal(inp1, at::nullopt, smaps, coord_vec, at::nullopt);
+	bs::batched_sense_normal_weighted(inp2, at::nullopt, smaps, coord_vec, weights_vec, at::nullopt);
 
 	std::cout << "Relerr: " << torch::norm(inp1 - inp2) / torch::norm(inp1) << std::endl;
 
-	bs::batched_sense_kdata(inp1, coils, smaps, coord_vec, kdata_vec, at::nullopt);
-	bs::batched_sense_weighted_kdata(inp2, coils, smaps, coord_vec, weights_vec, kdata_vec, at::nullopt);
+	bs::batched_sense_normal_kdata(inp1, at::nullopt, smaps, coord_vec, kdata_vec, at::nullopt);
+	bs::batched_sense_normal_weighted_kdata(inp2, at::nullopt, smaps, coord_vec, weights_vec, kdata_vec, at::nullopt);
 
 	std::cout << "Relerr: " << torch::norm(inp1 - inp2) / torch::norm(inp1) << std::endl;
 }
@@ -195,11 +195,11 @@ void test_large_batched() {
 		kdata_vec.push_back(kdata.detach().clone());
 	}
 
-	bs::batched_sense_kdata(inp1, coils, smaps, coord_vec, kdata_vec, at::nullopt);
+	bs::batched_sense_normal_kdata(inp1, at::nullopt, smaps, coord_vec, kdata_vec, at::nullopt);
 
 }
 
-void svt_test() {
+void random_svt_test() {
 
 	auto image = at::rand({ 30,5,64,64,64 }, c10::ScalarType::ComplexFloat);
 
@@ -207,10 +207,23 @@ void svt_test() {
 
 }
 
+void normal_svt_test() {
+
+	auto image = at::rand({ 30,5,64,64,64 }, c10::ScalarType::ComplexFloat);
+
+	svt::normal_blocks_svt(image, {16,16,16}, {16,16,16}, 4, 0.05, true, at::nullopt);
+}
+
 int main() {
 
-	//batched_sense_test();
-	//test_large_batched();
-	svt_test();
+	diagonal_test();
+	diagonal_ones_gives_shs();
+	nufft_tests();
+	batched_test();
+	batched_sense_test();
+	test_large_batched();
+	random_svt_test();
+	normal_svt_test();
+
 	return 0;
 }

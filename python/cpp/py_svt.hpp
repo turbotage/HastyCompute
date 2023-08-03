@@ -13,7 +13,7 @@ namespace svt {
 	}
 
 	void normal_blocks_svt(at::Tensor& input, std::vector<int64_t> block_strides, std::vector<int64_t> block_shapes,
-		int block_iter, double thresh, bool soft, const at::optional<std::vector<c10::Stream>>& streams)
+		int64_t block_iter, double thresh, bool soft, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		//std::cout << nblocks << " " << block_size << " " << thresh << " " << soft << std::endl;
 
