@@ -28,7 +28,7 @@ namespace hasty {
 	class SenseNormal {
 	public:
 
-		SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, bool adjoint=false);
 
 		/*
 		void apply(const at::Tensor& in, at::Tensor& out, const std::vector<std::reference_wrapper<const at::Tensor>>& smaps,
@@ -43,6 +43,8 @@ namespace hasty {
 	private:
 
 		NufftNormal _normal_nufft;
+		std::vector<int64_t> _nmodes;
+		bool _adjoint;
 
 	};
 
@@ -102,7 +104,7 @@ namespace hasty {
 			const std::optional<TensorVec>& kdata,
 			const std::optional<TensorVec>& weights);
 
-		at::Tensor apply_forward(const at::Tensor& in, TensorVec& out,
+		at::Tensor apply_forward(const at::Tensor& in, at::TensorList out,
 			bool sum, bool sumnorm,
 			const std::optional<std::vector<std::vector<int64_t>>>& coils,
 			const std::optional<WeightedManipulator>& wmanip,
@@ -122,6 +124,12 @@ namespace hasty {
 			const std::optional<FreqManipulator>& fmanip,
 			const std::optional<WeightedFreqManipulator>& wfmanip);
 
+		void apply_normal_adjoint(TensorVec& in,
+			const std::optional<std::vector<std::vector<int64_t>>>& coils,
+			const std::optional<WeightedManipulator>& wmanip,
+			const std::optional<FreqManipulator>& fmanip,
+			const std::optional<WeightedFreqManipulator>& wfmanip);
+
 		void apply_toep(at::Tensor& in,
 			const std::optional<std::vector<std::vector<int64_t>>>& coils);
 
@@ -129,7 +137,7 @@ namespace hasty {
 
 		void construct();
 
-		at::Tensor apply_outer_batch_forward(DeviceContext& dctxt, int32_t outer_batch, const at::Tensor& in, at::Tensor& out,
+		at::Tensor apply_outer_batch_forward(DeviceContext& dctxt, int32_t outer_batch, const at::Tensor& in, at::Tensor out,
 			bool sum, bool sumnorm,
 			const std::vector<int64_t>& coils,
 			const std::optional<WeightedManipulator>& wmanip,
@@ -144,6 +152,12 @@ namespace hasty {
 			const std::optional<WeightedFreqManipulator>& wfmanip);
 
 		void apply_outer_batch_normal(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
+			const std::vector<int64_t>& coils,
+			const std::optional<WeightedManipulator>& wmanip,
+			const std::optional<FreqManipulator>& fmanip,
+			const std::optional<WeightedFreqManipulator>& wfmanip);
+
+		void apply_outer_batch_normal_adjoint(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
 			const std::vector<int64_t>& coils,
 			const std::optional<WeightedManipulator>& wmanip,
 			const std::optional<FreqManipulator>& fmanip,

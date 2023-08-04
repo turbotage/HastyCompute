@@ -28,7 +28,7 @@ std::vector<hasty::BatchedSense::DeviceContext> get_batch_contexts(const std::ve
 
 // FORWARD
 
-LIB_EXPORT at::Tensor hasty::ffi::batched_sense_forward(const at::Tensor& input, std::vector<at::Tensor>& output, const std::optional<std::vector<std::vector<int64_t>>>& coils, 
+LIB_EXPORT at::Tensor hasty::ffi::batched_sense_forward(const at::Tensor& input, at::TensorList output, const std::optional<std::vector<std::vector<int64_t>>>& coils, 
 	const at::Tensor& smaps, const std::vector<at::Tensor>& coords, bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
 {
 	auto contexts = get_batch_contexts(streams, smaps);

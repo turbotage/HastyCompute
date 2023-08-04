@@ -27,47 +27,50 @@ namespace nufft {
 }
 
 
-namespace bs {
+namespace bs { 
 
-	// FORWARD
+	// FORWARD 
 
-	at::Tensor batched_sense_forward(const at::Tensor& input, std::vector<at::Tensor>& output, const std::optional<std::vector<std::vector<int64_t>>>& coils,
+	void batched_sense_forward(const at::Tensor& input, at::TensorList output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
-		return hasty::ffi::batched_sense_forward(input, output, coilss, smaps, coords, sum, sumnorm, hasty::ffi::get_streams(streams));
+		hasty::ffi::batched_sense_forward(input, output, coilss, smaps, coords, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
 
-	at::Tensor batched_sense_forward_weighted(const at::Tensor& input, std::vector<at::Tensor>& output, const std::optional<std::vector<std::vector<int64_t>>>& coils,
+	
+	/*
+	void batched_sense_forward_weighted(const at::Tensor& input, std::vector<at::Tensor>& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
-		return hasty::ffi::batched_sense_forward_weighted(input, output, coilss, smaps, coords, weights, sum, sumnorm, hasty::ffi::get_streams(streams));
+		hasty::ffi::batched_sense_forward_weighted(input, output, coilss, smaps, coords, weights, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
 
-	at::Tensor batched_sense_forward_kdata(const at::Tensor& input, std::vector<at::Tensor>& output, const std::optional<std::vector<std::vector<int64_t>>>& coils,
+	void batched_sense_forward_kdata(const at::Tensor& input, std::vector<at::Tensor>& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
-		return hasty::ffi::batched_sense_forward_kdata(input, output, coilss, smaps, coords, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
+		hasty::ffi::batched_sense_forward_kdata(input, output, coilss, smaps, coords, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
 
-	at::Tensor batched_sense_forward_weighted_kdata(const at::Tensor& input, std::vector<at::Tensor>& output, const std::optional<std::vector<std::vector<int64_t>>>& coils,
+	void batched_sense_forward_weighted_kdata(const at::Tensor& input, std::vector<at::Tensor>& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<at::Tensor>& kdatas,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
-		return hasty::ffi::batched_sense_forward_weighted_kdata(input, output, coilss, smaps, coords, weights, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
+		hasty::ffi::batched_sense_forward_weighted_kdata(input, output, coilss, smaps, coords, weights, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
+	*/
 	
 	// ADJOINT
 
 	at::Tensor batched_sense_adjoint(const std::vector<at::Tensor>& input, at::Tensor& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		return hasty::ffi::batched_sense_adjoint(input, output, coilss, smaps, coords, sum, sumnorm, hasty::ffi::get_streams(streams));
@@ -75,7 +78,7 @@ namespace bs {
 
 	at::Tensor batched_sense_adjoint_weighted(const std::vector<at::Tensor>& input, at::Tensor& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		return hasty::ffi::batched_sense_adjoint_weighted(input, output, coilss, smaps, coords, weights, sum, sumnorm, hasty::ffi::get_streams(streams));
@@ -83,7 +86,7 @@ namespace bs {
 
 	at::Tensor batched_sense_adjoint_kdata(const std::vector<at::Tensor>& input, at::Tensor& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& kdatas,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		return hasty::ffi::batched_sense_adjoint_kdata(input, output, coilss, smaps, coords, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
@@ -91,7 +94,7 @@ namespace bs {
 
 	at::Tensor batched_sense_adjoint_weighted_kdata(const std::vector<at::Tensor>& input, at::Tensor& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights, const std::vector<at::Tensor>& kdatas,
-		bool sum, bool sumnorm, const std::vector<c10::Stream>& streams)
+		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
 	{ 
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		return hasty::ffi::batched_sense_adjoint_weighted_kdata(input, output, coilss, smaps, coords, weights, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
@@ -141,13 +144,19 @@ namespace bs {
 	{
 		hasty::ffi::batched_sense_toeplitz_diagonals(input, coils, smaps, diagonals, hasty::ffi::get_streams(streams));
 	}
+	
+
+
 
 }
 
 namespace dummy {
 
-	void dummy(at::Tensor& tensor) {
-		std::cout << tensor << std::endl;
+	void dummy(at::TensorList tensorlist) {
+		std::cout << tensorlist << std::endl;
+		for (auto tensor : tensorlist) {
+			tensor += 1.0;
+		}
 	}
 
 }
@@ -157,15 +166,20 @@ using namespace at;
 
 TORCH_LIBRARY(HastySense, m) {
 	
+	m.def("dummy", dummy::dummy);
+
 	m.def("nufft1", nufft::nufft1);
 	m.def("nufft2", nufft::nufft2);
 	m.def("nufft21", nufft::nufft21);
 	m.def("nufft12", nufft::nufft12);
 	
 	m.def("batched_sense_forward", bs::batched_sense_forward);
+
+	/*
 	m.def("batched_sense_forward_weighted", bs::batched_sense_forward_weighted);
 	m.def("batched_sense_forward_kdata", bs::batched_sense_forward_kdata);
 	m.def("batched_sense_forward_weighted_kdata", bs::batched_sense_forward_weighted_kdata);
+	*/
 
 	m.def("batched_sense_adjoint", bs::batched_sense_adjoint);
 	m.def("batched_sense_adjoint_weighted", bs::batched_sense_adjoint_weighted);
@@ -179,6 +193,7 @@ TORCH_LIBRARY(HastySense, m) {
 	
 	m.def("batched_sense_toeplitz", bs::batched_sense_toeplitz);
 	m.def("batched_sense_toeplitz_diagonals", bs::batched_sense_toeplitz_diagonals);
+	
 
 }
 
