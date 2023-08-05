@@ -5,8 +5,8 @@
 
 using namespace hasty;
 
-Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes, bool adjoint)
-	: _nufft(coords, nmodes, adjoint ? NufftOptions::type1() : NufftOptions::type2()), _nmodes(nmodes), _adjoint(adjoint)
+Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _nufft(coords, nmodes, NufftOptions::type2()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
 		throw std::runtime_error("Only ntransf==1 allowed for Sense operator");
@@ -14,177 +14,233 @@ Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes, bool 
 }
 
 at::Tensor hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& storage,
-	const std::optional<std::function<void(at::Tensor&, int32_t)>>& manip, bool sum, bool sumnorm)
+	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
+	const std::optional<CoilApplier>& premanip,
+	const std::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
 	out.zero_();
 
-	at::Tensor normtensor = at::scalar_tensor(at::Scalar((double)0.0)).to(in.device());
-	bool has_manip = manip.has_value();
-
-	if (!_adjoint) {
-		
-		at::Tensor instore;
-
-		if (storage.has_value()) {
-			instore = *storage;
-		}
-		else {
-			instore = at::empty_like(in);
-		}
-
-		at::Tensor fstore;
-		if (sum) {
-			fstore = at::empty({ 1, _nufft.nfreq() }, in.options());
-		}
-
-		for (auto coil : coils) {
-			at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-			at::mul_out(instore, in, smap);
-
-			if (!sum) {
-				fstore = out.select(0, coil).unsqueeze(0);
-			}
-
-			_nufft.apply(instore, fstore);
-			if (has_manip) {
-				(*manip)(fstore, coil);
-			}
-
-			if (sumnorm) {
-				auto norm = at::linalg_norm(fstore);
-				normtensor.add_(norm.square_());
-			}
-
-			if (sum) {
-				out.add_(fstore);
-			}
-		}
-	}
-	else {
-		
-		at::Tensor outstore;
-		if (storage.has_value()) {
-			outstore = *storage;
-		}
-		else {
-			outstore = at::empty(at::makeArrayRef(_nmodes), in.options());
-		}
-
-		at::Tensor instore = at::empty({ 1, _nufft.nfreq() }, in.options());
-
-		for (auto coil : coils) {
-			
-			instore.copy_(in.select(0, coil).unsqueeze(0));
-			if (has_manip) {
-				(*manip)(instore, coil);
-			}
-
-			_nufft.apply(instore, outstore);
-
-			at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-			outstore.mul_(smap.conj());
-
-			if (sumnorm) {
-				at::Tensor norm = at::linalg_norm(outstore);
-				normtensor.add_(norm.square_());
-			}
-
-			if (sum) {
-				out.add_(outstore);
-			}
-			else {
-				out.select(0, coil).copy_(outstore);
-			}
-		}
-
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	} else {
+		imstore = at::empty_like(in);
 	}
 
-	return normtensor;
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	} else {
+		kstore = at::empty_like(out.select(0, 0).unsqueeze(0));
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (auto coil : coils) {
+
+		imstore.copy_(in);
+
+		if (premanip.has_value()) {
+			(*premanip)(imstore, coil);
+		}
+
+		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+		imstore.mul_(smap);
+
+		_nufft.apply(imstore, kstore);
+
+		if (postmanip.has_value()) {
+			(*postmanip)(kstore, coil);
+		}
+
+		if (accumulate) {
+			out.select(0, 0).unsqueeze(0).add_(kstore);
+		}
+		else {
+			out.select(0, coil).unsqueeze(0).add_(kstore);
+		}
+	}
+
 }
 
 
-SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, bool adjoint)
-	: _normal_nufft(coords, nmodes, adjoint ? NufftOptions::type1() : NufftOptions::type2(), adjoint ? NufftOptions::type2() : NufftOptions::type1()),
-	_nmodes(nmodes), _adjoint(adjoint)
+hasty::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _nufft(coords, nmodes, NufftOptions::type1()), _nmodes(nmodes)
 {
-	
+	if (_nmodes[0] != 1) {
+		throw std::runtime_error("Only ntransf==1 allowed for SenseAdjoint operator");
+	}
 }
 
-void SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& in_storage, const std::optional<at::Tensor>& mid_storage,
-	const std::optional<std::function<void(at::Tensor&, int32_t)>>& mid_manip)
+at::Tensor hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
+	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage, 
+	const std::optional<CoilApplier>& premanip, const std::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
 	out.zero_();
 
-	if (!_adjoint) {
-		at::Tensor xstore;
-		at::Tensor midstore;
-
-		if (in_storage.has_value()) {
-			xstore = in_storage.value();
-		}
-		else {
-			xstore = at::empty_like(in);
-		}
-		if (mid_storage.has_value()) {
-			midstore = mid_storage.value();
-		}
-		else {
-			midstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
-		}
-
-		bool has_mid_manip = mid_manip.has_value();
-
-		for (auto coil : coils) {
-
-			at::Tensor smap = smaps.select(0,coil).unsqueeze(0);
-			at::mul_out(xstore, in, smap);
-
-			if (has_mid_manip) {
-				_normal_nufft.apply_inplace(xstore, midstore, std::bind(mid_manip.value(), std::placeholders::_1, coil));
-			}
-			else {
-				_normal_nufft.apply_inplace(xstore, midstore, std::nullopt);
-			}
-
-			out.addcmul_(xstore, smap.conj());
-
-		}
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
 	}
 	else {
+		imstore = at::empty_like(out.select(0, 0).unsqueeze(0));
+	}
 
-		at::Tensor midstore;
-		if (mid_storage.has_value()) {
-			midstore = *mid_storage;
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	}
+	else {
+		kstore = at::empty_like(in.select(0,0).unsqueeze(0));
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (auto coil : coils) {
+
+		kstore.copy_(in.select(0, coil).unsqueeze(0));
+
+		if (premanip.has_value()) {
+			(*premanip)(kstore, coil);
+		}
+		
+		_nufft.apply(kstore, imstore);
+
+		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+		imstore.mul_(smap.conj());
+
+
+		if (postmanip.has_value()) {
+			(*postmanip)(imstore, coil);
+		}
+
+		if (accumulate) {
+			out.select(0, 0).unsqueeze(0).add_(kstore);
 		}
 		else {
-			midstore = at::empty(at::makeArrayRef(_nmodes), in.options());
+			out.select(0, coil).unsqueeze(0).add_(kstore);
+		}
+	}
+}
+
+
+SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1()), _nmodes(nmodes)
+{
+	if (_nmodes[0] != 1) {
+		throw std::runtime_error("Only ntransf==1 allowed for SenseNormal operator");
+	}
+}
+
+void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
+	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
+	const std::optional<CoilApplier>& premanip,
+	const std::optional<CoilApplier>& midmanip,
+	const std::optional<CoilApplier>& postmanip)
+{
+	c10::InferenceMode inference_guard;
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	} else {
+		imstore = at::empty_like(in);
+	}
+
+	out.zero_();
+
+
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	} else {
+		kstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
+	}
+
+	for (auto coil : coils) {
+		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+
+		if (premanip.has_value()) {
+			imstore.copy_(in);
+			(*premanip)(imstore, coil);
+			imstore.mul_(smap);
+		} else {
+			at::mul_out(imstore, in, smap);
 		}
 
-		bool has_mid_manip = mid_manip.has_value();
-		std::function<void(at::Tensor&,int32_t)> total_mid_manip = [&smaps, &mid_manip](at::Tensor& in, int32_t coil) {
 
-			at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+		if (midmanip.has_value()) {
+			_normal_nufft.apply_inplace(imstore, kstore, std::bind(*midmanip, std::placeholders::_1, coil));
+		} else {
+			_normal_nufft.apply_inplace(imstore, kstore, std::nullopt);
+		}
+
+		if (postmanip.has_value()) {
+			imstore.mul_(smap.conj());
+			(*postmanip)(imstore, coil);
+			out.add_(imstore);
+		} else {
+			out.addcmul_(imstore, smap.conj());
+		}
+	}
+}
+
+
+hasty::SenseNormalAdjoint::SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _normal_nufft(coords, nmodes, NufftOptions::type1(), NufftOptions::type1()), _nmodes(nmodes)
+{
+	if (_nmodes[0] != 1) {
+		throw std::runtime_error("Only ntransf==1 allowed for SenseNormalAdjoint operator");
+	}
+}
+
+void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
+	const std::optional<at::Tensor>& imspace_storage,
+	const std::optional<CoilApplier>& premanip,
+	const std::optional<CoilApplier>& midmanip,
+	const std::optional<CoilApplier>& postmanip)
+{
+	c10::InferenceMode inference_guard;
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	} else {
+		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
+	}
+
+	at::Tensor kstore;
+
+	for (auto coil : coils) {
+		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
+		
+		kstore = out.select(0, coil).unsqueeze(0);
+		kstore.copy_(in.select(0, coil).unsqueeze(0));
+
+		if (premanip.has_value()) {
+			(*premanip)(kstore, coil);
+		}
+
+		std::function<void(at::Tensor&)> total_midmanip = [coil, &smap, &midmanip](at::Tensor& in) {
 			in.mul_(smap.conj());
-			if (mid_manip.has_value()) {
-				(*mid_manip)(in, coil);
-			}
+			if (midmanip.has_value())
+				(*midmanip)(in, coil);
 			in.mul_(smap);
 		};
 
-		for (auto coil : coils) {
-			at::Tensor coil_out = out.select(0, coil).unsqueeze(0);
-			_normal_nufft.apply(in.select(0, coil).unsqueeze(0), coil_out, midstore, std::bind(total_mid_manip, std::placeholders::_1, coil));
+		_normal_nufft.apply_inplace(kstore, imstore, total_midmanip);
+
+		if (postmanip.has_value()) {
+			(*postmanip)(kstore, coil);
 		}
 
 	}
-
 }
+
 
 
 SenseNormalToeplitz::SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol)
@@ -219,26 +275,17 @@ void SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tenso
 
 
 
-BatchedSense::BatchedSense(
-	std::vector<DeviceContext>&& contexts,
-	at::Tensor&& diagonals)
-	:
-	_dcontexts(std::move(contexts)),
-	_diagonals(std::move(diagonals))
-{
-	construct();
-}
 
 BatchedSense::BatchedSense(
 	std::vector<DeviceContext>&& contexts,
-	const std::optional<TensorVec>& coords,
-	const std::optional<TensorVec>& kdata,
-	const std::optional<TensorVec>& weights)
+	const at::TensorList& coords,
+	const std::optional<at::TensorList>& kdata,
+	const std::optional<at::TensorList>& weights)
 	:
 	_dcontexts(std::move(contexts)),
-	_coords(coords.has_value() ? std::move(*coords) : TensorVec()),
-	_kdata(kdata.has_value() ? std::move(*kdata) : TensorVec()),
-	_weights(weights.has_value() ? std::move(*weights) : TensorVec())
+	_coords(coords.vec()),
+	_kdata(kdata.has_value() ? (*kdata).vec() : TensorVec()),
+	_weights(weights.has_value() ? (*weights).vec() : TensorVec())
 {
 	construct();
 }
@@ -247,7 +294,6 @@ void BatchedSense::construct()
 {
 	auto& smap = _dcontexts[0].smaps;
 
-	_nctxt = _dcontexts.size();
 	_ndim = smap.sizes().size() - 1;
 	_nmodes.resize(smap.sizes().size());
 	_nmodes[0] = 1; 
@@ -255,6 +301,138 @@ void BatchedSense::construct()
 		_nmodes[i] = smap.size(i);
 	}
 }
+
+void hasty::BatchedSense::apply(const at::Tensor& in, at::TensorList out, const std::vector<std::vector<int64_t>>& coils, const OuterManipulator& manips)
+{
+	c10::InferenceMode im_mode;
+
+	int n_outer_batch = in.size(0);
+	if (in.sizes().size() != _ndim + 2) {
+		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
+	}
+
+	ContextThreadPool<DeviceContext> tpool(_dcontexts);
+
+	std::deque<std::future<void>> futures;
+
+	std::function<void(DeviceContext&)> batch_applier;
+
+
+	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
+		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
+			apply_outer_batch(in, out[outer_batch], coils[outer_batch], context, outer_batch, manips);
+		};
+
+		futures.emplace_back(tpool.enqueue(batch_applier));
+
+		if (futures.size() > 32 * _dcontexts.size()) {
+			torch_util::future_catcher(futures.front());
+			futures.pop_front();
+		}
+	}
+
+	// we wait for all promises
+	while (futures.size() > 0) {
+		torch_util::future_catcher(futures.front());
+		futures.pop_front();
+	}
+
+}
+
+void hasty::BatchedSense::apply_outer_batch(const at::Tensor& in, at::Tensor out, const std::vector<int64_t>& coils, 
+	DeviceContext& dctxt, int32_t outer_batch, const OuterManipulator& outmanip)
+{
+	c10::InferenceMode inference_guard;
+	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
+
+	at::Tensor instore;
+
+	// Apply outer preapplier if applicable
+	{
+		if (outmanip.preapplier.has_value()) {
+			instore = in.select(0, outer_batch).detach().clone();
+			(*outmanip.preapplier)(instore, outer_batch, dctxt.stream);
+		} else {
+			instore = in.select(0, outer_batch);
+		}
+	}
+
+	InnerManipulator inmanip = outmanip.getInnerManipulator(outer_batch, dctxt.stream);
+
+	int n_inner_batches = instore.size(1);
+	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
+	Sense sense(coord_cu, _nmodes);
+
+	at::Tensor weights_cu;
+	if (_weights.size() > 0) {
+		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
+	}
+
+	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
+
+		at::Tensor in_inner_batch_cpu_view = instore.select(0, inner_batch).unsqueeze(0);
+		at::Tensor in_cu = in_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+
+		at::Tensor kdata_cu;
+		if (_kdata.size() > 0) {
+			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
+		}
+
+		InnerData data{ weights_cu, kdata_cu };
+
+		if (inmanip.preapplier.has_value()) {
+			(*inmanip.preapplier)(in_cu, inner_batch, data, dctxt.stream);
+		}
+
+		at::Tensor out_inner_batch_cpu_view = out.select(0, inner_batch);
+		at::Tensor out_cu = out_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+
+		std::optional<CoilApplier> coil_applier = inmanip.getCoilApplier(inner_batch, data, dctxt.stream);
+
+		sense.apply(in_cu, out_cu, coils, );
+
+		// no need to mutex synchronize in forward since devices split over vector not inside tensors
+		out_inner_batch_cpu_view.copy_(out_cu.cpu());
+	}
+
+
+
+
+
+	at::Tensor in_outer_batch_cpu_view = in.select(0, outer_batch);
+	at::Tensor in_inner_batch_cpu_view = in_outer_batch_cpu_view.select(0, 0).unsqueeze(0);
+	at::Tensor in_cu = in_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+	at::Tensor storage_cu = at::empty_like(in_cu);
+
+	at::Tensor out_inner_batch_cpu_view = out.select(0, 0);
+	at::Tensor out_cu = out_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+
+
+	at::Tensor normtensor = at::scalar_tensor(at::Scalar((double)0.0)).to(dctxt.stream.device());
+
+	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
+
+		in_inner_batch_cpu_view = in_outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
+		in_cu = in_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+
+		out_inner_batch_cpu_view = out.select(0, inner_batch);
+		out_cu = out_inner_batch_cpu_view.to(dctxt.stream.device(), true);
+
+		at::Tensor kdata_cu;
+		if (_kdata.size() > 0) {
+			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
+		}
+
+		// no need to mutex synchronize in forward since devices split over vector not inside tensors
+		out_inner_batch_cpu_view.copy_(out_cu.cpu());
+	}
+
+	return normtensor.cpu();
+}
+
+
+
+
 
 
 at::Tensor hasty::BatchedSense::apply_forward(const at::Tensor& in, at::TensorList out,
@@ -299,7 +477,7 @@ at::Tensor hasty::BatchedSense::apply_forward(const at::Tensor& in, at::TensorLi
 		{
 			std::lock_guard<std::mutex> lock(summut);
 			normtensor.add_(outer_norm);
-		}
+		} 
 	};
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
