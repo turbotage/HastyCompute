@@ -27,6 +27,7 @@ namespace nufft {
 }
 
 
+/*
 namespace bs { 
 
 	// FORWARD 
@@ -38,9 +39,7 @@ namespace bs {
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		hasty::ffi::batched_sense_forward(input, output, coilss, smaps, coords, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
-
 	
-	/*
 	void batched_sense_forward_weighted(const at::Tensor& input, std::vector<at::Tensor>& output, const at::optional<std::vector<std::vector<int64_t>>>& coils,
 		const at::Tensor& smaps, const std::vector<at::Tensor>& coords, const std::vector<at::Tensor>& weights,
 		bool sum, bool sumnorm, const at::optional<std::vector<c10::Stream>>& streams)
@@ -64,7 +63,6 @@ namespace bs {
 		std::optional<std::vector<std::vector<int64_t>>> coilss = coils.has_value() ? std::make_optional(*coils) : std::nullopt;
 		hasty::ffi::batched_sense_forward_weighted_kdata(input, output, coilss, smaps, coords, weights, kdatas, sum, sumnorm, hasty::ffi::get_streams(streams));
 	}
-	*/
 	
 	// ADJOINT
 
@@ -144,11 +142,9 @@ namespace bs {
 	{
 		hasty::ffi::batched_sense_toeplitz_diagonals(input, coils, smaps, diagonals, hasty::ffi::get_streams(streams));
 	}
-	
-
-
-
 }
+*/
+
 
 namespace dummy {
 
@@ -162,6 +158,23 @@ namespace dummy {
 }
 
 
+PYBIND11_MODULE(BatchedSense, bs) {
+
+	py::class_<hasty::ffi::BatchedSense>(bs, "BatchedSense")
+		.def_static("create", &hasty::ffi::BatchedSense::create)
+		.def("apply", &hasty::ffi::BatchedSense::apply);
+
+
+}
+
+/*
+.def(py::init<const at::TensorList&, const at::Tensor&,
+			const at::optional<at::TensorList>&, const at::optional<at::TensorList>&,
+			const at::optional<std::vector<at::Stream>>&>())
+*/
+
+
+/*
 using namespace at;
 
 TORCH_LIBRARY(HastySense, m) {
@@ -175,12 +188,11 @@ TORCH_LIBRARY(HastySense, m) {
 	
 	m.def("batched_sense_forward", bs::batched_sense_forward);
 
-	/*
 	m.def("batched_sense_forward_weighted", bs::batched_sense_forward_weighted);
 	m.def("batched_sense_forward_kdata", bs::batched_sense_forward_kdata);
 	m.def("batched_sense_forward_weighted_kdata", bs::batched_sense_forward_weighted_kdata);
-	*/
 
+	
 	m.def("batched_sense_adjoint", bs::batched_sense_adjoint);
 	m.def("batched_sense_adjoint_weighted", bs::batched_sense_adjoint_weighted);
 	m.def("batched_sense_adjoint_kdata", bs::batched_sense_adjoint_kdata);
@@ -194,8 +206,9 @@ TORCH_LIBRARY(HastySense, m) {
 	m.def("batched_sense_toeplitz", bs::batched_sense_toeplitz);
 	m.def("batched_sense_toeplitz_diagonals", bs::batched_sense_toeplitz_diagonals);
 	
-
 }
+*/
+
 
 
 

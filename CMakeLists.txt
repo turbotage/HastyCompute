@@ -22,6 +22,7 @@ set(CS_SOURCES
 	"lib/cs/cg.cpp"
 	"lib/cs/llr.cpp"
 	"lib/cs/sense.cpp"
+	"lib/cs/batch_sense.cpp"
 	"lib/cs/svt.cpp"
 )
 
@@ -46,6 +47,7 @@ set(EXPR_SOURCES
 
 set(FFI_SOURCES
 	"lib/FFI/nufft.cpp"
+	"lib/FFI/batch_sense.cpp"
 	"lib/FFI/cs.cpp"
 	"lib/FFI/ffi.cpp"
 

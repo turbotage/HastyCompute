@@ -8,6 +8,7 @@
 #include <c10/cuda/CUDAGuard.h>
 
 
+/*
 std::vector<hasty::BatchedSense::DeviceContext> get_batch_contexts(const std::vector<c10::Stream>& streams, const at::Tensor& smaps)
 {
 	std::unordered_map<c10::Device, at::Tensor> smaps_dict;
@@ -255,6 +256,7 @@ void hasty::ffi::batched_sense_toeplitz_diagonals(at::Tensor& input, const std::
 
 	bsense.apply_toep(input, coils);
 }
+*/
 
 // LLR
 

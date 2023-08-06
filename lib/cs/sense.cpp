@@ -3,9 +3,8 @@
 
 #include <c10/cuda/CUDAGuard.h>
 
-using namespace hasty;
 
-Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+hasty::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _nufft(coords, nmodes, NufftOptions::type2()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
@@ -13,7 +12,7 @@ Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	}
 }
 
-at::Tensor hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& postmanip)
@@ -25,14 +24,16 @@ at::Tensor hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::
 	at::Tensor imstore;
 	if (imspace_storage.has_value()) {
 		imstore = *imspace_storage;
-	} else {
+	}
+	else {
 		imstore = at::empty_like(in);
 	}
 
 	at::Tensor kstore;
 	if (kspace_storage.has_value()) {
 		kstore = *kspace_storage;
-	} else {
+	}
+	else {
 		kstore = at::empty_like(out.select(0, 0).unsqueeze(0));
 	}
 
@@ -74,8 +75,8 @@ hasty::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<in
 	}
 }
 
-at::Tensor hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
-	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage, 
+void hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip, const std::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
@@ -95,7 +96,7 @@ at::Tensor hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 		kstore = *kspace_storage;
 	}
 	else {
-		kstore = at::empty_like(in.select(0,0).unsqueeze(0));
+		kstore = at::empty_like(in.select(0, 0).unsqueeze(0));
 	}
 
 	bool accumulate = out.size(0) == 1;
@@ -107,7 +108,7 @@ at::Tensor hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 		if (premanip.has_value()) {
 			(*premanip)(kstore, coil);
 		}
-		
+
 		_nufft.apply(kstore, imstore);
 
 		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
@@ -128,7 +129,7 @@ at::Tensor hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 }
 
 
-SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+hasty::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
@@ -136,7 +137,7 @@ SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& n
 	}
 }
 
-void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
+void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& midmanip,
@@ -147,7 +148,8 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 	at::Tensor imstore;
 	if (imspace_storage.has_value()) {
 		imstore = *imspace_storage;
-	} else {
+	}
+	else {
 		imstore = at::empty_like(in);
 	}
 
@@ -157,7 +159,8 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 	at::Tensor kstore;
 	if (kspace_storage.has_value()) {
 		kstore = *kspace_storage;
-	} else {
+	}
+	else {
 		kstore = at::empty({ 1, _normal_nufft.nfreq() }, in.options());
 	}
 
@@ -168,14 +171,16 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 			imstore.copy_(in);
 			(*premanip)(imstore, coil);
 			imstore.mul_(smap);
-		} else {
+		}
+		else {
 			at::mul_out(imstore, in, smap);
 		}
 
 
 		if (midmanip.has_value()) {
 			_normal_nufft.apply_inplace(imstore, kstore, std::bind(*midmanip, std::placeholders::_1, coil));
-		} else {
+		}
+		else {
 			_normal_nufft.apply_inplace(imstore, kstore, std::nullopt);
 		}
 
@@ -183,7 +188,8 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 			imstore.mul_(smap.conj());
 			(*postmanip)(imstore, coil);
 			out.add_(imstore);
-		} else {
+		}
+		else {
 			out.addcmul_(imstore, smap.conj());
 		}
 	}
@@ -198,7 +204,7 @@ hasty::SenseNormalAdjoint::SenseNormalAdjoint(const at::Tensor& coords, const st
 	}
 }
 
-void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils, 
+void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const std::optional<at::Tensor>& imspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& midmanip,
@@ -209,7 +215,8 @@ void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 	at::Tensor imstore;
 	if (imspace_storage.has_value()) {
 		imstore = *imspace_storage;
-	} else {
+	}
+	else {
 		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
 	}
 
@@ -217,7 +224,7 @@ void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 
 	for (auto coil : coils) {
 		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-		
+
 		kstore = out.select(0, coil).unsqueeze(0);
 		kstore.copy_(in.select(0, coil).unsqueeze(0));
 
@@ -243,19 +250,19 @@ void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 
 
 
-SenseNormalToeplitz::SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol)
+hasty::SenseNormalToeplitz::SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol)
 	: _normal_nufft(coords, nmodes, tol, std::nullopt, std::nullopt, std::nullopt)
 {
 
 }
 
-SenseNormalToeplitz::SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+hasty::SenseNormalToeplitz::SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(std::move(diagonal), nmodes)
 {
 
 }
 
-void SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
+void hasty::SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils) const
 {
 	c10::InferenceMode inference_guard;
@@ -275,638 +282,4 @@ void SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tenso
 
 
 
-BatchedSense::BatchedSense(
-	std::vector<DeviceContext>&& contexts,
-	const at::TensorList& coords,
-	const std::optional<at::TensorList>& kdata,
-	const std::optional<at::TensorList>& weights)
-	:
-	_dcontexts(std::move(contexts)),
-	_coords(coords.vec()),
-	_kdata(kdata.has_value() ? (*kdata).vec() : TensorVec()),
-	_weights(weights.has_value() ? (*weights).vec() : TensorVec())
-{
-	construct();
-}
 
-void BatchedSense::construct()
-{
-	auto& smap = _dcontexts[0].smaps;
-
-	_ndim = smap.sizes().size() - 1;
-	_nmodes.resize(smap.sizes().size());
-	_nmodes[0] = 1; 
-	for (int i = 1; i < _nmodes.size(); ++i) {
-		_nmodes[i] = smap.size(i);
-	}
-}
-
-void hasty::BatchedSense::apply(const at::Tensor& in, at::TensorList out, const std::vector<std::vector<int64_t>>& coils, const OuterManipulator& manips)
-{
-	c10::InferenceMode im_mode;
-
-	int n_outer_batch = in.size(0);
-	if (in.sizes().size() != _ndim + 2) {
-		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
-	}
-
-	ContextThreadPool<DeviceContext> tpool(_dcontexts);
-
-	std::deque<std::future<void>> futures;
-
-	std::function<void(DeviceContext&)> batch_applier;
-
-
-	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
-			apply_outer_batch(in, out[outer_batch], coils[outer_batch], context, outer_batch, manips);
-		};
-
-		futures.emplace_back(tpool.enqueue(batch_applier));
-
-		if (futures.size() > 32 * _dcontexts.size()) {
-			torch_util::future_catcher(futures.front());
-			futures.pop_front();
-		}
-	}
-
-	// we wait for all promises
-	while (futures.size() > 0) {
-		torch_util::future_catcher(futures.front());
-		futures.pop_front();
-	}
-
-}
-
-void hasty::BatchedSense::apply_outer_batch(const at::Tensor& in, at::Tensor out, const std::vector<int64_t>& coils, 
-	DeviceContext& dctxt, int32_t outer_batch, const OuterManipulator& outmanip)
-{
-	c10::InferenceMode inference_guard;
-	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
-
-	at::Tensor instore;
-
-	// Apply outer preapplier if applicable
-	{
-		if (outmanip.preapplier.has_value()) {
-			instore = in.select(0, outer_batch).detach().clone();
-			(*outmanip.preapplier)(instore, outer_batch, dctxt.stream);
-		} else {
-			instore = in.select(0, outer_batch);
-		}
-	}
-
-	InnerManipulator inmanip = outmanip.getInnerManipulator(outer_batch, dctxt.stream);
-
-	int n_inner_batches = instore.size(1);
-	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	Sense sense(coord_cu, _nmodes);
-
-	at::Tensor weights_cu;
-	if (_weights.size() > 0) {
-		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
-	}
-
-	at::Tensor imspace_storage = at::empty(at::makeArrayRef(_nmodes), instore.options().device(dctxt.stream.device()));
-	at::Tensor kspace_storage = at::empty({ 1, coord_cu.size(1) }, instore.options().device(dctxt.stream.device()));
-
-	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
-
-		at::Tensor in_inner_batch_cpu_view = instore.select(0, inner_batch).unsqueeze(0);
-		at::Tensor in_cu = in_inner_batch_cpu_view.to(dctxt.stream.device(), true);
-
-		at::Tensor kdata_cu;
-		if (_kdata.size() > 0) {
-			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
-		}
-
-		InnerData data{ weights_cu, kdata_cu };
-
-		if (inmanip.preapplier.has_value()) {
-			(*inmanip.preapplier)(in_cu, inner_batch, data, dctxt.stream);
-		}
-
-		at::Tensor out_inner_batch_cpu_view = out.select(0, inner_batch);
-		at::Tensor out_cu = out_inner_batch_cpu_view.to(dctxt.stream.device(), true);
-
-		CoilManipulator coilmanip = inmanip.getCoilManipulator(inner_batch, data, dctxt.stream);
-
-		sense.apply(in_cu, out_cu, dctxt.smaps, coils, imspace_storage, kspace_storage, 
-			coilmanip.preapplier, coilmanip.postapplier);
-
-		// no need to mutex synchronize in forward since devices split over vector not inside tensors
-		out_inner_batch_cpu_view.copy_(out_cu.cpu());
-	}
-
-	if (outmanip.postapplier.has_value()) {
-		(*outmanip.postapplier)(out, outer_batch, dctxt.stream);
-	}
-
-}
-
-
-BatchedSenseAdjoint::BatchedSenseAdjoint(
-	std::vector<DeviceContext>&& contexts,
-	const at::TensorList& coords,
-	const std::optional<at::TensorList>& kdata,
-	const std::optional<at::TensorList>& weights)
-	:
-	_dcontexts(std::move(contexts)),
-	_coords(coords.vec()),
-	_kdata(kdata.has_value() ? (*kdata).vec() : TensorVec()),
-	_weights(weights.has_value() ? (*weights).vec() : TensorVec())
-{
-	construct();
-}
-
-void BatchedSenseAdjoint::construct()
-{
-	auto& smap = _dcontexts[0].smaps;
-
-	_ndim = smap.sizes().size() - 1;
-	_nmodes.resize(smap.sizes().size());
-	_nmodes[0] = 1;
-	for (int i = 1; i < _nmodes.size(); ++i) {
-		_nmodes[i] = smap.size(i);
-	}
-}
-
-void hasty::BatchedSenseAdjoint::apply(const at::TensorList& in, at::Tensor out, const std::vector<std::vector<int64_t>>& coils, const OuterManipulator& manips)
-{
-	c10::InferenceMode im_mode;
-
-	int n_outer_batch = in.size();
-	if (out.sizes().size() != _ndim + 2) {
-		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
-	}
-
-	ContextThreadPool<DeviceContext> tpool(_dcontexts);
-
-	std::deque<std::future<void>> futures;
-
-	std::function<void(DeviceContext&)> batch_applier;
-
-
-	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
-			apply_outer_batch(in[outer_batch], out, coils[outer_batch], context, outer_batch, manips);
-		};
-
-		futures.emplace_back(tpool.enqueue(batch_applier));
-
-		if (futures.size() > 32 * _dcontexts.size()) {
-			torch_util::future_catcher(futures.front());
-			futures.pop_front();
-		}
-	}
-
-	// we wait for all promises
-	while (futures.size() > 0) {
-		torch_util::future_catcher(futures.front());
-		futures.pop_front();
-	}
-}
-
-void hasty::BatchedSenseAdjoint::apply_outer_batch(const at::Tensor& in, at::Tensor out, const std::vector<int64_t>& coils, DeviceContext& dctxt, int32_t outer_batch, const OuterManipulator& outmanip)
-{
-	c10::InferenceMode inference_guard;
-	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
-
-	at::Tensor instore;
-
-	// Apply outer preapplier if applicable
-	{
-		if (outmanip.preapplier.has_value()) {
-			instore = in.detach().clone();
-			(*outmanip.preapplier)(instore, outer_batch, dctxt.stream);
-		}
-		else {
-			instore = in;
-		}
-	}
-
-	InnerManipulator inmanip = outmanip.getInnerManipulator(outer_batch, dctxt.stream);
-
-	int n_inner_batches = instore.size(1);
-	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	SenseAdjoint sense(coord_cu, _nmodes);
-
-	at::Tensor weights_cu;
-	if (_weights.size() > 0) {
-		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
-	}
-
-	at::Tensor imspace_storage = at::empty(at::makeArrayRef(_nmodes), instore.options().device(dctxt.stream.device()));
-	at::Tensor kspace_storage = at::empty({ 1, coord_cu.size(1) }, instore.options().device(dctxt.stream.device()));
-
-	at::Tensor out_outer_batch_cpu_view = out.select(0, outer_batch);
-
-	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
-
-		at::Tensor in_inner_batch_cpu_view = instore.select(0, inner_batch);
-		at::Tensor in_cu = in_inner_batch_cpu_view.to(dctxt.stream.device(), true);
-
-		at::Tensor kdata_cu;
-		if (_kdata.size() > 0) {
-			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
-		}
-
-		InnerData data{ weights_cu, kdata_cu };
-
-		if (inmanip.preapplier.has_value()) {
-			(*inmanip.preapplier)(in_cu, inner_batch, data, dctxt.stream);
-		}
-
-		at::Tensor out_inner_batch_cpu_view = out_outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
-		at::Tensor out_cu = out_inner_batch_cpu_view.to(dctxt.stream.device(), true);
-
-		CoilManipulator coilmanip = inmanip.getCoilManipulator(inner_batch, data, dctxt.stream);
-
-		sense.apply(in_cu, out_cu, dctxt.smaps, coils, imspace_storage, kspace_storage,
-			coilmanip.preapplier, coilmanip.postapplier);
-
-		out_inner_batch_cpu_view.copy_(out_cu.cpu());
-	}
-
-	if (outmanip.postapplier.has_value()) {
-		(*outmanip.postapplier)(out, outer_batch, dctxt.stream);
-	}
-}
-
-
-
-
-/*
-
-
-void BatchedSense::apply_normal(at::Tensor& in,
-	const std::optional<std::vector<std::vector<int64_t>>>& coils,
-	const std::optional<WeightedManipulator>& wmanip,
-	const std::optional<FreqManipulator>& fmanip,
-	const std::optional<WeightedFreqManipulator>& wfmanip)
-{
-	int n_outer_batch = in.size(0);
-
-	if (in.sizes().size() != _ndim + 2) {
-		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
-	}
-
-	c10::InferenceMode im_mode;
-
-	ContextThreadPool<DeviceContext> tpool(_dcontexts);
-
-	std::vector<std::vector<int64_t>> coilss;
-	if (coils.has_value()) {
-		coilss = coils.value();
-	}
-	else {
-		int num_smaps = _dcontexts[0].smaps.size(0);
-		coilss = std::vector<std::vector<int64_t>>(n_outer_batch);
-		for (int i = 0; i < coilss.size(); ++i) {
-			std::iota(coilss[i].begin(), coilss[i].end(), 0);
-		}
-	}
-
-	std::deque<std::future<void>> futures;
-
-	std::function<void(DeviceContext&)> batch_applier;
-
-	auto outer_capture = [this, &in, &coilss, &wmanip, &fmanip, &wfmanip](DeviceContext& context, int32_t outer_batch)
-	{
-		apply_outer_batch_normal(context, outer_batch, in, coilss[outer_batch], wmanip, fmanip, wfmanip);
-	};
-
-	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		batch_applier = [outer_batch, &outer_capture](DeviceContext& context) { outer_capture(context, outer_batch); };
-
-		futures.emplace_back(tpool.enqueue(batch_applier));
-
-		if (futures.size() > 32 * _dcontexts.size()) {
-			torch_util::future_catcher(futures.front());
-			futures.pop_front();
-		}
-	}
-
-	// we wait for all promises
-	while (futures.size() > 0) {
-		torch_util::future_catcher(futures.front());
-		futures.pop_front();
-	}
-
-}
-
-void BatchedSense::apply_outer_batch_normal(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
-	const std::vector<int64_t>& coils,
-	const std::optional<WeightedManipulator>& wmanip,
-	const std::optional<FreqManipulator>& fmanip,
-	const std::optional<WeightedFreqManipulator>& wfmanip)
-{
-	//std::cout << std::endl << "outer_batch: " << outer_batch << "coils: ";
-
-	c10::InferenceMode inference_guard;
-	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
-
-	at::Tensor coord_cu;
-	if (_coords.size() > 0) {
-		coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	}
-	SenseNormal sense(coord_cu, _nmodes);
-	int n_inner_batches = in.size(1);
-
-	at::Tensor outer_batch_cpu_view = in.select(0, outer_batch);
-	at::Tensor inner_batch_cpu_view = outer_batch_cpu_view.select(0, 0).unsqueeze(0);
-	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-	at::Tensor out_cu = at::empty_like(in_cu);
-	at::Tensor storage_cu = at::empty_like(in_cu);
-
-	at::Tensor weights_cu;
-	if (_weights.size() > 0) {
-		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
-	}
-
-	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
-		
-		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
-		in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-		//inner_batch_cpu_view.zero_();
-
-		at::Tensor kdata_cu;
-		if (_kdata.size() > 0) {
-			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
-		}
-
-		std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip;
-
-		if (wmanip.has_value()) {
-			freq_manip = [&wmanip, &weights_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				(*wmanip)(in, weights_cu);
-			};
-		}
-		else if (fmanip.has_value()) {
-			freq_manip = [&fmanip, &kdata_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				(*fmanip)(in, kdata_coil);
-			};
-		}
-		else if (wfmanip.has_value()) {
-			freq_manip = [&wfmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				(*wfmanip)(in, kdata_coil, weights_cu);
-			};
-		}
-
-		sense.apply(in_cu, out_cu, dctxt.smaps, coils, storage_cu, std::nullopt, freq_manip);
-
-		//out_cu.div_(std::accumulate(_nmodes.begin(), _nmodes.end(), 1, std::multiplies<int64_t>()));
-
-		if (_nctxt > 1)
-		{
-			at::Tensor out_cpu = out_cu.cpu();
-			{
-				std::lock_guard<std::mutex> lock(_copy_back_mutex);
-				inner_batch_cpu_view.copy_(out_cpu);
-			}
-		}
-		else {
-			inner_batch_cpu_view.copy_(out_cu.cpu());
-		}
-	}
-
-}
-
-
-void hasty::BatchedSense::apply_normal_adjoint(TensorVec& in, 
-	const std::optional<std::vector<std::vector<int64_t>>>& coils,
-	const std::optional<WeightedManipulator>& wmanip,
-	const std::optional<FreqManipulator>& fmanip,
-	const std::optional<WeightedFreqManipulator>& wfmanip)
-{
-	int n_outer_batch = in.size();
-
-	c10::InferenceMode im_mode;
-
-	ContextThreadPool<DeviceContext> tpool(_dcontexts);
-
-	std::vector<std::vector<int64_t>> coilss;
-	if (coils.has_value()) {
-		coilss = coils.value();
-	}
-	else {
-		int num_smaps = _dcontexts[0].smaps.size(0);
-		coilss = std::vector<std::vector<int64_t>>(n_outer_batch);
-		for (int i = 0; i < coilss.size(); ++i) {
-			std::iota(coilss[i].begin(), coilss[i].end(), 0);
-		}
-	}
-
-	std::deque<std::future<void>> futures;
-
-	std::function<void(DeviceContext&)> batch_applier;
-
-	auto outer_capture = [this, &in, &coilss, &wmanip, &fmanip, &wfmanip](DeviceContext& context, int32_t outer_batch)
-	{
-		apply_outer_batch_normal_adjoint(context, outer_batch, in[outer_batch], coilss[outer_batch], wmanip, fmanip, wfmanip);
-	};
-
-	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		batch_applier = [outer_batch, &outer_capture](DeviceContext& context) { outer_capture(context, outer_batch); };
-
-		futures.emplace_back(tpool.enqueue(batch_applier));
-
-		if (futures.size() > 32 * _dcontexts.size()) {
-			torch_util::future_catcher(futures.front());
-			futures.pop_front();
-		}
-	}
-
-	// we wait for all promises
-	while (futures.size() > 0) {
-		torch_util::future_catcher(futures.front());
-		futures.pop_front();
-	}
-}
-
-void hasty::BatchedSense::apply_outer_batch_normal_adjoint(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in, 
-	const std::vector<int64_t>& coils, 
-	const std::optional<WeightedManipulator>& wmanip, 
-	const std::optional<FreqManipulator>& fmanip, 
-	const std::optional<WeightedFreqManipulator>& wfmanip)
-{
-	c10::InferenceMode inference_guard;
-	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
-
-	at::Tensor coord_cu;
-	if (_coords.size() > 0) {
-		coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	}
-	SenseNormal sense(coord_cu, _nmodes, true);
-	int n_inner_batches = in.size(0);
-
-	at::Tensor inner_batch_cpu_view = in.select(0, 0).unsqueeze(0);
-	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-	at::Tensor out_cu = at::empty_like(in_cu);
-	at::Tensor storage_cu = at::empty(at::makeArrayRef(_nmodes), out_cu.options());
-
-	at::Tensor weights_cu;
-	if (_weights.size() > 0) {
-		weights_cu = _weights[outer_batch].to(dctxt.stream.device(), true);
-	}
-
-	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
-
-		inner_batch_cpu_view = in.select(0, inner_batch).unsqueeze(0);
-		in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-		//inner_batch_cpu_view.zero_();
-
-		at::Tensor kdata_cu;
-		if (_kdata.size() > 0) {
-			kdata_cu = _kdata[outer_batch].select(0, inner_batch).to(dctxt.stream.device(), true);
-		}
-
-		std::optional<std::function<void(at::Tensor&, int32_t)>> freq_manip;
-
-		if (wmanip.has_value()) {
-			freq_manip = [&wmanip, &weights_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				(*wmanip)(in, weights_cu);
-			};
-		}
-		else if (fmanip.has_value()) {
-			freq_manip = [&fmanip, &kdata_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				(*fmanip)(in, kdata_coil);
-			};
-		}
-		else if (wfmanip.has_value()) {
-			freq_manip = [&wfmanip, &kdata_cu, &weights_cu](at::Tensor& in, int32_t coil) {
-				//std::cout << " " << coil;
-				auto kdata_coil = kdata_cu.select(0, coil).unsqueeze(0);
-				(*wfmanip)(in, kdata_coil, weights_cu);
-			};
-		}
-		
-		sense.apply(in_cu, out_cu, dctxt.smaps, coils, storage_cu, std::nullopt, freq_manip);
-
-		inner_batch_cpu_view.copy_(out_cu.cpu());
-	}
-}
-
-
-
-
-void BatchedSense::apply_toep(at::Tensor& in, const std::optional<std::vector<std::vector<int64_t>>>& coils)
-{
-	if (in.sizes().size() != _ndim + 2) {
-		throw std::runtime_error("For a ND-image input to apply should be (N+2)D tensor");
-	}
-
-	int n_outer_batch = in.size(0);
-
-	c10::InferenceMode im_mode;
-
-	ContextThreadPool<DeviceContext> tpool(_dcontexts);
-
-	std::vector<std::vector<int64_t>> coilss;
-	if (coils.has_value()) {
-		coilss = coils.value();
-	}
-	else {
-		int num_smaps = _dcontexts[0].smaps.size(0);
-		coilss = std::vector<std::vector<int64_t>>(n_outer_batch);
-		for (int i = 0; i < coilss.size(); ++i) {
-			std::iota(coilss[i].begin(), coilss[i].end(), 0);
-		}
-	}
-
-	std::deque<std::future<void>> futures;
-
-	std::function<void(DeviceContext&)> batch_applier;
-
-	auto outer_capture = [this, &in, &coilss](DeviceContext& context, int32_t outer_batch)
-	{
-		apply_outer_batch_toep(context, outer_batch, in, coilss[outer_batch]);
-	};
-
-	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		batch_applier = [outer_batch, &outer_capture](DeviceContext& context) { outer_capture(context, outer_batch); };
-
-		futures.emplace_back(tpool.enqueue(batch_applier));
-
-		if (futures.size() > 32 * _dcontexts.size()) {
-			torch_util::future_catcher(futures.front());
-			futures.pop_front();
-		}
-	}
-
-	// we wait for all promises
-	while (futures.size() > 0) {
-		torch_util::future_catcher(futures.front());
-		futures.pop_front();
-	}
-}
-
-void BatchedSense::apply_outer_batch_toep(DeviceContext& dctxt, int32_t outer_batch, at::Tensor& in,
-	const std::vector<int64_t>& coils)
-{
-	c10::InferenceMode inference_guard;
-	c10::cuda::CUDAStreamGuard guard(dctxt.stream);
-
-	std::unique_ptr<SenseNormalToeplitz> psense;
-
-	if (_coords.size()> 0) {
-		psense = std::make_unique<SenseNormalToeplitz>(_coords[outer_batch].to(dctxt.stream.device(), true), _nmodes, 1e-5);
-
-	}
-	else {
-		psense = std::make_unique<SenseNormalToeplitz>(
-			std::move(
-				_diagonals.select(0, outer_batch).unsqueeze(0).to(dctxt.stream.device(), true)
-			), 
-			_nmodes);
-	}
-	
-	int n_inner_batches = in.size(1);
-
-	at::Tensor outer_batch_cpu_view = in.select(0, outer_batch);
-	at::Tensor inner_batch_cpu_view = outer_batch_cpu_view.select(0, 0).unsqueeze(0);
-	at::Tensor in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-	at::Tensor out_cu = at::empty_like(in_cu);
-
-	std::vector<int64_t> expanded_dims;
-	expanded_dims.push_back(0);
-	for (int i = 1; i < in_cu.sizes().size(); ++i) {
-		expanded_dims.push_back(in_cu.sizes()[i]);
-	}
-
-	at::Tensor storage1 = at::empty(at::makeArrayRef(expanded_dims), in_cu.options());
-	at::Tensor storage2 = at::empty(at::makeArrayRef(expanded_dims), in_cu.options());
-
-	for (int inner_batch = 0; inner_batch < n_inner_batches; ++inner_batch) {
-
-		inner_batch_cpu_view = outer_batch_cpu_view.select(0, inner_batch).unsqueeze(0);
-		in_cu = inner_batch_cpu_view.to(dctxt.stream.device(), true);
-		inner_batch_cpu_view.zero_();
-
-		psense->apply(in_cu, out_cu, storage1, storage2, dctxt.smaps, coils);
-
-		if (_nctxt > 1)
-		{
-			at::Tensor out_cpu = out_cu.cpu();
-			{
-				std::lock_guard<std::mutex> lock(_copy_back_mutex);
-				inner_batch_cpu_view.add_(out_cpu);
-			}
-		}
-		else {
-			inner_batch_cpu_view.add_(out_cu.cpu());
-		}
-
-	}
-}
-
- 
-*/

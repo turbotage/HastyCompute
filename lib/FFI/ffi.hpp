@@ -2,6 +2,7 @@
 
 #include "nufft.hpp"
 #include "cs.hpp"
+#include "batch_sense.hpp"
 
 #ifdef INCLUDE_TESTS
 #include "tests/tests1.hpp"
