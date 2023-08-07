@@ -143,7 +143,7 @@ namespace hasty {
 	};
 
 
-	class BatchedSenseBase {
+	class LIB_EXPORT BatchedSenseBase {
 	public:
 		struct DeviceContext {
 
@@ -182,7 +182,7 @@ namespace hasty {
 		int32_t _nctxt;
 	};
 
-	class BatchedSense : public BatchedSenseBase {
+	class LIB_EXPORT BatchedSense : public BatchedSenseBase {
 	public:
 
 		BatchedSense(
@@ -206,7 +206,7 @@ namespace hasty {
 
 	};
 
-	class BatchedSenseAdjoint : public BatchedSenseBase {
+	class LIB_EXPORT BatchedSenseAdjoint : public BatchedSenseBase {
 	public:
 
 		BatchedSenseAdjoint(
@@ -230,7 +230,7 @@ namespace hasty {
 
 	};
 
-	class BatchedSenseNormal : public BatchedSenseBase {
+	class LIB_EXPORT BatchedSenseNormal : public BatchedSenseBase {
 	public:
 
 		BatchedSenseNormal(
@@ -262,7 +262,7 @@ namespace hasty {
 
 	};
 
-	class BatchedSenseNormalAdjoint : public BatchedSenseBase {
+	class LIB_EXPORT BatchedSenseNormalAdjoint : public BatchedSenseBase {
 	public:
 
 		BatchedSenseNormalAdjoint(

@@ -2,8 +2,13 @@ cmake_minimum_required(VERSION 3.26)
 
 project("HastyCompute" VERSION 0.1)
 
-#include(FetchContent)
+include(FetchContent)
 #include(cmake/CPM.cmake)
+
+set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API "2182bf5c-ef0d-489a-91da-49dbc3090d2a")
+if (MSVC)
+	set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
+endif()
 
 set(BUILD_SHARED_LIBS ON)
 if (MSVC)
@@ -20,7 +25,6 @@ message("BUILD_CUDA = ${BUILD_CUDA}")
 
 set(CS_SOURCES
 	"lib/cs/cg.cpp"
-	"lib/cs/llr.cpp"
 	"lib/cs/sense.cpp"
 	"lib/cs/batch_sense.cpp"
 	"lib/cs/svt.cpp"
@@ -45,14 +49,9 @@ set(EXPR_SOURCES
 	"lib/expr/symbolic.ixx"
 )
 
-set(FFI_SOURCES
-	"lib/FFI/nufft.cpp"
-	"lib/FFI/batch_sense.cpp"
-	"lib/FFI/cs.cpp"
-	"lib/FFI/ffi.cpp"
-
-	"lib/FFI/tests/tests1.cpp"
-	"lib/FFI/tests/tests2.cpp"
+set(TEST_SOURCES
+	"lib/tests/tests1.cpp"
+	"lib/tests/tests2.cpp"
 )
 
 set(FFT_SOURCES
@@ -84,13 +83,7 @@ set(BACKEND_HEADERS
 add_library(HastyComputeLib SHARED
 
 	${CS_SOURCES}
-
-	${EXPR_SOURCES}
-
-	${FFI_SOURCES}
-
 	${FFT_SOURCES}
-
 	${THREADING_SOURCES}
 
 	"lib/hasty.ixx"
@@ -98,12 +91,12 @@ add_library(HastyComputeLib SHARED
 	"lib/hasty_util.ixx"
 	"lib/metadata.ixx"
 	"lib/torch_util.cpp"
-
+	
+	${EXPR_SOURCES}
 	${LINALG_SOURCES}
-
 	${NLSQ_SOURCES}
 
-	${OPTIM_SOURCES}
+	${TEST_SOURCES}
 )
 
 target_sources(HastyComputeLib PUBLIC 
@@ -188,19 +181,32 @@ endif()
 # Tests
 
 add_executable(HastyTest "tests/test.cpp")
-target_link_libraries(HastyTest HastyComputeLib)
+target_link_libraries(HastyTest PUBLIC HastyComputeLib)
 target_compile_features(HastyTest PRIVATE cxx_std_23)
 
 
 
 
 # Python Interface
+find_package(PythonLibs REQUIRED)
 find_package(Python3 3.11 EXACT COMPONENTS Interpreter Development REQUIRED)
+
+FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11
+    GIT_TAG        v2.11.1
+)
+FetchContent_MakeAvailable(pybind11)
+
 add_library(HastyPyInterface SHARED 
 	"python/cpp/py_interface.cpp"
+	"python/cpp/py_batched_sense.cpp"
 )
+#pybind11_add_module(HastyPyInterface SHARED "python/cpp/py_interface.cpp")
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
-#target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
+#target_link_libraries(HastyPyInterface PUBLIC ${TORCH_LIBRARIES})
+#set_property(TARGET HastyPyInterface PROPERTY CXX_STANDARD 17)
+target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
 target_link_libraries(HastyPyInterface PUBLIC ${Python3_LIBRARY_RELEASE})
 target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
 set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
@@ -237,8 +243,8 @@ install(TARGETS HastyComputeLib
 install(TARGETS HastyPyInterface 
 	EXPORT hasty-targets
 	RUNTIME DESTINATION bin
-	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib
+	LIBRARY DESTINATION lib
 	INCLUDES DESTINATION include
 )
 

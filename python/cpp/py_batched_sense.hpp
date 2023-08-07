@@ -2,30 +2,6 @@
 
 #include "py_util.hpp"
 
-namespace nufft {
-
-	at::Tensor nufft1(const at::Tensor& coords, const at::Tensor& input, const std::vector<int64_t>& nmodes)
-	{
-		return hasty::ffi::nufft1(coords, input, nmodes);
-	}
-
-	at::Tensor nufft2(const at::Tensor& coords, const at::Tensor& input)
-	{
-		return hasty::ffi::nufft2(coords, input);
-	}
-
-	at::Tensor nufft21(const at::Tensor& coords, const at::Tensor& input)
-	{
-		return hasty::ffi::nufft21(coords, input);
-	}
-
-	at::Tensor nufft12(const at::Tensor& coords, const at::Tensor& input, const std::vector<int64_t>& nmodes)
-	{
-		return hasty::ffi::nufft12(coords, input, nmodes);
-	}
-
-}
-
 
 /*
 namespace bs { 
@@ -145,27 +121,82 @@ namespace bs {
 }
 */
 
+namespace hasty {
+	namespace ffi {
+
+		class LIB_EXPORT BatchedSense : public torch::CustomClassHolder {
+		public:
+
+			BatchedSense(const at::TensorList& coords, const at::Tensor& smaps,
+				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+				const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+			void apply(const at::Tensor& in, at::TensorList out,
+				const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+		private:
+			std::unique_ptr<hasty::BatchedSense> _bs;
+		};
+
+		class LIB_EXPORT BatchedSenseAdjoint : public torch::CustomClassHolder {
+		public:
+
+			BatchedSenseAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
+				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+				const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+			void apply(const at::TensorList& in, at::Tensor out,
+				const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+		private:
+			std::unique_ptr<hasty::BatchedSenseAdjoint> _bs;
+		};
+
+		class LIB_EXPORT BatchedSenseNormal : public torch::CustomClassHolder {
+		public:
+
+			BatchedSenseNormal(const at::TensorList& coords, const at::Tensor& smaps,
+				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+				const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+			void apply(const at::Tensor& in, at::Tensor out,
+				const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+		private:
+			std::unique_ptr<hasty::BatchedSenseNormal> _bs;
+		};
+
+		class LIB_EXPORT BatchedSenseNormalAdjoint : public torch::CustomClassHolder {
+		public:
+
+			BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
+				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+				const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+			void apply(const at::TensorList& in, at::TensorList out,
+				const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+		private:
+			std::unique_ptr<hasty::BatchedSenseNormalAdjoint> _bs;
+		};
+
+	}
+}
 
 namespace dummy {
 
-	void dummy(at::TensorList tensorlist) {
-		std::cout << tensorlist << std::endl;
-		for (auto tensor : tensorlist) {
-			tensor += 1.0;
-		}
-	}
+	void LIB_EXPORT dummy(at::TensorList tensorlist);
 
+	void LIB_EXPORT stream_dummy(const at::optional<at::ArrayRef<at::Stream>>& streams, const torch::Tensor& in);
 }
 
-
-PYBIND11_MODULE(BatchedSense, bs) {
-
-	py::class_<hasty::ffi::BatchedSense>(bs, "BatchedSense")
-		.def_static("create", &hasty::ffi::BatchedSense::create)
+/*
+	bs.class_<hasty::ffi::BatchedSense>("BatchedSense")
+		.def(torch::init<const at::TensorList&, const at::Tensor&,
+			const at::optional<at::TensorList>&, const at::optional<at::TensorList>&,
+			const at::optional<at::ArrayRef<at::Stream>>&>())
 		.def("apply", &hasty::ffi::BatchedSense::apply);
-
-
-}
+	*/
 
 /*
 .def(py::init<const at::TensorList&, const at::Tensor&,

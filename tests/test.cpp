@@ -1,6 +1,5 @@
 
 #define INCLUDE_TESTS
-#define INCLUDE_FFI
 #include "../lib/hasty.hpp"
 
 #include <chrono>

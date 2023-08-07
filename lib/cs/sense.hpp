@@ -3,6 +3,7 @@
 #include "../fft/nufft.hpp"
 #include "../threading/thread_pool.hpp"
 
+#include "../export.hpp"
 
 namespace hasty {
 
@@ -38,7 +39,7 @@ namespace hasty {
 		std::optional<CoilApplier> postapplier;
 	};
 
-	class Sense {
+	class LIB_EXPORT Sense {
 	public:
 
 		Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
@@ -53,7 +54,7 @@ namespace hasty {
 		std::vector<int64_t> _nmodes;
 	};
 
-	class SenseAdjoint {
+	class LIB_EXPORT SenseAdjoint {
 	public:
 
 		SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
@@ -68,7 +69,7 @@ namespace hasty {
 		std::vector<int64_t> _nmodes;
 	};
 
-	class SenseNormal {
+	class LIB_EXPORT SenseNormal {
 	public:
 
 		SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
@@ -86,7 +87,7 @@ namespace hasty {
 
 	};
 
-	class SenseNormalAdjoint {
+	class LIB_EXPORT SenseNormalAdjoint {
 	public:
 
 		SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
@@ -103,7 +104,7 @@ namespace hasty {
 		std::vector<int64_t> _nmodes;
 	};
 
-	class SenseNormalToeplitz {
+	class LIB_EXPORT SenseNormalToeplitz {
 	public:
 
 		SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol);

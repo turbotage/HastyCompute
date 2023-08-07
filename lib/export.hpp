@@ -11,20 +11,3 @@
 #define LIB_IMPORT
 #pragma warning Unknown dynamic link import/export semantics
 #endif
-
-/*
-#ifdef _DEBUG
-#undef _DEBUG
-#include <torch/extension.h>
-#define _DEBUG
-#else
-#include <torch/extension.h>
-#endif
-*/
-
-#include <torch/custom_class.h>
-#include <torch/extension.h>
-#include <torch/library.h>
-
-
-#include "../../lib/hasty.hpp"

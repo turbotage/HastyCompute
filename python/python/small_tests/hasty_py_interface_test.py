@@ -1,36 +1,39 @@
 import torch
-# import numpy as np
-# import math
-# import gc
-# import random
-
-# import cupy as cp
-# import cupyx
-
-#import plot_utility as pu
-#import simulate_mri as simri
-
-#import h5py
-#import torchkbnufft as tkbn
-
-#from torch_linop import TorchLinop, TorchScaleLinop, TorchL2Reg
-#from torch_grad_methods import TorchCG, TorchGD
-#from torch_maxeig import TorchMaxEig
-#import torch_precond as tprcnd
 
 dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-torch.ops.load_library(dll_path)
-hasty_sense = torch.ops.HastySense
-hasty_svt = torch.ops.HastySVT
+#torch.ops.load_library(dll_path)
 
-tensorlist = []
-for i in range(4):
-	tensorlist.append(torch.rand(3,3))
+torch.classes.load_library(dll_path)
 
-print(tensorlist)
-print('hello')
+print(torch.classes.loaded_libraries)
 
-hasty_sense.dummy(tensorlist)
 
-print('hello')
-print(tensorlist)
+hbs_mod = torch.classes.HastyBatchedSense
+
+BatchedSense = hbs_mod.BatchedSense
+
+nfreq = 500 * 489
+nouter = 10
+ncoil = 16
+
+nx = 64
+ny = 64
+nz = 64
+
+coords = []
+for i in range(nouter):
+	coords.append(torch.rand((3, nfreq), dtype=torch.float32))
+
+smaps = torch.rand((ncoil, nx, ny, nz), dtype=torch.complex64)
+
+image = torch.rand((nouter, 1, nx, ny, nz), dtype=torch.complex64)
+
+out = []
+for i in range(nouter):
+	out.append(torch.empty((1,ncoil,nfreq), dtype=torch.complex64))
+
+bs = BatchedSense(coords, smaps, None, None, None)
+bs.apply(image, out, None)
+
+print(len(out))
+

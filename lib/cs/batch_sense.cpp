@@ -1,6 +1,6 @@
 #include "batch_sense.hpp"
 
-
+#include <c10/cuda/CUDAGuard.h>
 
 // BATCH SENSE BASE
 
@@ -50,7 +50,7 @@ void hasty::BatchedSense::apply(const at::Tensor& in, at::TensorList out, const 
 
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
+		std::function<void(DeviceContext&)> batch_applier = [this, &in, &out, &coils, &manips, outer_batch](DeviceContext& context) {
 			apply_outer_batch(in.select(0, outer_batch), out[outer_batch], coils[outer_batch], context, outer_batch, manips);
 		};
 
@@ -91,7 +91,7 @@ void hasty::BatchedSense::apply_outer_batch(const at::Tensor& in, at::Tensor out
 
 	InnerManipulator inmanip = outmanip.getInnerManipulator(outer_batch, dctxt.stream);
 
-	int n_inner_batches = instore.size(1);
+	int n_inner_batches = instore.size(0);
 	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
 	Sense sense(coord_cu, _nmodes);
 
@@ -200,7 +200,7 @@ void hasty::BatchedSenseAdjoint::apply(const at::TensorList& in, at::Tensor out,
 	std::function<void(DeviceContext&)> batch_applier;
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
+		std::function<void(DeviceContext&)> batch_applier = [this, &in, &out, &coils, &manips, outer_batch](DeviceContext& context) {
 			apply_outer_batch(in[outer_batch], out.select(0, outer_batch), coils[outer_batch], context, outer_batch, manips);
 		};
 
@@ -349,7 +349,7 @@ void hasty::BatchedSenseNormal::apply(const at::Tensor& in, at::Tensor out, cons
 
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
+		std::function<void(DeviceContext&)> batch_applier = [this, &in, &out, &coils, &manips, outer_batch](DeviceContext& context) {
 			apply_outer_batch(in.select(0, outer_batch), out.select(0, outer_batch), coils[outer_batch], context, outer_batch, manips);
 		};
 
@@ -606,7 +606,7 @@ void hasty::BatchedSenseNormalAdjoint::apply(const at::TensorList& in, at::Tenso
 
 
 	for (int outer_batch = 0; outer_batch < n_outer_batch; ++outer_batch) {
-		std::function<void(DeviceContext&)> batch_applier = [&](DeviceContext& context) {
+		std::function<void(DeviceContext&)> batch_applier = [this, &in, &out, &coils, &manips, outer_batch](DeviceContext& context) {
 			apply_outer_batch(in[outer_batch], out[outer_batch], coils[outer_batch], context, outer_batch, manips);
 		};
 

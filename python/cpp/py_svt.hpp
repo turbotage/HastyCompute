@@ -2,6 +2,7 @@
 
 #include "py_util.hpp"
 
+/*
 namespace svt {
 
 	void random_blocks_svt(at::Tensor& input, int64_t nblocks, int64_t block_size, 
@@ -25,4 +26,21 @@ namespace svt {
 		m.def("normal_blocks_svt", svt::normal_blocks_svt);
 	}
 
+}
+*/
+
+namespace hasty {
+	namespace ffi {
+
+		class LIB_EXPORT RandomBlocksSVT : public torch::CustomClassHolder {
+		public:
+
+			
+
+		private:
+
+
+		};
+
+	}
 }

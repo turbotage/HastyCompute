@@ -19,7 +19,7 @@ namespace hasty {
 		eType3 = 3
 	};
 
-	class NufftOptions {
+	class LIB_EXPORT NufftOptions {
 	public:
 
 		inline static NufftOptions type1() { return { NufftType::eType1, true, 1e-5 }; }
@@ -50,7 +50,7 @@ namespace hasty {
 		double get_tol() const { return tol; }
 	};
 
-	class Nufft {
+	class LIB_EXPORT Nufft {
 	public:
 
 		Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
@@ -94,7 +94,7 @@ namespace hasty {
 		int32_t _nvoxels;
 	};
 
-	class NufftNormal {
+	class LIB_EXPORT NufftNormal {
 	public:
 
 		NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops);
@@ -120,7 +120,7 @@ namespace hasty {
 		Nufft				_backward;
 	};
 
-	class NormalNufftToeplitz {
+	class LIB_EXPORT NormalNufftToeplitz {
 	public:
 
 		static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ffi_defines.hpp"
+#include "../export.hpp"
 
 namespace hasty {
 	namespace tests {

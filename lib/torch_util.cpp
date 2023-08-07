@@ -1,11 +1,22 @@
 #include "torch_util.hpp"
+#include <c10/cuda/CUDAGuard.h>
 
 #include <memory>
 
-std::vector<c10::Stream> hasty::torch_util::get_streams(const at::optional<std::vector<c10::Stream>>& streams)
+std::vector<at::Stream> hasty::torch_util::get_streams(const at::optional<std::vector<at::Stream>>& streams)
 {
 	if (streams.has_value()) {
 		return *streams;
+	}
+	else {
+		return { at::cuda::getDefaultCUDAStream() };
+	}
+}
+
+std::vector<at::Stream> hasty::torch_util::get_streams(const at::optional<at::ArrayRef<at::Stream>>& streams)
+{
+	if (streams.has_value()) {
+		return (*streams).vec();
 	}
 	else {
 		return { c10::cuda::getDefaultCUDAStream() };
@@ -104,12 +115,38 @@ void hasty::torch_util::future_catcher(std::future<void>& fut)
 		fut.get();
 	}
 	catch (c10::Error& e) {
-		std::cerr << e.what() << std::endl;
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+		throw std::runtime_error(err);
 	}
 	catch (std::exception& e) {
-		std::cerr << e.what() << std::endl;
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+		throw std::runtime_error(err);
 	}
 	catch (...) {
 		std::cerr << "caught something strange: " << std::endl;
+		throw std::runtime_error("caught something strange: ");
+	}
+}
+
+void hasty::torch_util::future_catcher(const std::function<void()>& func)
+{
+	try {
+		func();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+		throw std::runtime_error(err);
+	}
+	catch (std::exception& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+		throw std::runtime_error(err);
+	}
+	catch (...) {
+		std::cerr << "caught something strange: " << std::endl;
+		throw std::runtime_error("caught something strange: ");
 	}
 }

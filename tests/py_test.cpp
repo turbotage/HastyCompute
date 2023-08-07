@@ -6,7 +6,7 @@
 #include "py_test.hpp"
 
 
-
+/*
 void diagonal_test() {
 	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
 
@@ -213,9 +213,79 @@ void normal_svt_test() {
 
 	svt::normal_blocks_svt(image, {16,16,16}, {16,16,16}, 4, 0.05, true, at::nullopt);
 }
+*/
+
+
+void test_batched_sense()
+{
+	int32_t nfreq = 500 * 489;
+	int32_t outer = 10;
+	int32_t ncoil = 16;
+
+	int32_t nx = 64;
+	int32_t ny = 64;
+	int32_t nz = 64;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	std::vector<at::Tensor> coords;
+	for (int i = 0; i < outer; ++i) {
+		coords.push_back(at::rand({ 3,nfreq }, real_options));
+	}
+	
+	at::Tensor smaps = at::rand({ ncoil, nx, ny, nz }, complex_options);
+
+	at::Tensor image = at::rand({ outer, 1, nx, ny, nz }, complex_options);
+
+	std::vector<at::Tensor> out;
+	for (int i = 0; i < outer; ++i) {
+		out.push_back(at::empty({ 1,ncoil,nfreq }, complex_options));
+	}
+
+	hasty::ffi::BatchedSense bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+
+	bs.apply(image, at::makeArrayRef(out), at::nullopt);
+
+}
+
+void test_batched_sense_adjoint()
+{
+	int32_t nfreq = 500 * 489;
+	int32_t outer = 10;
+	int32_t ncoil = 16;
+
+	int32_t nx = 64;
+	int32_t ny = 64;
+	int32_t nz = 64;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	std::vector<at::Tensor> coords;
+	for (int i = 0; i < outer; ++i) {
+		coords.push_back(at::rand({ 3,nfreq }, real_options));
+	}
+
+	at::Tensor smaps = at::rand({ ncoil, nx, ny, nz }, complex_options);
+
+	at::Tensor image = at::rand({ outer, 1, nx, ny, nz }, complex_options);
+
+	std::vector<at::Tensor> out;
+	for (int i = 0; i < outer; ++i) {
+		out.push_back(at::empty({ 1,ncoil,nfreq }, complex_options));
+	}
+
+	hasty::ffi::BatchedSenseAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+
+	bs.apply(image, at::makeArrayRef(out), at::nullopt);
+
+}
+
 
 int main() {
 
+	/*
 	diagonal_test();
 	diagonal_ones_gives_shs();
 	nufft_tests();
@@ -224,6 +294,16 @@ int main() {
 	test_large_batched();
 	random_svt_test();
 	normal_svt_test();
+	*/
+
+
+	try {
+		test_batched_sense();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
 
 	return 0;
 }

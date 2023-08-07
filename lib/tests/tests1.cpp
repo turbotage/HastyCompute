@@ -1,6 +1,6 @@
 #include "tests1.hpp"
 
-#include "../../fft/nufft.hpp"
+#include "../fft/nufft.hpp"
 
 import hasty_util;
 import hasty_compute;
