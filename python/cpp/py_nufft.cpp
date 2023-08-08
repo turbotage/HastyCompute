@@ -28,6 +28,7 @@ void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
 	torch_util::future_catcher(func);
 }
 
+/*
 hasty::ffi::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const ffi::NufftOptions& forward, const ffi::NufftOptions& backward)
 	: _nufftop(std::make_unique<nufft::NufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions()))
@@ -36,26 +37,39 @@ hasty::ffi::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector
 void hasty::ffi::NufftNormal::apply(const at::Tensor& in, at::Tensor out, 
 	at::Tensor storage, at::optional<std::function<void(at::Tensor&)>>& func_between) const
 {
+	
+
 	auto func = [this, &in, &out, &storage, &func_between]() {
 		_nufftop->apply(in, out, storage, func_between);
 	};
 
 	torch_util::future_catcher(func);
 }
+*/
 
 
 TORCH_LIBRARY(HastyNufft, hn) {
 
-	hn.class_<hasty::ffi::NufftOptions>("NufftOptions")
+	static auto nufft_options = hn.class_<hasty::ffi::NufftOptions>("NufftOptions")
 		.def(torch::init<int64_t, const at::optional<bool>&, const at::optional<double>&>());
 
-	hn.class_<hasty::ffi::Nufft>("Nufft")
-		.def(torch::init<const at::Tensor&, const std::vector<int64_t>&, const hasty::ffi::NufftOptions&>())
+	static auto nufft = hn.class_<hasty::ffi::Nufft>("Nufft")
+		.def(torch::init([](const at::Tensor& coords, const std::vector<int64_t>& nmodes, const c10::intrusive_ptr<hasty::ffi::NufftOptions>& opts) {
+				return at::make_intrusive<hasty::ffi::Nufft>(coords, nmodes, *opts);
+			}))
 		.def("apply", &hasty::ffi::Nufft::apply);
 
+		/*
+		.def(torch::init<const at::Tensor&, const std::vector<int64_t>&, const hasty::ffi::NufftOptions&>()
+		.def("apply", &hasty::ffi::Nufft::apply);
+		*/
+
+	
+	/*
 	hn.class_<hasty::ffi::NufftNormal>("NufftNormal")
 		.def(torch::init<const at::Tensor&, const std::vector<int64_t>&, 
 			const hasty::ffi::NufftOptions&, const hasty::ffi::NufftOptions&>())
 		.def("apply", &hasty::ffi::NufftNormal::apply);
+	*/
 	
 }

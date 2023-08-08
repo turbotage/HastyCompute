@@ -27,6 +27,7 @@ namespace hasty {
 			std::unique_ptr<nufft::Nufft> _nufftop;
 		};
 
+		/*
 		class LIB_EXPORT NufftNormal : public torch::CustomClassHolder {
 		public:
 
@@ -39,6 +40,7 @@ namespace hasty {
 		private:
 			std::unique_ptr<nufft::NufftNormal> _nufftop;
 		};
+		*/
 
 		/*
 		ADD TOEPLITZ LATER

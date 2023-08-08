@@ -20,10 +20,18 @@ void hasty::dummy::stream_dummy(const at::optional<at::ArrayRef<at::Stream>>& st
 	std::cout << in << std::endl;
 }
 
+void hasty::dummy::lambda(const at::KernelFunction& caller, at::Tensor in)
+{
+	caller.call<void, at::Tensor>(in);
+}
+
+
 TORCH_LIBRARY(HastyDummy, hd) {
 
 	hd.def("dummy", hasty::dummy::dummy);
 
 	hd.def("stream_dummy", hasty::dummy::stream_dummy);
+
+	hd.def("lambda", hasty::dummy::lambda);
 
 }

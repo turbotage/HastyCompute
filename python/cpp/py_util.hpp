@@ -22,10 +22,9 @@
 #endif
 */
 
-#include <torch/custom_class.h>
 #include <torch/extension.h>
 #include <torch/library.h>
-#include <pybind11/functional.h>
-
+#include <torch/script.h>
+#include <torch/custom_class.h>
 
 #include "../../lib/hasty.hpp"
