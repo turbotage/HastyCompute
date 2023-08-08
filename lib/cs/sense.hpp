@@ -9,117 +9,120 @@ namespace hasty {
 
 	using TensorVec = std::vector<at::Tensor>;
 
-	using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
-	struct CoilManipulator {
-		CoilManipulator() = default;
+	namespace sense {
 
-		CoilManipulator& setPreApply(const CoilApplier& apply) {
-			if (preapplier.has_value())
-				throw std::runtime_error("Tried to set non nullopt applier");
-			preapplier = std::make_optional(apply);
-			return *this;
-		}
+		using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
+		struct CoilManipulator {
+			CoilManipulator() = default;
 
-		CoilManipulator& setMidApply(const CoilApplier& apply) {
-			if (midapplier.has_value())
-				throw std::runtime_error("Tried to set non nullopt applier");
-			midapplier = std::make_optional(apply);
-			return *this;
-		}
+			CoilManipulator& setPreApply(const CoilApplier& apply) {
+				if (preapplier.has_value())
+					throw std::runtime_error("Tried to set non nullopt applier");
+				preapplier = std::make_optional(apply);
+				return *this;
+			}
 
-		CoilManipulator& setPostApply(const CoilApplier& apply) {
-			if (postapplier.has_value())
-				throw std::runtime_error("Tried to set non nullopt applier");
-			postapplier = std::make_optional(apply);
-			return *this;
-		}
+			CoilManipulator& setMidApply(const CoilApplier& apply) {
+				if (midapplier.has_value())
+					throw std::runtime_error("Tried to set non nullopt applier");
+				midapplier = std::make_optional(apply);
+				return *this;
+			}
 
-		std::optional<CoilApplier> preapplier;
-		std::optional<CoilApplier> midapplier;
-		std::optional<CoilApplier> postapplier;
-	};
+			CoilManipulator& setPostApply(const CoilApplier& apply) {
+				if (postapplier.has_value())
+					throw std::runtime_error("Tried to set non nullopt applier");
+				postapplier = std::make_optional(apply);
+				return *this;
+			}
 
-	class LIB_EXPORT Sense {
-	public:
+			std::optional<CoilApplier> preapplier;
+			std::optional<CoilApplier> midapplier;
+			std::optional<CoilApplier> postapplier;
+		};
 
-		Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		class LIB_EXPORT Sense {
+		public:
 
-		void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-			const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
-			const std::optional<CoilApplier>& premanip,
-			const std::optional<CoilApplier>& postmanip);
+			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-	private:
-		Nufft _nufft;
-		std::vector<int64_t> _nmodes;
-	};
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
+				const std::optional<CoilApplier>& premanip,
+				const std::optional<CoilApplier>& postmanip);
 
-	class LIB_EXPORT SenseAdjoint {
-	public:
+		private:
+			nufft::Nufft _nufft;
+			std::vector<int64_t> _nmodes;
+		};
 
-		SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		class LIB_EXPORT SenseAdjoint {
+		public:
 
-		void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-			const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
-			const std::optional<CoilApplier>& premanip,
-			const std::optional<CoilApplier>& postmanip);
+			SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-	private:
-		Nufft _nufft;
-		std::vector<int64_t> _nmodes;
-	};
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
+				const std::optional<CoilApplier>& premanip,
+				const std::optional<CoilApplier>& postmanip);
 
-	class LIB_EXPORT SenseNormal {
-	public:
+		private:
+			nufft::Nufft _nufft;
+			std::vector<int64_t> _nmodes;
+		};
 
-		SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		class LIB_EXPORT SenseNormal {
+		public:
 
-		void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-			const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
-			const std::optional<CoilApplier>& premanip,
-			const std::optional<CoilApplier>& midmanip,
-			const std::optional<CoilApplier>& postmanip);
+			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-	private:
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
+				const std::optional<CoilApplier>& premanip,
+				const std::optional<CoilApplier>& midmanip,
+				const std::optional<CoilApplier>& postmanip);
 
-		NufftNormal _normal_nufft;
-		std::vector<int64_t> _nmodes;
+		private:
 
-	};
+			nufft::NufftNormal _normal_nufft;
+			std::vector<int64_t> _nmodes;
 
-	class LIB_EXPORT SenseNormalAdjoint {
-	public:
+		};
 
-		SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		class LIB_EXPORT SenseNormalAdjoint {
+		public:
 
-		void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-			const std::optional<at::Tensor>& imspace_storage,
-			const std::optional<CoilApplier>& premanip,
-			const std::optional<CoilApplier>& midmanip,
-			const std::optional<CoilApplier>& postmanip);
+			SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-	private:
+			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage,
+				const std::optional<CoilApplier>& premanip,
+				const std::optional<CoilApplier>& midmanip,
+				const std::optional<CoilApplier>& postmanip);
 
-		NufftNormal _normal_nufft;
-		std::vector<int64_t> _nmodes;
-	};
+		private:
 
-	class LIB_EXPORT SenseNormalToeplitz {
-	public:
+			nufft::NufftNormal _normal_nufft;
+			std::vector<int64_t> _nmodes;
+		};
 
-		SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol);
+		class LIB_EXPORT SenseNormalToeplitz {
+		public:
 
-		SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+			SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol);
 
-		void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
-			const at::Tensor& smaps, const std::vector<int64_t>& coils) const;
+			SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
 
-	private:
+			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils) const;
 
-		NormalNufftToeplitz _normal_nufft;
+		private:
 
-	};
+			nufft::NormalNufftToeplitz _normal_nufft;
 
+		};
+
+	}
 }
 
 

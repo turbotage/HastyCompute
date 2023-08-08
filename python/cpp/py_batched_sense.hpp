@@ -135,7 +135,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::BatchedSense> _bs;
+			std::unique_ptr<hasty::batched_sense::BatchedSense> _bs;
 		};
 
 		class LIB_EXPORT BatchedSenseAdjoint : public torch::CustomClassHolder {
@@ -149,7 +149,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::BatchedSenseAdjoint> _bs;
+			std::unique_ptr<hasty::batched_sense::BatchedSenseAdjoint> _bs;
 		};
 
 		class LIB_EXPORT BatchedSenseNormal : public torch::CustomClassHolder {
@@ -163,7 +163,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::BatchedSenseNormal> _bs;
+			std::unique_ptr<hasty::batched_sense::BatchedSenseNormal> _bs;
 		};
 
 		class LIB_EXPORT BatchedSenseNormalAdjoint : public torch::CustomClassHolder {
@@ -177,18 +177,13 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::BatchedSenseNormalAdjoint> _bs;
+			std::unique_ptr<hasty::batched_sense::BatchedSenseNormalAdjoint> _bs;
 		};
 
 	}
 }
 
-namespace dummy {
 
-	void LIB_EXPORT dummy(at::TensorList tensorlist);
-
-	void LIB_EXPORT stream_dummy(const at::optional<at::ArrayRef<at::Stream>>& streams, const torch::Tensor& in);
-}
 
 /*
 	bs.class_<hasty::ffi::BatchedSense>("BatchedSense")

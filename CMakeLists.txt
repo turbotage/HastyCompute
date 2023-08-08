@@ -201,6 +201,9 @@ FetchContent_MakeAvailable(pybind11)
 add_library(HastyPyInterface SHARED 
 	"python/cpp/py_interface.cpp"
 	"python/cpp/py_batched_sense.cpp"
+	"python/cpp/py_sense.cpp"
+	"python/cpp/py_nufft.cpp"
+	"python/cpp/py_svt.cpp"
 )
 #pybind11_add_module(HastyPyInterface SHARED "python/cpp/py_interface.cpp")
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)

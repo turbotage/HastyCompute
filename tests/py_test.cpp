@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include "../python/cpp/py_batched_sense.hpp"
 #include "../python/cpp/py_sense.hpp"
 #include "../python/cpp/py_svt.hpp"
 
@@ -269,17 +270,79 @@ void test_batched_sense_adjoint()
 
 	at::Tensor smaps = at::rand({ ncoil, nx, ny, nz }, complex_options);
 
-	at::Tensor image = at::rand({ outer, 1, nx, ny, nz }, complex_options);
+	at::Tensor out = at::empty({ outer, 1, nx, ny, nz }, complex_options);
 
+	std::vector<at::Tensor> in;
+	for (int i = 0; i < outer; ++i) {
+		in.push_back(at::rand({ 1,ncoil,nfreq }, complex_options));
+	}
+
+	hasty::ffi::BatchedSenseAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+
+	bs.apply(at::makeArrayRef(in), out, at::nullopt);
+
+}
+
+void test_batched_sense_normal()
+{
+	int32_t nfreq = 500 * 489;
+	int32_t outer = 10;
+	int32_t ncoil = 16;
+
+	int32_t nx = 64;
+	int32_t ny = 64;
+	int32_t nz = 64;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	std::vector<at::Tensor> coords;
+	for (int i = 0; i < outer; ++i) {
+		coords.push_back(at::rand({ 3,nfreq }, real_options));
+	}
+
+	at::Tensor smaps = at::rand({ ncoil, nx, ny, nz }, complex_options);
+
+	at::Tensor out = at::empty({ outer, 1, nx, ny, nz }, complex_options);
+	at::Tensor in = at::rand({ outer, 1, nx, ny, nz }, complex_options);
+
+	hasty::ffi::BatchedSenseNormal bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+
+	bs.apply(in, out, at::nullopt);
+}
+
+void test_batched_sense_normal_adjoint()
+{
+	int32_t nfreq = 500 * 489;
+	int32_t outer = 10;
+	int32_t ncoil = 16;
+
+	int32_t nx = 64;
+	int32_t ny = 64;
+	int32_t nz = 64;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	std::vector<at::Tensor> coords;
+	for (int i = 0; i < outer; ++i) {
+		coords.push_back(at::rand({ 3,nfreq }, real_options));
+	}
+
+	at::Tensor smaps = at::rand({ ncoil, nx, ny, nz }, complex_options);
+
+	std::vector<at::Tensor> in;
+	for (int i = 0; i < outer; ++i) {
+		in.push_back(at::rand({ 1,ncoil,nfreq }, complex_options));
+	}
 	std::vector<at::Tensor> out;
 	for (int i = 0; i < outer; ++i) {
 		out.push_back(at::empty({ 1,ncoil,nfreq }, complex_options));
 	}
 
-	hasty::ffi::BatchedSenseAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+	hasty::ffi::BatchedSenseNormalAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
 
-	bs.apply(image, at::makeArrayRef(out), at::nullopt);
-
+	bs.apply(at::makeArrayRef(in), at::makeArrayRef(out), at::nullopt);
 }
 
 
@@ -299,6 +362,30 @@ int main() {
 
 	try {
 		test_batched_sense();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+
+	try {
+		test_batched_sense_adjoint();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+
+	try {
+		test_batched_sense_normal();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+
+	try {
+		test_batched_sense_normal_adjoint();
 	}
 	catch (c10::Error& e) {
 		std::string err = e.what();

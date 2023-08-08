@@ -2,6 +2,7 @@
 
 #include "block.hpp"
 #include "../torch_util.hpp"
+#include "../threading/thread_pool.hpp"
 
 namespace hasty {
 	namespace svt {
@@ -22,63 +23,51 @@ namespace hasty {
 
 		void insert_block(at::Tensor& in, const Block<3>& block, at::Tensor& block_tensor, const std::optional<std::vector<int64_t>>& perms, bool transpose = false);
 
-		class LIB_EXPORT RandomBlocksSVT {
+		class BlocksSVTBase {
 		public:
 
 			struct DeviceContext {
 
-				DeviceContext(const c10::Stream& stream) :
+				DeviceContext(const at::Stream& stream) :
 					stream(stream) {}
-				DeviceContext(const DeviceContext&) = delete;
-				DeviceContext& operator=(const DeviceContext&) = delete;
-				DeviceContext(DeviceContext&&) = default;
 
-				c10::Stream stream;
-
+				at::Stream stream;
 			};
 
-		public:
+			BlocksSVTBase(const std::vector<DeviceContext>& contexts);
 
-			RandomBlocksSVT(std::vector<DeviceContext>& contexts,
-				at::Tensor& image, int64_t nblocks, std::vector<int64_t> block_shape, double thresh, bool soft);
-
-		private:
-
-			void block_svt_step(DeviceContext& dctxt, const Block<3>& block, double thresh, bool soft);
-
-		private:
+		protected:
 			std::mutex _mutex;
-			at::Tensor _image;
+			std::vector<DeviceContext> _dcontexts;
 			int32_t _nctxt;
+			std::unique_ptr<ContextThreadPool<DeviceContext>> _tpool;
 		};
 
-		class LIB_EXPORT NormalBlocksSVT {
+		class LIB_EXPORT Random3DBlocksSVT : public BlocksSVTBase {
 		public:
 
-			struct DeviceContext {
+			Random3DBlocksSVT(const std::vector<DeviceContext>& contexts);
 
-				DeviceContext(const c10::Stream& stream) :
-					stream(stream) {}
-				DeviceContext(const DeviceContext&) = delete;
-				DeviceContext& operator=(const DeviceContext&) = delete;
-				DeviceContext(DeviceContext&&) = default;
-
-				c10::Stream stream;
-
-			};
-		public:
-
-			NormalBlocksSVT(std::vector<DeviceContext>& contexts,
-				at::Tensor& image, std::vector<int64_t> block_strides, std::vector<int64_t> block_shape, int block_iter, double thresh, bool soft);
+			void apply(at::Tensor in, int64_t nblocks, std::array<int64_t, 3> block_shape, double thresh, bool soft);
 
 		private:
 
-			void block_svt_step(DeviceContext& dctxt, const Block<3>& block, double thresh, bool soft);
+			void block_svt_step(DeviceContext& dctxt, at::Tensor& in, const Block<3>& block, double thresh, bool soft);
+
+		};
+
+		class LIB_EXPORT Normal3DBlocksSVT : public BlocksSVTBase {
+		public:
+
+			Normal3DBlocksSVT(const std::vector<DeviceContext>& contexts);
+
+			void apply(at::Tensor in, const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape,
+				int64_t block_iter, double thresh, bool soft);
 
 		private:
-			std::mutex _mutex;
-			at::Tensor _image;
-			int32_t _nctxt;
+
+			void block_svt_step(DeviceContext& dctxt, at::Tensor& in, const Block<3>& block, double thresh, bool soft);
+
 		};
 
 	}

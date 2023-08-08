@@ -12,165 +12,179 @@ typedef cufinufftf_plan_s* cufinufftf_plan;
 
 
 namespace hasty {
+	namespace nufft {
 
-	enum NufftType {
-		eType1 = 1,
-		eType2 = 2,
-		eType3 = 3
-	};
+		enum NufftType {
+			eType1 = 1,
+			eType2 = 2,
+			eType3 = 3
+		};
 
-	class LIB_EXPORT NufftOptions {
-	public:
+		class LIB_EXPORT NufftOptions {
+		public:
 
-		inline static NufftOptions type1() { return { NufftType::eType1, true, 1e-5 }; }
+			NufftOptions() = default;
 
-		inline static NufftOptions type2() { return { NufftType::eType2, false, 1e-5 }; }
+			NufftOptions(NufftType intype, const at::optional<bool>& inpositive, const at::optional<double>& intol)
+				: type(intype)
+			{
+				if (inpositive.has_value())
+					positive = *inpositive;
+				if (intol.has_value())
+					tol = *intol;
+			}
 
-		inline static NufftOptions type1(double tol) { return { NufftType::eType1, true, tol }; }
+			inline static NufftOptions type1() { return { NufftType::eType1, true, 1e-5 }; }
 
-		inline static NufftOptions type2(double tol) { return { NufftType::eType2, false, tol }; }
+			inline static NufftOptions type2() { return { NufftType::eType2, false, 1e-5 }; }
 
-		inline static NufftOptions type1(bool positive) { return { NufftType::eType1, positive, 1e-5 }; }
+			inline static NufftOptions type1(double tol) { return { NufftType::eType1, true, tol }; }
 
-		inline static NufftOptions type2(bool positive) { return { NufftType::eType2, positive, 1e-5 }; }
+			inline static NufftOptions type2(double tol) { return { NufftType::eType2, false, tol }; }
 
-		inline static NufftOptions type1(bool positive, double tol) { return { NufftType::eType1, positive, tol }; }
+			inline static NufftOptions type1(bool positive) { return { NufftType::eType1, positive, 1e-5 }; }
 
-		inline static NufftOptions type2(bool positive, double tol) { return { NufftType::eType2, positive, tol }; }
+			inline static NufftOptions type2(bool positive) { return { NufftType::eType2, positive, 1e-5 }; }
 
-	public:
-		NufftType type = NufftType::eType1;
-		bool positive = true;
-		double tol = 1e-5;
+			inline static NufftOptions type1(bool positive, double tol) { return { NufftType::eType1, positive, tol }; }
 
-		const NufftType& get_type() const { return type; }
+			inline static NufftOptions type2(bool positive, double tol) { return { NufftType::eType2, positive, tol }; }
 
-		int get_positive() const { return positive ? 1 : -1; }
+		public:
+			NufftType type = NufftType::eType1;
+			bool positive = true;
+			double tol = 1e-5;
 
-		double get_tol() const { return tol; }
-	};
+			const NufftType& get_type() const { return type; }
 
-	class LIB_EXPORT Nufft {
-	public:
+			int get_positive() const { return positive ? 1 : -1; }
 
-		Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
+			double get_tol() const { return tol; }
+		};
 
-		void close();
-		~Nufft();
+		class LIB_EXPORT Nufft {
+		public:
 
-		void apply(const at::Tensor& in, at::Tensor& out) const;
+			Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
 
-		c10::ScalarType coord_type();
+			void close();
+			~Nufft();
 
-		c10::ScalarType complex_type();
+			void apply(const at::Tensor& in, at::Tensor& out) const;
 
-		int32_t nfreq();
+			at::ScalarType coord_type();
 
-		int32_t ndim();
+			at::ScalarType complex_type();
 
-	protected:
+			int32_t nfreq();
 
-		void make_plan_set_pts();
+			int32_t ndim();
 
-		void apply_type1(const at::Tensor& in, at::Tensor& out) const;
+		protected:
 
-		void apply_type2(const at::Tensor& in, at::Tensor& out) const;
+			void make_plan_set_pts();
 
-		c10::ScalarType			_type;
-		int32_t					_ndim;
-		int32_t					_ntransf;
-		int32_t					_nfreq;
-		const at::Tensor		_coords;
-		std::vector<int64_t>	_nmodes;
-		std::array<int32_t, 3>	_nmodes_flipped;
-		NufftOptions			_opts;
+			void apply_type1(const at::Tensor& in, at::Tensor& out) const;
 
-		bool _closed = false;
-		cufinufft_plan			_plan;
-		cufinufftf_plan			_planf;
+			void apply_type2(const at::Tensor& in, at::Tensor& out) const;
 
-		cufinufft_opts _finufft_opts;
+			at::ScalarType			_type;
+			int32_t					_ndim;
+			int32_t					_ntransf;
+			int32_t					_nfreq;
+			const at::Tensor		_coords;
+			std::vector<int64_t>	_nmodes;
+			std::array<int32_t, 3>	_nmodes_flipped;
+			NufftOptions			_opts;
 
-		int32_t _nvoxels;
-	};
+			bool _closed = false;
+			cufinufft_plan			_plan;
+			cufinufftf_plan			_planf;
 
-	class LIB_EXPORT NufftNormal {
-	public:
+			cufinufft_opts _finufft_opts;
 
-		NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops);
+			int32_t _nvoxels;
+		};
 
-		void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const;
+		class LIB_EXPORT NufftNormal {
+		public:
 
-		void apply_inplace(at::Tensor& in, at::Tensor& storage, std::optional<std::function<void(at::Tensor&)>> func_between) const;
+			NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+				const NufftOptions& forward_ops, const NufftOptions& backward_ops);
 
-		c10::ScalarType coord_type();
+			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
 
-		c10::ScalarType complex_type();
+			void apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
 
-		int32_t nfreq();
+			at::ScalarType coord_type();
 
-		int32_t ndim();
+			at::ScalarType complex_type();
 
-		const Nufft& get_forward();
+			int32_t nfreq();
 
-		const Nufft& get_backward();
+			int32_t ndim();
 
-	protected:
-		Nufft				_forward;
-		Nufft				_backward;
-	};
+			const Nufft& get_forward();
 
-	class LIB_EXPORT NormalNufftToeplitz {
-	public:
+			const Nufft& get_backward();
 
-		static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
+		protected:
+			Nufft				_forward;
+			Nufft				_backward;
+		};
 
-		static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
-			at::Tensor& storage, bool storage_is_frequency);
+		class LIB_EXPORT NormalNufftToeplitz {
+		public:
 
-		static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
-			at::Tensor& frequency_storage, at::Tensor& input_storage);
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
 
-	public:
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+				at::Tensor& storage, bool storage_is_frequency);
 
-		NormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, std::optional<double> tol,
-			std::optional<std::reference_wrapper<at::Tensor>> diagonal, 
-			std::optional<std::reference_wrapper<at::Tensor>> frequency_storage,
-			std::optional<std::reference_wrapper<at::Tensor>> input_storage);
+			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+				at::Tensor& frequency_storage, at::Tensor& input_storage);
 
-		NormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+		public:
 
-		at::Tensor apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
+			NormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
+				const at::optional<std::reference_wrapper<at::Tensor>>& diagonal, 
+				const at::optional<std::reference_wrapper<at::Tensor>>& frequency_storage,
+				const at::optional<std::reference_wrapper<at::Tensor>>& input_storage);
 
-		void apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const;
+			NormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
 
-		void apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const;
+			at::Tensor apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
 
-		void apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
+			void apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const;
 
-		at::Tensor get_diagonal();
+			void apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const;
 
-	private:
+			void apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
+
+			at::Tensor get_diagonal();
+
+		private:
 			
-		bool _created_from_diagonal;
+			bool _created_from_diagonal;
 
-		c10::ScalarType								_type;
-		int32_t										_ntransf;
-		int32_t										_ndim;
-		int32_t										_nfreq;
+			at::ScalarType								_type;
+			int32_t										_ntransf;
+			int32_t										_ndim;
+			int32_t										_nfreq;
 
-		std::vector<int64_t>						_nmodes;
-		std::vector<int64_t>						_transdims;
-		std::vector<int64_t>						_nmodes_ns;
+			std::vector<int64_t>						_nmodes;
+			std::vector<int64_t>						_transdims;
+			std::vector<int64_t>						_nmodes_ns;
 
-		c10::IntArrayRef							_transform_dims;
-		c10::IntArrayRef							_expanded_dims;
-		std::vector<at::indexing::TensorIndex>		_index_vector;
-		c10::ArrayRef<at::indexing::TensorIndex>	_indices;
+			at::IntArrayRef								_transform_dims;
+			at::IntArrayRef								_expanded_dims;
+			std::vector<at::indexing::TensorIndex>		_index_vector;
+			at::ArrayRef<at::indexing::TensorIndex>		_indices;
 
-		at::Tensor									_diagonal;
-	};
+			at::Tensor									_diagonal;
+		};
 
+	}
 }
 
 

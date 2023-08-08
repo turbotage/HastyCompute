@@ -7,7 +7,7 @@
 
 
 #include "fft/nufft.hpp"
-#include "cs/llr.hpp"
+#include "cs/svt.hpp"
 #include "cs/sense.hpp"
 #include "cs/batch_sense.hpp"
 

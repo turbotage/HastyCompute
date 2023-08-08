@@ -4,16 +4,16 @@
 #include <c10/cuda/CUDAGuard.h>
 
 
-hasty::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _nufft(coords, nmodes, NufftOptions::type2()), _nmodes(nmodes)
+hasty::sense::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _nufft(coords, nmodes, nufft::NufftOptions::type2()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
 		throw std::runtime_error("Only ntransf==1 allowed for Sense operator");
 	}
 }
 
-void hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
+void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& postmanip)
 {
@@ -67,16 +67,16 @@ void hasty::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor
 }
 
 
-hasty::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _nufft(coords, nmodes, NufftOptions::type1()), _nmodes(nmodes)
+hasty::sense::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _nufft(coords, nmodes, nufft::NufftOptions::type1()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
 		throw std::runtime_error("Only ntransf==1 allowed for SenseAdjoint operator");
 	}
 }
 
-void hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
+void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip, const std::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
@@ -120,25 +120,25 @@ void hasty::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at:
 		}
 
 		if (accumulate) {
-			out.select(0, 0).unsqueeze(0).add_(kstore);
+			out.add_(imstore);
 		}
 		else {
-			out.select(0, coil).unsqueeze(0).add_(kstore);
+			out.select(0, coil).unsqueeze(0).add_(imstore);
 		}
 	}
 }
 
 
-hasty::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _normal_nufft(coords, nmodes, NufftOptions::type2(), NufftOptions::type1()), _nmodes(nmodes)
+hasty::sense::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _normal_nufft(coords, nmodes, nufft::NufftOptions::type2(), nufft::NufftOptions::type1()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
 		throw std::runtime_error("Only ntransf==1 allowed for SenseNormal operator");
 	}
 }
 
-void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& imspace_storage, const std::optional<at::Tensor>& kspace_storage,
+void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& midmanip,
 	const std::optional<CoilApplier>& postmanip)
@@ -181,7 +181,7 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 			_normal_nufft.apply_inplace(imstore, kstore, std::bind(*midmanip, std::placeholders::_1, coil));
 		}
 		else {
-			_normal_nufft.apply_inplace(imstore, kstore, std::nullopt);
+			_normal_nufft.apply_inplace(imstore, kstore, at::nullopt);
 		}
 
 		if (postmanip.has_value()) {
@@ -196,16 +196,16 @@ void hasty::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::
 }
 
 
-hasty::SenseNormalAdjoint::SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _normal_nufft(coords, nmodes, NufftOptions::type1(), NufftOptions::type1()), _nmodes(nmodes)
+hasty::sense::SenseNormalAdjoint::SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+	: _normal_nufft(coords, nmodes, nufft::NufftOptions::type1(), nufft::NufftOptions::type2()), _nmodes(nmodes)
 {
 	if (_nmodes[0] != 1) {
 		throw std::runtime_error("Only ntransf==1 allowed for SenseNormalAdjoint operator");
 	}
 }
 
-void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const std::optional<at::Tensor>& imspace_storage,
+void hasty::sense::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage,
 	const std::optional<CoilApplier>& premanip,
 	const std::optional<CoilApplier>& midmanip,
 	const std::optional<CoilApplier>& postmanip)
@@ -250,19 +250,19 @@ void hasty::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& out, con
 
 
 
-hasty::SenseNormalToeplitz::SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol)
-	: _normal_nufft(coords, nmodes, tol, std::nullopt, std::nullopt, std::nullopt)
+hasty::sense::SenseNormalToeplitz::SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol)
+	: _normal_nufft(coords, nmodes, tol, at::nullopt, at::nullopt, at::nullopt)
 {
 
 }
 
-hasty::SenseNormalToeplitz::SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+hasty::sense::SenseNormalToeplitz::SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
 	: _normal_nufft(std::move(diagonal), nmodes)
 {
 
 }
 
-void hasty::SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
+void hasty::sense::SenseNormalToeplitz::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils) const
 {
 	c10::InferenceMode inference_guard;
