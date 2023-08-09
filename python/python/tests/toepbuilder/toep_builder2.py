@@ -48,7 +48,6 @@ def take_adjoint(input, coords, im_size, my_nufft=True):
 
 		return output
 		
-
 def toeplitz_diagonal(weights, coords, im_size):
 	ndim = coords.shape[0]
 	
@@ -66,7 +65,6 @@ def toeplitz_diagonal(weights, coords, im_size):
 
 	return torch.fft.fftn(diagonal, dim=[-1], norm="forward")
 	
-		
 def adjoint_flip_and_concat(dim, weights, coords, adjnufft):
 	ndim = coords.shape[0]
 

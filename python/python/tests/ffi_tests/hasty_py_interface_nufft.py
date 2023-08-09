@@ -21,11 +21,7 @@ hnufft_ops = torch.ops.HastyNufft
 hsense_ops = torch.ops.HastySense
 hbsense_ops = torch.ops.HastyBatchedSense
 
-print(hi_ops.doc())
-print(hsvt_ops.doc())
 print(hnufft_ops.doc())
-print(hsense_ops.doc())
-print(hbsense_ops.doc())
 
 NufftOptions = hnufft_mod.NufftOptions
 

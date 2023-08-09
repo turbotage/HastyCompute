@@ -10,7 +10,7 @@ namespace hasty {
 
 			FunctionLambda(const std::string& script, const std::string& entry, at::TensorList captures);
 
-			void apply(at::Tensor in) const;
+			void apply(at::TensorList inout) const;
 
 		private:
 			std::shared_ptr<at::CompilationUnit> _cunit;

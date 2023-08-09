@@ -8,10 +8,10 @@ hasty::ffi::FunctionLambda::FunctionLambda(const std::string& script, const std:
 {
 }
 
-void hasty::ffi::FunctionLambda::apply(at::Tensor in) const
+void hasty::ffi::FunctionLambda::apply(at::TensorList inout) const
 {
 
-	auto ret = _cunit->run_method(_entry, in, _captures);
+	auto ret = _cunit->run_method(_entry, inout, _captures);
 }
 
 void hasty::dummy::dummy(at::TensorList tensorlist)

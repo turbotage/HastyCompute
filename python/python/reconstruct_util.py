@@ -392,6 +392,8 @@ class SenseLinop(TorchLinop):
 		if self.randomize_coils:
 			self.coil_list = self.create_coil_list()
 
+		
+
 		if self.weights_vec is not None:
 			if self.kdata_vec is not None:
 				hasty_sense.batched_sense_weighted_kdata(input_copy, self.coil_list,
