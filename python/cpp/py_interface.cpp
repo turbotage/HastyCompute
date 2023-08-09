@@ -2,6 +2,18 @@
 
 #define FUNC_CASTER(x) static_cast<void(*)(x)>
 
+
+hasty::ffi::FunctionLambda::FunctionLambda(const std::string& script, const std::string& entry, at::TensorList captures)
+	: _entry(entry), _cunit(torch::jit::compile(script)), _captures(captures.vec())
+{
+}
+
+void hasty::ffi::FunctionLambda::apply(at::Tensor in) const
+{
+
+	auto ret = _cunit->run_method(_entry, in, _captures);
+}
+
 void hasty::dummy::dummy(at::TensorList tensorlist)
 {
 	std::cout << tensorlist << std::endl;
@@ -20,18 +32,34 @@ void hasty::dummy::stream_dummy(const at::optional<at::ArrayRef<at::Stream>>& st
 	std::cout << in << std::endl;
 }
 
-void hasty::dummy::lambda(const at::KernelFunction& caller, at::Tensor in)
-{
-	caller.call<void, at::Tensor>(in);
-}
 
 
-TORCH_LIBRARY(HastyDummy, hd) {
+TORCH_LIBRARY(HastyInterface, hi) {
+	
+	hi.class_<hasty::ffi::FunctionLambda>("FunctionLambda")
+		.def(torch::init<const std::string&, const std::string&, at::TensorList>())
+		.def("apply", &hasty::ffi::FunctionLambda::apply);
 
-	hd.def("dummy", hasty::dummy::dummy);
+	hi.def("doc", []() -> std::string {
+		return
+R"DOC(
 
-	hd.def("stream_dummy", hasty::dummy::stream_dummy);
+// HastyInterface Module
 
-	hd.def("lambda", hasty::dummy::lambda);
+class LIB_EXPORT FunctionLambda : public torch::CustomClassHolder {
+public:
+
+	FunctionLambda(const std::string& script, const std::string& entry, at::TensorList captures);
+
+	void apply(at::Tensor in) const;
+
+private:
+	std::shared_ptr<at::CompilationUnit> _cunit;
+	std::string _entry;
+	std::vector<at::Tensor> _captures;
+};
+
+)DOC";
+		});
 
 }

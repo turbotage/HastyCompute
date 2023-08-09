@@ -1,6 +1,7 @@
 #pragma once
 
 #include "py_util.hpp"
+#include "py_interface.hpp"
 
 namespace hasty {
 	namespace ffi {
@@ -27,7 +28,7 @@ namespace hasty {
 			std::unique_ptr<nufft::Nufft> _nufftop;
 		};
 
-		/*
+		
 		class LIB_EXPORT NufftNormal : public torch::CustomClassHolder {
 		public:
 
@@ -35,12 +36,12 @@ namespace hasty {
 				const ffi::NufftOptions& forward, const ffi::NufftOptions& backward);
 
 			void apply(const at::Tensor& in, at::Tensor out, at::Tensor storage,
-				at::optional<std::function<void(at::Tensor&)>>& func_between) const;
+				const at::optional<FunctionLambda>& func_between) const;
 
 		private:
 			std::unique_ptr<nufft::NufftNormal> _nufftop;
 		};
-		*/
+		
 
 		/*
 		ADD TOEPLITZ LATER

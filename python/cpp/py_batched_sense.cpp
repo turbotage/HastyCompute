@@ -211,4 +211,72 @@ TORCH_LIBRARY(HastyBatchedSense, hbs) {
 			const at::optional<at::ArrayRef<at::Stream>>&>())
 		.def("apply", &hasty::ffi::BatchedSenseNormalAdjoint::apply);
 
+
+
+	hbs.def("doc", []() -> std::string {
+		return
+R"DOC(
+
+// HastyBatchedSense Module
+
+class LIB_EXPORT BatchedSense : public torch::CustomClassHolder {
+public:
+
+	BatchedSense(const at::TensorList& coords, const at::Tensor& smaps,
+		const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+		const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+	void apply(const at::Tensor& in, at::TensorList out,
+		const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+private:
+	std::unique_ptr<hasty::batched_sense::BatchedSense> _bs;
+};
+
+class LIB_EXPORT BatchedSenseAdjoint : public torch::CustomClassHolder {
+public:
+
+	BatchedSenseAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
+		const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+		const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+	void apply(const at::TensorList& in, at::Tensor out,
+		const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+private:
+	std::unique_ptr<hasty::batched_sense::BatchedSenseAdjoint> _bs;
+};
+
+class LIB_EXPORT BatchedSenseNormal : public torch::CustomClassHolder {
+public:
+
+	BatchedSenseNormal(const at::TensorList& coords, const at::Tensor& smaps,
+		const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+		const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+	void apply(const at::Tensor& in, at::Tensor out,
+		const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+private:
+	std::unique_ptr<hasty::batched_sense::BatchedSenseNormal> _bs;
+};
+
+class LIB_EXPORT BatchedSenseNormalAdjoint : public torch::CustomClassHolder {
+public:
+
+	BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
+		const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+		const at::optional<at::ArrayRef<at::Stream>>& streams);
+
+	void apply(const at::TensorList& in, at::TensorList out,
+		const at::optional<std::vector<std::vector<int64_t>>>& coils);
+
+private:
+	std::unique_ptr<hasty::batched_sense::BatchedSenseNormalAdjoint> _bs;
+};
+
+)DOC";
+		});
+
+
 }
