@@ -18,10 +18,7 @@ from torch_grad_methods import TorchCG, TorchGD
 from torch_maxeig import TorchMaxEig
 import torch_precond as tprcnd
 
-dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-torch.ops.load_library(dll_path)
-hasty_sense = torch.ops.HastySense
-hasty_svt = torch.ops.HastySVT
+from ffi.hasty_sense import BatchedSenseNormal
 
 def load_simulated_diag_rhs(coords, kdatas, smaps, nframes, nenc, use_weights=False, root=0):
 	# mean flow
@@ -392,7 +389,7 @@ class SenseLinop(TorchLinop):
 		if self.randomize_coils:
 			self.coil_list = self.create_coil_list()
 
-		
+				
 
 		if self.weights_vec is not None:
 			if self.kdata_vec is not None:

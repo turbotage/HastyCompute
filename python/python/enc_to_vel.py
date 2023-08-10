@@ -151,7 +151,6 @@ void {{funcid}}(const float* params, const float* consts, const float* data,
 
 		self.run_func((blockSize,),(Nthreads,),(pars, consts, data, f, Nprobs))
 
-
 class EncVel_FGradF(CudaFunction):
 	def __init__(self):
 		return

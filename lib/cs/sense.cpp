@@ -145,6 +145,8 @@ void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, con
 {
 	c10::InferenceMode inference_guard;
 
+	out.zero_();
+	
 	at::Tensor imstore;
 	if (imspace_storage.has_value()) {
 		imstore = *imspace_storage;
@@ -152,9 +154,6 @@ void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, con
 	else {
 		imstore = at::empty_like(in);
 	}
-
-	out.zero_();
-
 
 	at::Tensor kstore;
 	if (kspace_storage.has_value()) {
@@ -211,6 +210,8 @@ void hasty::sense::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor& o
 	const std::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
+	
+	out.zero_();
 
 	at::Tensor imstore;
 	if (imspace_storage.has_value()) {

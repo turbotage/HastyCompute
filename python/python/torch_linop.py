@@ -54,3 +54,5 @@ class TorchL2Reg(TorchLinop):
 		else:
 			ret = self.lamda * input
 			return self.linop(input) + ret
+		
+
