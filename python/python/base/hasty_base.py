@@ -11,8 +11,8 @@ General Linops and Algorithms on General Linops
 
 class Vector:
 	def __init__(self, input):
-		self.children = None
-		self.tensor = None
+		self.children: list[torch.Tensor] = None
+		self.tensor: torch.Tensor = None
 		if isinstance(input, list):
 			self.children = []
 			for inp in input:
@@ -37,7 +37,7 @@ class Vector:
 				ret.append(self.children[i].clone())
 			return Vector(ret)
 
-	def __str_(self):
+	def __str__(self):
 		if self.istensor():
 			return str(self.tensor)
 		else:
@@ -54,7 +54,7 @@ class Vector:
 			raise RuntimeError("Can't get_tensor() when self is list")
 
 	def get_tensorlist(self) -> list[torch.Tensor]:
-		ret = []
+		ret: list[torch.Tensor] = []
 		if self.islist():
 			for i in range(len(self.children)):
 				ret.extend(self.children[i].get_tensorlist())
@@ -366,6 +366,10 @@ def norm(a: Vector) -> torch.Tensor:
 
 class Linop:
 	def __init__(self, ishape, oshape):
+		self.ishape = ishape
+		self.oshape = oshape
+
+	def reinitialize(self, ishape, oshape):
 		self.ishape = ishape
 		self.oshape = oshape
 

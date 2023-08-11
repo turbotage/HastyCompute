@@ -12,12 +12,14 @@ _hasty_batched_sense_mod = torch.classes.HastyBatchedSense
 Just the Sense operation, no stacked Sense operators, all tensors should reside on cuda device
 """
 
+
 class Sense:
 	def __init__(self, coords: torch.Tensor, nmodes: list[int]):
 		self._senseop = _hasty_sense_mod.Sense(coords, nmodes)
 		
 	def apply(self, input, output, smaps, coils, imspace_storage=None, kspace_storage=None):
 		self._senseop.apply(input, output, smaps, coils, imspace_storage, kspace_storage)
+
 
 class SenseAdjoint:
 	def __init__(self, coords: torch.Tensor, nmodes: list[int]):
@@ -26,6 +28,7 @@ class SenseAdjoint:
 	def apply(self, input, output, smaps, coils, imspace_storage=None, kspace_storage=None):
 		self._senseop.apply(input, output, smaps, coils, imspace_storage, kspace_storage)
 
+
 class SenseNormal:
 	def __init__(self, coords: torch.Tensor, nmodes: list[int]):
 		self._senseop = _hasty_sense_mod.SenseNormal(coords, nmodes)
@@ -33,13 +36,13 @@ class SenseNormal:
 	def apply(self, input, output, smaps, coils, imspace_storage=None, kspace_storage=None):
 		self._senseop.apply(input, output, smaps, coils, imspace_storage, kspace_storage)
 
+
 class SenseNormalAdjoint:
 	def __init__(self, coords: torch.Tensor, nmodes: list[int]):
 		self._senseop = _hasty_sense_mod.SenseNormalAdjoint(coords, nmodes)
 		
 	def apply(self, input, output, smaps, coils, imspace_storage=None):
 		self._senseop.apply(input, output, smaps, coils, imspace_storage)
-
 
 
 """
@@ -56,6 +59,7 @@ class BatchedSense:
 	def apply(self, input: torch.Tensor, output: list[torch.Tensor], coils: list[list[int]] | None = None):
 		self._senseop.apply(input, output, coils)
 
+
 class BatchedSenseAdjoint:
 	def __init__(self, coords: list[torch.Tensor], smaps: torch.Tensor, 
 	      kdata: list[torch.Tensor] | None = None, weights: list[torch.Tensor] | None = None,
@@ -65,6 +69,7 @@ class BatchedSenseAdjoint:
 	def apply(self, input: list[torch.Tensor], output: torch.Tensor, coils: list[list[int]] | None = None):
 		self._senseop.apply(input, output, coils)
 
+
 class BatchedSenseNormal:
 	def __init__(self, coords: list[torch.Tensor], smaps: torch.Tensor, 
 	      kdata: list[torch.Tensor] | None = None, weights: list[torch.Tensor] | None = None,
@@ -73,6 +78,7 @@ class BatchedSenseNormal:
 		
 	def apply(self, input: torch.Tensor, output: torch.Tensor, coils: list[list[int]] | None = None):
 		self._senseop.apply(input, output, coils)
+
 
 class BatchedSenseNormalAdjoint:
 	def __init__(self, coords: list[torch.Tensor], smaps: torch.Tensor, 

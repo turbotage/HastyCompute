@@ -184,7 +184,6 @@ def gate(coord, kdata, weights, gating, nframes):
 	kdata_vec = []
 	weights_vec = []
 
-
 	def add_idx_spokes(idx):
 		nspokes_idx = np.count_nonzero(idx)
 		nlast = nspokes_idx*spokelen
