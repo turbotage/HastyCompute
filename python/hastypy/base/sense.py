@@ -275,3 +275,21 @@ class BatchedSenseNormalAdjointLinop(Linop):
 		return Vector(self.output)
 	
 
+class OuterInnerAutomorphism(Linop):
+	def __init__(self, nouter_batches, ninner_batches, sp_dims):
+		super().__init__((nouter_batches, ninner_batches) + sp_dims, 
+		   (nouter_batches*ninner_batches,1) + sp_dims)
+
+	def _apply(self, input: Vector):
+		return Vector(input.get_tensor().view(self.oshape))
+
+class InnerOuterAutomorphism(Linop):
+	def __init__(self, nouter_batches, ninner_batches, sp_dims):
+		super().__init__((nouter_batches*ninner_batches,1) + sp_dims, 
+		   (nouter_batches, ninner_batches) + sp_dims)
+
+	def _apply(self, input: Vector):
+		return Vector(input.get_tensor().view(self.oshape))
+	
+
+

@@ -1,8 +1,12 @@
 import torch
 import numpy as np
+import scipy as sp
+from scipy.ndimage import zoom
 
-import base.hasty_base as hasty_base
-from base.hasty_base import Linop
+import h5py
+
+import base.base as base
+from base.base import Linop
 
 from ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal
 
@@ -107,6 +111,168 @@ class BatchedSenseNormalLinop(Linop):
 		return input
 """
 
+class FiveEncodingLoader:
+
+	@staticmethod
+	def load_smaps(self, filepath, sp_dims):
+		with torch.inference_mode():
+			smaps: torch.Tensor
+
+			def get_zoom(dims):
+				zoom: []
+				for i in range(len(sp_dims)):
+					zoom.append(sp_dims[i] / dims[i])
+				return tuple(zoom)
+
+			with h5py.File(filepath) as f:
+				smap_vec = []
+				smapsdata = f['Maps']
+				ncoils = len(smapsdata.keys())
+				for i in range(ncoils):
+					smp = smapsdata['SenseMaps_' + str(i)][()]
+					smp = smp['real']+1j*smp['imag']
+					smap_vec.append(torch.tensor(zoom(smp, get_zoom(smp.shape))))
+				smaps = torch.stack(smap_vec, axis=0)
+				del smap_vec
+
+			self.ncoils = smaps.shape[0]
+
+		return smaps
+	
+	@staticmethod
+	def load_raw(self, filepath, load_coords=True, load_kdata=True, load_weights=True, load_gating=True):
+		with torch.inference_mode():
+			ret: tuple[torch.Tensor]
+
+			with h5py.File(filepath) as f:
+
+				# Coords, K-data, Density Compensation/Weights
+				if load_coords or load_kdata or load_weights:
+					kdataset = f['Kdata']
+
+					# Coords
+					if load_coords:
+						kx_vec = []
+						ky_vec = []
+						kz_vec = []
+						for i in range(5):
+							kx_vec.append(torch.tensor(kdataset['KX_E' + str(i)][()]))
+							ky_vec.append(torch.tensor(kdataset['KY_E' + str(i)][()]))
+							kz_vec.append(torch.tensor(kdataset['KZ_E' + str(i)][()]))
+						kx = torch.stack(kx_vec, axis=0)
+						ky = torch.stack(ky_vec, axis=0)
+						kz = torch.stack(kz_vec, axis=0)
+						coords = torch.stack([kx,ky,kz], axis=0)
+						ret += (coords,)
+
+					# K-Data
+					if load_kdata:
+						kdata_vec = []
+						for i in range(5):
+							kdata_enc = []
+							for j in range(32):
+								kde = kdataset['KData_E'+str(i)+'_C'+str(j)][()]
+								kdata_enc.append(torch.tensor(kde['real'] + 1j*kde['imag']))
+							kdata_vec.append(torch.stack(kdata_enc, axis=0))
+						kdatas = torch.stack(kdata_vec, axis=0)
+						ret += (kdatas,)
+
+					# Density Compensation
+					if load_weights:
+						kw_vec = []
+						for i in range(5):
+							kw_vec.append(torch.tensor(kdataset['KW_E'+str(i)][()]))
+						weights = torch.stack(kw_vec, axis=0)
+						ret += (weights,)
+				# Gating
+				if load_gating:
+					gatingset = f['Gating']
+					gating = torch.tensor(gatingset['ECG_E0'][()][0,:])
+					ret += (gating,)
+
+			return ret
+
+	@staticmethod
+	def load_as_full(coords, kdatas, weights=None):
+		ret: tuple[list[torch.Tensor]]
+
+		coord_vec = []
+		kdata_vec = []
+
+		nlast = coords.shape[-1] * coords.shape[-2]
+		ncoil = kdatas.shape[1]
+
+		coordf = coords[:,:,0,:,:].reshape((3,5,nlast))
+		kdataf = kdatas[:,:,0,:,:].reshape((5,ncoil,nlast))
+		
+		for j in range(5):
+			coord_vec.append(torch.tensor(coordf[:,j,:]))
+			kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
+
+		ret += (coord_vec, kdata_vec)
+
+		if weights is not None:
+			weights_vec = []
+			weightsf = weights[:,0,:,:].reshape((5,nlast))
+			for j in range(5):
+				weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+			ret += (weights_vec,)
+
+		return ret
+
+	@staticmethod
+	def gate_ecg_method(coord, kdata, weights, gating, nframes):
+		mean = np.mean(gating)
+		upper_bound = 1.9*mean # This is heuristic, perhaps base it on percentile instead
+		length = upper_bound / nframes
+
+		spokelen = coord.shape[-1]
+		nspokes = coord.shape[-2]
+		ncoil = kdata.shape[1]	
+
+		coord_vec = []
+		kdata_vec = []
+		weights_vec = []
+
+		def add_idx_spokes(idx):
+			nspokes_idx = np.count_nonzero(idx)
+			nlast = nspokes_idx*spokelen
+
+			coordf = coord[:,:,0,idx,:].reshape((3,5,nlast))
+			kdataf = kdata[:,:,0,idx,:].reshape((5,ncoil,nlast))
+			if weights is not None:
+				weightsf = weights[:,0,idx,:].reshape((5,nlast))
+
+			for j in range(5):
+				coord_vec.append(torch.tensor(coordf[:,j,:]))
+				kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
+				if weights is not None:
+					weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+
+		len_start = length + length/2
+		gates = [len_start]
+		# First Frame
+		if True:
+			idx = gating < len_start
+			add_idx_spokes(idx)
+
+		# Mid Frames
+		for i in range(1,nframes-1):
+			new_len_start = len_start + length
+			idx = np.logical_and(len_start <= gating, gating < new_len_start)
+			len_start = new_len_start
+			gates.append(len_start)
+
+			add_idx_spokes(idx)
+
+		# Last Frame
+		if True:
+			idx = len_start <= gating
+			add_idx_spokes(idx)
+
+		return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates)
+
+
 
 def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0, prefovkmul=1.0, postfovkmul=1.0):
 	max = 0.0
@@ -150,7 +316,6 @@ def center_weights(im_size, width, coord, weights):
 	idx = torch.abs(scaled_coords) < width
 	idx = torch.logical_and(idx[0,:], torch.logical_and(idx[1,:], idx[2,:]))
 	return weights[0,idx]
-
 
 
 

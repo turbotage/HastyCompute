@@ -61,6 +61,16 @@ class Vector:
 		else:
 			return [self.tensor]
 
+	@staticmethod
+	def scale(input: Self, scale: torch.Tensor):
+		if input.islist():
+			ret = []
+			for i in range(len(input.children)):
+				ret.append(scale(input[i], scale))
+			return Vector(ret)
+		else:
+			return Vector(input.tensor * scale)
+
 	def __add__(self, o: Self) -> Self:
 		if not isinstance(o, Vector):
 			raise RuntimeError("Input was not a Vector")
@@ -364,7 +374,8 @@ def norm(a: Vector) -> torch.Tensor:
 			sum += norm(a.children[i])
 		return sum
 
-class Linop:
+
+class Operator:
 	def __init__(self, ishape, oshape):
 		self.ishape = ishape
 		self.oshape = oshape
@@ -378,23 +389,79 @@ class Linop:
 	
 	def apply(self, input: torch.Tensor):
 		if get_shape(input) != self.ishape:
-			raise RuntimeError("Incompatible input shape with Linop")
+			raise RuntimeError("Incompatible input shape for Operator")
 		
 		output = self._apply(input)
 
 		if get_shape(output) != self.oshape:
-			raise RuntimeError("Incompatible output shape with Linop")
+			raise RuntimeError("Incompatible output shape for Operator")
 		
 		return output
 
 	def __call__(self, input: torch.Tensor):
 		return self.apply(input)
+	
+	def __mul__(self, other: Self):
+		return CompositeOp(self, other)
+	
+	def __add__(self, other: Self):
+		return AdditiveOp(self, other)
+
+class IdentityOp(Operator):
+	def __init__(self, ishape):
+		super().__init__(ishape, ishape)
+
+	def _apply(self, input: Vector):
+		return input
+
+class CompositeOp(Operator):
+	def __init__(self, left: Operator, right: Operator):
+		if left.ishape != right.oshape:
+			raise RuntimeError("Incompatible left and right ishape/oshape")
+		
+		self.left = left
+		self.right = right
+
+		super().__init__(right.ishape, left.oshape)
+
+	def _apply(self, input: Vector):
+		return self.left(self.right(input))
+
+class AdditiveOp(Operator):
+	def __init__(self, left: Operator, right: Operator):
+		if left.ishape != right.ishape:
+			raise RuntimeError("Incompatible left and right ishape/oshape")
+		if left.oshape != right.oshape:
+			raise RuntimeError("Incompatible left and right ishape/oshape")
+
+		self.left = left
+		self.right = right
+
+		super().__init__(right.ishape, left.oshape)
+
+	def _apply(self, input: Vector):
+		return self.left(input) + self.right(input)
+
+class ScaleOp(Operator):
+	def __init__(self, op: Operator, scale: torch.Tensor):
+		self.op = op
+		self.scale = scale
+		super().__init__(op.ishape, op.oshape)
+
+	def _apply(self, input: Vector):
+		return Vector.scale(self.op(input), self.scale)
+
+
+class Linop(Operator):
+	def __init__(self, ishape, oshape):
+		super().__init__(ishape, oshape)
+
 
 class IterativeAlg:
 	def __init__(self, max_iter):
 		self.max_iter = max_iter
 		self.iter = 0
-                
+				
 	def _update(self):
 		raise NotImplementedError
 
