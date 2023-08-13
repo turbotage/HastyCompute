@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from hasty_base import Vector, Linop
-from ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal, BatchedSenseNormalAdjoint
+from hastypy.base.opalg import Vector, Linop
+from hastypy.ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal, BatchedSenseNormalAdjoint
 
 class BatchedSenseLinop(Linop):
 	def __init__(self, coord_vec: list[torch.Tensor], smaps: torch.Tensor, kdata_vec: list[torch.Tensor] | None = None, 

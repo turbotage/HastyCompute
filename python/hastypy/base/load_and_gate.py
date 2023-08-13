@@ -5,10 +5,10 @@ from scipy.ndimage import zoom
 
 import h5py
 
-import base.base as base
-from base.base import Linop
 
-from ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal
+from hastypy.base.opalg import Linop
+from hastypy.ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal
+
 
 """
 class BatchedSenseLinop(Linop):

@@ -3,8 +3,6 @@ import numpy as np
 import math
 from typing import Any, Self
 
-import torch_base
-
 """
 General Linops and Algorithms on General Linops
 """
@@ -16,11 +14,11 @@ class Vector:
 		if isinstance(input, list):
 			self.children = []
 			for inp in input:
-				self.children.append(Vector(inp))
+				self.children.append(inp if isinstance(inp, Vector) else Vector(inp))
 		elif isinstance(input, torch.Tensor):
 			self.tensor = input
 		else:
-			raise RuntimeError('Was neither list nor Tensor')
+			raise RuntimeError('Was not Vector, list or Tensor')
 		
 	def istensor(self):
 		return self.tensor is not None
@@ -66,7 +64,7 @@ class Vector:
 		if input.islist():
 			ret = []
 			for i in range(len(input.children)):
-				ret.append(scale(input[i], scale))
+				ret.append(Vector.scale(input.children[i], scale))
 			return Vector(ret)
 		else:
 			return Vector(input.tensor * scale)
@@ -91,7 +89,7 @@ class Vector:
 			ret = []
 			for i in range(len(self.children)):
 				ret.append(self.children[i] + o.children[i])
-			return Vector(self.ret)
+			return Vector(ret)
 	
 	def __sub__(self, o: Self) -> Self:
 		if not isinstance(o, Vector):
@@ -113,7 +111,7 @@ class Vector:
 			ret = []
 			for i in range(len(self.children)):
 				ret.append(self.children[i] - o.children[i])
-			return Vector(self.ret)
+			return Vector(ret)
 
 	def __mul__(self, o: Self) -> Self:
 		if not isinstance(o, Vector):
@@ -157,7 +155,7 @@ class Vector:
 			ret = []
 			for i in range(len(self.children)):
 				ret.append(self.children[i] / o.children[i])
-			return Vector(self.ret)
+			return Vector(ret)
 
 	def __pow__(self, o: Self) -> Self:
 		if not isinstance(o, Vector):
@@ -179,7 +177,7 @@ class Vector:
 			ret = []
 			for i in range(len(self.children)):
 				ret.append(self.children[i] ** o.children[i])
-			return Vector(self.ret)
+			return Vector(ret)
 
 	def __iadd__(self, o: Self) -> Self:
 		if not isinstance(o, Vector):
@@ -288,15 +286,14 @@ class Vector:
 		return self
 
 
-def get_shape(inp: Vector):
+def get_shape(inp: Vector | list | torch.Tensor):
+	if isinstance(inp, Vector):
+		if inp.islist():
+			return get_shape(inp.children)
+		else:
+			return inp.tensor.shape
 	if isinstance(inp, torch.Tensor) or isinstance(inp, np.ndarray):
 		return inp.shape
-	if isinstance(inp, tuple):
-		if len(inp) > 0:
-			for p in inp:
-				if not isinstance(p, int):
-					raise RuntimeError("Encountered a tuple that didn't contain ints or was empty")
-		return inp
 	if isinstance(inp, list):
 		shape_list = []
 		for p in inp:
@@ -384,10 +381,10 @@ class Operator:
 		self.ishape = ishape
 		self.oshape = oshape
 
-	def _apply(self, input: torch.Tensor):
+	def _apply(self, input: Vector):
 		raise NotImplementedError
 	
-	def apply(self, input: torch.Tensor):
+	def apply(self, input: Vector):
 		if get_shape(input) != self.ishape:
 			raise RuntimeError("Incompatible input shape for Operator")
 		
@@ -398,7 +395,7 @@ class Operator:
 		
 		return output
 
-	def __call__(self, input: torch.Tensor):
+	def __call__(self, input: Vector):
 		return self.apply(input)
 	
 	def __mul__(self, other: Self):
@@ -475,7 +472,7 @@ class IterativeAlg:
 	def done(self):
 		return self._done()
 	
-class MagEig(IterativeAlg):
+class MaxEig(IterativeAlg):
 	def __init__(self, A: Linop, dtype=torch.float32, max_iter=30):
 		self.A = A
 		self.x = rand(A.ishape, dtype=dtype)
@@ -579,7 +576,7 @@ class ConjugateGradient(IterativeAlg):
 		return self.x
 
 class GradientDescent(IterativeAlg):
-	def __init__(self, gradf, x, prox=None, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):
+	def __init__(self, gradf: Operator, x: Vector, prox: Operator | None = None, alpha=1.0, accelerate=False, max_iter=100, tol=0.0):
 		self.gradf = gradf
 		self.x = x
 		self.alpha = alpha
