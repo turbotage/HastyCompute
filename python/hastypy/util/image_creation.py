@@ -2,7 +2,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 import scipy as sp
 
-import plot_utility as pu
+import hastypy.util.plot_utility as pu
 
 import nibabel as nib
 import math
