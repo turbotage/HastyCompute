@@ -111,38 +111,47 @@ class BatchedSenseNormalLinop(Linop):
 		return input
 """
 
-class FiveEncodingLoader:
+class FivePointLoader:
 
 	@staticmethod
-	def load_smaps(self, filepath, sp_dims):
+	def load_smaps(filepath, sp_dims):
 		with torch.inference_mode():
 			smaps: torch.Tensor
 
 			def get_zoom(dims):
-				zoom: []
+				if dims == sp_dims:
+					return None
+				zoom = []
 				for i in range(len(sp_dims)):
-					zoom.append(sp_dims[i] / dims[i])
+						zoom.append(sp_dims[i] / dims[i])
 				return tuple(zoom)
 
+			print("Loading smaps...")
 			with h5py.File(filepath) as f:
 				smap_vec = []
 				smapsdata = f['Maps']
 				ncoils = len(smapsdata.keys())
 				for i in range(ncoils):
+					print("\r", end="")
 					smp = smapsdata['SenseMaps_' + str(i)][()]
 					smp = smp['real']+1j*smp['imag']
-					smap_vec.append(torch.tensor(zoom(smp, get_zoom(smp.shape))))
+					zooming = get_zoom(smp.shape)
+					if zooming is None:
+						smap_vec.append(torch.tensor(smp))
+						print('Coil: ', i, '/', ncoils, end="")
+					else:
+						smap_vec.append(torch.tensor(zoom(smp, get_zoom(smp.shape))))
+						print('Coil: ', i, '/', ncoils, ', Rescaling...', end="")
 				smaps = torch.stack(smap_vec, axis=0)
 				del smap_vec
-
-			self.ncoils = smaps.shape[0]
+			print("\nDone.")
 
 		return smaps
 	
 	@staticmethod
-	def load_raw(self, filepath, load_coords=True, load_kdata=True, load_weights=True, load_gating=True):
+	def load_raw(filepath, load_coords=True, load_kdata=True, load_weights=True, load_gating=True):
 		with torch.inference_mode():
-			ret: tuple[torch.Tensor]
+			ret: tuple[torch.Tensor] = ()
 
 			with h5py.File(filepath) as f:
 
@@ -152,6 +161,7 @@ class FiveEncodingLoader:
 
 					# Coords
 					if load_coords:
+						print('Loading coords:  ', end="")
 						kx_vec = []
 						ky_vec = []
 						kz_vec = []
@@ -164,9 +174,11 @@ class FiveEncodingLoader:
 						kz = torch.stack(kz_vec, axis=0)
 						coords = torch.stack([kx,ky,kz], axis=0)
 						ret += (coords,)
+						print('Done.')
 
 					# K-Data
 					if load_kdata:
+						print('Loading kdata:  ', end="")
 						kdata_vec = []
 						for i in range(5):
 							kdata_enc = []
@@ -176,19 +188,25 @@ class FiveEncodingLoader:
 							kdata_vec.append(torch.stack(kdata_enc, axis=0))
 						kdatas = torch.stack(kdata_vec, axis=0)
 						ret += (kdatas,)
+						print('Done.')
 
 					# Density Compensation
 					if load_weights:
+						print('Loading weights:  ', end="")
 						kw_vec = []
 						for i in range(5):
 							kw_vec.append(torch.tensor(kdataset['KW_E'+str(i)][()]))
 						weights = torch.stack(kw_vec, axis=0)
 						ret += (weights,)
+						print('Done.')
+
 				# Gating
 				if load_gating:
+					print('Loading gating:  ', end="")
 					gatingset = f['Gating']
 					gating = torch.tensor(gatingset['ECG_E0'][()][0,:])
 					ret += (gating,)
+					print('Done.')
 
 			return ret
 

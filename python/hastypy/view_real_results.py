@@ -7,8 +7,8 @@ import math
 import random
 import gc
 
-import plot_utility as pu
-import image_creation as ic
+import hastypy.util.plot_utility as pu
+import hastypy.util.image_creation as ic
 
 import torchkbnufft as tkbn
 

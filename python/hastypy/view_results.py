@@ -2,8 +2,8 @@
 import numpy as np
 import h5py
 
-import plot_utility as pu
-import image_creation as ic
+import hastypy.util.plot_utility as pu
+import hastypy.util.image_creation as ic
 
 import torchkbnufft as tkbn
 

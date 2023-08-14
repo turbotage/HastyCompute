@@ -6,6 +6,21 @@ from hastypy.base.svt import Random3DBlocksSVT, Normal3DBlocksSVT
 
 from hastypy.base.opalg import Vector, MaxEig, GradientDescent
 
+
+
+class FivePointFULL:
+	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, streams=None, solver='GD'):
+		self.smaps = smaps
+		self.coord_vec = coord_vec
+		self.kdata_vec = kdata_vec
+		self.weights_vec = weights_vec
+
+		if solver == 'GD':
+			
+
+
+
+
 class LLROptions:
 	def __init__(self, block_shapes=[16,16,16], block_strides=[16,16,16], block_iter: int = 4, 
 			random=False, nblocks=1, thresh: float = 0.01, soft: bool = True):
