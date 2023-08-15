@@ -168,6 +168,8 @@ class BatchedSenseNormalLinop(Linop):
 
 		self._calc_shapes()
 
+		self.set_coil_randomization()
+
 		super().__init__(self.ishape, self.ishape)
 		
 	def _calc_shapes(self):

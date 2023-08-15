@@ -212,7 +212,7 @@ class FivePointLoader:
 
 	@staticmethod
 	def load_as_full(coords, kdatas, weights=None):
-		ret: tuple[list[torch.Tensor]]
+		ret: tuple[list[torch.Tensor]] = ()
 
 		coord_vec = []
 		kdata_vec = []
@@ -224,8 +224,8 @@ class FivePointLoader:
 		kdataf = kdatas[:,:,0,:,:].reshape((5,ncoil,nlast))
 		
 		for j in range(5):
-			coord_vec.append(torch.tensor(coordf[:,j,:]))
-			kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
+			coord_vec.append(coordf[:,j,:].detach().clone())
+			kdata_vec.append(kdataf[j,:,:].detach().clone().unsqueeze(0))
 
 		ret += (coord_vec, kdata_vec)
 
@@ -233,7 +233,7 @@ class FivePointLoader:
 			weights_vec = []
 			weightsf = weights[:,0,:,:].reshape((5,nlast))
 			for j in range(5):
-				weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+				weights_vec.append(weightsf[j,:].detach().clone().unsqueeze(0))
 			ret += (weights_vec,)
 
 		return ret

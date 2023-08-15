@@ -1,10 +1,10 @@
 import torch
 import numpy as np
 
-from hastypy.base.opalg import Vector, Linop
+from hastypy.base.opalg import Vector, Operator, Linop
 from hastypy.ffi.hasty_svt import Random3DBlocksSVT, Normal3DBlocksSVT
 
-class Random3DBlocksSVT(Linop):
+class Random3DBlocksSVT(Operator):
 	def __init__(self, input_shape, streams: list[torch.Stream], nblocks: int, 
 			block_shape: list[int], thresh: float, soft: bool):
 		self._svtop = Random3DBlocksSVT(streams)
@@ -18,7 +18,7 @@ class Random3DBlocksSVT(Linop):
 	def _apply(self, input: Vector):
 		self._svtop.apply(input.get_tensor(), self.nblocks, self.block_shape, self.thresh, self.soft)
 
-class Normal3DBlocksSVT(Linop):
+class Normal3DBlocksSVT(Operator):
 	def __init__(self, input_shape, streams: list[torch.Stream], block_strides: list[int], 
 	      block_shape: list[int], block_iter: int, thresh: float, soft: bool):
 		self._svtop = Normal3DBlocksSVT(streams)
