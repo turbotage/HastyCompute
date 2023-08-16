@@ -4,8 +4,8 @@ import cupy as cp
 
 import math
 import h5py
-import plot_utility as pu
-import image_creation as ic
+import hastypy.util.plot_utility as pu
+import hastypy.util.image_creation as ic
 
 sys.path.append('C:\\Users\\TurboTage\\Documents\\GitHub\\pycompute')
 
@@ -754,8 +754,31 @@ def test():
 
 	print('Hello')
 
+def test_real():
+
+	img_full = np.array([0])
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
+		img_full = f['images'][()]
+
+	#pu.image_nd(img_full)
+
+	img_vel = enc_to_vel_linear(img_full, 500)
+
+	mean_mag = np.mean(img_full, axis=(0,1))
+
+	vmag = np.sqrt(img_vel[:,1,...]**2 + img_vel[:,2,...]**2 + img_vel[:,3,...]**2)
+
+	pu.image_nd(vmag)
+
+	cd = ic.get_CD(img_vel, 500)
+
+	pu.image_nd(cd)
+
+	print('Hello')
+
 
 if __name__ == '__main__':
 	#objective_surface(0.0)
 	#test_data(noiceperc=0.2)
-	test()
+	#test()
+	test_real()

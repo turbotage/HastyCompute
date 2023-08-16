@@ -6,6 +6,9 @@
 
 #include "py_test.hpp"
 
+#include <torch/torch.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <chrono>
 
 /*
 void diagonal_test() {
@@ -345,21 +348,7 @@ void test_batched_sense_normal_adjoint()
 	bs.apply(at::makeArrayRef(in), at::makeArrayRef(out), at::nullopt);
 }
 
-
-int main() {
-
-	/*
-	diagonal_test();
-	diagonal_ones_gives_shs();
-	nufft_tests();
-	batched_test();
-	batched_sense_test();
-	test_large_batched();
-	random_svt_test();
-	normal_svt_test();
-	*/
-
-
+void batched_sense_tests() {
 	try {
 		test_batched_sense();
 	}
@@ -391,6 +380,105 @@ int main() {
 		std::string err = e.what();
 		std::cerr << err << std::endl;
 	}
+}
+
+
+
+void test_random_svt() {
+	int32_t outer = 20;
+
+	int32_t nx = 256;
+	int32_t ny = 256;
+	int32_t nz = 256;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	at::Tensor in = at::rand({ outer, 5, nx, ny, nz }, complex_options);
+
+	std::vector<at::Stream> streams = { at::cuda::getDefaultCUDAStream() };
+	/*
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	*/
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	hasty::ffi::Random3DBlocksSVT  rbsvt(at::make_optional(at::makeArrayRef(streams)));
+	rbsvt.apply(in, 10000, { 16,16,16 }, 0.1, true);
+
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << std::endl;
+
+}
+
+void test_normal_svt() {
+	int32_t outer = 20;
+
+	int32_t nx = 256;
+	int32_t ny = 256;
+	int32_t nz = 256;
+
+	auto complex_options = c10::TensorOptions().dtype(c10::ScalarType::ComplexFloat);
+	auto real_options = c10::TensorOptions().dtype(c10::ScalarType::Float);
+
+	at::Tensor in = at::rand({ outer, 5, nx, ny, nz }, complex_options);
+
+	std::vector<at::Stream> streams = { at::cuda::getDefaultCUDAStream() };
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	/*
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	streams.push_back(at::cuda::getStreamFromPool());
+	*/
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	hasty::ffi::Normal3DBlocksSVT  rbsvt(at::make_optional(at::makeArrayRef(streams)));
+	rbsvt.apply(in, { 16,16,16 }, {16, 16, 16}, 4, 0.1, true);
+
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << std::endl;
+
+}
+
+void svt_tests() {
+	try {
+		test_random_svt();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+
+	try {
+		test_normal_svt();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+}
+
+int main() {
+
+	
+	try {
+		test_normal_svt();
+	}
+	catch (c10::Error& e) {
+		std::string err = e.what();
+		std::cerr << err << std::endl;
+	}
+
 
 	return 0;
 }

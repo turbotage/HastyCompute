@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import math
 from typing import Any, Self
+import time
 
 import hastypy.base.opalg as opalg
 from hastypy.base.opalg import IterativeAlg, Vector, Linop, Operator
@@ -103,11 +104,17 @@ class GradientDescent(IterativeAlg):
 		if self.accelerate:
 			self.x = self.z
 
+		time_start = time.time()
 		self.x -= self.alpha * self.gradf(self.x)
+		time_stop = time.time()
+		self.grad_time = time_stop - time_start
 
 		if self.prox is not None:
+			time_start = time.time()
 			self.prox.set_alpha(self.alpha)
 			self.x = self.prox(self.x)
+			time_stop = time.time()
+			self.prox_time = time_stop - time_start
 
 		if self.accelerate:
 			t_old = self.t
@@ -131,14 +138,22 @@ class GradientDescent(IterativeAlg):
 			self.update()
 			
 			if print_info:
+				printr: str = ""
 				if self.accelerate:
-					print('GD Iter: ', i, '/', self.max_iter, ', Res: ', self.resids[-1], ', t:  ', self.t, ',  ', end="")
+					printr += f"GD Iter: {i} / {self.max_iter}, , Res: {self.resids[-1]}, t: {self.t},  "
+					#print('GD Iter: ', i, '/', self.max_iter, ', Res: ', self.resids[-1], ', t:  ', self.t, ',  ', end="")
 				else:
-					print('GD Iter: ', i, '/', self.max_iter, ', Res: ', self.resids[-1], ',  ', end="")
+					printr += f"GD Iter: {i} / {self.max_iter}, , Res: {self.resids[-1]},  "
 
 				if self.tol != 0.0:
-					print(' RelRes: ', self.rel_resids[-1], ', ', end="")
-				print("")
+					printr += f"RelRes: {self.rel_resids[-1]},  "
+
+				printr += f"GradTime:  {self.grad_time},  "
+
+				if self.prox is not None:
+					printr += f"ProxTime:  {self.prox_time},  "
+
+				print(printr)
 
 			if callback is not None:
 				callback(self.x, i)

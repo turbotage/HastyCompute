@@ -140,7 +140,7 @@ class FivePointLoader:
 						smap_vec.append(torch.tensor(smp))
 						print('Coil: ', i, '/', ncoils, end="")
 					else:
-						smap_vec.append(torch.tensor(zoom(smp, get_zoom(smp.shape))))
+						smap_vec.append(torch.tensor(zoom(smp, get_zoom(smp.shape), order=1)))
 						print('Coil: ', i, '/', ncoils, ', Rescaling...', end="")
 				smaps = torch.stack(smap_vec, axis=0)
 				del smap_vec
@@ -240,7 +240,7 @@ class FivePointLoader:
 
 	@staticmethod
 	def gate_ecg_method(coord, kdata, weights, gating, nframes):
-		mean = np.mean(gating)
+		mean = torch.mean(gating)
 		upper_bound = 1.9*mean # This is heuristic, perhaps base it on percentile instead
 		length = upper_bound / nframes
 
@@ -253,7 +253,7 @@ class FivePointLoader:
 		weights_vec = []
 
 		def add_idx_spokes(idx):
-			nspokes_idx = np.count_nonzero(idx)
+			nspokes_idx = torch.count_nonzero(idx)
 			nlast = nspokes_idx*spokelen
 
 			coordf = coord[:,:,0,idx,:].reshape((3,5,nlast))
@@ -262,10 +262,10 @@ class FivePointLoader:
 				weightsf = weights[:,0,idx,:].reshape((5,nlast))
 
 			for j in range(5):
-				coord_vec.append(torch.tensor(coordf[:,j,:]))
-				kdata_vec.append(torch.tensor(kdataf[j,:,:]).unsqueeze(0))
+				coord_vec.append(coordf[:,j,:].detach().clone())
+				kdata_vec.append(kdataf[j,:,:].unsqueeze(0).detach().clone())
 				if weights is not None:
-					weights_vec.append(torch.tensor(weightsf[j,:]).unsqueeze(0))
+					weights_vec.append(weightsf[j,:].unsqueeze(0).detach().clone())
 
 		len_start = length + length/2
 		gates = [len_start]
@@ -277,7 +277,7 @@ class FivePointLoader:
 		# Mid Frames
 		for i in range(1,nframes-1):
 			new_len_start = len_start + length
-			idx = np.logical_and(len_start <= gating, gating < new_len_start)
+			idx = torch.logical_and(len_start <= gating, gating < new_len_start)
 			len_start = new_len_start
 			gates.append(len_start)
 
@@ -292,38 +292,54 @@ class FivePointLoader:
 
 
 
-def crop_kspace(coord_vec, kdata_vec, weights_vec, im_size, crop_factor=1.0, prefovkmul=1.0, postfovkmul=1.0):
-	max = 0.0
-	for i in range(len(coord_vec)):
-		maxi = coord_vec[i].abs().max().item()
-		if maxi > max:
-			max = maxi
-
-	kim_size = tuple((e / 2) * crop_factor for e in im_size)
-
-	for i in range(len(coord_vec)):
-		coord = coord_vec[i] * prefovkmul
-		idxx = torch.abs(coord[0,:]) < kim_size[0]
-		idxy = torch.abs(coord[1,:]) < kim_size[1]
-		idxz = torch.abs(coord[2,:]) < kim_size[2]
-
-		idx = torch.logical_and(idxx, torch.logical_and(idxy, idxz))
-
-		coord_vec[i] = postfovkmul * torch.pi * coord[:,idx] / maxi
-		kdata_vec[i] = kdata_vec[i][:,:,idx]
-		if weights_vec is not None:
-			weights_vec[i] = weights_vec[i][:,idx]
+def crop_kspace(coords, kdatas, weights, im_size, crop_factors=(1.0,1.0,1.0), prefovkmuls=(1.0,1.0,1.0), postfovkmuls=(1.0,1.0,1.0)):
 	
-	return (coord_vec, kdata_vec, weights_vec)
+	if isinstance(coords, list):
+		max = 0.0
+		for i in range(len(coords)):
+			maxi = coords[i].abs().max().item()
+			if maxi > max:
+				max = maxi
+
+		kim_size = tuple(0.5*im_size[i]*crop_factors[i] for i in range(3))
+
+		upp_bound = torch.tensor(0.99999*torch.pi)
+		for i in range(len(coords)):
+			coord = coords[i]
+			coord[0,:] *= prefovkmuls[0]
+			coord[1,:] *= prefovkmuls[1]
+			coord[2,:] *= prefovkmuls[2]
+
+			idxx = torch.abs(coord[0,:]) < kim_size[0]
+			idxy = torch.abs(coord[1,:]) < kim_size[1]
+			idxz = torch.abs(coord[2,:]) < kim_size[2]
+
+			idx = torch.logical_and(idxx, torch.logical_and(idxy, idxz))
+
+			coords[i] = coord[:,idx]
+			coords[i][0,:] *= postfovkmuls[0] * torch.pi / kim_size[0]
+			coords[i][1,:] *= postfovkmuls[1] * torch.pi / kim_size[1]
+			coords[i][2,:] *= postfovkmuls[2] * torch.pi / kim_size[2]
+
+			coords[i] = torch.maximum(torch.minimum(upp_bound, coords[i]), -upp_bound)
+
+			kdatas[i] = kdatas[i][:,:,idx]
+			if weights is not None:
+				weights[i] = weights[i][:,idx]
+		
+		return (coords, kdatas, weights)
+	else:
+		raise NotImplementedError("Not implemented")
+		
 
 def translate(coord_vec, kdata_vec, translation):
 	cudev = torch.device('cuda:0')
+	mult = torch.tensor(list(translation)).unsqueeze(-1).to(cudev)
 	for i in range(len(coord_vec)):
-		coord = coord_vec[i].to(cudev)
-		kdata = kdata_vec[i].to(cudev)
-		mult = torch.tensor(list(translation)).unsqueeze(0).to(cudev)
+		coord = coord_vec[i].to(cudev, non_blocking=True)
+		kdata = kdata_vec[i].to(cudev, non_blocking=True)
 
-		kdata *= torch.exp(1j*(mult @ coord)).unsqueeze(0)
+		kdata *= torch.exp(1j*torch.linalg.vecdot(mult, coord, dim=0)).unsqueeze(0)
 
 		kdata_vec[i] = kdata.cpu()
 

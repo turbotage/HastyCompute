@@ -397,10 +397,10 @@ class Operator:
 		self.ishape = ishape
 		self.oshape = oshape
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		raise NotImplementedError
 	
-	def apply(self, input: Vector):
+	def apply(self, input: Vector) -> Vector:
 		if get_shape(input) != self.ishape:
 			raise RuntimeError("Incompatible input shape for Operator")
 		
@@ -411,7 +411,7 @@ class Operator:
 		
 		return output
 
-	def __call__(self, input: Vector):
+	def __call__(self, input: Vector) -> Vector:
 		return self.apply(input)
 	
 	def __mul__(self, other: Self):
@@ -424,7 +424,7 @@ class IdentityOp(Operator):
 	def __init__(self, ishape):
 		super().__init__(ishape, ishape)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return input
 
 class CompositeOp(Operator):
@@ -437,7 +437,7 @@ class CompositeOp(Operator):
 
 		super().__init__(right.ishape, left.oshape)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return self.left(self.right(input))
 
 class AdditiveOp(Operator):
@@ -452,7 +452,7 @@ class AdditiveOp(Operator):
 
 		super().__init__(right.ishape, left.oshape)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return self.left(input) + self.right(input)
 
 class ScaleOp(Operator):
@@ -461,7 +461,7 @@ class ScaleOp(Operator):
 		self.scale = scale
 		super().__init__(op.ishape, op.oshape)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return Vector.scale(self.op(input), self.scale)
 
 

@@ -282,7 +282,7 @@ class OuterInnerAutomorphism(Linop):
 		super().__init__((nouter_batches, ninner_batches) + sp_dims, 
 		   (nouter_batches*ninner_batches,1) + sp_dims)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return Vector(input.get_tensor().view(self.oshape))
 
 #(nf*ne,1,...) -> (nf,ne,...)
@@ -291,7 +291,7 @@ class InnerOuterAutomorphism(Linop):
 		super().__init__((nouter_batches*ninner_batches,1) + sp_dims, 
 		   (nouter_batches, ninner_batches) + sp_dims)
 
-	def _apply(self, input: Vector):
+	def _apply(self, input: Vector) -> Vector:
 		return Vector(input.get_tensor().view(self.oshape))
 	
 
