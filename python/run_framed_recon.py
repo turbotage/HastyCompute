@@ -40,6 +40,8 @@ def run(settings: RunSettings):
 	smaps = FivePointLoader.load_smaps(settings.smaps_filepath, settings.im_size)
 	smaps = torch.permute(smaps, (0,3,2,1))
 
+	pu.image_nd(smaps.numpy())
+
 	coords, kdata, weights, gating = FivePointLoader.load_raw(settings.rawdata_filepath)
 	#normalize kdata
 	kdata /= 0.5*(torch.mean(torch.real(kdata)) + torch.mean(torch.real(kdata)))
@@ -59,7 +61,7 @@ def run(settings: RunSettings):
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
 
-	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=20.0)
+	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=10.0)
 
 	image = torch.zeros((5,1) + settings.im_size, dtype=torch.complex64)
 
@@ -69,7 +71,7 @@ def run(settings: RunSettings):
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=3, callback=None)
+	image = full_recon.run(image, iter=15, callback=None)
 
 	pu.image_nd(image.numpy())
 
@@ -110,15 +112,15 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.numpy())
 
-	images = framed_recon.run(images, iter=40, callback=None)
+	images = framed_recon.run(images, iter=80, callback=None)
 
 	return images
 
 
 if __name__ == '__main__':
 	with torch.inference_mode():
-		im_size = (170,170,170)
-		shift = (-2*17, 0.0, 0.0)
+		im_size = (160,160,160)
+		shift = (-2*16, 0.0, 0.0)
 		#im_size = (256,256,256)
 		#shift = (-2*25.6, 0.0, 0.0)
 		crop_factors = (1.1,1.1,1.1)
@@ -126,11 +128,11 @@ if __name__ == '__main__':
 		postfovkmuls = (1.0,1.0,1.0)
 
 		settings = RunSettings(im_size, crop_factors, prefovkmuls, postfovkmuls, shift
-			).set_nframes(10
+			).set_nframes(15
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp.h5'
 			).set_rawdata_filepath('D:/4DRecon/MRI_Raw.h5')
 
-		smaps, image, raw_data = run(settings, )
+		smaps, image, raw_data = run(settings)
 
 		gc.collect()
 		torch.cuda.empty_cache()
