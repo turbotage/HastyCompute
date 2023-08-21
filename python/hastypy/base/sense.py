@@ -1,10 +1,126 @@
 import torch
 import numpy as np
 
+from hastypy.base.torch_opalg import TorchLinop
 from hastypy.base.opalg import Vector, Linop
-from hastypy.ffi.hasty_sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal, BatchedSenseNormalAdjoint
+import hastypy.ffi.hasty_sense as hasty_sense
 
-class BatchedSenseLinop(Linop):
+
+
+class SenseT(TorchLinop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.Sense(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((1,) + self.smaps.shape[1:], (self.ncoil, self.nfreq))
+
+	def _apply(self, input: torch.Tensor):
+		output = torch.empty((self.ncoil,self.nfreq), dtype=input.dtype, device=input.device)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return output
+
+class SenseAdjointT(TorchLinop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.SenseAdjoint(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((self.ncoil, self.nfreq), (1,) + self.smaps.shape[1:])
+
+	def _apply(self, input: torch.Tensor):
+		output = torch.empty((1,) + self.smaps.shape[1:], dtype=input.dtype, device=input.device)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return output
+
+class SenseNormalT(TorchLinop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.SenseNormal(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((1,) + self.smaps.shape[1:], (1,) + self.smaps.shape[1:])
+
+	def _apply(self, input: torch.Tensor):
+		output = torch.empty_like(input)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return output
+
+
+
+
+
+class Sense(Linop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.Sense(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((1,) + self.smaps.shape[1:], (1, self.ncoil, self.nfreq))
+
+	def _apply(self, input: Vector):
+		if not input.istensor():
+			raise RuntimeError("Input must be a tensor Vector")
+		inp = input.get_tensor()
+		output = torch.empty((1,self.ncoil,self.nfreq), dtype=inp.dtype, device=inp.device)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return Vector(output)
+
+class SenseAdjoint(Linop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.SenseAdjoint(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((1, self.ncoil, self.nfreq), (1,) + self.smaps.shape[1:])
+
+	def _apply(self, input: Vector):
+		if not input.istensor():
+			raise RuntimeError("Input must be a tensor Vector")
+		inp = input.get_tensor()
+		output = torch.empty((1,) + self.smaps.shape[1:], dtype=inp.dtype, device=inp.device)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return Vector(output)
+
+class SenseNormal(Linop):
+	def __init__(self, coords: torch.Tensor, smaps: torch.Tensor, coils):
+		self._senseop = hasty_sense.SenseNormal(coords, [1] + list(smaps.shape[1:]))
+		self.nfreq = coords.shape[1]
+		self.ndim = coords.shape[0]
+		self.ncoil = smaps.shape[0]
+		self.smaps = smaps
+		self.coils = coils
+
+		super().__init__((1,) + self.smaps.shape[1:], (1,) + self.smaps.shape[1:])
+
+	def _apply(self, input: Vector):
+		if not input.istensor():
+			raise RuntimeError("Input must be a tensor Vector")
+		inp = input.get_tensor()
+		output = torch.empty_like(inp)
+		self._senseop.apply(input, output, self.smaps, self.coils, None, None)
+		return Vector(output)
+
+
+
+
+
+class BatchedSense(Linop):
 	def __init__(self, coord_vec: list[torch.Tensor], smaps: torch.Tensor, kdata_vec: list[torch.Tensor] | None = None, 
 			weights_vec: list[torch.Tensor] | None = None, streams: list[torch.Stream] | None = None, 
 			coils=None, ninner_batches=1):
@@ -29,7 +145,7 @@ class BatchedSenseLinop(Linop):
 		for i in range(self.nouter_batches):
 			self.output.append(torch.empty(self.ninner_batches, self.ncoils, self.nfreqs[i]))
 
-		self._senseop = BatchedSense(coord_vec, smaps, kdata_vec, weights_vec, streams)
+		self._senseop = hasty_sense.BatchedSense(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
 
@@ -74,7 +190,7 @@ class BatchedSenseLinop(Linop):
 		return Vector(self.output)
 	
 
-class BatchedSenseAdjointLinop(Linop):
+class BatchedSenseAdjoint(Linop):
 	def __init__(self, coord_vec: list[torch.Tensor], smaps: torch.Tensor, kdata_vec: list[torch.Tensor] | None = None, 
 			weights_vec: list[torch.Tensor] | None = None, streams: list[torch.Stream] | None = None, 
 			coils=None, ninner_batches=1):
@@ -97,7 +213,7 @@ class BatchedSenseAdjointLinop(Linop):
 
 		self.output = torch.empty((self.nouter_batches, self.ninner_batches, *self.dimensions), dtype=self.dtype)
 
-		self._senseop = BatchedSenseAdjoint(coord_vec, smaps, kdata_vec, weights_vec, streams)
+		self._senseop = hasty_sense.BatchedSenseAdjoint(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
 
@@ -141,7 +257,7 @@ class BatchedSenseAdjointLinop(Linop):
 		return Vector(self.output)
 	
 
-class BatchedSenseNormalLinop(Linop):
+class BatchedSenseNormal(Linop):
 	def __init__(self, coord_vec: list[torch.Tensor], smaps: torch.Tensor, kdata_vec: list[torch.Tensor] | None = None, 
 			weights_vec: list[torch.Tensor] | None = None, streams: list[torch.Stream] | None = None, 
 			coils=None, ninner_batches=1):
@@ -164,7 +280,7 @@ class BatchedSenseNormalLinop(Linop):
 
 		self.output = torch.empty((self.nouter_batches, self.ninner_batches, *self.dimensions), dtype=self.dtype)
 
-		self._senseop = BatchedSenseNormal(coord_vec, smaps, kdata_vec, weights_vec, streams)
+		self._senseop = hasty_sense.BatchedSenseNormal(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
 
@@ -207,7 +323,7 @@ class BatchedSenseNormalLinop(Linop):
 		return Vector(self.output)
 	
 
-class BatchedSenseNormalAdjointLinop(Linop):
+class BatchedSenseNormalAdjoint(Linop):
 	def __init__(self, coord_vec: list[torch.Tensor], smaps: torch.Tensor, kdata_vec: list[torch.Tensor] | None = None, 
 			weights_vec: list[torch.Tensor] | None = None, streams: list[torch.Stream] | None = None, 
 			coils=None, ninner_batches=1):
@@ -232,7 +348,7 @@ class BatchedSenseNormalAdjointLinop(Linop):
 		for i in range(self.nouter_batches):
 			self.output.append(torch.empty(self.ninner_batches, self.ncoils, self.nfreqs[i]))
 		
-		self._senseop = BatchedSenseAdjoint(coord_vec, smaps, kdata_vec, weights_vec, streams)
+		self._senseop = hasty_sense.BatchedSenseAdjoint(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
 

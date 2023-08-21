@@ -465,10 +465,14 @@ class ScaleOp(Operator):
 		return Vector.scale(self.op(input), self.scale)
 
 
+
+
 class Linop(Operator):
 	def __init__(self, ishape, oshape):
 		super().__init__(ishape, oshape)
 
+def l2_reg_linop(linop: Linop, lamda: torch.Tensor):
+	return linop + ScaleOp(IdentityOp, lamda)
 
 class IterativeAlg:
 	def __init__(self, max_iter):

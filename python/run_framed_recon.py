@@ -14,6 +14,7 @@ import hastypy.util.plot_utility as pu
 from hastypy.base.recon import FivePointFULL
 from hastypy.base.proximal import SVTOptions
 from hastypy.base.svt import extract_mean_block
+import hastypy.base.coil_est as coil_est
 
 class RunSettings:
 	def __init__(self, im_size, crop_factors, prefovkmuls, postfovkmuls, shift):
@@ -37,10 +38,10 @@ class RunSettings:
 
 
 def run(settings: RunSettings):
-	smaps = FivePointLoader.load_smaps(settings.smaps_filepath, settings.im_size)
-	smaps = torch.permute(smaps, (0,3,2,1))
+	#smaps = FivePointLoader.load_smaps(settings.smaps_filepath, settings.im_size)
+	#smaps = torch.permute(smaps, (0,3,2,1))
 
-	pu.image_nd(smaps.numpy())
+	#pu.image_nd(smaps.numpy())
 
 	coords, kdata, weights, gating = FivePointLoader.load_raw(settings.rawdata_filepath)
 	#normalize kdata
@@ -60,6 +61,17 @@ def run(settings: RunSettings):
 		print('Translating... ', end="")
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
+
+
+	# My smaps
+	sos, coil_images, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size)
+	pu.image_nd(smaps.cpu().numpy())
+	smaps = coil_est.SenseEstimation(smaps, coil_images, sos, coord_vec[0], 
+				  kdata_vec[0], settings.im_size, weights_vec[0]).run(3)
+	del sos, coil_images
+	pu.image_nd(smaps.cpu().numpy())
+
+
 
 	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=10.0)
 
@@ -82,6 +94,8 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	coord_vec, kdata_vec, _, gates = FivePointLoader.gate_ecg_method(rawdata[0], 
 									    rawdata[1], None, rawdata[3], settings.nframes)
 	
+	pu.plot_gating(rawdata[3], gates)
+
 	coord_vec, kdata_vec, _ = lag.crop_kspace(coord_vec, kdata_vec, None, settings.im_size, 
 		crop_factors=settings.crop_factors, prefovkmuls=settings.prefovkmuls, postfovkmuls=settings.postfovkmuls)
 
@@ -99,7 +113,7 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 			images[i,j,...] = fullimage[j]
 	
 	_,_,_,smean = extract_mean_block(images, settings.im_size, (16,16,16))
-	final_lamda = smean[0] * 0.00005
+	final_lamda = smean[0] * 0.000025
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=4, random=False, 
 			nblocks=0, thresh=final_lamda, soft=True)
@@ -112,15 +126,15 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.numpy())
 
-	images = framed_recon.run(images, iter=80, callback=None)
+	images = framed_recon.run(images, iter=40, callback=None)
 
 	return images
 
 
 if __name__ == '__main__':
 	with torch.inference_mode():
-		im_size = (160,160,160)
-		shift = (-2*16, 0.0, 0.0)
+		im_size = (196,196,196)
+		shift = (-2*19.6, 0.0, 0.0)
 		#im_size = (256,256,256)
 		#shift = (-2*25.6, 0.0, 0.0)
 		crop_factors = (1.1,1.1,1.1)

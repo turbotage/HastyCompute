@@ -23,7 +23,7 @@ class Sense:
 
 class SenseAdjoint:
 	def __init__(self, coords: torch.Tensor, nmodes: list[int]):
-		self._sense = _hasty_sense_mod.SenseAdjoint(coords, nmodes)
+		self._senseop = _hasty_sense_mod.SenseAdjoint(coords, nmodes)
 		
 	def apply(self, input, output, smaps, coils, imspace_storage=None, kspace_storage=None):
 		self._senseop.apply(input, output, smaps, coils, imspace_storage, kspace_storage)

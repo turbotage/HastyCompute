@@ -757,7 +757,7 @@ def test():
 def test_real():
 
 	img_full = np.array([0])
-	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "r") as f:
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real_200.h5', "r") as f:
 		img_full = f['images'][()]
 
 	#pu.image_nd(img_full)

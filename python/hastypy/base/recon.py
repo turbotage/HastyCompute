@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from hastypy.base.sense import BatchedSenseNormalLinop, OuterInnerAutomorphism, InnerOuterAutomorphism
+from hastypy.base.sense import BatchedSenseNormal, OuterInnerAutomorphism, InnerOuterAutomorphism
 from hastypy.base.svt import Random3DBlocksSVT, Normal3DBlocksSVT
 
 from hastypy.base.opalg import Vector, MaxEig
@@ -24,7 +24,7 @@ class FivePointFULL:
 		self.stepsize = 1 / self.max_eig
 		
 		if self.solver == 'GD':
-			self._sensenormalop = BatchedSenseNormalLinop(self.coord_vec, self.smaps, self.kdata_vec,
+			self._sensenormalop = BatchedSenseNormal(self.coord_vec, self.smaps, self.kdata_vec,
 				self.weights_vec, self.streams)
 			
 
@@ -36,7 +36,7 @@ class FivePointFULL:
 
 
 	def max_eig_run(self, print_info=True):
-		maxeigop = BatchedSenseNormalLinop([self.coord_vec[0]], self.smaps)
+		maxeigop = BatchedSenseNormal([self.coord_vec[0]], self.smaps)
 		self.max_eig = MaxEig(maxeigop, torch.complex64, max_iter=5).run(print_info=print_info).to(torch.float32)
 
 	def run(self, image, iter=50, callback=None, accelerate=True):
@@ -73,7 +73,7 @@ class FivePointLLR:
 
 		# Setup ||Ax-b|| operators
 		if self.solver == 'GD':
-			self._sensenormalop = BatchedSenseNormalLinop(self.coord_vec, self.smaps, self.kdata_vec,
+			self._sensenormalop = BatchedSenseNormal(self.coord_vec, self.smaps, self.kdata_vec,
 				self.weights_vec, self.grad_streams)
 		
 		self.svtshape = (self.nframes, 5) + self.smaps.shape[1:]
@@ -98,7 +98,7 @@ class FivePointLLR:
 
 
 	def max_eig_run(self):
-		maxeigop = BatchedSenseNormalLinop([self.coord_vec[0]], self.smaps)
+		maxeigop = BatchedSenseNormal([self.coord_vec[0]], self.smaps)
 		self.max_eig = MaxEig(maxeigop, torch.complex64, max_iter=5).run().to(torch.float32)
 
 	def run(self, image, iter=50, callback=None, accelerate=True):

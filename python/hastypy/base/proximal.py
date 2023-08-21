@@ -7,30 +7,70 @@ from torch.utils.dlpack import to_dlpack, from_dlpack
 
 from hastypy.base.opalg import Vector, Operator, Linop
 from hastypy.base.svt import Random3DBlocksSVT, Normal3DBlocksSVT
+import hastypy.base.opalg as opalg
 
+# Proximal operator base class
+class ProximalOperator:
+	def __init__(self, shape, base_alpha: torch.Tensor | None = None, inplace=False):
+		self.base_alpha = base_alpha
+		self.inplace = inplace
+		self.shape = shape
 
-class ProximalOperator(Operator):
-	def __init__(self, shape, lamda):
-		self.alpha = torch.tensor(1.0, dtype=torch.float32)
-		self.lamda = lamda
-		super().__init__(shape, shape)
-		
-	def get_lamda(self):
-		return self.lamda
+	def get_base_alpha(self):
+		return self.alpha
 
-	def set_alpha(self, alpha):
+	def set_base_alpha(self, alpha):
 		self.alpha = alpha
+
+	def apply(self, alpha, input: Vector) -> Vector:
+		if opalg.get_shape(input) != self.shape:
+			raise RuntimeError("Incompatible input shape for ProximalOperator")
+		
+		output = self._apply(alpha if self.base_alpha is None else alpha * self.base_alpha, input)
+
+		if opalg.get_shape(output) != self.shape:
+			raise RuntimeError("Incompatible output shape for ProximalOperator")
+		
+		return output
+
+# proximal operator of zero function, is identity op
+class ZeroFunc(ProximalOperator):
+	def __init__(self, shape):
+		super().__init__(shape, inplace=True)
+
+	def _apply(self, alpha, input: Vector):
+		return input
+
+# proximal operator of f^*(y) = sup_{x \in X} y^Hx - f(x)
+class ConvexConjugate(ProximalOperator):
+	def __init__(self, prox: ProximalOperator, alpha=None):	
+		self.prox = prox
+		super().__init__(prox.ishape, alpha)
+
+	def _apply(self, alpha, input: Vector) -> Vector:
+		return input - alpha * self.prox(1 / alpha, input / alpha)
+
+class Postcomposition(ProximalOperator):
+	def __init__(self, prox: ProximalOperator, )
+
+class L2Reg(ProximalOperator):
+	def __init__(self, shape, alpha=None, lamda=None, bias=None, proxg=None):
+		self.lamda = lamda
+		self.bias = bias
+		self.proxg = proxg
+
+		super().__init__(shape)
 
 
 class UnitaryTransform(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, unitary: Linop, unitary_adjoint: Linop):
+	def __init__(self, prox: ProximalOperator, unitary: Linop, unitary_adjoint: Linop, inplace=False):
 		self.prox = prox
 		self.unitary = unitary
 		self.unitary_adjoint = unitary_adjoint
 		if unitary.ishape != unitary_adjoint.oshape:
 			raise RuntimeError("Unitary input shape and UnitaryAdjoint output shape did not match")
 
-		super().__init__(unitary.ishape, None)
+		super().__init__(unitary.ishape, None, inplace)
 
 	def get_lamda(self):
 		return self.prox.get_lamda()
@@ -45,8 +85,7 @@ class UnitaryTransform(ProximalOperator):
 class ProximalL1DCT(ProximalOperator):
 	def __init__(self, shape, axis, lamda, inplace=True):
 		self.axis = axis
-		self.inplace = inplace
-		super().__init__(shape, lamda)
+		super().__init__(shape, lamda, inplace)
 
 	@staticmethod
 	def tensor_apply(input: torch.Tensor, lamda: cp.array, axis: tuple[bool]):
@@ -108,9 +147,6 @@ class SVTOptions:
 
 class Proximal3DSVT(ProximalOperator):
 	def __init__(self, shape, svt_options: SVTOptions, streams: list[torch.Stream] | None = None, inplace=True):
-
-		self.inplace = inplace
-
 		if streams is None:
 			cudev = torch.device('cuda:0')
 			streams = [torch.cuda.default_stream(), torch.cuda.Stream(), torch.cuda.Stream(), torch.cuda.Stream()]
@@ -122,7 +158,7 @@ class Proximal3DSVT(ProximalOperator):
 			self._svtop = Normal3DBlocksSVT(shape, streams, svt_options.block_strides,
 				   svt_options.block_shape, svt_options.block_iter, svt_options.thresh, svt_options.soft)
 
-		super().__init__(shape, svt_options.thresh)
+		super().__init__(shape, svt_options.thresh, inplace)
 
 	def set_alpha(self, alpha):
 		super().set_alpha(alpha)
