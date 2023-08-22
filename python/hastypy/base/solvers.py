@@ -164,7 +164,7 @@ class GradientDescent(IterativeAlg):
 
 class PrimalDualHybridGradient(IterativeAlg):
 	def __init__(self, proxfc: ProximalOperator, proxg: ProximalOperator, K: Linop, KH: Linop, x: Vector, y: Vector, 
-	      tau: Linop, sigma: Linop, max_iter: int):
+	      tau: Linop, sigma: Linop, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100):
 		self.proxfc = proxfc
 		self.proxg = proxg
 		self.K = K
@@ -173,10 +173,24 @@ class PrimalDualHybridGradient(IterativeAlg):
 		self.y = y
 		self.tau = tau
 		self.sigma = sigma
-		self.max_iter = max_iter
 
-		self.x_lerp = self.x.clone()
+		self.theta = theta
+		self.gamma_primal = gamma_primal
+		self.gamma_dual = gamma_dual
+
+		self.xold: Vector
+
+		super().__init__(max_iter)
 
 	def _update(self):
-		
+
 		# Primal Update
+		self.xold = self.x.clone()
+		self.x -= self.tau * self.KH(self.y)
+		self.x = self.proxg(self.tau, self.x)
+
+		# Dual Update
+		self.y += self.sigma * self.K(self.x + self.theta*(self.x - self.xold))
+		self.y = self.proxfc(self.sigma, self.y)
+
+		

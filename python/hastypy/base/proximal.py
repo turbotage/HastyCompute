@@ -11,22 +11,25 @@ import hastypy.base.opalg as opalg
 
 # Proximal operator base class
 class ProximalOperator:
-	def __init__(self, shape, base_alpha: torch.Tensor | None = None, inplace=False):
-		self.base_alpha = base_alpha
+	def __init__(self, shape, base_alpha, inplace):
+		self.base_alpha = base_alpha if base_alpha is not None else 1.0
 		self.inplace = inplace
 		self.shape = shape
 
 	def get_base_alpha(self):
-		return self.alpha
+		return self.base_alpha
 
-	def set_base_alpha(self, alpha):
-		self.alpha = alpha
+	def set_base_alpha(self, base_alpha):
+		self.base_alpha = base_alpha
 
-	def apply(self, alpha, input: Vector) -> Vector:
+	# True alpha will always be base_alpha * alpha so postcomposition is applied
+	def apply(self, input: Vector, alpha=None) -> Vector:
 		if opalg.get_shape(input) != self.shape:
 			raise RuntimeError("Incompatible input shape for ProximalOperator")
 		
-		output = self._apply(alpha if self.base_alpha is None else alpha * self.base_alpha, input)
+		mul = self.base_alpha * (1.0 if alpha is None else alpha)
+
+		output = self._apply(mul, input)
 
 		if opalg.get_shape(output) != self.shape:
 			raise RuntimeError("Incompatible output shape for ProximalOperator")
@@ -36,50 +39,81 @@ class ProximalOperator:
 # proximal operator of zero function, is identity op
 class ZeroFunc(ProximalOperator):
 	def __init__(self, shape):
-		super().__init__(shape, inplace=True)
+		super().__init__(shape, None, inplace=True)
 
-	def _apply(self, alpha, input: Vector):
+	def _apply(self, alpha, input: Vector) -> Vector:
 		return input
 
 # proximal operator of f^*(y) = sup_{x \in X} y^Hx - f(x)
 class ConvexConjugate(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, alpha=None):	
+	def __init__(self, prox: ProximalOperator, base_alpha=None):	
 		self.prox = prox
-		super().__init__(prox.ishape, alpha)
+		super().__init__(prox.shape, base_alpha)
 
 	def _apply(self, alpha, input: Vector) -> Vector:
 		return input - alpha * self.prox(1 / alpha, input / alpha)
 
+# proximal operator of f(x) = alpha*phi(x) + beta, beta changes nothing
+# also all proximal operators essentially performs postcomposition with base_alpha
 class Postcomposition(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, )
+	def __init__(self, prox: ProximalOperator, base_alpha=None):
+		self.prox = prox
+		super().__init__(prox.shape, base_alpha)
 
-class L2Reg(ProximalOperator):
-	def __init__(self, shape, alpha=None, lamda=None, bias=None, proxg=None):
-		self.lamda = lamda
-		self.bias = bias
-		self.proxg = proxg
+	def _apply(self, alpha, input: Vector) -> Vector:
+		return self.prox(alpha, input)
 
-		super().__init__(shape)
+# proximal operator of f(x) = phi(a*x+b) with a != 0
+class Precomposition(ProximalOperator):
+	def __init__(self, prox: ProximalOperator, a, b, base_alpha=None):
+		self.prox = prox
+		self.a = a
+		self.b = b
+		super().__init__(prox.shape, base_alpha)
 
+	def _apply(self, alpha, input: Vector) -> Vector:
+		return (1 / self.a) * (self.prox((self.a*self.a)*alpha, self.a*input + self.b) - self.b)
 
+# proximal operator of f(x) = phi(Qx) where Q is unitary
 class UnitaryTransform(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, unitary: Linop, unitary_adjoint: Linop, inplace=False):
+	def __init__(self, prox: ProximalOperator, unitary: Linop, unitary_adjoint: Linop, base_alpha=None, inplace=False):
 		self.prox = prox
 		self.unitary = unitary
 		self.unitary_adjoint = unitary_adjoint
 		if unitary.ishape != unitary_adjoint.oshape:
 			raise RuntimeError("Unitary input shape and UnitaryAdjoint output shape did not match")
 
-		super().__init__(unitary.ishape, None, inplace)
+		super().__init__(unitary.ishape, base_alpha, inplace)
 
-	def get_lamda(self):
-		return self.prox.get_lamda()
+	def _apply(self, alpha, input: Vector) -> Vector:
+		return self.unitary_adjoint(self.prox(alpha, self.unitary(input)))
 
-	def set_alpha(self, alpha):
-		return self.prox.set_alpha(alpha)
+# proximal operator of f(x) = phi(x) + a^Hx + b, b doesn't matter
+class AffineAddition(ProximalOperator):
+	def __init__(self, prox: ProximalOperator, a, base_alpha=None):
+		self.prox = prox
+		self.a = a
+		super().__init__(prox.shape, base_alpha)
 
-	def _apply(self, input: Vector) -> Vector:
-		return self.unitary_adjoint(self.prox(self.unitary(input)))
+	def _apply(self, alpha, input: Vector) -> Vector:
+		return self.prox(alpha, input - alpha*self.a)
+
+# proximal operator of f(x) = phi(x) + (rho/2)||x-a||_2^2
+class L2Reg(ProximalOperator):
+	def __init__(self, prox: ProximalOperator, rho, a, base_alpha=None):
+		self.prox = prox
+		self.rho = rho
+		self.a = a
+		super().__init__(prox.shape, base_alpha)
+
+	def _apply(self, alpha, input: Vector) -> Vector:
+		alphahat = alpha / (1 + alpha*self.rho)
+		return self.prox(alphahat, (alphahat / alpha)*input + (self.rho*alphahat)*self.a)
+
+
+
+
+
 
 
 class ProximalL1DCT(ProximalOperator):
