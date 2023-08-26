@@ -178,6 +178,23 @@ hasty::ffi::BatchedSenseNormalAdjoint::BatchedSenseNormalAdjoint(const at::Tenso
 void hasty::ffi::BatchedSenseNormalAdjoint::apply(const at::TensorList& in, at::TensorList out, const at::optional<std::vector<std::vector<int64_t>>>& coils)
 {
 	auto func = [this, &in, &out, &coils]() {
+		if (_bs->has_kdata() && _bs->has_weights()) {
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
+				hasty::batched_sense::BatchedSenseNormal::standard_weighted_kdata_manipulator());
+		}
+		else if (_bs->has_kdata()) {
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
+				hasty::batched_sense::BatchedSenseNormal::standard_kdata_manipulator());
+		}
+		else if (_bs->has_weights()) {
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
+				hasty::batched_sense::BatchedSenseNormal::standard_weighted_manipulator());
+		}
+		else {
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
+		}
+
+
 		_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
 	};
 

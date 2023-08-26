@@ -35,6 +35,9 @@ class ProximalOperator:
 			raise RuntimeError("Incompatible output shape for ProximalOperator")
 		
 		return output
+	
+	def __call__(self, input: Vector, alpha=None) -> Vector:
+		return self.apply(input)
 
 # proximal operator of zero function, is identity op
 class ZeroFunc(ProximalOperator):
@@ -86,7 +89,7 @@ class UnitaryTransform(ProximalOperator):
 		super().__init__(unitary.ishape, base_alpha, inplace)
 
 	def _apply(self, alpha, input: Vector) -> Vector:
-		return self.unitary_adjoint(self.prox(alpha, self.unitary(input)))
+		return self.unitary_adjoint(self.prox(self.unitary(input), alpha))
 
 # proximal operator of f(x) = phi(x) + a^Hx + b, b doesn't matter
 class AffineAddition(ProximalOperator):
@@ -100,22 +103,31 @@ class AffineAddition(ProximalOperator):
 
 # proximal operator of f(x) = phi(x) + (rho/2)||x-a||_2^2
 class L2Reg(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, rho, a, base_alpha=None):
+	def __init__(self, prox: ProximalOperator, rho=1.0, a=None, base_alpha=None, inplace=False):
 		self.prox = prox
 		self.rho = rho
 		self.a = a
-		super().__init__(prox.shape, base_alpha)
+		super().__init__(prox.shape, base_alpha, inplace)
 
 	def _apply(self, alpha, input: Vector) -> Vector:
-		alphahat = alpha / (1 + alpha*self.rho)
-		return self.prox(alphahat, (alphahat / alpha)*input + (self.rho*alphahat)*self.a)
+		if self.inplace:
+			output = input
+		else:
+			output = input.clone()
+		
+		mult = alpha * self.rho
+		denom = 1.0 + mult
 
+		if self.a is not None:
+			output += mult * self.a
 
+		output /= denom
+		
+		if self.prox is not None:
+			return self.prox(alpha / denom, output)
+		return output
 
-
-
-
-
+# proximal operator for the L1 Discrete Cosine Transform, ie soft thresholding in cosine space
 class ProximalL1DCT(ProximalOperator):
 	def __init__(self, shape, axis, lamda, inplace=True):
 		self.axis = axis
@@ -147,14 +159,14 @@ class ProximalL1DCT(ProximalOperator):
 
 		loop_dim(input)
 
-	def _apply(self, input: Vector) -> Vector:
+	def _apply(self, alpha, input: Vector) -> Vector:
 
 		if self.inplace:
 			output = input
 		else:
 			output = input.clone()
 
-		al =  cp.array(self.alpha * self.lamda)
+		al =  cp.array(alpha)
 
 		def loop_list(inp: Vector):
 			if inp.islist():
@@ -193,16 +205,14 @@ class Proximal3DSVT(ProximalOperator):
 				   svt_options.block_shape, svt_options.block_iter, svt_options.thresh, svt_options.soft)
 
 		super().__init__(shape, svt_options.thresh, inplace)
-
-	def set_alpha(self, alpha):
-		super().set_alpha(alpha)
-		return self._svtop.update_thresh(self.alpha * self.lamda)
 	
-	def _apply(self, input: Vector) -> Vector:
+	def _apply(self, alpha, input: Vector) -> Vector:
 		if self.inplace:
 			output = input
 		else:
 			output = input.clone()
+
+		self._svtop.update_thresh(alpha)
 
 		self._svtop._apply(output)
 		return output

@@ -111,8 +111,7 @@ class GradientDescent(IterativeAlg):
 
 		if self.prox is not None:
 			time_start = time.time()
-			self.prox.set_alpha(self.alpha)
-			self.x = self.prox(self.x)
+			self.x = self.prox(self.x, self.alpha)
 			time_stop = time.time()
 			self.prox_time = time_stop - time_start
 
@@ -174,23 +173,49 @@ class PrimalDualHybridGradient(IterativeAlg):
 		self.tau = tau
 		self.sigma = sigma
 
+		self.resids = [-1]
+
 		self.theta = theta
 		self.gamma_primal = gamma_primal
 		self.gamma_dual = gamma_dual
 
-		self.xold: Vector
+		self.tau_min = 0.0
+		self.sigma_min = 0.0
+
+		self.xtemp = self.x.clone()
 
 		super().__init__(max_iter)
 
 	def _update(self):
 
-		# Primal Update
-		self.xold = self.x.clone()
-		self.x -= self.tau * self.KH(self.y)
-		self.x = self.proxg(self.tau, self.x)
-
 		# Dual Update
-		self.y += self.sigma * self.K(self.x + self.theta*(self.x - self.xold))
-		self.y = self.proxfc(self.sigma, self.y)
+		self.y += self.sigma * self.K(self.xtemp) # xtemp stored extrapolated x
+		self.y = self.proxfc(self.y, self.sigma)
+		
+		# Primal Update
+		self.xtemp = self.x.clone() # Stored x_old
+		self.x -= self.tau * self.KH(self.y)
+		self.x = self.proxg(self.x, self.tau)
 
+		# Update stepsizes for acceleration
+		if self.gamma_primal > 0 and self.gamma_dual == 0:
+			theta = 1 / torch.sqrt(1 + 2*self.gamma_primal*self.tau_min)
+			self.tau *= theta
+			self.tau_min *= theta
+
+			self.sigma /= theta
+		elif self.gamma_primal == 0 and self.gamma_dual > 0:
+			theta = 1 / torch.sqrt(1 + 2*self.gamma_dual*self.sigma_min)
+			self.sigma *= theta
+			self.sigma_min *= theta
+
+			self.tau /= theta
+		else:
+			theta = self.theta
+
+		# xtemp holds difference
+		self.xtemp = self.x - self.xtemp
+		self.resids.append(opalg.norm(self.xtemp).item())
+		# xtemp holds extrapolated x
+		self.xtemp = self.x + theta*self.xtemp
 		

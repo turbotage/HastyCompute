@@ -1,6 +1,7 @@
 import torch
 import h5py
 
+import os
 import math
 import gc
 
@@ -15,6 +16,11 @@ from hastypy.ffi.hasty_interface import FunctionLambda
 from hastypy.base.torch_opalg import TorchConjugateGradient
 
 import hastypy.util.plot_utility as pu
+
+import scipy
+import numpy as np
+#import sigpy.mri as mr
+#import sigpy as sp
 
 
 class CoilMapNormal(Linop):
@@ -39,7 +45,7 @@ class CoilMapNormal(Linop):
 # TODO: Alternating Minimization, This works poorly
 class SenseEstimation:
 	def __init__(self, smaps_est: torch.Tensor, coil_img_est: torch.Tensor, full_img_est: torch.Tensor,
-	      coord: torch.Tensor, kdata: torch.Tensor, im_size: tuple[int], weights: torch.Tensor | None = None):
+	      coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int], sense_size: tuple[int] = (24,24,24), decay_factor=1.0):
 		
 		self.cudev = torch.device('cuda:0')
 		self.smaps = smaps_est.to(self.cudev)
@@ -47,10 +53,12 @@ class SenseEstimation:
 		self.full_img = full_img_est.to(device=self.cudev, dtype=torch.complex64)
 
 
-		self.coord = coord.to(self.cudev)
-		self.weights = weights.to(self.cudev) if weights is not None else None
-		self.kdata = kdata.to(self.cudev)
+		self.coord = coord.to(self.cudev, non_blocking=True)
+		self.weights = weights.to(self.cudev, non_blocking=True)
+		self.kdata = kdata.to(self.cudev, non_blocking=True)
 		self.im_size = im_size
+		self.sense_size = sense_size
+		self.decay_factor = decay_factor
 		self.ncoil = self.kdata.shape[1]
 		self.coils = [i for i in range(self.ncoil)]
 
@@ -58,24 +66,42 @@ class SenseEstimation:
 	def estimate_coil_images(self):
 		pass
 		# Forward
-		
-		weight_scaling_script = """
-def apply(a: List[Tensor], b: List[Tensor]):
-	a[0] *= b[0]
-"""
-		func_lamda = FunctionLambda(weight_scaling_script, "apply", [self.weights])
 
-		nn = NufftNormalT(self.coord, self.im_size, func_lamda)
+		ndim = len(self.im_size)
+
+		kspace_length = 0.0
+		for i in range(ndim):
+			kspace_length += ((self.sense_size[i] / self.im_size[i]) * torch.pi)**2 #(0.125 * im_size[i] * torch.pi) ** 2
+		kspace_length = math.sqrt(kspace_length)
+
+		coord_length = torch.sum(torch.square(self.coord), dim=0).sqrt()
+
+		idx = coord_length > kspace_length
+
+		# Smoothing transient for smaps
+		decaymult = torch.exp(torch.square(self.decay_factor*(coord_length[idx] - kspace_length) / kspace_length).neg())
+
+		#weight_scaling_script = """
+#def apply(a: List[Tensor], b: List[Tensor]):
+#	a[0] *= b[0]
+#"""
+		#func_lamda = FunctionLambda(weight_scaling_script, "apply", [self.weights])
+
+		nn = NufftNormalT(self.coord, self.im_size)
 		na = NufftAdjointT(self.coord, self.im_size)
 
 		print('Estimate coil images')
 		for c in range(self.ncoil):
-			rhs = na.apply(self.weights * self.kdata[0,c,:].unsqueeze(0))
+			kdatac = self.kdata[0,c,:].unsqueeze(0).detach().clone()
+			kdatac[:,idx] *= decaymult
+			rhs = na.apply(kdatac)
 			
 			print("\r", end="")
 			print('Coil: ', c, '/', self.ncoil, end="")
 			self.coil_img[c,...] = TorchConjugateGradient(nn, rhs, 
 						     self.coil_img[c,...].unsqueeze(0), max_iter=20).run()
+			
+		pu.image_nd(self.coil_img.cpu().numpy())
 		print('\nDone.')
 	
 	def image_and_smaps_update(self):
@@ -99,18 +125,14 @@ def apply(a: List[Tensor], b: List[Tensor]):
 		return self.smaps
 			
 			
-
-		
-
-
-
-def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int]):
+def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int], 
+		sense_size: tuple[int] = (24,24,24), decay_factor=2.0):
 	ndim = len(im_size)
 	ncoil = kdata.shape[1]
 
 	kspace_length = 0.0
 	for i in range(ndim):
-		kspace_length += (0.125 * im_size[i] * torch.pi) ** 2
+		kspace_length += ((sense_size[i] / im_size[i]) * torch.pi)**2 #(0.125 * im_size[i] * torch.pi) ** 2
 	kspace_length = math.sqrt(kspace_length)
 
 	#smaps = torch.zeros((ncoil,) + im_size, dtype=kdata_vec[0].dtype, device=torch.device('cuda:0'))
@@ -121,10 +143,10 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 
 	coord_length = torch.sum(torch.square(coord), dim=0).sqrt()
 
-	idx = coord_length < kspace_length
+	idx = coord_length > kspace_length
 
 	# Smoothing transient for smaps
-	weights[:,idx] *= torch.exp(torch.square(2*(coord_length[idx] - kspace_length) / kspace_length).neg())
+	weights[:,idx] *= torch.exp(torch.square(decay_factor*(coord_length[idx] - kspace_length) / kspace_length).neg())
 
 	na = NufftAdjointT(coord, im_size)
 
@@ -132,6 +154,7 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 		kd = kdata[:,c,:] * weights
 		coil_images[c,...] = na.apply(kd)
 
+	#pu.image_nd(coil_images.cpu().numpy())
 	gc.collect()
 
 	sos = torch.sqrt(torch.sum(torch.square(torch.abs(coil_images)), dim=0)).unsqueeze(0)
@@ -141,4 +164,3 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 	
 
 
-		
