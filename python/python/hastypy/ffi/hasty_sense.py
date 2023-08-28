@@ -83,8 +83,9 @@ class BatchedSenseNormal:
 class BatchedSenseNormalAdjoint:
 	def __init__(self, coords: list[torch.Tensor], smaps: torch.Tensor, 
 	      kdata: list[torch.Tensor] | None = None, weights: list[torch.Tensor] | None = None,
+	      imspace_weights: list[torch.Tensor] | None = None,
 		  streams: list[torch.Stream] | None = None):
-		self._senseop = _hasty_batched_sense_mod.BatchedSenseNormalAdjoint(coords, smaps, kdata, weights, streams)
+		self._senseop = _hasty_batched_sense_mod.BatchedSenseNormalAdjoint(coords, smaps, kdata, weights, imspace_weights, streams)
 		
 	def apply(self, input: list[torch.Tensor], output: list[torch.Tensor], coils: list[list[int]] | None = None):
 		self._senseop.apply(input, output, coils)

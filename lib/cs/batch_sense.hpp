@@ -276,11 +276,7 @@ namespace hasty {
 
 			void apply(const at::TensorList& in, at::TensorList out, const std::vector<std::vector<int64_t>>& coils, const OuterManipulator& manips);
 
-			static OuterManipulator standard_kdata_manipulator();
-
-			static OuterManipulator standard_weighted_manipulator();
-
-			static OuterManipulator standard_weighted_kdata_manipulator();
+			static OuterManipulator standard_imspace_manipulator(const at::TensorList& imspace_weights);
 
 		private:
 

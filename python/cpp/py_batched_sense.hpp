@@ -170,7 +170,8 @@ namespace hasty {
 		public:
 
 			BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
-				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+				const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights, 
+				const at::optional<at::TensorList>& imspace_weights,
 				const at::optional<at::ArrayRef<at::Stream>>& streams);
 
 			void apply(const at::TensorList& in, at::TensorList out,
@@ -178,6 +179,7 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<hasty::batched_sense::BatchedSenseNormalAdjoint> _bs;
+			at::optional<at::TensorList> _imspace_weights;
 		};
 
 	}

@@ -693,38 +693,14 @@ void hasty::batched_sense::BatchedSenseNormalAdjoint::apply_outer_batch(const at
 }
 
 
-
-hasty::batched_sense::OuterManipulator hasty::batched_sense::BatchedSenseNormalAdjoint::standard_kdata_manipulator()
+hasty::batched_sense::OuterManipulator hasty::batched_sense::BatchedSenseNormalAdjoint::standard_imspace_manipulator(const at::TensorList& imspace_weights)
 {
-	return OuterManipulator([](int32_t outer_batch, at::Stream stream)
+	return OuterManipulator([&imspace_weights](int32_t outer_batch, at::Stream stream)
 		{
-			return InnerManipulator([](int32_t inner_batch, const InnerData& data, at::Stream stream) {
-				return sense::CoilManipulator().setMidApply([&data](at::Tensor& tensor, int32_t coil) {
-					tensor.sub_(data.kdata.select(0, coil).unsqueeze(0));
-					});
-				});
-		});
-}
-
-hasty::batched_sense::OuterManipulator hasty::batched_sense::BatchedSenseNormalAdjoint::standard_weighted_manipulator()
-{
-	return OuterManipulator([](int32_t outer_batch, at::Stream stream)
-		{
-			return InnerManipulator([](int32_t inner_batch, const InnerData& data, at::Stream stream) {
-				return sense::CoilManipulator().setMidApply([&data](at::Tensor& tensor, int32_t coil) {
-					tensor.mul_(data.weights);
-					});
-				});
-		});
-}
-
-hasty::batched_sense::OuterManipulator hasty::batched_sense::BatchedSenseNormalAdjoint::standard_weighted_kdata_manipulator()
-{
-	return OuterManipulator([](int32_t outer_batch, at::Stream stream)
-		{
-			return InnerManipulator([](int32_t inner_batch, const InnerData& data, at::Stream stream) {
-				return sense::CoilManipulator().setMidApply([&data](at::Tensor& tensor, int32_t coil) {
-					tensor.sub_(data.kdata.select(0, coil).unsqueeze(0)).mul_(data.weights);
+			at::Tensor outer_imspace_weights = imspace_weights[outer_batch];
+			return InnerManipulator([outer_imspace_weights](int32_t inner_batch, const InnerData& data, at::Stream stream) {
+				return sense::CoilManipulator().setMidApply([&outer_imspace_weights](at::Tensor& tensor, int32_t coil) {
+					tensor.mul_(outer_imspace_weights);
 					});
 				});
 		});

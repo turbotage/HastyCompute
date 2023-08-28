@@ -369,6 +369,18 @@ def zeros(shape, dtype):
 	else: # shape is a tuple
 		return Vector(torch.zeros(shape, dtype=dtype))
 
+def empty(shape, dtype):
+	if not is_shape(shape):
+		raise RuntimeError('Invalid shape')
+
+	if isinstance(shape, list):
+		ret = []
+		for elm in shape:
+			ret.append(rand(get_shape(elm), dtype))
+		return Vector(ret)
+	else: # shape is a tuple
+		return Vector(torch.empty(shape, dtype=dtype))
+
 def vdot(a: Vector, b: Vector) -> torch.Tensor:
 	if a.istensor():
 		return torch.vdot(a.tensor.flatten(), b.tensor.flatten())

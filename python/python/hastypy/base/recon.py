@@ -1,11 +1,12 @@
 import torch
 import numpy as np
 
-from hastypy.base.sense import BatchedSenseNormal, BatchedSenseNormalAdjoint, OuterInnerAutomorphism, InnerOuterAutomorphism
+from hastypy.base.sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal, BatchedSenseNormalAdjoint, OuterInnerAutomorphism, InnerOuterAutomorphism
 from hastypy.base.svt import Random3DBlocksSVT, Normal3DBlocksSVT
 
-from hastypy.base.opalg import Vector, MaxEig, get_shape
-from hastypy.base.solvers import GradientDescent
+import hastypy.base.opalg as opalg
+from hastypy.base.opalg import Vector, MaxEig
+from hastypy.base.solvers import GradientDescent, PrimalDualHybridGradient
 import hastypy.base.proximal as prox
 
 
@@ -69,9 +70,6 @@ class FivePointLLR:
 
 		self.solver = solver
 
-		self.tau = tau
-		self.sigma = sigma
-
 
 		def init_gd():
 			maxeigop = BatchedSenseNormal([self.coord_vec[0]], self.smaps)
@@ -87,21 +85,31 @@ class FivePointLLR:
 			self.gamma_dual = 1.0
 
 			datavec = Vector(self.kdata_vec)
-			self.proxfc = prox.L2Reg(get_shape(datavec), a=-datavec)
+			self.proxfc = prox.L2Reg(opalg.get_shape(datavec), a=-datavec)
+
+			self.tau = tau
+			self.sigma = sigma
 
 			if self.tau is None:
 				if self.sigma is None:
-					sigmatemp = torch.ones_like(self.coord_vec[0][0,:].unsqueeze(0))
+					sigmatemp = [torch.ones_like(self.coord_vec[0][0,:].unsqueeze(0))]
+					self.sigma = 1.0
 				else:
-					sigmatemp = self.sigma.get_tensorlist()[0]
+					sigmatemp = [sigma.get_tensorlist()[0]]
 
-				AHA = BatchedSenseNormal(self.coord_vec[0], self.smaps, self.kdata_vec[0], sigmatemp)
+				AHA = BatchedSenseNormal([self.coord_vec[0]], self.smaps, [self.kdata_vec[0]], sigmatemp)
 				max_eig = MaxEig(AHA, torch.complex64, max_iter=5).run()
 				
 				self.tau = 1.0 / max_eig
 
 			elif self.sigma is None:
-				AAH = BatchedSenseNormalAdjoint
+				AAH = BatchedSenseNormalAdjoint([self.coord_vec[0]], self.smaps, [self.kdata_vec[0]], [self.tau[0]])
+				max_eig = MaxEig(AAH, torch.complex64, max_iter=5).run()
+
+				self.sigma = 1.0 / max_eig
+
+			self.bsense = BatchedSense(self.coord_vec, self.smaps, None)
+			self.bsenseadj = BatchedSenseAdjoint(self.coord_vec, self.smaps, None)
 
 
 		# Setup ||Ax-b|| operators
@@ -110,8 +118,6 @@ class FivePointLLR:
 
 		elif self.solver == 'PDHG':
 			init_pdhg()
-
-
 
 		
 		self.svtshape = (self.nframes, 5) + self.smaps.shape[1:]
@@ -137,6 +143,13 @@ class FivePointLLR:
 		if self.solver == 'GD':
 			gd = GradientDescent(self.sensenormalop, image, self.svtprox, self.stepsize, accelerate=accelerate, max_iter=iter)
 			image = gd.run(callback, print_info=True)
+		elif self.solver == 'PDHG':
+			dual = opalg.empty(opalg.get_shape(self.kdata_vec), torch.complex64)
+
+			pdhg = PrimalDualHybridGradient(self.proxfc, self.svtprox, self.bsense, self.bsenseadj, image, dual, 
+				self.tau, self.sigma, gamma_primal=self.gamma_primal, gamma_dual=self.gamma_dual, max_iter=iter)
+			
+			image = pdhg.run(callback, print_info=True)
 
 		return self.tosvtshape(image).get_tensor()
 

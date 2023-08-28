@@ -343,7 +343,7 @@ void test_batched_sense_normal_adjoint()
 		out.push_back(at::empty({ 1,ncoil,nfreq }, complex_options));
 	}
 
-	hasty::ffi::BatchedSenseNormalAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt);
+	hasty::ffi::BatchedSenseNormalAdjoint bs(at::makeArrayRef(coords), smaps, at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 
 	bs.apply(at::makeArrayRef(in), at::makeArrayRef(out), at::nullopt);
 }

@@ -167,10 +167,12 @@ void hasty::ffi::BatchedSenseNormal::apply(const at::Tensor& in, at::Tensor out,
 
 hasty::ffi::BatchedSenseNormalAdjoint::BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
 	const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
+	const at::optional<at::TensorList>& imspace_weights,
 	const at::optional<at::ArrayRef<at::Stream>>& streams)
 {
 	std::vector<hasty::batched_sense::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
 
+	_imspace_weights = imspace_weights;
 	_bs = std::make_unique<hasty::batched_sense::BatchedSenseNormalAdjoint>(std::move(contexts), coords, kdata, weights);
 }
 
@@ -178,24 +180,13 @@ hasty::ffi::BatchedSenseNormalAdjoint::BatchedSenseNormalAdjoint(const at::Tenso
 void hasty::ffi::BatchedSenseNormalAdjoint::apply(const at::TensorList& in, at::TensorList out, const at::optional<std::vector<std::vector<int64_t>>>& coils)
 {
 	auto func = [this, &in, &out, &coils]() {
-		if (_bs->has_kdata() && _bs->has_weights()) {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_weighted_kdata_manipulator());
-		}
-		else if (_bs->has_kdata()) {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_kdata_manipulator());
-		}
-		else if (_bs->has_weights()) {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_weighted_manipulator());
+		if (_imspace_weights.has_value()) {
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), 
+				hasty::batched_sense::BatchedSenseNormalAdjoint::standard_imspace_manipulator(*_imspace_weights));
 		}
 		else {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
 		}
-
-
-		_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
 	};
 
 	torch_util::future_catcher(func);
@@ -225,6 +216,7 @@ TORCH_LIBRARY(HastyBatchedSense, hbs) {
 	hbs.class_<hasty::ffi::BatchedSenseNormalAdjoint>("BatchedSenseNormalAdjoint")
 		.def(torch::init<const at::TensorList&, const at::Tensor&,
 			const at::optional<at::TensorList>&, const at::optional<at::TensorList>&,
+			const at::optional<at::TensorList>&,
 			const at::optional<at::ArrayRef<at::Stream>>&>())
 		.def("apply", &hasty::ffi::BatchedSenseNormalAdjoint::apply);
 

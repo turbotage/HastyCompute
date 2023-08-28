@@ -163,7 +163,7 @@ class GradientDescent(IterativeAlg):
 
 class PrimalDualHybridGradient(IterativeAlg):
 	def __init__(self, proxfc: ProximalOperator, proxg: ProximalOperator, K: Linop, KH: Linop, x: Vector, y: Vector, 
-	      tau: Linop, sigma: Linop, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100):
+	      tau: Linop, sigma: Linop, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100, tol=0.0):
 		self.proxfc = proxfc
 		self.proxg = proxg
 		self.K = K
@@ -173,7 +173,9 @@ class PrimalDualHybridGradient(IterativeAlg):
 		self.tau = tau
 		self.sigma = sigma
 
+		self.tol = tol
 		self.resids = [-1]
+		self.rel_resids = [-1]
 
 		self.theta = theta
 		self.gamma_primal = gamma_primal
@@ -218,4 +220,35 @@ class PrimalDualHybridGradient(IterativeAlg):
 		self.resids.append(opalg.norm(self.xtemp).item())
 		# xtemp holds extrapolated x
 		self.xtemp = self.x + theta*self.xtemp
-		
+	
+		if self.tol != 0.0:
+			self.rel_resids.append(self.resids[-1] / opalg.norm(self.x))
+
+	def _done(self):
+		return self.iter >= self.max_iter or (self.rel_resids[-1] < self.tol and self.rel_resids[-1] > 0.0)
+
+	def run(self, callback=None, print_info=False):
+		i = 0
+		while not self.done() or i == 0:
+
+			time_start = time.time()
+			self.update()
+			time_stop = time.time()
+			
+			if print_info:
+				printr: str = ""
+				printr += f"PDHG Iter: {i} / {self.max_iter}, , Res: {self.resids[-1]},  "
+
+				if self.tol != 0.0:
+					printr += f"RelRes: {self.rel_resids[-1]},  "
+
+				printr += f"UpdateTime:  {time_stop - time_start},  "
+
+				print(printr)
+
+			if callback is not None:
+				callback(self.x, i)
+			
+			i += 1
+
+		return self.x

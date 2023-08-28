@@ -103,11 +103,11 @@ class AffineAddition(ProximalOperator):
 
 # proximal operator of f(x) = phi(x) + (rho/2)||x-a||_2^2
 class L2Reg(ProximalOperator):
-	def __init__(self, prox: ProximalOperator, rho=1.0, a=None, base_alpha=None, inplace=False):
+	def __init__(self, shape, prox: ProximalOperator | None = None, rho=1.0, a=None, base_alpha=None, inplace=False):
 		self.prox = prox
 		self.rho = rho
 		self.a = a
-		super().__init__(prox.shape, base_alpha, inplace)
+		super().__init__(shape, base_alpha, inplace)
 
 	def _apply(self, alpha, input: Vector) -> Vector:
 		if self.inplace:

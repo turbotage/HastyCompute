@@ -16,6 +16,8 @@ from hastypy.base.proximal import SVTOptions
 from hastypy.base.svt import extract_mean_block
 import hastypy.base.coil_est as coil_est
 
+import hastypy.base.torch_precond as precond
+
 class RunSettings:
 	def __init__(self, im_size, crop_factors, prefovkmuls, postfovkmuls, shift):
 		self.im_size = im_size
@@ -112,15 +114,19 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=3, random=False, 
 			nblocks=0, thresh=final_lamda, soft=True)
 
-	framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts)
-
 	gc.collect()
 	torch.cuda.empty_cache()
 
+	preconds = []
+	for i in range(len(coord_vec)):
+		preconds.append(precond.kspace_precond(smaps, coord_vec[i]))
+
+	framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
+	
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.numpy())
 
-	images = framed_recon.run(images, iter=60, callback=None)
+	images = framed_recon.run(images, iter=20, callback=None)
 
 	return images
 

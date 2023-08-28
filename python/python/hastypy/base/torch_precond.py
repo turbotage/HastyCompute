@@ -8,33 +8,22 @@ import cupyx
 import hastypy.util.plot_utility as pu
 import hastypy.util.simulate_mri as simri
 
-import h5py
-import torchkbnufft as tkbn
-
 import hastypy.util.image_creation as ic
-
-from torch_linop import TorchLinop, TorchScaleLinop
-from torch_grad_methods import TorchCG, TorchGD
-
-import reconstruct_util as ru
-
-dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-torch.ops.load_library(dll_path)
-hasty_sense = torch.ops.HastySense
+from hastypy.base.nufft import NufftT, NufftAdjointT
 
 def kspace_precond(smaps, coord, weights=None):
 	mps_shape = list(smaps.shape)
 	img_shape = mps_shape[1:]
-	expanded_shape = [d*2 for d in img_shape]
+	expanded_shape = tuple([d*2 for d in img_shape])
 	ndim = len(img_shape)
-	cudev = torch.cuda('cuda:0')
+	cudev = torch.device('cuda:0')
 
 	ones = torch.ones((1,coord.shape[1]), dtype=torch.complex64).to(cudev)
 	if weights is not None:
 		ones *= torch.sqrt(weights)
 
 	coord_cu = coord.to(cudev)
-	psf = hasty_sense.nufft1(coord_cu, ones, expanded_shape)
+	psf = NufftAdjointT(coord_cu, expanded_shape).apply(ones).squeeze(0)
 
 	smaps_cu = smaps.to(cudev)
 
@@ -53,14 +42,15 @@ def kspace_precond(smaps, coord, weights=None):
 		corr = torch.fft.ifftn(fourier_corr)
 		corr *= psf
 
-		pinvi = hasty_sense.nufft2(coord, corr)
+		pinvi = NufftT(coord_cu, corr.shape).apply(corr.unsqueeze(0))
+
 
 		if weights is not None:
 			pinvi *= torch.sqrt(weights)
 
-		pinv.append(pinvi * scale / mpsi_norm)
+		pinv.append((pinvi * scale / mpsi_norm).squeeze(0))
 
-	pinv = torch.abs(torch.stack(pinv, dim=0))
+	pinv = torch.abs(torch.stack(pinv, dim=0)).unsqueeze(0)
 	pinv[pinv == 0] = 1
 	return 1 / pinv
 
@@ -80,7 +70,7 @@ def circulant_precond(smaps, coord, weights=None):
 		ones_cu *= torch.sqrt(weights_cu)
 
 	coord_cu = coord.to(cudev)
-	psf = hasty_sense.nufft1(coord_cu, ones_cu, [1] + list(expanded_shape)).squeeze(0)
+	psf = NufftAdjointT(coord_cu, expanded_shape).apply(ones_cu).squeeze(0)
 	del coord_cu, ones_cu
 	torch.cuda.empty_cache()
 
@@ -112,14 +102,13 @@ def circulant_precond(smaps, coord, weights=None):
 	return ret
 
 def test():
-	N1 = 256
-	N2 = 256
-	N3 = 256
+	N1 = 64
+	N2 = 64
+	N3 = 64
 
 	smaps = torch.rand((32,N1,N2,N3), dtype=torch.complex64)
-	coord = torch.rand((3,10000000), dtype=torch.float32)
+	coord = torch.rand((3,100000), dtype=torch.float32)
 
-	P = circulant_precond(smaps, coord)
+	P = kspace_precond(smaps, coord)
 
 	print(P.shape)
-
