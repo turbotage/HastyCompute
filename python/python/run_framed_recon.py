@@ -3,7 +3,7 @@ import h5py
 
 import gc
 
-from hastypy.base.opalg import Vector
+from hastypy.base.opalg import Vector, MaxEig
 
 from hastypy.base.recon import FivePointLLR
 import hastypy.base.load_and_gate as lag
@@ -15,6 +15,8 @@ from hastypy.base.recon import FivePointFULL
 from hastypy.base.proximal import SVTOptions
 from hastypy.base.svt import extract_mean_block
 import hastypy.base.coil_est as coil_est
+
+from hastypy.base.sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal
 
 import hastypy.base.torch_precond as precond
 
@@ -67,7 +69,14 @@ def run(settings: RunSettings):
 	# My smaps
 	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, sense_size=(16,16,16), decay_factor=1.0)
 	smaps = (smaps / torch.mean(torch.abs(smaps))).cpu()
-	pu.image_nd(smaps.numpy())
+	#pu.image_nd(smaps.numpy())
+
+	#A = BatchedSense(coord_vec, smaps)
+	#AH = BatchedSenseAdjoint(coord_vec, smaps)
+	#AHA = BatchedSenseNormal(coord_vec, smaps)
+	#MaxEig(AH * A, torch.complex64, max_iter=8).run(print_info=True)
+	#MaxEig(AHA, torch.complex64, max_iter=8).run(print_info=True)
+
 
 	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=0.00005)
 
@@ -79,9 +88,9 @@ def run(settings: RunSettings):
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=10, callback=None)
+	image = full_recon.run(image, iter=4, callback=None)
 
-	pu.image_nd(image.numpy())
+	#pu.image_nd(image.numpy())
 
 	return smaps, image, (coords, kdata, weights, gating)
 
@@ -117,24 +126,32 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	preconds = []
-	for i in range(len(coord_vec)):
-		preconds.append(precond.kspace_precond(smaps, coord_vec[i]))
+	precond_pdhg = False
+	if precond_pdhg:
+		preconds = []
+		print('Preconditioning matrices...')
+		for i in range(len(coord_vec)):
+			print("\r", end="")
+			print('Coil: ', i, '/', len(coord_vec), end="")
+			preconds.append(precond.kspace_precond(smaps, coord_vec[i]).to(device='cpu', non_blocking=False))
+		print(' Done.')
 
-	framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-	
+		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
+	else:
+		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG')
+
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.numpy())
 
-	images = framed_recon.run(images, iter=20, callback=None)
+	images = framed_recon.run(images, iter=25, callback=plot_callback)
 
 	return images
 
 
 if __name__ == '__main__':
 	with torch.inference_mode():
-		im_size = (210,210,210)
-		shift = (-2*21.0, 0.0, 0.0)
+		im_size = (160,160,160)
+		shift = (-2*16.0, 0.0, 0.0)
 		#im_size = (256,256,256)
 		#shift = (-2*25.6, 0.0, 0.0)
 		crop_factors = (1.1,1.1,1.1)
@@ -142,7 +159,7 @@ if __name__ == '__main__':
 		postfovkmuls = (1.0,1.0,1.0)
 
 		settings = RunSettings(im_size, crop_factors, prefovkmuls, postfovkmuls, shift
-			).set_nframes(20
+			).set_nframes(4
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp.h5'
 			).set_rawdata_filepath('D:/4DRecon/MRI_Raw.h5')
 

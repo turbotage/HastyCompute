@@ -5,7 +5,7 @@ from hastypy.base.sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNo
 from hastypy.base.svt import Random3DBlocksSVT, Normal3DBlocksSVT
 
 import hastypy.base.opalg as opalg
-from hastypy.base.opalg import Vector, MaxEig
+from hastypy.base.opalg import Vector, MaxEig, MultiplyOp
 from hastypy.base.solvers import GradientDescent, PrimalDualHybridGradient
 import hastypy.base.proximal as prox
 
@@ -85,28 +85,31 @@ class FivePointLLR:
 			self.gamma_dual = 1.0
 
 			datavec = Vector(self.kdata_vec)
-			self.proxfc = prox.L2Reg(opalg.get_shape(datavec), a=-datavec)
+			self.proxfc = prox.L2Reg(opalg.get_shape(datavec), a=-datavec, inplace=True)
 
 			self.tau = tau
 			self.sigma = sigma
 
 			if self.tau is None:
 				if self.sigma is None:
-					sigmatemp = [torch.ones_like(self.coord_vec[0][0,:].unsqueeze(0))]
-					self.sigma = 1.0
+					sigmatemp = [torch.ones_like(self.kdata_vec[0])]
+					self.sigma = Vector(1.0)
 				else:
 					sigmatemp = [sigma.get_tensorlist()[0]]
 
-				AHA = BatchedSenseNormal([self.coord_vec[0]], self.smaps, [self.kdata_vec[0]], sigmatemp)
-				max_eig = MaxEig(AHA, torch.complex64, max_iter=5).run()
+				A = BatchedSense([self.coord_vec[0]], self.smaps)
+				AH = BatchedSenseAdjoint([self.coord_vec[0]], self.smaps)
+				S = MultiplyOp(sigmatemp)
+
+				max_eig = MaxEig(AH * S * A, torch.complex64, max_iter=5).run(print_info=True)
 				
-				self.tau = 1.0 / max_eig
+				self.tau = Vector(0.5 / max_eig)
 
 			elif self.sigma is None:
 				AAH = BatchedSenseNormalAdjoint([self.coord_vec[0]], self.smaps, [self.kdata_vec[0]], [self.tau[0]])
-				max_eig = MaxEig(AAH, torch.complex64, max_iter=5).run()
+				max_eig = MaxEig(AAH, torch.complex64, max_iter=5).run(print_info=True)
 
-				self.sigma = 1.0 / max_eig
+				self.sigma = Vector(0.5 / max_eig)
 
 			self.bsense = BatchedSense(self.coord_vec, self.smaps, None)
 			self.bsenseadj = BatchedSenseAdjoint(self.coord_vec, self.smaps, None)
@@ -120,7 +123,7 @@ class FivePointLLR:
 			init_pdhg()
 
 		
-		self.svtshape = (self.nframes, 5) + self.smaps.shape[1:]
+		self.svtshape = (self.nframes,5) + self.smaps.shape[1:]
 		self.gradshape = (self.nframes*5,) + self.smaps.shape[1:]
 
 		self.tosvtshape = InnerOuterAutomorphism(self.nframes, 5, self.smaps.shape[1:])
@@ -144,8 +147,9 @@ class FivePointLLR:
 			gd = GradientDescent(self.sensenormalop, image, self.svtprox, self.stepsize, accelerate=accelerate, max_iter=iter)
 			image = gd.run(callback, print_info=True)
 		elif self.solver == 'PDHG':
-			dual = opalg.empty(opalg.get_shape(self.kdata_vec), torch.complex64)
+			dual = opalg.zeros(opalg.get_shape(Vector(self.kdata_vec)), torch.complex64)
 
+			self.svtprox = prox.ZeroFunc(opalg.get_shape(image))
 			pdhg = PrimalDualHybridGradient(self.proxfc, self.svtprox, self.bsense, self.bsenseadj, image, dual, 
 				self.tau, self.sigma, gamma_primal=self.gamma_primal, gamma_dual=self.gamma_dual, max_iter=iter)
 			

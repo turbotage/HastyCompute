@@ -241,7 +241,7 @@ class FivePointLoader:
 	@staticmethod
 	def gate_ecg_method(coord, kdata, weights, gating, nframes):
 		mean = torch.mean(gating)
-		upper_bound = 1.9*mean # This is heuristic, perhaps base it on percentile instead
+		upper_bound = 2.0*mean # This is heuristic, perhaps base it on percentile instead
 		length = upper_bound / nframes
 
 		spokelen = coord.shape[-1]
@@ -267,7 +267,7 @@ class FivePointLoader:
 				if weights is not None:
 					weights_vec.append(weightsf[j,:].unsqueeze(0).detach().clone())
 
-		len_start = length + length/2
+		len_start = length + length/4
 		gates = [len_start]
 		# First Frame
 		if True:
@@ -275,7 +275,7 @@ class FivePointLoader:
 			add_idx_spokes(idx)
 
 		# Mid Frames
-		for i in range(1,nframes-1):
+		for i in range(1,nframes):
 			new_len_start = len_start + length
 			idx = torch.logical_and(len_start <= gating, gating < new_len_start)
 			len_start = new_len_start
@@ -284,9 +284,9 @@ class FivePointLoader:
 			add_idx_spokes(idx)
 
 		# Last Frame
-		if True:
-			idx = len_start <= gating
-			add_idx_spokes(idx)
+		#if True:
+		#	idx = len_start <= gating
+		#	add_idx_spokes(idx)
 
 		return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates)
 

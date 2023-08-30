@@ -143,11 +143,13 @@ class BatchedSense(Linop):
 
 		self.output = []
 		for i in range(self.nouter_batches):
-			self.output.append(torch.empty(self.ninner_batches, self.ncoils, self.nfreqs[i]))
+			self.output.append(torch.empty((self.ninner_batches, self.ncoils, self.nfreqs[i]), dtype=self.dtype))
 
 		self._senseop = hasty_sense.BatchedSense(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
+
+		self.set_coil_randomization()
 
 		super().__init__(self.ishape, self.oshape)
 		
@@ -217,12 +219,14 @@ class BatchedSenseAdjoint(Linop):
 
 		self._calc_shapes()
 
+		self.set_coil_randomization()
+
 		super().__init__(self.ishape, self.oshape)
 		
 	def _calc_shapes(self):
 		self.ishape = []
 		for i in range(self.nouter_batches):
-			self.oshape.append((self.ninner_batches, self.ncoils, self.nfreqs[i]))
+			self.ishape.append((self.ninner_batches, self.ncoils, self.nfreqs[i]))
 		self.oshape = (self.nouter_batches, self.ninner_batches, *self.dimensions)
 		
 	def reinit(self, ninner_batches=1, coils=None):
@@ -351,6 +355,8 @@ class BatchedSenseNormalAdjoint(Linop):
 		self._senseop = hasty_sense.BatchedSenseAdjoint(coord_vec, smaps, kdata_vec, weights_vec, streams)
 
 		self._calc_shapes()
+
+		self.set_coil_randomization()
 
 		super().__init__(self.ishape, self.oshape)
 		

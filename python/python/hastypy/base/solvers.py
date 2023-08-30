@@ -163,28 +163,29 @@ class GradientDescent(IterativeAlg):
 
 class PrimalDualHybridGradient(IterativeAlg):
 	def __init__(self, proxfc: ProximalOperator, proxg: ProximalOperator, K: Linop, KH: Linop, x: Vector, y: Vector, 
-	      tau: Linop, sigma: Linop, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100, tol=0.0):
+	      tau: Vector, sigma: Vector, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100, tol=0.0):
 		self.proxfc = proxfc
 		self.proxg = proxg
 		self.K = K
 		self.KH = KH
 		self.x = x
 		self.y = y
+
 		self.tau = tau
 		self.sigma = sigma
-
-		self.tol = tol
-		self.resids = [-1]
-		self.rel_resids = [-1]
 
 		self.theta = theta
 		self.gamma_primal = gamma_primal
 		self.gamma_dual = gamma_dual
-
-		self.tau_min = 0.0
-		self.sigma_min = 0.0
+		
+		self.tau_min = opalg.min(self.tau)
+		self.sigma_min = opalg.min(self.sigma)
 
 		self.xtemp = self.x.clone()
+
+		self.tol = tol
+		self.resids = [-1]
+		self.rel_resids = [-1]
 
 		super().__init__(max_iter)
 
@@ -201,13 +202,13 @@ class PrimalDualHybridGradient(IterativeAlg):
 
 		# Update stepsizes for acceleration
 		if self.gamma_primal > 0 and self.gamma_dual == 0:
-			theta = 1 / torch.sqrt(1 + 2*self.gamma_primal*self.tau_min)
+			theta = 1 / math.sqrt(1 + 2*self.gamma_primal*self.tau_min)
 			self.tau *= theta
 			self.tau_min *= theta
 
 			self.sigma /= theta
 		elif self.gamma_primal == 0 and self.gamma_dual > 0:
-			theta = 1 / torch.sqrt(1 + 2*self.gamma_dual*self.sigma_min)
+			theta = 1 / math.sqrt(1 + 2*self.gamma_dual*self.sigma_min)
 			self.sigma *= theta
 			self.sigma_min *= theta
 

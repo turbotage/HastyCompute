@@ -382,8 +382,6 @@ void batched_sense_tests() {
 	}
 }
 
-
-
 void test_random_svt() {
 	int32_t outer = 20;
 

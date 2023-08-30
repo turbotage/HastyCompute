@@ -8,6 +8,8 @@ import cupyx
 import hastypy.util.plot_utility as pu
 import hastypy.util.simulate_mri as simri
 
+import hastypy.base.util as util
+
 import hastypy.util.image_creation as ic
 from hastypy.base.nufft import NufftT, NufftAdjointT
 
@@ -37,9 +39,10 @@ def kspace_precond(smaps, coord, weights=None):
 		fourier_corr = 0.0
 		for j in range(smaps_cu.shape[0]):
 			mpsj = smaps_cu[j,...]
-			fourier_corr += torch.fft.fftn(mpsi * mpsj.conj(), s=expanded_shape) ** 2
+			#fourier_corr += torch.fft.fftn(mpsi * mpsj.conj(), s=expanded_shape) ** 2
+			fourier_corr += util.fftn(mpsi * mpsj.conj(), oshape=expanded_shape, center=True)
 
-		corr = torch.fft.ifftn(fourier_corr)
+		corr = util.ifftn(fourier_corr, center=True)
 		corr *= psf
 
 		pinvi = NufftT(coord_cu, corr.shape).apply(corr.unsqueeze(0))

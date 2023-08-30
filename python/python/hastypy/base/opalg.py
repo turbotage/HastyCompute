@@ -58,6 +58,7 @@ class Vector:
 		if self.islist():
 			for i in range(len(self.children)):
 				ret.extend(self.children[i].get_tensorlist())
+			return ret
 		else:
 			return [self.tensor]
 
@@ -136,7 +137,7 @@ class Vector:
 			ret = []
 			for i in range(len(self.children)):
 				ret.append(self.children[i] * o.children[i])
-			return Vector(self.ret)
+			return Vector(ret)
 
 	def __truediv__(self, other: Self) -> Self:
 		o = Vector.tovector(other)
@@ -302,7 +303,7 @@ class Vector:
 		return self
 
 
-def get_shape(inp: Vector | list | torch.Tensor):
+def get_shape(inp: Vector | list | torch.Tensor | tuple):
 	if isinstance(inp, Vector):
 		if inp.islist():
 			return get_shape(inp.children)
@@ -315,6 +316,8 @@ def get_shape(inp: Vector | list | torch.Tensor):
 		for p in inp:
 			shape_list.append(get_shape(p))
 		return shape_list
+	if isinstance(inp, tuple):
+		return inp
 	raise RuntimeError('Invalid type for get_shape')
 
 def is_shape(inp):
@@ -352,7 +355,7 @@ def ones(shape, dtype):
 	if isinstance(shape, list):
 		ret = []
 		for elm in shape:
-			ret.append(rand(get_shape(elm), dtype))
+			ret.append(ones(get_shape(elm), dtype))
 		return Vector(ret)
 	else: # shape is a tuple
 		return Vector(torch.ones(shape, dtype=dtype))
@@ -364,7 +367,7 @@ def zeros(shape, dtype):
 	if isinstance(shape, list):
 		ret = []
 		for elm in shape:
-			ret.append(rand(get_shape(elm), dtype))
+			ret.append(zeros(get_shape(elm), dtype))
 		return Vector(ret)
 	else: # shape is a tuple
 		return Vector(torch.zeros(shape, dtype=dtype))
@@ -376,7 +379,7 @@ def empty(shape, dtype):
 	if isinstance(shape, list):
 		ret = []
 		for elm in shape:
-			ret.append(rand(get_shape(elm), dtype))
+			ret.append(empty(get_shape(elm), dtype))
 		return Vector(ret)
 	else: # shape is a tuple
 		return Vector(torch.empty(shape, dtype=dtype))
@@ -398,6 +401,24 @@ def norm(a: Vector) -> torch.Tensor:
 		for i in range(len(a.children)):
 			sum += norm(a.children[i])
 		return sum
+
+def min(a: Vector) -> torch.Tensor:
+	if a.istensor():
+		return torch.min(a.tensor)
+	else:
+		smallest = min(a.children[0])
+		for i in range(1,len(a.children)):
+			smallest = torch.minimum(smallest, min(a.children[i]))
+		return smallest
+
+def max(a: Vector) -> torch.Tensor:
+	if a.istensor():
+		return torch.max(a.tensor)
+	else:
+		smallest = max(a.children[0])
+		for i in range(1,len(a.children)):
+			smallest = torch.maximum(smallest, max(a.children[i]))
+		return smallest
 
 
 class Operator:
@@ -476,7 +497,14 @@ class ScaleOp(Operator):
 	def _apply(self, input: Vector) -> Vector:
 		return Vector.scale(self.op(input), self.scale)
 
+class MultiplyOp(Operator):
+	def __init__(self, mult: Vector):
+		self.mult = mult
+		shape = get_shape(mult)
+		super().__init__(shape, shape)
 
+	def _apply(self, input: Vector) -> Vector:
+		return self.mult * input
 
 
 class Linop(Operator):
