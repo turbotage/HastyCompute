@@ -163,7 +163,7 @@ class GradientDescent(IterativeAlg):
 
 class PrimalDualHybridGradient(IterativeAlg):
 	def __init__(self, proxfc: ProximalOperator, proxg: ProximalOperator, K: Linop, KH: Linop, x: Vector, y: Vector, 
-	      tau: Vector, sigma: Vector, theta=1.0, gamma_primal=0.0, gamma_dual=0.0, max_iter=100, tol=0.0):
+	      tau: Vector, sigma: Vector, acceleration: float, max_iter=100, tol=0.0):
 		self.proxfc = proxfc
 		self.proxg = proxg
 		self.K = K
@@ -171,15 +171,12 @@ class PrimalDualHybridGradient(IterativeAlg):
 		self.x = x
 		self.y = y
 
+		self.acceleration = acceleration
+
 		self.tau = tau
 		self.sigma = sigma
 
-		self.theta = theta
-		self.gamma_primal = gamma_primal
-		self.gamma_dual = gamma_dual
-		
-		self.tau_min = opalg.min(self.tau)
-		self.sigma_min = opalg.min(self.sigma)
+		self.tau_mul = opalg.min(tau).item()
 
 		self.xtemp = self.x.clone()
 
@@ -194,34 +191,25 @@ class PrimalDualHybridGradient(IterativeAlg):
 		# Dual Update
 		self.y += self.sigma * self.K(self.xtemp) # xtemp stored extrapolated x
 		self.y = self.proxfc(self.y, self.sigma)
-		
+
 		# Primal Update
-		self.xtemp = self.x.clone() # Stored x_old
+		self.xold = self.x.clone() # Stored x_old
 		self.x -= self.tau * self.KH(self.y)
 		self.x = self.proxg(self.x, self.tau)
 
-		# Update stepsizes for acceleration
-		if self.gamma_primal > 0 and self.gamma_dual == 0:
-			theta = 1 / math.sqrt(1 + 2*self.gamma_primal*self.tau_min)
-			self.tau *= theta
-			self.tau_min *= theta
-
-			self.sigma /= theta
-		elif self.gamma_primal == 0 and self.gamma_dual > 0:
-			theta = 1 / math.sqrt(1 + 2*self.gamma_dual*self.sigma_min)
-			self.sigma *= theta
-			self.sigma_min *= theta
-
-			self.tau /= theta
-		else:
-			theta = self.theta
+		# Acceleration
+		self.theta = 1.0 / math.sqrt(1.0 + 2.0 * self.acceleration * self.tau_mul)
+		if not math.isclose(self.theta, 1.0):
+			self.tau_mul *= self.theta
+			self.tau *= self.theta
+			self.sigma /= self.theta
 
 		# xtemp holds difference
 		self.xtemp = self.x - self.xtemp
 		self.resids.append(opalg.norm(self.xtemp).item())
 		# xtemp holds extrapolated x
-		self.xtemp = self.x + theta*self.xtemp
-	
+		self.xtemp = self.x + self.theta*self.xtemp
+
 		if self.tol != 0.0:
 			self.rel_resids.append(self.resids[-1] / opalg.norm(self.x))
 
@@ -243,6 +231,14 @@ class PrimalDualHybridGradient(IterativeAlg):
 				if self.tol != 0.0:
 					printr += f"RelRes: {self.rel_resids[-1]},  "
 
+				if self.tau.numel() == 1:
+					printr += f"Tau: {self.tau.item()},  "
+
+				if self.sigma.numel() == 1:
+					printr += f"Sigma: {self.sigma.item()},  "
+
+				printr += f"Theta: {self.theta},  "
+
 				printr += f"UpdateTime:  {time_stop - time_start},  "
 
 				print(printr)
@@ -253,3 +249,6 @@ class PrimalDualHybridGradient(IterativeAlg):
 			i += 1
 
 		return self.x
+
+			
+

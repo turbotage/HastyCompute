@@ -9,7 +9,7 @@ General Linops and Algorithms on General Linops
 
 class Vector:
 	def __init__(self, input):
-		self.children: list[torch.Tensor] = None
+		self.children: list[Vector] = None
 		self.tensor: torch.Tensor = None
 		if isinstance(input, list):
 			self.children = []
@@ -30,7 +30,7 @@ class Vector:
 	
 	def clone(self):
 		if self.istensor():
-			return Vector(self.tensor.clone())
+			return Vector(self.tensor.detach().clone())
 		else:
 			ret = []
 			for i in range(len(self.children)):
@@ -61,6 +61,20 @@ class Vector:
 			return ret
 		else:
 			return [self.tensor]
+
+	def __getitem__(self, key):
+		if self.istensor():
+			return self.tensor[key]
+
+		if isinstance(key, list):
+			ret = []
+			for ikey in key:
+				ret.append(self.children[ikey])
+			return Vector(ret)
+		elif isinstance(key, int):
+			return self.children[key]
+		else:
+			raise RuntimeError('Illegal typeof key, operator[] on Vector')
 
 	@staticmethod
 	def tovector(other):
@@ -293,15 +307,39 @@ class Vector:
 
 	def __neg__(self):
 		if self.istensor():
-			self.tensor.neg_()
+			return self.tensor.neg()
 		else:
+			ret = []
 			for i in range(len(self.children)):
-				self.children[i].__neg__()
-		return self
+				ret.append(self.children[i].__neg__())
+		return Vector(ret)
 
 	def __pos__(self):
 		return self
 
+	def numel(self):
+		return numel(self)
+	
+	def min(self):
+		return min(self)
+	
+	def max(self):
+		return max(self)
+
+	def item(self):
+		return item(self)
+
+	def mean(self):
+		return mean(self)
+	
+	def mean_median(self):
+		return mean_median(self)
+	
+	def sum(self):
+		return sum(self)
+
+	def abs(self):
+		return abs(self)
 
 def get_shape(inp: Vector | list | torch.Tensor | tuple):
 	if isinstance(inp, Vector):
@@ -420,6 +458,58 @@ def max(a: Vector) -> torch.Tensor:
 			smallest = torch.maximum(smallest, max(a.children[i]))
 		return smallest
 
+def numel(a: Vector) -> int:
+	if a.istensor():
+		return a.tensor.numel()
+	else:
+		numelem = 0
+		for i in range(len(a.children)):
+			numelem += numel(a.children[i])
+		return numelem
+
+def item(a: Vector):
+	if a.istensor():
+		return a.tensor.item()
+	else:
+		raise RuntimeError("Can't run item on Vector that isn't tensor")
+
+def mean(a: Vector):
+	if a.istensor():
+		return torch.mean(a.tensor)
+	else:
+		val = 0
+		for i in range(len(a.children)):
+			val += mean(a.children[i])
+		return val / len(a.children)
+
+def mean_median(a: Vector):
+	if a.istensor():
+		return torch.median(a.tensor)
+	else:
+		val = 0
+		for i in range(len(a.children)):
+			val += mean_median(a.children[i])
+		return val / len(a.children)
+
+def sum(a: Vector):
+	if a.istensor():
+		return torch.sum(a.tensor)
+	else:
+		val = 0
+		for i in range(len(a.children)):
+			val += sum(a.children[i])
+		return val
+
+def abs(a: Vector):
+	if a.istensor():
+		return Vector(torch.abs(a.tensor))
+	else:
+		ret = []
+		for i in range(len(a.children)):
+			ret.append(abs(a.children[i]))
+		return Vector(ret)
+
+
 
 class Operator:
 	def __init__(self, ishape, oshape):
@@ -505,6 +595,20 @@ class MultiplyOp(Operator):
 
 	def _apply(self, input: Vector) -> Vector:
 		return self.mult * input
+
+class TranslationOp(Operator):
+	def __init__(self, op: Operator, offset: Vector, neg: bool):
+		self.op = op
+		self.offset = offset
+		self.neg = neg
+		super().__init__(op.ishape, op.oshape)
+
+	def _apply(self, input: Vector) -> Vector:
+		if self.neg:
+			return self.op(input) - self.offset
+		else:
+			return self.op(input) + self.offset
+			
 
 
 class Linop(Operator):

@@ -121,6 +121,9 @@ class L2Reg(ProximalOperator):
 		if self.a is not None:
 			output += mult * self.a
 
+		#print('Data norm')
+		#print(opalg.norm(output))
+
 		output /= denom
 		
 		if self.prox is not None:

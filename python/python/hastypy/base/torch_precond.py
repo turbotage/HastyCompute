@@ -11,7 +11,7 @@ import hastypy.util.simulate_mri as simri
 import hastypy.base.util as util
 
 import hastypy.util.image_creation as ic
-from hastypy.base.nufft import NufftT, NufftAdjointT
+from hastypy.base.nufft import NufftT, NufftAdjointT, NufftNormalT
 
 def kspace_precond(smaps, coord, weights=None):
 	mps_shape = list(smaps.shape)
@@ -103,6 +103,17 @@ def circulant_precond(smaps, coord, weights=None):
 		del weigths_cu
 	torch.cuda.empty_cache()
 	return ret
+
+def pipe_menon_dcf(coord, im_size, max_iter=30):
+	cudev = torch.device('cuda:0')
+	N = NufftT(coord.to(cudev), im_size)
+	NH = NufftAdjointT(coord.to(cudev), im_size)
+	w = torch.ones((1,coord.shape[1]), dtype=torch.complex64, device=cudev)
+	for i in range(max_iter):
+		NHNw = N(NH(w))
+		w /= torch.abs(NHNw)
+	return w
+
 
 def test():
 	N1 = 64

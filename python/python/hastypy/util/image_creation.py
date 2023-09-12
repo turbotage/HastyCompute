@@ -8,10 +8,10 @@ import nibabel as nib
 import math
 import matplotlib.pyplot as plt
 
+from numba import njit
 
 def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0, crop_factor=1.0):
 	if method == 'PCVIPR':
-
 		def rx(angle):
 			return np.array([
 				[1.0, 	0.0, 	0.0],
@@ -29,7 +29,7 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0,
 		spoke = np.zeros((3,samp_per_spoke), dtype=np.float32)
 		spoke[0,:] = np.random.normal(scale=noise, size=samp_per_spoke)
 		spoke[1,:] = np.random.normal(scale=noise, size=samp_per_spoke)
-		spoke[2,:] = 2*np.pi*np.linspace(-(1.0/3.0), 1.0, samp_per_spoke).astype(np.float32)
+		spoke[2,:] = np.pi*np.linspace(-(1.0/3.0), 1.0, samp_per_spoke).astype(np.float32)
 
 		xangle = np.pi*np.random.rand(1).astype(np.float32).item()
 		zangle = scale_factor*2*np.pi*np.random.rand(1).astype(np.float32).item()
@@ -39,9 +39,9 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0,
 		if crop_factor != 1.0:
 			spoke *= crop_factor
 
-			xidx = np.abs(spoke[0,:]) < 2*np.pi
-			yidx = np.abs(spoke[1,:]) < 2*np.pi
-			zidx = np.abs(spoke[2,:]) < 2*np.pi
+			xidx = np.abs(spoke[0,:]) < np.pi
+			yidx = np.abs(spoke[1,:]) < np.pi
+			zidx = np.abs(spoke[2,:]) < np.pi
 
 			idx = np.logical_and(np.logical_and(xidx, yidx), zidx)
 
@@ -51,7 +51,7 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0,
 	else:
 		raise RuntimeError("Not a valid method")
 
-def create_coords(nspokes, samp_per_spoke, method='MidRandom', plot=False, crop_factor=1.0):
+def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=False, crop_factor=1.0):
 	nfreq = nspokes * samp_per_spoke
 
 	if method == 'MidRandom':
@@ -90,6 +90,52 @@ def create_coords(nspokes, samp_per_spoke, method='MidRandom', plot=False, crop_
 			pu.scatter_3d(coord)
 
 		return coord
+	elif method == 'SubsampledCartesian':
+
+		@njit
+		def fill_coordinates():
+			nx = imsize[0]
+			ny = imsize[1]
+			nz = imsize[2]
+			nfreq = min(nspokes * samp_per_spoke, nx*ny*nz)
+			choises = np.sort(np.random.permutation(nx*ny*nz)[:nfreq])
+			coord = np.empty((3,nfreq), dtype=np.float32)
+			l = 0
+			c = 0
+			for i in range(nx):
+				for j in range(ny):
+					for k in range(nz):
+						if l != choises[c]:
+							l += 1
+							continue
+						coord[0,c] = -np.pi + 2*np.pi*i/nx
+						coord[1,c] = -np.pi + 2*np.pi*j/ny
+						coord[2,c] = -np.pi + 2*np.pi*k/nz
+						c += 1
+						l += 1
+			return coord
+		
+		return fill_coordinates()
+	
+	elif method == 'FullCartesian':
+		@njit
+		def fill_coordinates():
+			nx = imsize[0]
+			ny = imsize[1]
+			nz = imsize[2]
+			coord = np.empty((3,nx*ny*nz), dtype=np.float32)
+			l = 0
+			for i in range(nx):
+				for j in range(ny):
+					for k in range(nz):
+						coord[0,l] = -np.pi + 2*np.pi*i/nx
+						coord[1,l] = -np.pi + 2*np.pi*j/ny
+						coord[2,l] = -np.pi + 2*np.pi*k/nz
+						l += 1
+			return coord
+		
+		return fill_coordinates()
+
 	else:
 		raise RuntimeError("Not a valid method")
 		
