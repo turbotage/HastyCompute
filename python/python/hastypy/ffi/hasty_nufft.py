@@ -42,3 +42,5 @@ class NufftNormal:
 
 	def apply(self, input: torch.Tensor, output: torch.Tensor, storage: torch.Tensor, callable: FunctionLambda | None = None):
 		self._nufftopt.apply(input, output, storage, callable._funclam if callable is not None else None)
+
+

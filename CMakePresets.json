@@ -18,7 +18,7 @@
         "strategy": "external"
       },
       "environment": {
-        "NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx",
+        //"NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx",
         "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
         //"PYTHON_PATH": "D:\\miniconda3\\envs\\v311",
         //"PYTHONHOME": "D:\\miniconda3\\envs\\v311"

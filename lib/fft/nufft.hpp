@@ -4,12 +4,8 @@
 #include <cufinufft_opts.h>
 
 
-struct cufinufft_plan_s;
-typedef cufinufft_plan_s* cufinufft_plan;
-
-struct cufinufftf_plan_s;
-typedef cufinufftf_plan_s* cufinufftf_plan;
-
+typedef struct cufinufft_plan_s* cufinufft_plan;
+typedef struct cufinufft_fplan_s* cufinufftf_plan;
 
 namespace hasty {
 	namespace nufft {
@@ -94,7 +90,7 @@ namespace hasty {
 			int32_t					_nfreq;
 			const at::Tensor		_coords;
 			std::vector<int64_t>	_nmodes;
-			std::array<int32_t, 3>	_nmodes_flipped;
+			std::array<int64_t, 3>	_nmodes_flipped;
 			NufftOptions			_opts;
 
 			bool _closed = false;

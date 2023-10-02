@@ -20,6 +20,7 @@ from hastypy.base.svt import extract_mean_block
 import hastypy.base.coil_est as coil_est
 
 from hastypy.base.sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNormal
+from hastypy.base.sense import SenseT
 
 import hastypy.base.torch_precond as precond
 
@@ -72,26 +73,11 @@ def run(settings: RunSettings):
 	# My smaps
 	print('Estimating coil sensitivities...')
 	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, sense_size=(16,16,16), decay_factor=1.0)
-	smaps = (smaps / torch.mean(torch.abs(smaps))).cpu()
+	smaps /= torch.mean(torch.abs(smaps))
 	print('Done estimating coil sensitivities')
 	#pu.image_nd(smaps.numpy())
 
-	if False:
-		#A = BatchedSense(coord_vec, smaps)
-		#AH = BatchedSenseAdjoint(coord_vec, smaps)
-		#AHA = BatchedSenseNormal(coord_vec, smaps)
-		#rand_input1 = opalg.rand((5,1) + smaps.shape[1:], dtype=torch.complex64)
-		#rand_input2 = rand_input1.clone()
-		#output1 = (AH * A)(rand_input1)
-		#output2 = AHA(rand_input2)
-		#relerr = opalg.norm(output1 - output2) / opalg.norm(output2)
-		#print(relerr)
-		pass
-		#MaxEig(AH * A, torch.complex64, max_iter=8).run(print_info=True)
-		#MaxEig(AHA, torch.complex64, max_iter=8).run(print_info=True)
-
-
-	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=0.00005)
+	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=0.0005)
 
 	image = torch.zeros((5,1) + settings.im_size, dtype=torch.complex64)
 
@@ -99,11 +85,12 @@ def run(settings: RunSettings):
 		pu.image_nd(image.tensor.numpy())
 
 	gc.collect()
+
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=10, callback=None)
+	image = full_recon.run(image, iter=30, callback=None)
 
-	pu.image_nd(image.numpy())
+	#pu.image_nd(image.numpy())
 
 	return smaps, image, (coords, kdata, weights, gating)
 
@@ -112,8 +99,6 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	coord_vec, kdata_vec, weights_vec, gates = FivePointLoader.gate_ecg_method(rawdata[0], 
 									    rawdata[1], rawdata[2], rawdata[3], settings.nframes)
 	
-	#pu.plot_gating(rawdata[3], gates)
-
 	coord_vec, kdata_vec, weights_vec = lag.crop_kspace(coord_vec, kdata_vec, weights_vec, settings.im_size, 
 		crop_factors=settings.crop_factors, prefovkmuls=settings.prefovkmuls, postfovkmuls=settings.postfovkmuls)
 
@@ -122,24 +107,23 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
 
-	if rescale: # Implement mean shift
-		pass
+	cudev = torch.device('cuda:0')
+	smaps_cu = smaps.to(cudev)
+	coils = [i for i in range(smaps.shape[0])]
+	for frame in range(settings.nframes):
+		for enc in range(5):
+			kdata = SenseT(coord_vec[frame*5 + enc].to(cudev), smaps_cu, coils).apply(fullimage[enc].to(cudev)).cpu()
+			kdata_vec[frame*5 + enc] -= kdata
+	del smaps_cu
 
-	images = torch.empty((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
-	for i in range(settings.nframes):
-		for j in range(5):
-			images[i,j,...] = fullimage[j]
-	
-	_,_,_,smean = extract_mean_block(images, settings.im_size, (16,16,16))
-	final_lamda = smean[0] * 8*1e-5
-
-	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=3, random=False, 
-			nblocks=0, thresh=final_lamda, soft=True)
 
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	precond_pdhg = True
+	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=3, random=False, 
+			nblocks=0, thresh=5e-6, soft=True)
+
+	precond_pdhg = False
 	precond_weights = False
 	if precond_pdhg:
 		preconds = []
@@ -161,20 +145,22 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 
 		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
 	else:
-		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG')
+		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='GD')
 
 	def plot_callback(image: Vector, iter):
-		pu.image_nd(image.tensor.numpy())
+		pu.image_nd(image.tensor.view((settings.nframes,5) + settings.im_size).numpy())
 
-	images = framed_recon.run(images, iter=45, callback=None)
+	images = framed_recon.run(torch.zeros((settings.nframes,5) + settings.im_size, dtype=torch.complex64), iter=100, callback=plot_callback)
 
 	return images
 
 
 if __name__ == '__main__':
 	with torch.inference_mode():
-		im_size = (256,256,256)
-		shift = (-2*25.6, 0.0, 0.0)
+		resol = 196 
+		im_size = (resol,resol,resol)
+		shift = (-2*(resol / 10.0), 0.0, 0.0)
+
 		#im_size = (256,256,256)
 		#shift = (-2*25.6, 0.0, 0.0)
 		crop_factors = (1.1,1.1,1.1)
@@ -182,21 +168,31 @@ if __name__ == '__main__':
 		postfovkmuls = (1.0,1.0,1.0)
 
 		settings = RunSettings(im_size, crop_factors, prefovkmuls, postfovkmuls, shift
-			).set_nframes(10
+			).set_nframes(20
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp.h5'
 			).set_rawdata_filepath('D:/4DRecon/MRI_Raw.h5')
 
 		smaps, image, raw_data = run(settings)
+		store = True
+		if store:
+			print('Storing full image')
+			with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_real.h5', "w") as f:
+				f.create_dataset('image', data=image)
 
 		gc.collect()
 		torch.cuda.empty_cache()
 
 		images = run_framed(settings, smaps, image, raw_data, False)
 
-		#pu.image_nd(images.numpy())
+		for frame in range(settings.nframes):
+			for enc in range(5):
+				images[frame,enc,...] += image[enc,0,...]
 
-		store = True
+		images = images.numpy()
+
 		if store:
 			print('Storing frame reconstructed')
 			with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real.h5', "w") as f:
-				f.create_dataset('images', data=images.numpy())
+				f.create_dataset('images', data=images)
+		
+		pu.image_nd(images)

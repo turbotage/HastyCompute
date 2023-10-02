@@ -26,6 +26,8 @@ from hastypy.base.sense import BatchedSense, BatchedSenseAdjoint, BatchedSenseNo
 from hastypy.base.sense import SenseT
 
 import hastypy.base.torch_precond as precond
+import hastypy.base.enc_to_vel as etv
+
 
 class RunSettings:
 	def __init__(self, im_size=None, crop_factors=None, prefovkmuls=None, postfovkmuls=None, shift=None, solver='GD'):
@@ -35,7 +37,7 @@ class RunSettings:
 		self.postfovkmuls = postfovkmuls
 		self.shift = shift
 		self.solver = solver
-
+		
 		self.smaps_filepath = None
 		self.rawdata_filepath = None
 		self.true_filepath = None
@@ -56,24 +58,29 @@ class RunSettings:
 		self.nframes = nframes
 		return self
 
-def run_from_difference(settings: RunSettings):
-	coord_vec, kdata_vec, smaps, true_images = FivePointLoader.load_simulated(
-		settings.rawdata_filepath, settings.smaps_filepath, settings.true_filepath)
-	
-	settings.im_size = smaps.shape[1:]
-	nframes = len(coord_vec) // 5
-	
-	#pu.image_nd(true_images.numpy())
+class Data:
+	def __init__(self, coord_vec, kdata_vec, smaps, true_images):
+		self.coord_vec = coord_vec
+		self.kdata_vec = kdata_vec
+		self.smaps = smaps
+		self.true_images = true_images
+
 	
 
+
+
+def run_full(settings, data):
+
 	full_coord_vec, full_kdata_vec = stack_frame_datas_fivepoint(coord_vec, kdata_vec)
-	#weights_vec = []
-	#for i in range(5):
-	#	weights_vec.append(tkbn.calc_density_compensation_function(ktraj=full_coord_vec[i], im_size=settings.im_size).squeeze(0))
-	
-	images_full = FivePointFULL(smaps, full_coord_vec, full_kdata_vec, lamda=0.0000001).run(
+
+	images_full = FivePointFULL(smaps, full_coord_vec, full_kdata_vec, lamda=0.00001).run(
 		torch.zeros((5,1) + settings.im_size, dtype=torch.complex64), iter=130)
-	pu.image_nd(images_full.numpy())
+	
+	return images_full
+
+
+
+def run_from_difference(settings: RunSettings):
 
 	cudev = torch.device('cuda:0')
 	smaps_cu = smaps.to(cudev)
@@ -92,7 +99,7 @@ def run_from_difference(settings: RunSettings):
 	mean_images = mean_images.view((nframes*5,1) + settings.im_size)
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
-			nblocks=0, thresh=0.1, soft=True)
+			nblocks=0, thresh=0.001, soft=True)
 
 	print('Kdata points per frame: ', coord_vec[0].shape[1])
 	print('Kdata points kdata per pixel: ', coord_vec[0].shape[1] / math.prod(smaps.shape[1:]))
@@ -177,22 +184,22 @@ def run_from_difference(settings: RunSettings):
 		raise RuntimeError('Unsupported solver type')
 
 	def err_callback(image: Vector, iter):
-		if iter==-1:
-			relerr = torch.norm(mean_images.view((nframes,5) + smaps.shape[1:]) + image - 
-				true_images.get_tensor().view((nframes,5) + smaps.shape[1:])) / true_images_norm
-		else:	
-			relerr = opalg.norm(mean_images + image - true_images) / true_images_norm
+		relerr = opalg.norm(mean_images + image - true_images) / true_images_norm
 		print('RelErr: ', relerr)
 
 	images = torch.zeros((nframes, 5) + settings.im_size, dtype=torch.complex64)
 
 	images = framed_recon.run(images, iter=45, callback=err_callback)
 
-	err_callback(images, -1)
+	#err_callback(images, -1)
 
 	pu.image_nd(images.numpy())
 
-	pu.image_nd((mean_images + images).numpy())
+	images += mean_images.view((nframes,5) + smaps.shape[1:])
+
+	vel_images = etv.enc_to_vel_linear(images.numpy(), 1.0)
+
+	pu.image_nd(vel_images)
 
 	return images
 
@@ -320,6 +327,12 @@ if __name__ == '__main__':
 			).set_rawdata_filepath('D:/4DRecon/dat/dat2/simulated_coords_kdatas.h5'
 			).set_true_filepath('D:/4DRecon/dat/dat2/images_encs_20f_cropped_interpolated.h5')
 		
+		data = Data(*FivePointLoader.load_simulated(
+			settings.rawdata_filepath, settings.smaps_filepath, settings.true_filepath))
+
+		settings.im_size = data.smaps.shape[1:]
+		nframes = len(data.coord_vec) // 5
+
 		run_from_difference(settings)
 
 

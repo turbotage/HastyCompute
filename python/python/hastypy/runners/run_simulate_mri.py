@@ -9,7 +9,7 @@ if __name__ == '__main__':
 			create_enc_image=True, load_enc_image=False,
 			create_nufft_of_enced_image=True, load_nufft_of_neced_image=False,
 			nimgout=20,
-			nspokes=250,
+			nspokes=100,
 			samp_per_spoke=100,#samp_per_spoke=489,
 			#method='PCVIPR', # PCVIPR, MidRandom
 			method='PCVIPR',

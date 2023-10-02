@@ -44,7 +44,6 @@ def stack_frame_datas_fivepoint(coord_vec, kdata_vec):
 	
 
 
-
 class FivePointFULL:
 	def __init__(self, smaps, coord_vec, kdata_vec, weights_vec=None, streams=None, solver='GD', lamda=0.0):
 		self.smaps = smaps
@@ -116,7 +115,7 @@ class FivePointLLR:
 				if maxeig > self.max_eig:
 					self.max_eig = maxeig
 
-			self.stepsize = 1.0*(1.0 / self.max_eig)
+			self.stepsize = (0.5 / self.max_eig)
 			self.sensenormalop = BatchedSenseNormal(self.coord_vec, self.smaps, self.kdata_vec,
 				self.weights_vec, self.grad_streams)
 

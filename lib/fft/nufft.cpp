@@ -2,8 +2,8 @@
 //#include <cufinufft.h>
 
 #include "nufft.hpp"
-
 #include <cufinufft.h>
+
 
 import hasty_util;
 
@@ -15,7 +15,10 @@ hasty::nufft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>&
 	_ntransf = _nmodes[0];
 	_ndim = _coords.size(0);
 	_nfreq = _coords.size(1);
-	_nvoxels = _nmodes[1] * _nmodes[2] * _nmodes[3];
+	_nvoxels = 1;
+	for (int i = 0; i < _ndim; ++i) {
+		_nvoxels *= nmodes[i + 1];
+	}
 
 	if (_opts.get_type() == NufftType::eType3) {
 		throw std::runtime_error("Type 3 Nufft is not yet supported");
@@ -27,7 +30,6 @@ hasty::nufft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>&
 
 	for (int i = 0; i < _ndim; ++i) {
 		_nmodes_flipped[i] = _nmodes[_ndim - i];
-		//_nmodes_flipped[i] = _nmodes[i + 1];
 	}
 
 	if (!_coords.is_contiguous())
@@ -134,7 +136,6 @@ int32_t hasty::nufft::Nufft::ndim()
 }
 
 
-
 void hasty::nufft::Nufft::make_plan_set_pts()
 {
 
@@ -150,19 +151,18 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 	switch (_type) {
 	case c10::ScalarType::Float:
 	{
-		if (cufinufftf_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
-			throw std::runtime_error("Failed to create cufinufft_default_opts");
+		cufinufft_default_opts(&_finufft_opts);
 
 		_finufft_opts.gpu_device_id = cuda_device_idx;
 
-		if (cufinufftf_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_planf, &_finufft_opts))
+		if (cufinufftf_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, &_planf, &_finufft_opts))
 			throw std::runtime_error("cufinufft_makeplan failed");
 
 		switch (_ndim) {
 		case 1:
 		{
 			auto tx = _coords.select(0, 0);
-			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), NULL, NULL, 0, NULL, NULL, NULL, _planf)) {
+			if (cufinufftf_setpts(_planf, _nfreq, (float*)tx.data_ptr(), NULL, NULL, 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -171,7 +171,7 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 		{
 			auto ty = _coords.select(0, 0);
 			auto tx = _coords.select(0, 1);
-			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL, _planf)) {
+			if (cufinufftf_setpts(_planf, _nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -181,7 +181,7 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 			auto tz = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
 			auto tx = _coords.select(0, 2);
-			if (cufinufftf_setpts(_nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), (float*)tz.data_ptr(), 0, NULL, NULL, NULL, _planf)) {
+			if (cufinufftf_setpts(_planf, _nfreq, (float*)tx.data_ptr(), (float*)ty.data_ptr(), (float*)tz.data_ptr(), 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -193,19 +193,18 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 	break;
 	case c10::ScalarType::Double:
 	{
-		if (cufinufft_default_opts(_opts.get_type(), _ndim, &_finufft_opts))
-			throw std::runtime_error("Failed to create cufinufft_default_opts");
+		cufinufft_default_opts(&_finufft_opts);
 
 		_finufft_opts.gpu_device_id = cuda_device_idx;
 
-		if (cufinufft_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, 0, &_plan, &_finufft_opts))
+		if (cufinufft_makeplan(_opts.get_type(), _ndim, _nmodes_flipped.data(), _opts.get_positive(), _ntransf, (float)_opts.tol, &_plan, &_finufft_opts))
 			throw std::runtime_error("cufinufft_makeplan failed");
 
 		switch (_ndim) {
 		case 1:
 		{
 			auto tx = _coords.select(0, 0);
-			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), NULL, NULL, 0, NULL, NULL, NULL, _plan)) {
+			if (cufinufft_setpts(_plan, _nfreq, (double*)tx.data_ptr(), NULL, NULL, 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -214,7 +213,7 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 		{
 			auto ty = _coords.select(0, 0);
 			auto tx = _coords.select(0, 1);
-			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL, _plan)) {
+			if (cufinufft_setpts(_plan, _nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), NULL, 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -224,7 +223,7 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 			auto tz = _coords.select(0, 0);
 			auto ty = _coords.select(0, 1);
 			auto tx = _coords.select(0, 2);
-			if (cufinufft_setpts(_nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), (double*)tz.data_ptr(), 0, NULL, NULL, NULL, _plan)) {
+			if (cufinufft_setpts(_plan, _nfreq, (double*)tx.data_ptr(), (double*)ty.data_ptr(), (double*)tz.data_ptr(), 0, NULL, NULL, NULL)) {
 				throw std::runtime_error("cufinufftf_setpts failed");
 			}
 		}
@@ -284,7 +283,7 @@ void hasty::nufft::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) con
 		cuFloatComplex* c = (cuFloatComplex*)in.data_ptr();
 		cuFloatComplex* f = (cuFloatComplex*)out.data_ptr();
 
-		if (cufinufftf_execute(c, f, _planf)) {
+		if (cufinufftf_execute(_planf, c, f)) {
 			throw std::runtime_error("cufinufft_execute failed");
 		}
 	}
@@ -294,7 +293,7 @@ void hasty::nufft::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) con
 		cuDoubleComplex* c = (cuDoubleComplex*)in.data_ptr();
 		cuDoubleComplex* f = (cuDoubleComplex*)out.data_ptr();
 
-		if (cufinufft_execute(c, f, _plan)) {
+		if (cufinufft_execute(_plan, c, f)) {
 			throw std::runtime_error("cufinufft_execute failed");
 		}
 	}
@@ -350,7 +349,7 @@ void hasty::nufft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) con
 		cuFloatComplex* c = (cuFloatComplex*)out.data_ptr();
 		cuFloatComplex* f = (cuFloatComplex*)in.data_ptr();
 
-		if (cufinufftf_execute(c, f, _planf)) {
+		if (cufinufftf_execute(_planf, c, f)) {
 			throw std::runtime_error("cufinufft_makeplan failed");
 		}
 	}
@@ -360,7 +359,7 @@ void hasty::nufft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) con
 		cuDoubleComplex* c = (cuDoubleComplex*)out.data_ptr();
 		cuDoubleComplex* f = (cuDoubleComplex*)in.data_ptr();
 
-		if (cufinufft_execute(c, f, _plan)) {
+		if (cufinufft_execute(_plan, c, f)) {
 			throw std::runtime_error("cufinufft_makeplan failed");
 		}
 	}

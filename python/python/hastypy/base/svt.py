@@ -5,9 +5,9 @@ import random
 from hastypy.base.opalg import Vector, Operator, Linop
 import hastypy.ffi.hasty_svt as ffisvt
 
-def extract_mean_block(images, imsize, blocksize):
+def extract_mean_block(images, imsize, blocksize, nblocks=200):
 	Ss = []
-	for i in range(200):
+	for i in range(nblocks):
 		rb = (
 				random.randint(imsize[0]//4, 3*imsize[0]//4 - blocksize[0]), 
 				random.randint(imsize[1]//4, 3*imsize[1]//4 - blocksize[2]),

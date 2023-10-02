@@ -19,8 +19,6 @@ import hastypy.util.plot_utility as pu
 
 import scipy
 import numpy as np
-#import sigpy.mri as mr
-#import sigpy as sp
 
 
 class CoilMapNormal(Linop):
@@ -156,7 +154,9 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 
 	#pu.image_nd(coil_images.cpu().numpy())
 	gc.collect()
+	torch.cuda.empty_cache()
 
+	coil_images = coil_images.cpu()
 	sos = torch.sqrt(torch.sum(torch.square(torch.abs(coil_images)), dim=0)).unsqueeze(0)
 	sos += torch.max(sos)*1e-5
 
