@@ -28,27 +28,28 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 
 	if create_crop_image:
 		print('Loading images')
-		with h5py.File(map_joiner(imagefile), "r") as f:
+		with h5py.File(map_joiner(rename_h5(imagefile, '_mvel')), "r") as f:
 			img = f['images'][()]
-			img = np.transpose(img, axes=(4,3,2,1,0))
+			#img = np.transpose(img, axes=(4,3,2,1,0))
 
 		print('Loading magnitude')
 		with h5py.File(map_joiner(rename_h5(imagefile, '_mag')), "r") as f:
 			img_mag = f['images'][()]
-			img_mag = np.transpose(img_mag, (2,1,0))
+			#img_mag = np.transpose(img_mag, (2,1,0))
 
 		if True:
 			smap_list = []
 			print('Loading sense')
-			with h5py.File(map_joiner('SenseMapsCpp.h5'), "r") as hf:
-				maps_base = hf['Maps']
-				maps_key_base = 'SenseMaps_'
-				for i in range(len(list(maps_base))):
-					smap = maps_base[maps_key_base + str(i)][()]
-					smap = smap['real'] + 1j*smap['imag']
-					smap_list.append(smap)
+			with h5py.File(map_joiner('my_smaps.h5'), "r") as hf:
+				smaps = hf['Maps'][()]
+				#maps_base = hf['Maps']
+				#maps_key_base = 'SenseMaps_'
+				#for i in range(len(list(maps_base))):
+				#	smap = maps_base[maps_key_base + str(i)][()]
+				#	smap = smap['real'] + 1j*smap['imag']
+				#	smap_list.append(smap)
 
-			smaps = np.stack(smap_list, axis=0)
+			#smaps = np.stack(smap_list, axis=0)
 
 		nlen = 64
 		nx = 120
@@ -65,6 +66,8 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 			pu.image_nd(np.sqrt(new_img[:,1,...]**2 + new_img[:,2,...]**2 + new_img[:,3,...]**2))
 			cd = ic.get_CD(new_img)
 			pu.image_nd(cd)
+			pu.image_nd(new_smaps)
+			pu.image_nd(img_mag)
 			
 			if just_plot:
 				return (None, None, None)
@@ -137,10 +140,10 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 		imvel = np.expand_dims(np.transpose(img[:,1:], axes=(2,3,4,0,1)), axis=-1)
 		imvel /= np.mean(imvel)
 
-		imvel = np.sign(imvel) * (imvel ** 3)
-		max_vel = np.max(imvel)
-		imvel /= max_vel
-		imvel *= (v_enc / np.sqrt(3))
+		#imvel = np.sign(imvel) * (imvel ** 3)
+		#max_vel = np.max(imvel)
+		#imvel /= max_vel
+		#imvel *= (v_enc / np.sqrt(3))
 
 		if also_plot:
 			pu.image_nd(np.sqrt(imvel[...,0,0]**2 + imvel[...,1,0]**2 + imvel[...,2,0]**2))

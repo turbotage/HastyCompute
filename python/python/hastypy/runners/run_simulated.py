@@ -71,9 +71,9 @@ class Data:
 
 def run_full(settings, data):
 
-	full_coord_vec, full_kdata_vec = stack_frame_datas_fivepoint(coord_vec, kdata_vec)
+	full_coord_vec, full_kdata_vec = stack_frame_datas_fivepoint(data.coord_vec, data.kdata_vec)
 
-	images_full = FivePointFULL(smaps, full_coord_vec, full_kdata_vec, lamda=0.00001).run(
+	images_full = FivePointFULL(data.smaps, full_coord_vec, full_kdata_vec, lamda=0.00001).run(
 		torch.zeros((5,1) + settings.im_size, dtype=torch.complex64), iter=130)
 	
 	return images_full

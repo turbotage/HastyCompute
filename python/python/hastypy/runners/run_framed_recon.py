@@ -74,8 +74,11 @@ def run(settings: RunSettings):
 	print('Estimating coil sensitivities...')
 	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, sense_size=(16,16,16), decay_factor=1.0)
 	smaps /= torch.mean(torch.abs(smaps))
+	pu.image_nd(smaps.numpy())
 	print('Done estimating coil sensitivities')
-	#pu.image_nd(smaps.numpy())
+	
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_smaps.h5', "w") as f:
+		f.create_dataset('Maps', data=smaps.numpy())
 
 	full_recon = FivePointFULL(smaps, coord_vec, kdata_vec, weights_vec, lamda=0.0005)
 
@@ -157,7 +160,7 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 
 if __name__ == '__main__':
 	with torch.inference_mode():
-		resol = 196 
+		resol = 256 
 		im_size = (resol,resol,resol)
 		shift = (-2*(resol / 10.0), 0.0, 0.0)
 

@@ -102,44 +102,39 @@ def test():
 
 def test_real():
 
-	img_full = np.array([0])
+	img_framed = np.array([0])
 	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real_100.h5', "r") as f:
-		img_full = f['images'][()]
-
-	pu.image_nd(img_full)
-
-	#img_mean_img = np.array([0])
-	#with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_real_100.h5', "r") as f:
-	#	img_mean_img = f['image'][()]
-
-	#pu.image_nd(img_mean_img)
-
-	mean_block = svt.extract_mean_block(torch.tensor(img_full), img_full.shape[2:], [16,16,16])
-	print('Extremes: ', mean_block[0:3])
-	print('SVD Vals: ', mean_block[3])
-
-	#for i in range(img_full.shape[0]):
-	#	for j in range(5):
-	#		img_full[i, j, ...] -= img_mean_img[j, 0, ...]
-
-	#ean_block = svt.extract_mean_block(torch.tensor(img_full), img_full.shape[2:], [16,16,16])
-	#print('Extremes: ', mean_block[0:3])
-	#print('SVD Vals: ', mean_block[3])
-
+		img_framed = f['images'][()]
 
 	#pu.image_nd(img_full)
 
-	img_vel = etv.enc_to_vel_linear(img_full, 1)
+	img_mean = np.array([0])
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_real_100.h5', "r") as f:
+		img_mean = f['image'][()]
 
-	mean_mag = np.mean(img_full, axis=(0,1))
+	#pu.image_nd(img_mean_img)
+
+	mean_block = svt.extract_mean_block(torch.tensor(img_framed), img_framed.shape[2:], [16,16,16])
+	print('Extremes: ', mean_block[0:3])
+	print('SVD Vals: ', mean_block[3])
+
+	#pu.image_nd(img_full)
+
+	img_vel = etv.enc_to_vel_linear(img_framed, 1)
 
 	vmag = np.sqrt(img_vel[:,1,...]**2 + img_vel[:,2,...]**2 + img_vel[:,3,...]**2)
 
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real_100_mvel.h5', "w") as f:
+		f.create_dataset('images', data=img_vel)
+	with h5py.File('D:\\4DRecon\\dat\\dat2\\my_framed_real_100_mag.h5', "w") as f:
+		f.create_dataset('images', data=np.mean(img_mean, axis=(0,1)))
+
+
 	pu.image_nd(vmag)
 
-	cd = ic.get_CD(img_vel, 500)
+	#cd = ic.get_CD(img_vel, 500)
 
-	pu.image_nd(cd)
+	#pu.image_nd(cd)
 
 	print('Hello')
 
