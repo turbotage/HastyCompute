@@ -106,8 +106,6 @@ class NUFFTAdjoint(Linop):
 		return NUFFT(self.oshape, self.coord,
 					 oversamp=self.oversamp, width=self.width)
 
-
-
 class NormalNUFFT(Linop):
 
 	def __init__(self, ishape, coord, oversamp=1.25, width=4):
@@ -133,3 +131,5 @@ class NormalNUFFT(Linop):
 
 	def get_psf(self):
 		return self.psf
+	
+

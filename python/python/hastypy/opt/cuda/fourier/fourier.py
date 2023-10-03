@@ -3,9 +3,9 @@ from typing import Callable, Tuple
 import cupy as cp
 from jinja2 import Template
 
-from pycompute.cuda import cuda_program as cudap
-from pycompute.cuda.cuda_program import CudaFunction
-from pycompute.cuda.cuda_program import CudaTensorChecking as ctc
+from hastypy.opt.cuda import cuda_program as cudap
+from hastypy.opt.cuda.cuda_program import CudaFunction
+from hastypy.opt.cuda.cuda_program import CudaTensorChecking as ctc
 
 import math
 

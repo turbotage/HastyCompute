@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from numba import njit
 
-def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0, crop_factor=1.0):
+def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0, crop_factor=1.0, xangle=None, zangle=None):
 	if method == 'PCVIPR':
 		def rx(angle):
 			return np.array([
@@ -30,9 +30,12 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0,
 		spoke[0,:] = np.random.normal(scale=noise, size=samp_per_spoke)
 		spoke[1,:] = np.random.normal(scale=noise, size=samp_per_spoke)
 		spoke[2,:] = np.pi*np.linspace(-(1.0/3.0), 1.0, samp_per_spoke).astype(np.float32)
+		spoke[2,:] += np.random.normal(scale=noise, size=samp_per_spoke)
 
-		xangle = np.pi*np.random.rand(1).astype(np.float32).item()
-		zangle = scale_factor*2*np.pi*np.random.rand(1).astype(np.float32).item()
+		if xangle is None:
+			xangle = np.pi*np.random.rand(1).astype(np.float32).item()
+		if zangle is None:
+			zangle = scale_factor*2*np.pi*np.random.rand(1).astype(np.float32).item()
 
 		spoke = rz(zangle) @ rx(xangle) @ spoke
 		
@@ -51,7 +54,7 @@ def create_spoke(samp_per_spoke, method='PCVIPR', noise=0.005, scale_factor=1.0,
 	else:
 		raise RuntimeError("Not a valid method")
 
-def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=False, crop_factor=1.0):
+def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=False, crop_factor=1.0, xangles=None, zangles=None):
 	nfreq = nspokes * samp_per_spoke
 
 	if method == 'MidRandom':
@@ -75,7 +78,14 @@ def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=Fals
 		coord_vec = []
 
 		for i in range(nspokes):
-			coord_vec.append(create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=crop_factor))
+			if xangles is None and zangles is None:
+				coord_vec.append(create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=crop_factor))
+			elif xangles is None and zangles is not None:
+				coord_vec.append(create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=crop_factor, zangle=zangles[i].item()))
+			elif xangles is not None and zangles is None:
+				coord_vec.append(create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=crop_factor, xangle=xangles[i].item()))
+			else:
+				coord_vec.append(create_spoke(samp_per_spoke, method='PCVIPR', crop_factor=crop_factor, xangle=xangles[i].item(), zangle=zangles[i].item()))
 
 		coord = np.concatenate(coord_vec, axis=1)
 
@@ -89,7 +99,7 @@ def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=Fals
 		if plot:
 			pu.scatter_3d(coord)
 
-		return coord
+		return coord.astype(np.float32)	
 	elif method == 'SubsampledCartesian':
 
 		@njit
@@ -113,10 +123,9 @@ def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=Fals
 						coord[2,c] = -np.pi + 2*np.pi*k/nz
 						c += 1
 						l += 1
-			return coord
+			return coord.astype(np.float32)
 		
-		return fill_coordinates()
-	
+		return fill_coordinates()	
 	elif method == 'FullCartesian':
 		@njit
 		def fill_coordinates():
@@ -132,10 +141,9 @@ def create_coords(nspokes, samp_per_spoke, imsize, method='MidRandom', plot=Fals
 						coord[1,l] = -np.pi + 2*np.pi*j/ny
 						coord[2,l] = -np.pi + 2*np.pi*k/nz
 						l += 1
-			return coord
+			return coord.astype(np.float32)
 		
 		return fill_coordinates()
-
 	else:
 		raise RuntimeError("Not a valid method")
 		

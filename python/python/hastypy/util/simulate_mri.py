@@ -63,11 +63,11 @@ def crop_image(dirpath, imagefile, create_crop_image=False, load_crop_image=Fals
 
 		if just_plot or also_plot:
 			pu.image_nd(new_img)
-			pu.image_nd(np.sqrt(new_img[:,1,...]**2 + new_img[:,2,...]**2 + new_img[:,3,...]**2))
+			#pu.image_nd(np.sqrt(new_img[:,1,...]**2 + new_img[:,2,...]**2 + new_img[:,3,...]**2))
 			cd = ic.get_CD(new_img)
 			pu.image_nd(cd)
-			pu.image_nd(new_smaps)
-			pu.image_nd(img_mag)
+			#pu.image_nd(new_smaps)
+			#pu.image_nd(img_mag)
 			
 			if just_plot:
 				return (None, None, None)
@@ -116,7 +116,7 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 	if create_enc_image:
 		old_img = img
 
-		img[:,0,...] *= (2.0 * np.expand_dims(img_mag, axis=0) / np.max(img_mag, axis=(0,1,2)))
+		#img[:,0,...] *= (2.0 * np.expand_dims(img_mag, axis=0) / np.max(img_mag, axis=(0,1,2)))
 
 		
 		if img.shape[0] != out_images:
@@ -138,15 +138,16 @@ def enc_image(img, img_mag, out_images, dirpath, imagefile,
 			], dtype=np.float32)
 
 		imvel = np.expand_dims(np.transpose(img[:,1:], axes=(2,3,4,0,1)), axis=-1)
-		imvel /= np.mean(imvel)
+		imvel /= (0.25*np.max(imvel))
+
 
 		#imvel = np.sign(imvel) * (imvel ** 3)
 		#max_vel = np.max(imvel)
 		#imvel /= max_vel
 		#imvel *= (v_enc / np.sqrt(3))
 
-		if also_plot:
-			pu.image_nd(np.sqrt(imvel[...,0,0]**2 + imvel[...,1,0]**2 + imvel[...,2,0]**2))
+		#if also_plot:
+			#pu.image_nd(np.sqrt(imvel[...,0,0]**2 + imvel[...,1,0]**2 + imvel[...,2,0]**2))
 
 		print('Applying encoding matrix')
 		imenc = (A @ imvel).squeeze(-1)
@@ -205,12 +206,16 @@ def nufft_of_enced_image(img_enc, smaps, dirpath,
 
 			encode_coords = []
 			encode_kdatas = []
+
+			xangles = np.pi * np.random.rand(nspokes).astype(np.float32)
+			zangles = 2 * np.pi * np.random.rand(nspokes).astype(np.float32)
+
 			for encode in range(nenc):
 				print('Encode: ', encode, '/', nenc, '  Creating coordinates')
 
 				coil_kdatas = []
 
-				coord = np.ascontiguousarray(ic.create_coords(nspokes, nsamp_per_spoke, im_size, method, False, crop_factor))
+				coord = np.ascontiguousarray(ic.create_coords(nspokes, nsamp_per_spoke, im_size, method, False, crop_factor, xangles, zangles))
 
 				if also_plot:
 					pu.scatter_3d(coord)
@@ -222,6 +227,7 @@ def nufft_of_enced_image(img_enc, smaps, dirpath,
 					coiled_image = torch.tensor(img_enc[frame,encode,...] * smaps[smap,...]).to(
 						torch.device('cuda:0')).unsqueeze(0).contiguous()
 					coil_kdatas.append(nufftobj.apply(coiled_image).cpu().numpy())
+				print("")
 
 				encode_coords.append(coord)
 				encode_kdatas.append(np.stack(coil_kdatas, axis=1))

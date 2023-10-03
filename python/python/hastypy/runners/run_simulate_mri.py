@@ -15,4 +15,4 @@ if __name__ == '__main__':
 			method='PCVIPR',
 			crop_factor=1.3,
 			just_plot=False,
-			also_plot=True)
+			also_plot=False)
