@@ -466,6 +466,10 @@ void svt_tests() {
 	}
 }
 
+void test_nufft_speed() {
+
+}
+
 int main() {
 
 	

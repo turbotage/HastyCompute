@@ -53,9 +53,6 @@ class NufftNormalT(TorchLinop):
 
 
 
-
-
-
 class Nufft(Linop):
 	def __init__(self, coord, im_size):
 		self.ndim = coord.shape[0]

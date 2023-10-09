@@ -69,7 +69,7 @@ class FivePointFULL:
 
 
 	def max_eig_run(self, print_info=True):
-		maxeigop = BatchedSenseNormal([self.coord_vec[0]], self.smaps)
+		maxeigop = BatchedSenseNormal([self.coord_vec[0]], self.smaps, None, None if self.weights_vec is None else [self.weights_vec[0]])
 		self.max_eig = MaxEig(maxeigop, torch.complex64, max_iter=5).run(print_info=print_info).to(torch.float32)
 
 	def run(self, image, iter=50, callback=None, accelerate=True):

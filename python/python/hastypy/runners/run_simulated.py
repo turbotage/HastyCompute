@@ -75,11 +75,13 @@ def run_full(settings, data):
 
 	full_weights_vec = []
 	for i in range(5):
-		full_weights_vec.append(dcf.pipe_menon_dcf(
+		dcfw = dcf.pipe_menon_dcf(
 			(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * full_coord_vec[i] / torch.pi,
 			settings.im_size,
-			max_iter=2					  
-			))
+			max_iter=30					  
+			)
+
+		full_weights_vec.append(dcfw / torch.mean(dcfw))
 
 	images_full = FivePointFULL(data.smaps, full_coord_vec, full_kdata_vec, full_weights_vec, lamda=0.00001).run(
 		torch.zeros((5,1) + settings.im_size, dtype=torch.complex64), iter=10)
@@ -98,7 +100,7 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 			kdata = SenseT(data.coord_vec[frame*5 + enc].to(cudev), smaps_cu, coils).apply(img_full[enc].to(cudev)).cpu()
 			data.kdata_vec[frame*5 + enc] -= kdata
 
-	true_images = Vector(true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
+	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images_norm = opalg.norm(true_images)
 	mean_images = torch.empty((settings.nframes,5) + settings.im_size, dtype=torch.complex64)
 	for frame in range(settings.nframes):
@@ -247,9 +249,9 @@ def run_from_zero(settings: RunSettings):
 			for i in range(len(coord_vec)):
 				print("\r", end="")
 				print('Coord: ', i, '/', len(coord_vec), end="")
-				weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
-				weights = torch.sqrt(weights)
-				#weights = precond.pipe_menon_dcf(coord_vec[i], settings.im_size)
+				#weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
+				#weights = torch.sqrt(weights)
+				weights = precond.pipe_menon_dcf(coord_vec[i], settings.im_size)
 				weights_vec.append(weights.squeeze(0).to(device='cpu', non_blocking=False))
 			print(' Done.')
 
@@ -263,7 +265,7 @@ def run_from_zero(settings: RunSettings):
 		for i in range(len(coord_vec)):
 			print("\r", end="")
 			print('Coord: ', i, '/', len(coord_vec), end="")
-			weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
+			#weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
 			#weights = torch.sqrt(weights)
 			#weights = precond.pipe_menon_dcf(coord_vec[i], settings.im_size)
 			weights_vec.append(weights.squeeze(0).to(device='cpu', non_blocking=False))
@@ -305,6 +307,6 @@ if __name__ == '__main__':
 
 		img_full = run_full(settings, data)
 
-		run_from_difference(settings)
+		run_from_difference(settings, data, img_full)
 
 

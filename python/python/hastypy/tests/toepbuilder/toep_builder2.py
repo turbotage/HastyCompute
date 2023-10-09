@@ -38,13 +38,24 @@ def take_adjoint(input, coords, im_size, my_nufft=True):
 
 		coords_ = coords.numpy()
 		input_ = shifted_input(input, coords, angle).numpy()
+		#input_ = input.numpy()
 		output = torch.tensor([0])
+		plan = finufft.Plan(1, im_size, dtype='complex64', modeord=0)
 		if ndim == 1:
-			output = torch.tensor(finufft.nufft1d1(coords_[0,:], input_, n_modes=im_size))
+			plan.setpts(coords_[0,:])
 		elif ndim == 2:
-			output = torch.tensor(finufft.nufft2d1(coords_[0,:], coords_[1,:], input_, n_modes=im_size))
+			plan.setpts(coords_[0,:], coords_[1,:])
 		elif ndim == 3:
-			output =  torch.tensor(finufft.nufft3d1(coords_[0,:], coords_[1,:], coords_[2,:], input_, n_modes=im_size))
+			plan.setpts(coords_[0,:], coords_[1,:], coords_[2,:])
+
+		output = torch.tensor(plan.execute(input_))
+
+		#if ndim == 1:
+		#	output = torch.tensor(finufft.nufft1d1(coords_[0,:], input_, n_modes=im_size))
+		#elif ndim == 2:
+		#	output = torch.tensor(finufft.nufft2d1(coords_[0,:], coords_[1,:], input_, n_modes=im_size))
+		#elif ndim == 3:
+		#	output =  torch.tensor(finufft.nufft3d1(coords_[0,:], coords_[1,:], coords_[2,:], input_, n_modes=im_size))
 
 		return output
 		
@@ -58,12 +69,12 @@ def toeplitz_diagonal(weights, coords, im_size):
 	else:
 		diagonal = adjnufft(weights, coords)
 
-	return diagonal
+	#return diagonal
 	diagonal = reflect_conj_concat(0, diagonal)
 
 	diagonal = hermitify(0, diagonal)
 
-	return torch.fft.fftn(diagonal, dim=[-1], norm="forward")
+	return torch.fft.fftn(diagonal, dim=[-1], norm="forward") / np.sqrt(np.prod(im_size))
 	
 def adjoint_flip_and_concat(dim, weights, coords, adjnufft):
 	ndim = coords.shape[0]

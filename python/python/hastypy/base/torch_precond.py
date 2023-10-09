@@ -106,13 +106,15 @@ def circulant_precond(smaps, coord, weights=None):
 
 def pipe_menon_dcf(coord, im_size, max_iter=30):
 	cudev = torch.device('cuda:0')
-	N = NufftT(coord.to(cudev), im_size)
-	NH = NufftAdjointT(coord.to(cudev), im_size)
+	coordcu = coord.to(cudev)
+	N = NufftT(coordcu, im_size)
+	NH = NufftAdjointT(coordcu, im_size)
 	w = torch.ones((1,coord.shape[1]), dtype=torch.complex64, device=cudev)
 	for i in range(max_iter):
-		NHNw = N(NH(w))
-		w /= torch.abs(NHNw)
-	return w
+		NNHw = N(NH(w))
+		w /= torch.abs(NNHw)
+		#w /= NNHw
+	return w #torch.abs(w)
 
 
 def test():
