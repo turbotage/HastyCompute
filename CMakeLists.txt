@@ -68,6 +68,10 @@ set(NLSQ_SOURCES
 	"lib/nlsq/nlsq.ixx"
 )
 
+set(OP_SOURCES
+	"lib/op/op.cpp"
+)
+
 set(OPTION_SOURCES)
 
 set(THREADING_SOURCES
@@ -95,6 +99,7 @@ add_library(HastyComputeLib SHARED
 	${EXPR_SOURCES}
 	${LINALG_SOURCES}
 	${NLSQ_SOURCES}
+	${OP_SOURCES}
 
 	${TEST_SOURCES}
 )
