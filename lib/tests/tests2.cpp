@@ -3,9 +3,11 @@
 import hasty_util;
 import nlsq_symbolic;
 
+#include <iostream>
+
 import <string>;
 import <vector>;
-#include <iostream>
+
 
 void hasty::tests::test_funcexprs()
 {
@@ -27,6 +29,7 @@ void hasty::tests::test_funcexprs()
 	// Reduced
 	std::cout << funcexprs.second->str(std::nullopt);
 }
+
 
 void hasty::tests::test_first_derivatives()
 {

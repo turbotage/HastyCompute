@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import scipy as sp
 from scipy.ndimage import zoom
+import scipy.signal as spsig
 
 import h5py
 
@@ -149,7 +150,7 @@ class FivePointLoader:
 		return smaps
 	
 	@staticmethod
-	def load_raw(filepath, load_coords=True, load_kdata=True, load_weights=True, load_gating=True):
+	def load_raw(filepath, load_coords=True, load_kdata=True, load_weights=True, load_gating=True, gating_names=[]):
 		with torch.inference_mode():
 			ret: tuple[torch.Tensor] = ()
 
@@ -182,9 +183,13 @@ class FivePointLoader:
 						kdata_vec = []
 						for i in range(5):
 							kdata_enc = []
-							for j in range(32):
-								kde = kdataset['KData_E'+str(i)+'_C'+str(j)][()]
-								kdata_enc.append(torch.tensor(kde['real'] + 1j*kde['imag']))
+							for j in range(100000):
+								coilname = 'KData_E'+str(i)+'_C'+str(j)
+								if coilname in kdataset:
+									kde = kdataset['KData_E'+str(i)+'_C'+str(j)][()]
+									kdata_enc.append(torch.tensor(kde['real'] + 1j*kde['imag']))
+								else:
+									break
 							kdata_vec.append(torch.stack(kdata_enc, axis=0))
 						kdatas = torch.stack(kdata_vec, axis=0)
 						ret += (kdatas,)
@@ -204,7 +209,11 @@ class FivePointLoader:
 				if load_gating:
 					print('Loading gating:  ', end="")
 					gatingset = f['Gating']
-					gating = torch.tensor(gatingset['ECG_E0'][()][0,:])
+					
+					gating = {}
+					for gatename in gating_names:
+						gating[gatename] = gatingset[gatename][()]
+
 					ret += (gating,)
 					print('Done.')
 
@@ -331,6 +340,78 @@ class FivePointLoader:
 			#	add_idx_spokes(idx)
 
 			return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates)
+
+	@staticmethod
+	def gate_resp_method(coord, kdata, weights, gating, nframes):
+		with torch.inference_mode():
+
+			def get_angle_gating(gating):
+				timegate = gating['TIME_E0'][0,:]
+				respgate = gating['RESP_E0'][0,:]
+
+				timeidx = np.argsort(timegate)
+				
+				time = timegate[timeidx]
+				resp = respgate[timeidx]
+
+				Fs = 1.0 / (time[1] - time[0])
+				Fn = Fs / 2.0
+				Fco = 0.01
+				Fsb = 1.0
+				Rp = 0.05
+				Rs = 50.0
+
+				def torad(x):
+					return x
+
+				N, Wn = spsig.buttord(torad(Fco / Fn), torad(Fsb / Fn), Rp, Rs, analog=True)
+				b, a = spsig.butter(N, Wn)
+				filtered = spsig.filtfilt(b, a, resp)
+
+				hfilt = spsig.hilbert(resp - filtered)
+				angles = np.angle(hfilt)
+
+				invtimeidx = np.argsort(timeidx)
+				return torch.tensor(angles[invtimeidx]), torch.tensor(angles)
+
+
+			angles, sorted_angles = get_angle_gating(gating)
+
+			spokelen = coord.shape[-1]
+			nspokes = coord.shape[-2]
+			ncoil = kdata.shape[1]	
+
+			coord_vec = []
+			kdata_vec = []
+			weights_vec = []
+
+			def add_idx_spokes(idx):
+				nspokes_idx = torch.count_nonzero(idx)
+				nlast = nspokes_idx*spokelen
+
+				coordf = coord[:,:,0,idx,:].reshape((3,5,nlast))
+				kdataf = kdata[:,:,0,idx,:].reshape((5,ncoil,nlast))
+				if weights is not None:
+					weightsf = weights[:,0,idx,:].reshape((5,nlast))
+
+				for j in range(5):
+					coord_vec.append(coordf[:,j,:].detach().clone())
+					kdata_vec.append(kdataf[j,:,:].unsqueeze(0).detach().clone())
+					if weights is not None:
+						weights_vec.append(weightsf[j,:].unsqueeze(0).detach().clone())
+
+
+			gatethreshs = np.linspace(-3.141592, 3.141592, nframes+1)
+
+			gates = []
+			for i in range(nframes):
+				idx = torch.logical_and(gatethreshs[i] <= angles, angles <= gatethreshs[i+1])
+				gates.append(gatethreshs[i+1])
+
+				add_idx_spokes(idx)
+
+
+			return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates, angles, sorted_angles)
 
 
 

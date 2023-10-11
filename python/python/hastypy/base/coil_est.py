@@ -152,7 +152,7 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 		kd = kdata[:,c,:] * weights
 		coil_images[c,...] = na.apply(kd)
 
-	#pu.image_nd(coil_images.cpu().numpy())
+	pu.image_nd(coil_images.cpu().numpy())
 	gc.collect()
 	torch.cuda.empty_cache()
 
@@ -164,3 +164,9 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 	
 
 
+def walsh(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int]):
+
+	def extract_blocks(image, block_shape, block_stride):
+		print('helo')
+
+	

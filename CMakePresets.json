@@ -18,10 +18,7 @@
         "strategy": "external"
       },
       "environment": {
-        //"NVTOOLSEXT_PATH": "C:\\Program Files\\NVIDIA Corporation\\Nsight Systems 2023.1.2\\target-windows-x64\\nvtx",
         "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
-        //"PYTHON_PATH": "D:\\miniconda3\\envs\\v311",
-        //"PYTHONHOME": "D:\\miniconda3\\envs\\v311"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl.exe",
@@ -47,6 +44,7 @@
           "value": "60;75;89"
         }
       },
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -62,7 +60,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
+          "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX}"
         }
       }
     },
@@ -75,7 +73,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
-          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX};$env{AF_PATH}/cmake"
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
         }
       }
     }

@@ -4,6 +4,11 @@ from matplotlib.widgets import Slider, Button, RadioButtons, RangeSlider, CheckB
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 
+from nibabel.viewers import OrthoSlicer3D
+
+
+
+
 def image_5d(image):
 	lens = []
 	for i in range(len(image.shape)):

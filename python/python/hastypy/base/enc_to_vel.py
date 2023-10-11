@@ -500,7 +500,7 @@ def constant_from_venc(venc):
 def get_encode_matrix(k):
 	Emat = k * np.array(
 		[
-			[ 0,  0,  0],
+			#[ 0,  0,  0],
 			[-1, -1, -1],
 			[ 1,  1, -1],
 			[ 1, -1,  1],
@@ -519,10 +519,10 @@ def _enc_to_vel_linear(image, venc):
 	base_corrected = (image * np.exp(-1j*base_phase)[np.newaxis,...]).reshape((5,nvoxel))
 
 	phases = np.angle(base_corrected)
-	imageout = pEmat @ phases
+	imageout = pEmat @ phases[1:,...]
 	print(imageout.min())
 	print(imageout.max())
-	print(venc * np.sqrt(3))
+	#print(venc * np.sqrt(3))
 
 	mag = np.mean(np.abs(base_corrected), axis=0)[np.newaxis,:]
 
