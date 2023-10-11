@@ -54,6 +54,8 @@ hasty::op::VectorShape::VectorShape(const std::initializer_list<std::vector<Vect
 	}
 }
 
+
+
 hasty::op::Vector::Vector(const at::Tensor& tensor) 
 	: _tensor(tensor)
 {}
@@ -61,6 +63,12 @@ hasty::op::Vector::Vector(const at::Tensor& tensor)
 hasty::op::Vector::Vector(const std::vector<Vector>& children)
 	: _children(children)
 {
+}
+
+hasty::op::Vector::Vector(Vector&& vec)
+{
+	_tensor = std::move(vec._tensor);
+	_children = std::move(vec._children);
 }
 
 hasty::op::VectorShape hasty::op::Vector::get_shape() const {
@@ -75,10 +83,50 @@ hasty::op::VectorShape hasty::op::Vector::get_shape() const {
 	return shapes;
 }
 
+hasty::op::Vector hasty::op::Vector::clone() const
+{
+	if (_children.empty()) {
+		return _tensor;
+	}
+	std::vector<Vector> newchildren;
+	newchildren.reserve(_children.size());
+	for (auto& child : _children) {
+		newchildren.emplace_back(child.clone());
+	}
+	return Vector(std::move(newchildren));
+}
+
 
 hasty::op::Vector& hasty::op::Vector::operator+=(const Vector& rhs)
 {
 #define OP_CHARACTER +=
+	if (_children.empty() && rhs._children.empty()) {
+		_tensor OP_CHARACTER rhs._tensor;
+		return *this;
+	}
+	else if (_children.empty()) {
+		_children.reserve(rhs._children.size());
+		for (auto& rchild : rhs._children) {
+			_children.push_back(std::move(*this + rchild));
+		}
+		return *this;
+	}
+	else if (rhs._children.empty()) {
+		for (auto& lchild : _children) {
+			lchild += rhs;
+		}
+		return *this;
+	}
+	else {
+		if (_children.size() != rhs._children.size())
+			throw std::runtime_error("Uncompatible sizes");
+
+		for (int i = 0; i < _children.size(); ++i) {
+
+		}
+	}
+
+
 	if (_children.empty()) {
 		if (rhs._children.empty()) {
 			_tensor OP_CHARACTER rhs._tensor;
@@ -104,7 +152,7 @@ hasty::op::Vector& hasty::op::Vector::operator+=(const Vector& rhs)
 #undef OP_CHARACTER
 }
 
-hasty::op::Vector hasty::op::operator+(Vector lhs, const Vector& rhs)
+hasty::op::Vector hasty::op::operator+(const Vector& lhs, const Vector& rhs)
 {
 #define OP_CHARACTER +
 	if (lhs._children.empty() && rhs._children.empty()) {
@@ -116,7 +164,7 @@ hasty::op::Vector hasty::op::operator+(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < rhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._tensor OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else if (rhs._children.empty()) {
 		std::vector<Vector> new_children;
@@ -124,7 +172,7 @@ hasty::op::Vector hasty::op::operator+(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._tensor);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else {
 		if (lhs._children.size() != rhs._children.size())
@@ -134,41 +182,14 @@ hasty::op::Vector hasty::op::operator+(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 #undef OP_CHARACTER
 }
 
 
-hasty::op::Vector& hasty::op::Vector::operator-=(const Vector& rhs)
-{
-#define OP_CHARACTER -=
-	if (_children.empty()) {
-		if (rhs._children.empty()) {
-			_tensor OP_CHARACTER rhs._tensor;
-			return *this;
-		}
-		throw std::runtime_error("Uncompatible sizes");
-	}
-	else {
-		if (rhs._children.empty()) {
-			for (auto& child : _children) {
-				child OP_CHARACTER rhs;
-			}
-			return *this;
-		}
-		if (_children.size() != rhs._children.size()) {
-			throw std::runtime_error("Uncompatible sizes");
-		}
-		for (int i = 0; i < _children.size(); ++i) {
-			_children[i] OP_CHARACTER rhs._children[i];
-		}
-		return *this;
-	}
-#undef OP_CHARACTER
-}
 
-hasty::op::Vector hasty::op::operator-(Vector lhs, const Vector& rhs)
+hasty::op::Vector hasty::op::operator-(const Vector& lhs, const Vector& rhs)
 {
 #define OP_CHARACTER -
 	if (lhs._children.empty() && rhs._children.empty()) {
@@ -180,7 +201,7 @@ hasty::op::Vector hasty::op::operator-(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < rhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._tensor OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else if (rhs._children.empty()) {
 		std::vector<Vector> new_children;
@@ -188,7 +209,7 @@ hasty::op::Vector hasty::op::operator-(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._tensor);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else {
 		if (lhs._children.size() != rhs._children.size())
@@ -198,42 +219,15 @@ hasty::op::Vector hasty::op::operator-(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 
 #undef OP_CHARACTER
 }
 
 
-hasty::op::Vector& hasty::op::Vector::operator*=(const Vector& rhs)
-{
-#define OP_CHARACTER *=
-	if (_children.empty()) {
-		if (rhs._children.empty()) {
-			_tensor OP_CHARACTER rhs._tensor;
-			return *this;
-		}
-		throw std::runtime_error("Uncompatible sizes");
-	}
-	else {
-		if (rhs._children.empty()) {
-			for (auto& child : _children) {
-				child OP_CHARACTER rhs;
-			}
-			return *this;
-		}
-		if (_children.size() != rhs._children.size()) {
-			throw std::runtime_error("Uncompatible sizes");
-		}
-		for (int i = 0; i < _children.size(); ++i) {
-			_children[i] OP_CHARACTER rhs._children[i];
-		}
-		return *this;
-	}
-#undef OP_CHARACTER
-}
 
-hasty::op::Vector hasty::op::operator*(Vector lhs, const Vector& rhs)
+hasty::op::Vector hasty::op::operator*(const Vector& lhs, const Vector& rhs)
 {
 #define OP_CHARACTER *
 	if (lhs._children.empty() && rhs._children.empty()) {
@@ -245,7 +239,7 @@ hasty::op::Vector hasty::op::operator*(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < rhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._tensor OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else if (rhs._children.empty()) {
 		std::vector<Vector> new_children;
@@ -253,7 +247,7 @@ hasty::op::Vector hasty::op::operator*(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._tensor);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else {
 		if (lhs._children.size() != rhs._children.size())
@@ -263,42 +257,14 @@ hasty::op::Vector hasty::op::operator*(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 
 #undef OP_CHARACTER
 }
 
 
-hasty::op::Vector& hasty::op::Vector::operator/=(const Vector& rhs)
-{
-#define OP_CHARACTER /=
-	if (_children.empty()) {
-		if (rhs._children.empty()) {
-			_tensor OP_CHARACTER rhs._tensor;
-			return *this;
-		}
-		throw std::runtime_error("Uncompatible sizes");
-	}
-	else {
-		if (rhs._children.empty()) {
-			for (auto& child : _children) {
-				child OP_CHARACTER rhs;
-			}
-			return *this;
-		}
-		if (_children.size() != rhs._children.size()) {
-			throw std::runtime_error("Uncompatible sizes");
-		}
-		for (int i = 0; i < _children.size(); ++i) {
-			_children[i] OP_CHARACTER rhs._children[i];
-		}
-		return *this;
-	}
-#undef OP_CHARACTER
-}
-
-hasty::op::Vector hasty::op::operator/(Vector lhs, const Vector& rhs)
+hasty::op::Vector hasty::op::operator/(const Vector& lhs, const Vector& rhs)
 {
 #define OP_CHARACTER /
 	if (lhs._children.empty() && rhs._children.empty()) {
@@ -310,7 +276,7 @@ hasty::op::Vector hasty::op::operator/(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < rhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._tensor OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else if (rhs._children.empty()) {
 		std::vector<Vector> new_children;
@@ -318,7 +284,7 @@ hasty::op::Vector hasty::op::operator/(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._tensor);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 	else {
 		if (lhs._children.size() != rhs._children.size())
@@ -328,11 +294,13 @@ hasty::op::Vector hasty::op::operator/(Vector lhs, const Vector& rhs)
 		for (int i = 0; i < lhs._children.size(); ++i) {
 			new_children.emplace_back(lhs._children[i] OP_CHARACTER rhs._children[i]);
 		}
-		return new_children;
+		return Vector(std::move(new_children));
 	}
 
 #undef OP_CHARACTER
 }
+
+
 
 at::Tensor hasty::op::Vector::norm() const
 {
@@ -401,10 +369,31 @@ hasty::op::Vector hasty::op::Vector::zeros(const VectorShape& shape, const at::T
 	}
 	std::vector<Vector> newchildren;
 	for (auto& shape : shape._children_shape) {
-		
+		newchildren.emplace_back(Vector::zeros(shape, opts));
 	}
 }
 
+hasty::op::Vector hasty::op::Vector::ones(const VectorShape& shape, const at::TensorOptions& opts)
+{
+	if (shape._children_shape.empty()) {
+		return Vector(at::ones(at::makeArrayRef(shape._self_shape), opts));
+	}
+	std::vector<Vector> newchildren;
+	for (auto& shape : shape._children_shape) {
+		newchildren.emplace_back(Vector::ones(shape, opts));
+	}
+}
+
+hasty::op::Vector hasty::op::Vector::rand(const VectorShape& shape, const at::TensorOptions& opts)
+{
+	if (shape._children_shape.empty()) {
+		return Vector(at::rand(at::makeArrayRef(shape._self_shape), opts));
+	}
+	std::vector<Vector> newchildren;
+	for (auto& shape : shape._children_shape) {
+		newchildren.emplace_back(Vector::rand(shape, opts));
+	}
+}
 
 
 
@@ -419,18 +408,51 @@ hasty::op::Vector hasty::op::Operator::apply(const Vector& in) const
 	return _apply(in);
 }
 
+hasty::op::Vector hasty::op::Operator::_apply(const Vector& in) const
+{
+	throw std::runtime_error("Operator _apply() should be overridden");
+}
+
 hasty::op::Operator hasty::op::operator+(Operator lhs, const Operator& rhs)
 {
-	return AddOp()
+	return AddOp(lhs, rhs);
+}
+
+hasty::op::Operator hasty::op::operator-(Operator lhs, const Operator& rhs)
+{
+	return SubOp(lhs, rhs);
+}
+
+hasty::op::Operator hasty::op::operator*(Operator lhs, const Operator& rhs)
+{
+	return MulOp(lhs, rhs);
 }
 
 
-
-
+hasty::op::AddOp::AddOp(const Operator& lop, const Operator& rop)
+	: _left(lop), _right(rop)
+{}
 
 hasty::op::Vector hasty::op::AddOp::_apply(const Vector& in) const
 {
-	return left(in) + right(in);
+	return _left(in) + _right(in);
 }
 
+hasty::op::SubOp::SubOp(const Operator& lop, const Operator& rop)
+	: _left(lop), _right(rop)
+{}
+
+hasty::op::Vector hasty::op::SubOp::_apply(const Vector& in) const
+{
+	return _left(in) - _right(in);
+}
+
+hasty::op::MulOp::MulOp(const Operator& lop, const Operator& rop)
+	: _left(lop), _right(rop)
+{}
+
+hasty::op::Vector hasty::op::MulOp::_apply(const Vector& in) const
+{
+	return _left(_right(in));
+}
 

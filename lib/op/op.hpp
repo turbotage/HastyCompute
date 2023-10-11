@@ -16,7 +16,6 @@ namespace hasty {
 			VectorShape(const std::vector<int64_t>& dims);
 			VectorShape(const std::vector<int64_t>::iterator& begin, const std::vector<int64_t>::iterator& end);
 
-
 			VectorShape(const std::initializer_list<VectorShape>& shapes);
 			VectorShape(const std::vector<VectorShape>& shapes);
 			VectorShape(const std::vector<VectorShape>::iterator& begin, const std::vector<VectorShape>::iterator& end);
@@ -35,20 +34,26 @@ namespace hasty {
 			Vector(const at::Tensor& tensor);
 			Vector(const std::vector<Vector>& children);
 
+			Vector(Vector&& vec);
+
 			VectorShape get_shape() const;
 
+			Vector clone() const;
+
 			Vector& operator+=(const Vector& rhs);
-			friend Vector operator+(Vector lhs, const Vector& rhs);
+			friend Vector operator+(const Vector& lhs, const Vector& rhs);
 
 			Vector& operator-=(const Vector& rhs);
 
-			friend Vector operator-(Vector lhs, const Vector& rhs);
+			friend Vector operator-(const Vector& lhs, const Vector& rhs);
 
 			Vector& operator*=(const Vector& rhs);
-			friend Vector operator*(Vector lhs, const Vector& rhs);
+			friend Vector operator*(const Vector& lhs, const Vector& rhs);
+			Vector& operator*=(const at::Tensor& rhs);
+
 
 			Vector& operator/=(const Vector& rhs);
-			friend Vector operator/(Vector lhs, const Vector& rhs);
+			friend Vector operator/(const Vector& lhs, const Vector& rhs);
 
 			at::Tensor norm() const;
 			Vector abs() const;
@@ -86,24 +91,39 @@ namespace hasty {
 		class AddOp : public Operator {
 		public:
 
-			AddOp(const )
+			AddOp(const Operator& lop, const Operator& rop);
 
 			Vector _apply(const Vector& in) const override;
 
 		private:
-			Operator left;
-			Operator right;
+			Operator _left;
+			Operator _right;
 		};
 
 		class SubOp : public Operator {
 		public:
 
+			SubOp(const Operator& lop, const Operator& rop);
+
+			Vector _apply(const Vector& in) const override;
+
 		private:
+			Operator _left;
+			Operator _right;
 		};
 
-		class MulOp {
+		class MulOp : public Operator {
+		public:
 
+			MulOp(const Operator& lop, const Operator& rop);
+
+			Vector _apply(const Vector& in) const override;
+
+		private:
+			Operator _left;
+			Operator _right;
 		};
+
 
 	}
 
