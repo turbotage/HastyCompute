@@ -34,7 +34,13 @@ namespace hasty {
 			Vector(const at::Tensor& tensor);
 			Vector(const std::vector<Vector>& children);
 
+			at::ScalarType dtype() const;
+
+			Vector(const Vector& vec);
+			Vector& operator=(const Vector& vec);
+			
 			Vector(Vector&& vec);
+			Vector& operator=(Vector&& vec);
 
 			VectorShape get_shape() const;
 
@@ -42,6 +48,8 @@ namespace hasty {
 
 			Vector& operator+=(const Vector& rhs);
 			friend Vector operator+(const Vector& lhs, const Vector& rhs);
+			//friend Vector operator+(const at::Tensor& lhs, const Vector& rhs);
+			//friend Vector operator+(const Vector& lhs, const at::Tensor& rhs);
 
 			Vector& operator-=(const Vector& rhs);
 
@@ -49,7 +57,6 @@ namespace hasty {
 
 			Vector& operator*=(const Vector& rhs);
 			friend Vector operator*(const Vector& lhs, const Vector& rhs);
-			Vector& operator*=(const at::Tensor& rhs);
 
 
 			Vector& operator/=(const Vector& rhs);
@@ -63,26 +70,34 @@ namespace hasty {
 			static Vector zeros(const VectorShape& shape, const at::TensorOptions& opts);
 			static Vector ones(const VectorShape& shape, const at::TensorOptions& opts);
 			static Vector rand(const VectorShape& shape, const at::TensorOptions& opts);
+			static Vector empty(const VectorShape& shape, const at::TensorOptions& opts);
+
+			friend at::Tensor vdot(const Vector& a, const Vector& b);
 
 		private:
 			at::Tensor _tensor;
 			std::vector<Vector> _children;
 		};
 
-
 		class Operator {
 		public:
 
 			Vector operator()(const Vector& in) const;
-
 			Vector apply(const Vector& in) const;
+			friend Vector operator*(const Operator& lhs, const Vector& rhs);
+			
+			
+			void apply_inplace(Vector& in) const;
+			bool has_inplace_apply() const;
 
 			virtual Vector _apply(const Vector& in) const;
 
-			friend Operator operator+(Operator lhs, const Operator& rhs);
-			friend Operator operator-(Operator lhs, const Operator& rhs);
-			friend Operator operator*(Operator lhs, const Operator& rhs);
+			virtual void _apply_inplace(Vector& in) const;
+			virtual bool _has_inplace_apply() const;
 
+			friend Operator operator+(const Operator& lhs, const Operator& rhs);
+			friend Operator operator-(const Operator& lhs, const Operator& rhs);
+			friend Operator operator*(const Operator& lhs, const Operator& rhs);
 
 		private:
 
@@ -123,6 +138,7 @@ namespace hasty {
 			Operator _left;
 			Operator _right;
 		};
+
 
 
 	}
