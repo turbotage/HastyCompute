@@ -48,8 +48,6 @@ namespace hasty {
 
 			Vector& operator+=(const Vector& rhs);
 			friend Vector operator+(const Vector& lhs, const Vector& rhs);
-			//friend Vector operator+(const at::Tensor& lhs, const Vector& rhs);
-			//friend Vector operator+(const Vector& lhs, const at::Tensor& rhs);
 
 			Vector& operator-=(const Vector& rhs);
 
@@ -57,7 +55,6 @@ namespace hasty {
 
 			Vector& operator*=(const Vector& rhs);
 			friend Vector operator*(const Vector& lhs, const Vector& rhs);
-
 
 			Vector& operator/=(const Vector& rhs);
 			friend Vector operator/(const Vector& lhs, const Vector& rhs);
@@ -83,17 +80,12 @@ namespace hasty {
 		public:
 
 			Vector operator()(const Vector& in) const;
-			Vector apply(const Vector& in) const;
 			friend Vector operator*(const Operator& lhs, const Vector& rhs);
 			
+			virtual Vector apply(const Vector& in) const;
 			
-			void apply_inplace(Vector& in) const;
-			bool has_inplace_apply() const;
-
-			virtual Vector _apply(const Vector& in) const;
-
-			virtual void _apply_inplace(Vector& in) const;
-			virtual bool _has_inplace_apply() const;
+			virtual void apply_inplace(Vector& in) const;
+			virtual bool has_inplace_apply() const;
 
 			friend Operator operator+(const Operator& lhs, const Operator& rhs);
 			friend Operator operator-(const Operator& lhs, const Operator& rhs);
@@ -108,7 +100,7 @@ namespace hasty {
 
 			AddOp(const Operator& lop, const Operator& rop);
 
-			Vector _apply(const Vector& in) const override;
+			Vector apply(const Vector& in) const override;
 
 		private:
 			Operator _left;
@@ -120,7 +112,7 @@ namespace hasty {
 
 			SubOp(const Operator& lop, const Operator& rop);
 
-			Vector _apply(const Vector& in) const override;
+			Vector apply(const Vector& in) const override;
 
 		private:
 			Operator _left;
@@ -132,13 +124,12 @@ namespace hasty {
 
 			MulOp(const Operator& lop, const Operator& rop);
 
-			Vector _apply(const Vector& in) const override;
+			Vector apply(const Vector& in) const override;
 
 		private:
 			Operator _left;
 			Operator _right;
 		};
-
 
 
 	}

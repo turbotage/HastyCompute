@@ -510,29 +510,15 @@ at::Tensor hasty::op::vdot(const Vector& a, const Vector& b)
 	if (a._children.empty()) {
 		return at::vdot(a._tensor.flatten(), b._tensor.flatten());
 	}
-	at::Tensor sum = at::zeros({},)
-
+	if (a._children.size() != b._children.size())
+		throw std::runtime_error("Vectors was not the same size in vdot");
+	
+	at::Tensor sum = vdot(a._children[0], b._children[0]);
+	for (int i = 1; i < a._children.size(); ++i) {
+		sum += vdot(a._children[i], b._children[i]);
+	}
+	return sum;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -544,7 +530,7 @@ hasty::op::Vector hasty::op::Operator::operator()(const Vector& in) const
 
 hasty::op::Vector hasty::op::Operator::apply(const Vector& in) const
 {
-	return _apply(in);
+	throw std::runtime_error("apply() wasn't implemented");
 }
 
 hasty::op::Vector hasty::op::operator*(const Operator& lhs, const Vector& rhs)
@@ -554,25 +540,10 @@ hasty::op::Vector hasty::op::operator*(const Operator& lhs, const Vector& rhs)
 
 void hasty::op::Operator::apply_inplace(Vector& in) const
 {
-	_apply_inplace(in);
+	throw std::runtime_error("apply_inplace() wasn't implemented");
 }
 
 bool hasty::op::Operator::has_inplace_apply() const
-{
-	return _has_inplace_apply();
-}
-
-hasty::op::Vector hasty::op::Operator::_apply(const Vector& in) const
-{
-	throw std::runtime_error("Operator _apply() should be overridden");
-}
-
-void hasty::op::Operator::_apply_inplace(Vector& in) const
-{
-	throw std::runtime_error("Operator _apply_inpace() should be overridden if _has_inplace_apply() is true");
-}
-
-bool hasty::op::Operator::_has_inplace_apply() const
 {
 	return false;
 }
@@ -598,7 +569,7 @@ hasty::op::AddOp::AddOp(const Operator& lop, const Operator& rop)
 	: _left(lop), _right(rop)
 {}
 
-hasty::op::Vector hasty::op::AddOp::_apply(const Vector& in) const
+hasty::op::Vector hasty::op::AddOp::apply(const Vector& in) const
 {
 	return _left(in) + _right(in);
 }
@@ -607,7 +578,7 @@ hasty::op::SubOp::SubOp(const Operator& lop, const Operator& rop)
 	: _left(lop), _right(rop)
 {}
 
-hasty::op::Vector hasty::op::SubOp::_apply(const Vector& in) const
+hasty::op::Vector hasty::op::SubOp::apply(const Vector& in) const
 {
 	return _left(in) - _right(in);
 }
@@ -616,7 +587,7 @@ hasty::op::MulOp::MulOp(const Operator& lop, const Operator& rop)
 	: _left(lop), _right(rop)
 {}
 
-hasty::op::Vector hasty::op::MulOp::_apply(const Vector& in) const
+hasty::op::Vector hasty::op::MulOp::apply(const Vector& in) const
 {
 	return _left(_right(in));
 }
