@@ -49,5 +49,68 @@ namespace hasty {
 			ProximalOperator _prox;
 		};
 
+		class Postcomposition : public ProximalOperator {
+		public:
+
+			Postcomposition(const ProximalOperator& prox, double base_alpha = 1.0);
+
+			Vector _apply(const Vector& input, double alpha);
+
+		private:
+			ProximalOperator _prox;
+		};
+
+		class Precomposition : public ProximalOperator {
+		public:
+
+			Precomposition(const ProximalOperator& prox, double a, double b, double base_alpha = 1.0);
+
+			Vector _apply(const Vector& input, double alpha);
+
+		private:
+			ProximalOperator _prox;
+			double _a, _b;
+		};
+
+		class UnitaryTransform : public ProximalOperator {
+		public:
+
+			UnitaryTransform(const ProximalOperator& prox, const Operator& unitary, 
+				const Operator& unitary_adjoint, double base_alpha = 1.0);
+
+			Vector _apply(const Vector& input, double alpha);
+
+		private:
+			ProximalOperator _prox;
+			Operator _unitary;
+			Operator _unitary_adjoint;
+		};
+
+		class AffineAddition : public ProximalOperator {
+		public:
+
+			AffineAddition(const ProximalOperator& prox, const Vector& a, double base_alpha = 1.0);
+
+			Vector _apply(const Vector& input, double alpha);
+
+		private:
+			ProximalOperator _prox;
+			Vector _a;
+		};
+
+		class L2Reg : public ProximalOperator {
+		public:
+
+			L2Reg(const std::optional<ProximalOperator>& prox, double rho = 1.0, const std::optional<Vector>& a, 
+				double base_alpha = 1.0);
+
+			Vector _apply(const Vector& input, double alpha);
+
+		private:
+			std::optional<ProximalOperator> _prox;
+			double _rho;
+			std::optional<Vector> _a;
+		};
+
 	}
 }

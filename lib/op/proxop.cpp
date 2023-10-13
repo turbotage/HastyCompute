@@ -62,10 +62,72 @@ hasty::op::Vector hasty::op::ZeroFunc::_apply(const Vector& input, double alpha)
 hasty::op::ConvexConjugate::ConvexConjugate(const ProximalOperator& prox, double base_alpha)
 	: ProximalOperator(base_alpha), _prox(prox)
 {
-	
 }
 
 hasty::op::Vector hasty::op::ConvexConjugate::_apply(const Vector& input, double alpha)
 {
 	return input - alpha * _prox(input / alpha, 1.0 / alpha);
+}
+
+
+hasty::op::Postcomposition::Postcomposition(const ProximalOperator& prox, double base_alpha = 1.0)
+	: ProximalOperator(base_alpha), _prox(prox)
+{
+}
+
+hasty::op::Vector hasty::op::Postcomposition::_apply(const Vector& input, double alpha)
+{
+	return apply(input, alpha);
+}
+
+hasty::op::Precomposition::Precomposition(const ProximalOperator& prox, double a, double b, double base_alpha = 1.0)
+	: ProximalOperator(base_alpha), _prox(prox), _a(a), _b(b)
+{
+}
+
+hasty::op::Vector hasty::op::Precomposition::_apply(const Vector& input, double alpha)
+{
+	return (1.0 / _a) * (apply(_a*input + _b, _a*_a*alpha) - _b);
+}
+
+hasty::op::UnitaryTransform::UnitaryTransform(const ProximalOperator& prox, const Operator& unitary, 
+	const Operator& unitary_adjoint, double base_alpha)
+	: ProximalOperator(base_alpha), _prox(prox), _unitary(unitary), _unitary_adjoint(unitary_adjoint)
+{
+}
+
+hasty::op::Vector hasty::op::UnitaryTransform::_apply(const Vector& input, double alpha)
+{
+	return _unitary_adjoint(_prox(_unitary * input, alpha));
+}
+
+hasty::op::AffineAddition::AffineAddition(const ProximalOperator& prox, const Vector& a, double base_alpha)
+	: ProximalOperator(base_alpha), _prox(prox), _a(a)
+{}
+
+hasty::op::Vector hasty::op::AffineAddition::_apply(const Vector& input, double alpha)
+{
+	return _prox(input - alpha * _a, alpha);
+}
+
+hasty::op::L2Reg::L2Reg(const std::optional<ProximalOperator>& prox, double rho, const std::optional<Vector>& a, double base_alpha)
+	: ProximalOperator(base_alpha), _prox(prox), _rho(rho), _a(a)
+{
+}
+
+hasty::op::Vector hasty::op::L2Reg::_apply(const Vector& input, double alpha)
+{
+	double mult = alpha * _rho;
+	double denom = 1.0 + mult;
+
+	Vector output = input;
+
+	if (_a.has_value())
+		output += (*_a) * mult;
+
+	output /= denom;
+
+	if (_prox.has_value())
+		return (*_prox)(output, alpha / denom);
+	return output;
 }

@@ -52,25 +52,34 @@ hasty::op::VectorShape::VectorShape(const std::initializer_list<std::vector<Vect
 	for (auto& ishapes : shapes) {
 		_children_shape.emplace_back(ishapes);
 	}
-
-	at::Tensor hello;
-	Vector vec;
-	vec *= at::ones({}) * 2;
-
-
 }
 
 
+hasty::op::Vector::Vector(float scalar)
+	: _tensor(at::tensor(scalar)) {}
 
+hasty::op::Vector::Vector(double scalar)
+	: _tensor(at::tensor(scalar)) {}
+
+hasty::op::Vector::Vector(std::complex<float> scalar)
+	: _tensor(at::tensor(c10::complex<float>(scalar.real(), scalar.imag()))) {}
+
+hasty::op::Vector::Vector(std::complex<double> scalar)
+	: _tensor(at::tensor(c10::complex<double>(scalar.real(), scalar.imag()))) {}
+
+hasty::op::Vector::Vector(c10::complex<float> scalar)
+	: _tensor(at::tensor(scalar)) {}
+
+hasty::op::Vector::Vector(c10::complex<double> scalar)
+	: _tensor(at::tensor(scalar)) {}
 
 hasty::op::Vector::Vector(const at::Tensor& tensor) 
-	: _tensor(tensor)
-{}
+	: _tensor(tensor) {}
 
 hasty::op::Vector::Vector(const std::vector<Vector>& children)
-	: _children(children)
-{
-}
+	: _children(children) {}
+
+
 
 at::ScalarType hasty::op::Vector::dtype() const
 {

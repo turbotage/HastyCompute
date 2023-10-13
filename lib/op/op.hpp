@@ -31,6 +31,12 @@ namespace hasty {
 		class Vector {
 		public:
 
+			Vector(float scalar);
+			Vector(double scalar);
+			Vector(std::complex<float> scalar);
+			Vector(std::complex<double> scalar);
+			Vector(c10::complex<float> scalar);
+			Vector(c10::complex<double> scalar);
 
 			Vector(const at::Tensor& tensor);
 			Vector(const std::vector<Vector>& children);
