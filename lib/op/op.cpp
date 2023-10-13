@@ -52,7 +52,14 @@ hasty::op::VectorShape::VectorShape(const std::initializer_list<std::vector<Vect
 	for (auto& ishapes : shapes) {
 		_children_shape.emplace_back(ishapes);
 	}
+
+	at::Tensor hello;
+	Vector vec;
+	vec *= at::ones({}) * 2;
+
+
 }
+
 
 
 

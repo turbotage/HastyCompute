@@ -69,7 +69,7 @@ def test_real():
 	#pu.image_nd(img_full)
 
 	img_full = np.array([0])
-	with h5py.File('D:\\4DRecon\\Garpen\\Ena\\my_framed_real_160.h5', "r") as f:
+	with h5py.File('D:\\4DRecon\\Wahlin\\BrutalAndning\\my_framed_real_160.h5', "r") as f:
 		img_full = f['images'][()]
 
 	#pu.image_nd(img_mean_img)

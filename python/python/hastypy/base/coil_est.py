@@ -150,7 +150,7 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 
 	for c in range(ncoil):
 		kd = kdata[:,c,:] * weights
-		coil_images[c,...] = na.apply(kd)
+		coil_images[c,...] = na.apply(kd).nan_to_num(0.0, 0.0, 0.0)
 
 	pu.image_nd(coil_images.cpu().numpy())
 	gc.collect()

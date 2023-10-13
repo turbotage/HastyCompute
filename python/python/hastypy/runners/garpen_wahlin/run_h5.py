@@ -20,65 +20,68 @@ from nibabel.viewers import OrthoSlicer3D
 #	OrthoSlicer3D(image[0,...])
 
 
-def resp_gating(gating):
+resp = False
+if resp:
+    def resp_gating(gating):
 
-    tvec = 0
+        tvec = 0
 
-    timegate = gating['TIME_E0'][()][0,:]
-    respgate = gating['RESP_E0'][()][0,:]
+        timegate = gating['TIME_E0'][()][0,:]
+        respgate = gating['RESP_E0'][()][0,:]
 
 
-    timeidx = np.argsort(timegate)
+        timeidx = np.argsort(timegate)
+        
+        time = timegate[timeidx]
+        resp = respgate[timeidx]
+
+        Fs = 1.0 / (time[1] - time[0])
+        Fn = Fs / 2.0
+        Fco = 0.01
+        Fsb = 1.0
+        Rp = 0.05
+        Rs = 50.0
+
+        def torad(x):
+            return x
+
+        N, Wn = spsig.buttord(torad(Fco / Fn), torad(Fsb / Fn), Rp, Rs, analog=True)
+        print(Wn)
+        b, a = spsig.butter(N, Wn)
+        filtered = spsig.filtfilt(b, a, resp)
+        
+        hfilt = spsig.hilbert(resp - filtered)
+
+
+
+        plt.figure()
+        plt.plot(resp)
+        plt.plot(filtered)
+        plt.show()
+
+        plt.figure()
+        plt.plot(resp - filtered)
+        plt.show()
+
+        hfilt = spsig.hilbert(resp - filtered)
+
+        plt.figure()
+        plt.plot((resp - filtered) / np.max(resp - filtered))
+        plt.plot(np.angle(hfilt))
+        plt.show()
+
+
+    with h5py.File('D:\\4DRecon\\Wahlin\\BrutalAndning\\MRI_Raw.h5') as f:
+        gating = f['Gating']
+
+        resp_gating(gating)
     
-    time = timegate[timeidx]
-    resp = respgate[timeidx]
 
-    Fs = 1.0 / (time[1] - time[0])
-    Fn = Fs / 2.0
-    Fco = 0.01
-    Fsb = 1.0
-    Rp = 0.05
-    Rs = 50.0
-
-    def torad(x):
-        return x
-
-    N, Wn = spsig.buttord(torad(Fco / Fn), torad(Fsb / Fn), Rp, Rs, analog=True)
-    print(Wn)
-    b, a = spsig.butter(N, Wn)
-    filtered = spsig.filtfilt(b, a, resp)
-    
-    hfilt = spsig.hilbert(resp - filtered)
-
-
-
-    plt.figure()
-    plt.plot(resp)
-    plt.plot(filtered)
-    plt.show()
-
-    plt.figure()
-    plt.plot(resp - filtered)
-    plt.show()
-
-    hfilt = spsig.hilbert(resp - filtered)
-
-    plt.figure()
-    plt.plot((resp - filtered) / np.max(resp - filtered))
-    plt.plot(np.angle(hfilt))
-    plt.show()
-
-
-with h5py.File('D:\\4DRecon\\Wahlin\\BrutalAndning\\MRI_Raw.h5') as f:
-    gating = f['Gating']
-
-    resp_gating(gating)
-    
-
-plot_spoke_info = False
+plot_spoke_info = True
 if plot_spoke_info:
     with h5py.File(base_path + 'MRI_Raw.h5', "r") as f:
         kdata = f['Kdata']
+        gating = f['Gating']
 
         def plotter(spoke_number):
 
@@ -88,32 +91,44 @@ if plot_spoke_info:
             
             kw = kdata['KW_E0'][()]
 
-            xspoke = kx[0,spoke_number,:]
-            yspoke = ky[0,spoke_number,:]
-            zspoke = kz[0,spoke_number,:]
+            #time = gating['TIME_E0'][0,:]
 
-            wspoke = kw[0,spoke_number,:]
-            plt.figure()
-            plt.plot(wspoke)
-            plt.title('Weights')
-            plt.show()
+            #timeidx = np.argsort(time)
 
-            pu.scatter_3d(np.stack([xspoke, yspoke, zspoke]))
+            kx = kx[0,:,1::3]
+            ky = ky[0,:,1::3]
+            kz = kz[0,:,1::3]
 
-            r = np.sqrt(xspoke**2 + yspoke**2 + zspoke**2)
+            #n = time.shape[0] // 15
+            n = 100
 
-            plt.figure()
-            plt.plot(r)
-            plt.title('Radius')
-            plt.show()
+            xspoke = kx[0::n,:]
+            yspoke = ky[0::n,:]
+            zspoke = kz[0::n,:]
 
-            plt.figure()
-            plt.plot(xspoke, 'r-*')
-            plt.plot(yspoke, 'g-*')
-            plt.plot(zspoke, 'b-*')
-            plt.title('Coords')
-            plt.legend(['X', 'Y', 'Z'])
-            plt.show()
+            #wspoke = kw[0,1::n,:]
+            #plt.figure()
+            #plt.plot(wspoke)
+            #plt.title('Weights')
+            #plt.show()
+
+            pu.scatter_3d(np.stack([xspoke, yspoke, zspoke]), title='Sampling of K-Space', 
+                          axis_labels=['X Coodrinate','Y Coodrinate', 'Z Coordinate'])
+
+            #r = np.sqrt(xspoke**2 + yspoke**2 + zspoke**2)
+
+            #plt.figure()
+            #plt.plot(r)
+            #plt.title('Radius')
+            #plt.show()
+
+            #plt.figure()
+            #plt.plot(xspoke, 'r-*')
+            #plt.plot(yspoke, 'g-*')
+            #plt.plot(zspoke, 'b-*')
+            #plt.title('Coords')
+            #plt.legend(['X', 'Y', 'Z'])
+            #plt.show()
 
 
         def resp_gating():

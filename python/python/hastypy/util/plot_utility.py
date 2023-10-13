@@ -6,10 +6,10 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from nibabel.viewers import OrthoSlicer3D
 
-
-
-
 def image_5d(image):
+
+	image = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+
 	lens = []
 	for i in range(len(image.shape)):
 		lens.append(image.shape[i])
@@ -203,14 +203,16 @@ def image_nd(image):
 	else:
 		raise RuntimeError("Only 2 <= n <= 5 is supported for image_nd")
 
-def scatter_3d(coord):
+def scatter_3d(coord, marker='.', markersize=1 ,title='', axis_labels=['X Label', 'Y Label', 'Z Label']):
 	fig = plt.figure()
 	ax = fig.add_subplot(projection='3d')
 	
-	ax.scatter(coord[0,:], coord[1,:], coord[2,:], marker='*')
-	ax.set_xlabel('X Label')
-	ax.set_ylabel('Y Label')
-	ax.set_zlabel('Z Label')
+	ax.scatter(coord[0,:], coord[1,:], coord[2,:], marker=marker, s=markersize)
+	ax.set_xlabel(axis_labels[0])
+	ax.set_ylabel(axis_labels[1])
+	ax.set_zlabel(axis_labels[2])
+
+	plt.title(title)
 
 	plt.show()
 

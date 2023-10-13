@@ -91,7 +91,7 @@ def run(settings: RunSettings):
 
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=30, callback=None)
+	image = full_recon.run(image, iter=30, callback=plot_callback)
 
 	#pu.image_nd(image.numpy())
 

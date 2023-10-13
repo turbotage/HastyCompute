@@ -31,6 +31,7 @@ namespace hasty {
 		class Vector {
 		public:
 
+
 			Vector(const at::Tensor& tensor);
 			Vector(const std::vector<Vector>& children);
 

@@ -91,9 +91,9 @@ def run(settings: RunSettings):
 
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=25, callback=None)
+	image = full_recon.run(image, iter=25, callback=plot_callback)
 
-	#pu.image_nd(image.numpy())
+	pu.image_nd(image.numpy())
 
 	return smaps, image, (coords, kdata, weights, gating)
 
@@ -155,7 +155,7 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.view((settings.nframes,5) + settings.im_size).numpy())
 
-	images = framed_recon.run(torch.zeros((settings.nframes,5) + settings.im_size, dtype=torch.complex64), iter=40, callback=None)
+	images = framed_recon.run(torch.zeros((settings.nframes,5) + settings.im_size, dtype=torch.complex64), iter=120, callback=None)
 
 	return images
 
@@ -163,7 +163,7 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 if __name__ == '__main__':
 
 	base_path = 'D:/4Drecon/Wahlin/BrutalAndning/'
-	resol = 160 
+	resol = 170
 	file_ending = '_' + str(resol)
 
 	with torch.inference_mode():
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 		postfovkmuls = (1.0,1.0,1.0)
 
 		settings = RunSettings(im_size, crop_factors, prefovkmuls, postfovkmuls, shift
-			).set_nframes(8
+			).set_nframes(15
 			).set_smaps_filepath(base_path + 'SenseMaps.h5'
 			).set_rawdata_filepath(base_path + 'MRI_Raw.h5')
 
