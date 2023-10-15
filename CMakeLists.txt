@@ -72,6 +72,7 @@ set(OP_SOURCES
 	"lib/op/op.cpp"
 	"lib/op/proxop.cpp"
 	"lib/op/opalgs.cpp"
+	"lib/op/mriop.cpp"
 )
 
 set(OPTION_SOURCES)
