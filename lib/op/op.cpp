@@ -97,6 +97,7 @@ hasty::op::Vector& hasty::op::Vector::operator=(const Vector& vec)
 {
 	_tensor = vec._tensor;
 	_children = vec._children;
+	return *this;
 }
 
 hasty::op::Vector::Vector(Vector&& vec)
@@ -109,6 +110,7 @@ hasty::op::Vector& hasty::op::Vector::operator=(Vector&& vec)
 {
 	_tensor = std::move(vec._tensor);
 	_children = std::move(vec._children);
+	return *this;
 }
 
 hasty::op::VectorShape hasty::op::Vector::get_shape() const {
@@ -551,7 +553,7 @@ hasty::op::Vector hasty::op::Operator::apply(const Vector& in) const
 
 hasty::op::Vector hasty::op::operator*(const Operator& lhs, const Vector& rhs)
 {
-	return lhs._apply(rhs);
+	return lhs.apply(rhs);
 }
 
 void hasty::op::Operator::apply_inplace(Vector& in) const

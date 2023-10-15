@@ -2,7 +2,11 @@
 
 #include "../torch_util.hpp"
 #include <cufinufft_opts.h>
+#include <finufft_opts.h>
 
+
+typedef struct finufft_plan_s* finufft_plan;
+typedef struct finufftf_plan_s* finufftf_plan;
 
 typedef struct cufinufft_plan_s* cufinufft_plan;
 typedef struct cufinufft_fplan_s* cufinufftf_plan;
@@ -87,6 +91,50 @@ namespace hasty {
 			at::ScalarType			_type;
 			int32_t					_ndim;
 			int32_t					_ntransf;
+			int64_t					_nfreq;
+			const at::Tensor		_coords;
+			std::vector<int64_t>	_nmodes;
+			std::array<int64_t, 3>	_nmodes_flipped;
+			NufftOptions			_opts;
+
+			bool _closed = false;
+			finufft_plan			_plan;
+			finufftf_plan			_planf;
+
+			finufft_opts _finufft_opts;
+
+			int32_t _nvoxels;
+		};
+
+		class LIB_EXPORT CUDANufft {
+		public:
+
+			CUDANufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
+
+			void close();
+			~CUDANufft();
+
+			void apply(const at::Tensor& in, at::Tensor& out) const;
+
+			at::ScalarType coord_type();
+
+			at::ScalarType complex_type();
+
+			int32_t nfreq();
+
+			int32_t ndim();
+
+		protected:
+
+			void make_plan_set_pts();
+
+			void apply_type1(const at::Tensor& in, at::Tensor& out) const;
+
+			void apply_type2(const at::Tensor& in, at::Tensor& out) const;
+
+			at::ScalarType			_type;
+			int32_t					_ndim;
+			int32_t					_ntransf;
 			int32_t					_nfreq;
 			const at::Tensor		_coords;
 			std::vector<int64_t>	_nmodes;
@@ -105,7 +153,7 @@ namespace hasty {
 		class LIB_EXPORT NufftNormal {
 		public:
 
-			NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+			NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const NufftOptions& forward_ops, const NufftOptions& backward_ops);
 
 			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
@@ -129,7 +177,50 @@ namespace hasty {
 			Nufft				_backward;
 		};
 
-		class LIB_EXPORT NormalNufftToeplitz {
+		class LIB_EXPORT CUDANufftNormal {
+		public:
+
+			CUDANufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const NufftOptions& forward_ops, const NufftOptions& backward_ops);
+
+			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
+
+			void apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
+
+			at::ScalarType coord_type();
+
+			at::ScalarType complex_type();
+
+			int32_t nfreq();
+
+			int32_t ndim();
+
+			const CUDANufft& get_forward();
+
+			const CUDANufft& get_backward();
+
+		protected:
+			CUDANufft				_forward;
+			CUDANufft				_backward;
+		};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		class LIB_EXPORT CUDANormalNufftToeplitz {
 		public:
 
 			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
@@ -142,12 +233,12 @@ namespace hasty {
 
 		public:
 
-			NormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
+			CUDANormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
 				const at::optional<std::reference_wrapper<at::Tensor>>& diagonal, 
 				const at::optional<std::reference_wrapper<at::Tensor>>& frequency_storage,
 				const at::optional<std::reference_wrapper<at::Tensor>>& input_storage);
 
-			NormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
+			CUDANormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
 
 			at::Tensor apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const;
 

@@ -101,7 +101,7 @@ namespace hasty {
 		class L2Reg : public ProximalOperator {
 		public:
 
-			L2Reg(const std::optional<ProximalOperator>& prox, double rho = 1.0, const std::optional<Vector>& a, 
+			L2Reg(const std::optional<ProximalOperator>& prox, double rho = 1.0, const std::optional<Vector>& a = std::nullopt, 
 				double base_alpha = 1.0);
 
 			Vector _apply(const Vector& input, double alpha);

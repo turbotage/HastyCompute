@@ -70,7 +70,7 @@ hasty::op::Vector hasty::op::ConvexConjugate::_apply(const Vector& input, double
 }
 
 
-hasty::op::Postcomposition::Postcomposition(const ProximalOperator& prox, double base_alpha = 1.0)
+hasty::op::Postcomposition::Postcomposition(const ProximalOperator& prox, double base_alpha)
 	: ProximalOperator(base_alpha), _prox(prox)
 {
 }
@@ -80,7 +80,7 @@ hasty::op::Vector hasty::op::Postcomposition::_apply(const Vector& input, double
 	return apply(input, alpha);
 }
 
-hasty::op::Precomposition::Precomposition(const ProximalOperator& prox, double a, double b, double base_alpha = 1.0)
+hasty::op::Precomposition::Precomposition(const ProximalOperator& prox, double a, double b, double base_alpha)
 	: ProximalOperator(base_alpha), _prox(prox), _a(a), _b(b)
 {
 }

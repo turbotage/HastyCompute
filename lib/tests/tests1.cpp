@@ -226,7 +226,7 @@ void hasty::tests::test_speed() {
 	//hasty::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType1, true, 1e-5f});
 	//hasty::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType2, false, 1e-5f });
 
-	hasty::nufft::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+	hasty::nufft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
 		{ hasty::nufft::NufftType::eType2, false, 1e-5f },
 		{ hasty::nufft::NufftType::eType1, true, 1e-5f });
 
@@ -507,14 +507,14 @@ void hasty::tests::compare_normal_methods()
 	}
 	// Normal Nufft
 	{
-		hasty::nufft::NufftNormal nu_normal(coords, { nt,nz,ny,nx },
+		hasty::nufft::CUDANufftNormal nu_normal(coords, { nt,nz,ny,nx },
 			{ hasty::nufft::NufftType::eType2, false, 1e-6 }, { hasty::nufft::NufftType::eType1, true, 1e-6 });
 
 		nu_normal.apply(c, out2, freq_temp, at::nullopt);
 	}
 	// Toeplitz Normal Nufft
 	{
-		hasty::nufft::NormalNufftToeplitz top_normal(coords, { nt,nz,ny,nx }, 1e-6, at::nullopt, at::nullopt, at::nullopt);
+		hasty::nufft::CUDANormalNufftToeplitz top_normal(coords, { nt,nz,ny,nx }, 1e-6, at::nullopt, at::nullopt, at::nullopt);
 
 		out3 = top_normal.apply(c, full_temp1, full_temp2);
 		//top_normal.apply(torch::fft_fftshift(c), out3, full_temp1, full_temp2);
@@ -575,7 +575,7 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 
 		auto start = std::chrono::high_resolution_clock::now();
 
-		hasty::nufft::NufftNormal normal_nufft(coords, { nt, nx, nx, nx }, 
+		hasty::nufft::CUDANufftNormal normal_nufft(coords, { nt, nx, nx, nx }, 
 			hasty::nufft::NufftOptions::type2(1e-4), hasty::nufft::NufftOptions::type1(1e-4));
 
 		for (int i = 0; i < nrun; ++i) {
@@ -595,7 +595,7 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 		torch::cuda::synchronize();
 		auto start = std::chrono::high_resolution_clock::now();
 
-		hasty::nufft::NormalNufftToeplitz normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, at::nullopt, freq_temp, storage1);
+		hasty::nufft::CUDANormalNufftToeplitz normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, at::nullopt, freq_temp, storage1);
 		for (int i = 0; i < nrun; ++i) {
 			out = normal_nufft.apply(in, storage1, storage2);
 		}
@@ -674,7 +674,7 @@ int hasty::tests::test_speed(int n, int nc, int nf) {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	hasty::nufft::NufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+	hasty::nufft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
 		{ hasty::nufft::NufftType::eType2, false, 1e-5f },
 		{ hasty::nufft::NufftType::eType1, true, 1e-5f });
 
