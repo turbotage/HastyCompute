@@ -546,6 +546,6 @@ with h5py.File('D:/4DRecon/dat/dat2/for_plotting_tests.h5', 'r') as f:
 	data = f['images'][()]
 
 dataf = np.abs(data).transpose((2,3,4,0,1))
-slicer = HastyOrthoSlicer(dataf[:,:,:,0,:])
+slicer = HastyOrthoSlicer(dataf[:,:,:,:,:])
 
 slicer.show()

@@ -26,7 +26,10 @@ namespace hasty {
 			std::vector<VectorShape> _children_shape;
 
 			friend class Vector;
+			friend class Operator;
 		};
+
+		class Operator;
 
 		class Vector {
 		public:
@@ -81,6 +84,8 @@ namespace hasty {
 		private:
 			at::Tensor _tensor;
 			std::vector<Vector> _children;
+
+			friend class Operator;
 		};
 
 		class Operator {
@@ -98,7 +103,16 @@ namespace hasty {
 			friend Operator operator-(const Operator& lhs, const Operator& rhs);
 			friend Operator operator*(const Operator& lhs, const Operator& rhs);
 
+		protected:
+
+			at::Tensor& access_vectensor(Vector& vec) const;
+			const at::Tensor& access_vectensor(const Vector& vec) const;
+
+			std::vector<Vector>& access_vecchilds(Vector& vec) const;
+			const std::vector<Vector>& access_vecchilds(const Vector& vec) const;
+
 		private:
+
 
 		};
 

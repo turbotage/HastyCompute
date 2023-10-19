@@ -109,6 +109,50 @@ std::vector<int64_t> hasty::torch_util::nmodes_from_tensor(const at::Tensor& ten
 	return ret;
 }
 
+at::ScalarType hasty::torch_util::complex_type(at::ScalarType real_type, std::initializer_list<at::ScalarType> allowed_types)
+{
+	at::ScalarType complex_type;
+	if (real_type == at::ScalarType::Float)
+		complex_type = at::ScalarType::ComplexFloat;
+	else if (real_type == at::ScalarType::Double)
+		complex_type = at::ScalarType::ComplexDouble;
+	else if (real_type == at::ScalarType::Half)
+		complex_type = at::ScalarType::ComplexHalf;
+	else
+		throw std::runtime_error("Type not implemented complex_type()");
+
+	if (allowed_types.size() != 0) {
+		for (auto& atype : allowed_types) {
+			if (complex_type == atype)
+				return complex_type;
+		}
+		throw std::runtime_error("complex_type converted to non allowable type");
+	}
+	return complex_type;
+}
+
+at::ScalarType hasty::torch_util::real_type(at::ScalarType complex_type, std::initializer_list<at::ScalarType> allowed_types)
+{
+	at::ScalarType real_type;
+	if (complex_type == at::ScalarType::ComplexFloat)
+		real_type = at::ScalarType::Float;
+	else if (complex_type == at::ScalarType::ComplexDouble)
+		real_type = at::ScalarType::Double;
+	else if (complex_type == at::ScalarType::ComplexHalf)
+		real_type = at::ScalarType::Half;
+	else
+		throw std::runtime_error("Type not implemented complex_type()");
+
+	if (allowed_types.size() != 0) {
+		for (auto& atype : allowed_types) {
+			if (real_type == atype)
+				return real_type;
+		}
+		throw std::runtime_error("complex_type converted to non allowable type");
+	}
+	return real_type;
+}
+
 void hasty::torch_util::future_catcher(std::future<void>& fut)
 {
 	try {

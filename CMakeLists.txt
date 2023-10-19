@@ -23,11 +23,11 @@ message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 message("BUILD_CUDA = ${BUILD_CUDA}")
 
 
-set(CS_SOURCES
-	"lib/cs/cg.cpp"
-	"lib/cs/sense.cpp"
-	"lib/cs/batch_sense.cpp"
-	"lib/cs/svt.cpp"
+set(MRI_SOURCES
+	"lib/mri/cg.cpp"
+	"lib/mri/sense.cpp"
+	"lib/mri/batch_sense.cpp"
+	"lib/mri/svt.cpp"
 )
 
 set(EXPR_SOURCES
@@ -85,10 +85,7 @@ set(BACKEND_HEADERS
 	"lib/fft/nufft.hpp"
 )
 
-
-
 add_library(HastyComputeLib SHARED
-
 	${CS_SOURCES}
 	${FFT_SOURCES}
 	${THREADING_SOURCES}

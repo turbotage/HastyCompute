@@ -7,7 +7,7 @@
 
 
 #include "fft/nufft.hpp"
-#include "cs/svt.hpp"
-#include "cs/sense.hpp"
-#include "cs/batch_sense.hpp"
+#include "mri/svt.hpp"
+#include "mri/sense.hpp"
+#include "mri/batch_sense.hpp"
 

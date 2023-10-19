@@ -15,8 +15,8 @@ namespace hasty {
 	namespace nufft {
 
 		enum NufftType {
-			eType1 = 1,
-			eType2 = 2,
+			eType1 = 1, // ADJOINT
+			eType2 = 2, // FORWARD
 			eType3 = 3
 		};
 
@@ -61,6 +61,10 @@ namespace hasty {
 
 			double get_tol() const { return tol; }
 		};
+
+		at::Tensor allocate_out(const at::Tensor& coords, int ntransf);
+
+		at::Tensor allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
 		class LIB_EXPORT Nufft {
 		public:
@@ -150,6 +154,14 @@ namespace hasty {
 			int32_t _nvoxels;
 		};
 
+		at::Tensor allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+
+		at::Tensor allocate_normal_storage(const at::Tensor& coords, int ntransf);
+
+		at::Tensor allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf);
+
+		at::Tensor allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+
 		class LIB_EXPORT NufftNormal {
 		public:
 
@@ -203,17 +215,6 @@ namespace hasty {
 			CUDANufft				_forward;
 			CUDANufft				_backward;
 		};
-
-
-
-
-
-
-
-
-
-
-
 
 
 

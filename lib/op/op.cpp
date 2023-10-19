@@ -582,6 +582,27 @@ hasty::op::Operator hasty::op::operator*(const Operator& lhs, const Operator& rh
 	return MulOp(lhs, rhs);
 }
 
+at::Tensor& hasty::op::Operator::access_vectensor(Vector& vec) const
+{
+	return vec._tensor;
+}
+
+const at::Tensor& hasty::op::Operator::access_vectensor(const Vector& vec) const
+{
+	return vec._tensor;
+}
+
+std::vector<hasty::op::Vector>& hasty::op::Operator::access_vecchilds(Vector& vec) const
+{
+	return vec._children;
+}
+
+const std::vector<hasty::op::Vector>& hasty::op::Operator::access_vecchilds(const Vector& vec) const
+{
+	return vec._children;
+}
+
+
 
 hasty::op::AddOp::AddOp(const Operator& lop, const Operator& rop)
 	: _left(lop), _right(rop)

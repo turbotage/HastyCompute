@@ -9,6 +9,20 @@
 
 import hasty_util;
 
+
+
+at::Tensor hasty::nufft::allocate_out(const at::Tensor& coords, int ntransf)
+{
+	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
+
+at::Tensor hasty::nufft::allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+{
+	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
+
 // NUFFT
 
 hasty::nufft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)
@@ -367,6 +381,30 @@ void hasty::nufft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) con
 	}
 }
 
+
+at::Tensor hasty::nufft::allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+{
+	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
+
+at::Tensor hasty::nufft::allocate_normal_storage(const at::Tensor& coords, int ntransf)
+{
+	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
+
+at::Tensor hasty::nufft::allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf)
+{
+	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
+
+at::Tensor hasty::nufft::allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+{
+	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
+		torch_util::complex_type(coords.dtype().toScalarType(), {})));
+}
 
 // CUDA-NUFFT
 

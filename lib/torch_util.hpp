@@ -31,6 +31,10 @@ namespace hasty {
             return indices;
         }
 
+        at::ScalarType complex_type(at::ScalarType real_type, std::initializer_list<at::ScalarType> allowed_types);
+
+        at::ScalarType real_type(at::ScalarType complex_type, std::initializer_list<at::ScalarType> allowed_types);
+
         template<typename T>
         std::vector<T> apply_permutation(const std::vector<T>& v, const std::vector<int64_t>& indices)
         {
