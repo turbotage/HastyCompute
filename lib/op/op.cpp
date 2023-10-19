@@ -487,6 +487,7 @@ hasty::op::Vector hasty::op::Vector::zeros(const VectorShape& shape, const at::T
 	for (auto& shape : shape._children_shape) {
 		newchildren.emplace_back(Vector::zeros(shape, opts));
 	}
+	return newchildren;
 }
 
 hasty::op::Vector hasty::op::Vector::ones(const VectorShape& shape, const at::TensorOptions& opts)
@@ -498,6 +499,7 @@ hasty::op::Vector hasty::op::Vector::ones(const VectorShape& shape, const at::Te
 	for (auto& shape : shape._children_shape) {
 		newchildren.emplace_back(Vector::ones(shape, opts));
 	}
+	return newchildren;
 }
 
 hasty::op::Vector hasty::op::Vector::rand(const VectorShape& shape, const at::TensorOptions& opts)
@@ -509,6 +511,7 @@ hasty::op::Vector hasty::op::Vector::rand(const VectorShape& shape, const at::Te
 	for (auto& shape : shape._children_shape) {
 		newchildren.emplace_back(Vector::rand(shape, opts));
 	}
+	return newchildren;
 }
 
 hasty::op::Vector hasty::op::Vector::empty(const VectorShape& shape, const at::TensorOptions& opts)
@@ -520,6 +523,7 @@ hasty::op::Vector hasty::op::Vector::empty(const VectorShape& shape, const at::T
 	for (auto& shape : shape._children_shape) {
 		newchildren.emplace_back(Vector::empty(shape, opts));
 	}
+	return newchildren;
 }
 
 

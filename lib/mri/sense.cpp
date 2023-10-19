@@ -6,10 +6,7 @@
 
 hasty::sense::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _nufft(coords, nmodes, nufft::NufftOptions::type2()), _nmodes(nmodes)
-{
-	if (_nmodes[0] != 1) {
-		throw std::runtime_error("Only ntransf==1 allowed for Sense operator");
-	}
+{	
 }
 
 void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
@@ -19,6 +16,12 @@ void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at:
 {
 	c10::InferenceMode inference_guard;
 
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
 	out.zero_();
 
 	at::Tensor imstore;
@@ -26,7 +29,7 @@ void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at:
 		imstore = *imspace_storage;
 	}
 	else {
-		imstore = at::empty_like(in);
+		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
 	}
 
 	at::Tensor kstore;
@@ -34,33 +37,48 @@ void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at:
 		kstore = *kspace_storage;
 	}
 	else {
-		kstore = at::empty_like(out.select(0, 0).unsqueeze(0));
+		kstore = at::empty({ntransf, out.size(1)}, in.options());
 	}
 
 	bool accumulate = out.size(0) == 1;
 
-	for (auto coil : coils) {
-
-		imstore.copy_(in);
+	for (int brun = 0; brun < batch_runs; ++brun) {
 
 		if (premanip.has_value()) {
-			(*premanip)(imstore, coil);
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j) = in.select(0, idx);
+			}
+			if (premanip.has_value()) {
+				(*premanip)(imstore, brun);
+			}
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j).mul_(smaps.select(0, idx));
+			}
 		}
-
-		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-		imstore.mul_(smap);
+		else {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j) = in.select(0, idx) * smaps.select(0, idx);
+			}
+		}
 
 		_nufft.apply(imstore, kstore);
 
 		if (postmanip.has_value()) {
-			(*postmanip)(kstore, coil);
+			(*postmanip)(kstore, brun);
 		}
 
 		if (accumulate) {
-			out.select(0, 0).unsqueeze(0).add_(kstore);
+			for (int j = 0; j < ntransf; ++j) {
+				out.select(0, 0).unsqueeze(0).add_(kstore.select(0, j));
+			}
 		}
 		else {
-			out.select(0, coil).unsqueeze(0).add_(kstore);
+			for (int j = 0; j < ntransf; ++j) {
+				out.select(0, j).unsqueeze(0).add_(kstore.select(0, j));
+			}
 		}
 	}
 
@@ -70,9 +88,6 @@ void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at:
 hasty::sense::CUDASense::CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _nufft(coords, nmodes, nufft::NufftOptions::type2()), _nmodes(nmodes)
 {
-	if (_nmodes[0] != 1) {
-		throw std::runtime_error("Only ntransf==1 allowed for Sense operator");
-	}
 }
 
 void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
@@ -82,6 +97,12 @@ void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const
 {
 	c10::InferenceMode inference_guard;
 
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
 	out.zero_();
 
 	at::Tensor imstore;
@@ -89,7 +110,7 @@ void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const
 		imstore = *imspace_storage;
 	}
 	else {
-		imstore = at::empty_like(in);
+		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
 	}
 
 	at::Tensor kstore;
@@ -97,46 +118,57 @@ void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const
 		kstore = *kspace_storage;
 	}
 	else {
-		kstore = at::empty_like(out.select(0, 0).unsqueeze(0));
+		kstore = at::empty({ ntransf, out.size(1) }, in.options());
 	}
 
 	bool accumulate = out.size(0) == 1;
 
-	for (auto coil : coils) {
-
-		imstore.copy_(in);
+	for (int brun = 0; brun < batch_runs; ++brun) {
 
 		if (premanip.has_value()) {
-			(*premanip)(imstore, coil);
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j) = in.select(0, idx);
+			}
+			if (premanip.has_value()) {
+				(*premanip)(imstore, brun);
+			}
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j).mul_(smaps.select(0, idx));
+			}
 		}
-
-		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-		imstore.mul_(smap);
+		else {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				imstore.select(0, j) = in.select(0, idx) * smaps.select(0, idx);
+			}
+		}
 
 		_nufft.apply(imstore, kstore);
 
 		if (postmanip.has_value()) {
-			(*postmanip)(kstore, coil);
+			(*postmanip)(kstore, brun);
 		}
 
 		if (accumulate) {
-			out.select(0, 0).unsqueeze(0).add_(kstore);
+			for (int j = 0; j < ntransf; ++j) {
+				out.add_(kstore.select(0, j));
+			}
 		}
 		else {
-			out.select(0, coil).unsqueeze(0).add_(kstore);
+			for (int j = 0; j < ntransf; ++j) {
+				out.select(0, j).unsqueeze(0).add_(kstore.select(0, j));
+			}
 		}
 	}
 
 }
 
 
-
 hasty::sense::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _nufft(coords, nmodes, nufft::NufftOptions::type1()), _nmodes(nmodes)
 {
-	if (_nmodes[0] != 1) {
-		throw std::runtime_error("Only ntransf==1 allowed for SenseAdjoint operator");
-	}
 }
 
 void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
@@ -145,6 +177,12 @@ void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, co
 {
 	c10::InferenceMode inference_guard;
 
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
 	out.zero_();
 
 	at::Tensor imstore;
@@ -152,7 +190,7 @@ void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, co
 		imstore = *imspace_storage;
 	}
 	else {
-		imstore = at::empty_like(out.select(0, 0).unsqueeze(0));
+		imstore = at::empty(at::makeArrayRef(_nmodes), out.options());
 	}
 
 	at::Tensor kstore;
@@ -160,30 +198,39 @@ void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, co
 		kstore = *kspace_storage;
 	}
 	else {
-		kstore = at::empty_like(in.select(0, 0).unsqueeze(0));
+		kstore = at::empty({ ntransf, in.size(1) });
 	}
 
 	bool accumulate = out.size(0) == 1;
 
-	for (auto coil : coils) {
+	for (int brun = 0; brun < batch_runs; ++brun) {
 
-		kstore.copy_(in.select(0, coil).unsqueeze(0));
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			kstore.select(0, j) = in.select(0, idx);
+		}
 
 		if (premanip.has_value()) {
-			(*premanip)(kstore, coil);
+			(*premanip)(kstore, brun);
 		}
 
 		_nufft.apply(kstore, imstore);
 
-		at::Tensor smap = smaps.select(0, coil).unsqueeze(0);
-		imstore.mul_(smap.conj());
 
-
-		if (postmanip.has_value()) {
-			(*postmanip)(imstore, coil);
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			imstore.mul_(smaps.select(0, coils[idx]));
 		}
 
+		if (postmanip.has_value()) {
+			(*postmanip)(imstore, brun);
+		}
+
+
 		if (accumulate) {
+			for (int j = 0; j < ntransf; ++j) {
+				out.add_()
+			}
 			out.add_(imstore);
 		}
 		else {

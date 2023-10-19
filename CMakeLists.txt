@@ -24,7 +24,6 @@ message("BUILD_CUDA = ${BUILD_CUDA}")
 
 
 set(MRI_SOURCES
-	"lib/mri/cg.cpp"
 	"lib/mri/sense.cpp"
 	"lib/mri/batch_sense.cpp"
 	"lib/mri/svt.cpp"
@@ -72,6 +71,7 @@ set(OP_SOURCES
 	"lib/op/op.cpp"
 	"lib/op/proxop.cpp"
 	"lib/op/opalgs.cpp"
+	"lib/op/fftop.cpp"
 	"lib/op/mriop.cpp"
 )
 
@@ -86,7 +86,7 @@ set(BACKEND_HEADERS
 )
 
 add_library(HastyComputeLib SHARED
-	${CS_SOURCES}
+	${MRI_SOURCES}
 	${FFT_SOURCES}
 	${THREADING_SOURCES}
 
