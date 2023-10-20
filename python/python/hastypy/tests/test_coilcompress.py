@@ -304,37 +304,49 @@ class FivePointLoader:
 			return (coord_vec, kdata_vec, weights_vec if len(weights_vec) != 0 else None, gates, angles, sorted_angles)
 
 	@staticmethod
-	def coil_compress(kdata=None, axis=0, target_channels=None):
+	def coil_compress(kdata=None, axis=0, target_channels=None, cudev=torch.device('cuda:0'), thresh=0.25):
+		
 		kdata_cc = torch.squeeze(kdata[0]) 
-
 		kdata_cc = torch.moveaxis(kdata_cc, axis, -1)
-
 		old_channels = kdata_cc[-1].shape
-
-		# Pick out only 5% of the data for SVD
 		mask_shape = kdata_cc.shape
 
-		mask = torch.rand(mask_shape[:-1])<0.3
+		mask = torch.rand(mask_shape[:-1], )
 
-		kcc = torch.zeros((old_channels[0], torch.sum(mask).item()), dtype=kdata_cc.dtype)
+		def calc_U(mask):
+			# Pick out only 5% of the data for SVD
+			kcc = torch.zeros((old_channels[0], torch.sum(mask).item()), dtype=kdata_cc.dtype, device=cudev)
+			for c in range(old_channels[0]):
+				ktemp = kdata_cc[...,c]
+				kcc[c, :] = ktemp[mask].to(cudev, non_blocking=True)
+			# SVD
+			U, S, Vh = torch.linalg.svd(kcc, full_matrices=False, driver='gesvd')
 
-		for c in range(old_channels[0]):
-			ktemp = kdata_cc[...,c]
-			kcc[c, :] = ktemp[mask]
+			del S
+			del Vh
+			gc.collect()
+			torch.cuda.empty_cache()
 
-		kdata_cc = torch.moveaxis(kdata_cc, -1, axis)
+			return U
 
-		cudev = torch.device('cuda:0')
-		#cudev = torch.device('cpu')
-		kcc = kcc.to(cudev)
+		U1 = calc_U(mask < thresh)
+		U2 = calc_U(torch.logical_and(thresh <= mask, mask < 2*thresh))
+		U3 = calc_U(torch.logical_and(2*thresh <= mask, mask < 3*thresh))
+		U4 = calc_U(torch.logical_and(3*thresh <= mask, mask < 4*thresh))
 
-		# SVD
-		U, S, Vh = torch.linalg.svd(kcc, full_matrices=False, driver='gesvd')
+		Z0 = torch.zeros_like(U1)
 
-		del S
-		del Vh
-		gc.collect()
-		torch.cuda.empty_cache()
+		C1 = torch.cat([U1, Z0])
+		C2 = torch.cat([Z0, U2])
+		C3 = torch.cat([U3, Z0])
+		C4 = torch.cat([Z0, U4])
+		
+
+
+		X = torch.cat([C1, C2, C3, C4], dim=1)
+
+
+
 
 		for e in range(len(kdata)):
 			kdatae = kdata[e].transpose(0,2).to(cudev)
@@ -354,22 +366,177 @@ import time
 if __name__ == "__main__":
 
 
-	c = 44
+	def full_svd(C1, C2, C3, C4, dev):
+		C_full = torch.cat([C1, C2, C3, C4], dim=1)
+		cpudev = torch.device('cpu')
 
-	Np = 25000000
+		if dev == 'cpu':
+			U, s, Vh = torch.linalg.svd(C_full, full_matrices=False)
+		else:
+			U, s, Vh = torch.linalg.svd(C_full.to(dev, non_blocking=True), full_matrices=False, driver='gesvd')
+		
+		#CHECK = (U @ torch.diag(s) @ Vh).to(cpudev, non_blocking=True if cpudev != dev else False)
+		CHECK = (U @ torch.diag(s) @ Vh).to(cpudev, non_blocking=False)
+		
+		print('RelErr: ', torch.norm(CHECK - C_full) / torch.norm(C_full))
+		print('MaxErr:', torch.max(torch.abs(CHECK - C_full)))
+
+
+	def combined_svd(C1, C2, C3, C4, dev):
+		cpudev = torch.device('cpu')
+
+		if dev == 'cpu':
+			U1, s1, Vh = torch.linalg.svd(C1.to(dev), full_matrices=False)
+		else:
+			U1, s1, Vh = torch.linalg.svd(C1.to(dev), full_matrices=False, driver='gesvd')
+		Vh = torch.conj(Vh).transpose(0,1)
+		#RY1 = torch.linalg.qr(Vh1, mode='r')
+		QY1, RY1 = torch.linalg.qr(Vh)
+		if (dev != cpudev):
+			QY1 = QY1.to(cpudev, non_blocking=True)
+
+
+		if dev == 'cpu':
+			U2, s2, Vh = torch.linalg.svd(C2.to(dev), full_matrices=False)
+		else:
+			U2, s2, Vh = torch.linalg.svd(C2.to(dev), full_matrices=False, driver='gesvd')
+		Vh = torch.conj(Vh).transpose(0,1)
+		#RY2 = torch.linalg.qr(Vh2, mode='r')
+		QY2, RY2 = torch.linalg.qr(Vh)
+		if (dev != cpudev):
+			QY2 = QY2.to(cpudev, non_blocking=True)
+
+		if dev == 'cpu':
+			U3, s3, Vh = torch.linalg.svd(C3.to(dev), full_matrices=False)
+		else:
+			U3, s3, Vh = torch.linalg.svd(C3.to(dev), full_matrices=False, driver='gesvd')
+		Vh = torch.conj(Vh).transpose(0,1)
+		#RY3 = torch.linalg.qr(Vh3, mode='r')
+		QY3, RY3 = torch.linalg.qr(Vh)
+		if (dev != cpudev):
+			QY3 = QY3.to(cpudev, non_blocking=True)
+		
+		
+		if dev == 'cpu':
+			U4, s4, Vh = torch.linalg.svd(C4.to(dev), full_matrices=False)
+		else:
+			U4, s4, Vh = torch.linalg.svd(C4.to(dev), full_matrices=False, driver='gesvd')
+		Vh = torch.conj(Vh).transpose(0,1)
+		#RY4 = torch.linalg.qr(Vh4, mode='r')
+		QY4, RY4 = torch.linalg.qr(Vh)
+		if (dev != cpudev):
+			QY4 = QY4.to(cpudev, non_blocking=True)
+
+		del Vh
+		torch.cuda.empty_cache()
+
+		X = torch.cat([U1, U2, U3, U4], dim=1)
+		QX, RX = torch.linalg.qr(X)
+		#del U1, U2, U3, U4
+
+
+		start = 0
+		end = s1.shape[0]
+		RX1 = RX[:,start:end]
+		start = end
+		end += s2.shape[0]
+		RX2 = RX[:,start:end]
+		start = end
+		end += s3.shape[0]
+		RX3 = RX[:,start:end]
+		start = end
+		end += s4.shape[0]
+		RX4 = RX[:,start:end]
+
+		UW1, sW1, VHW1 = torch.linalg.svd(RX1 @ torch.diag(s1) @ torch.conj(RY1).transpose(0,1), full_matrices=False, driver='gesvd')
+		UW2, sW2, VHW2 = torch.linalg.svd(RX2 @ torch.diag(s2) @ torch.conj(RY2).transpose(0,1), full_matrices=False, driver='gesvd')
+		UW3, sW3, VHW3 = torch.linalg.svd(RX3 @ torch.diag(s3) @ torch.conj(RY3).transpose(0,1), full_matrices=False, driver='gesvd')
+		UW4, sW4, VHW4 = torch.linalg.svd(RX4 @ torch.diag(s4) @ torch.conj(RY4).transpose(0,1), full_matrices=False, driver='gesvd')
+
+		s = torch.cat([sW1, sW2, sW3, sW4]).to(cpudev, non_blocking=True)
+		UW = torch.cat([UW1, UW2, UW3, UW4], dim=1)
+		U_final = (QX @ UW)
+		if dev != cpudev:
+			U_final = U_final.to(cpudev, non_blocking=True)
+
+		p = torch.argsort(s)
+		s = s[p]
+
+		U_final = U_final[:,p]
+
+		Vh_final = torch.block_diag(
+						(VHW1 @ torch.conj(QY1.to(dev)).transpose(0,1)).to(
+							cpudev, non_blocking=True if cpudev != dev else False), 
+						(VHW2 @ torch.conj(QY2.to(dev)).transpose(0,1)).to(
+							cpudev, non_blocking=True if cpudev != dev else False), 
+						(VHW3 @ torch.conj(QY3.to(dev)).transpose(0,1)).to(
+							cpudev, non_blocking=True if cpudev != dev else False), 
+						(VHW4 @ torch.conj(QY4.to(dev)).transpose(0,1)).to(
+							cpudev, non_blocking=True if cpudev != dev else False)
+						)
+		
+		Vh_final = Vh_final[p,:]
+
+		C_full = torch.cat([C1, C2, C3, C4], dim=1)
+		CHECK = U_final @ torch.diag(s) @ Vh_final
+
+		print('RelErr: ', torch.norm(CHECK - C_full) / torch.norm(C_full))
+		print('MaxErr:', torch.max(torch.abs(CHECK - C_full)))
+
+	C1 = torch.rand(32, 100000)
+	C2 = torch.rand(32, 100000)
+	C3 = torch.rand(32, 100000)
+	C4 = torch.rand(32, 100000)
 
 	start = time.time()
-
-	kdata = [torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np)]
-
+	combined_svd(C1, C2, C3, C4, torch.device('cuda:0'))
 	end = time.time()
 	print('It Took: ', end - start)
 
-	print(1)
 	start = time.time()
-
-	compressed = FivePointLoader.coil_compress(kdata, axis=0, target_channels=10)
-
+	full_svd(C1, C2, C3, C4, torch.device('cuda:0'))
 	end = time.time()
-
 	print('It Took: ', end - start)
+	
+
+
+
+
+
+
+
+
+
+	#s = torch.cat([s1, s2, s3, s4])
+	#p = torch.argsort(s)
+
+
+
+
+
+
+	
+
+
+
+	coil_compress = False
+	if coil_compress:
+		c = 44
+
+		Np = 25000000
+
+		start = time.time()
+
+		kdata = [torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np), torch.rand(1, c, Np)]
+
+		end = time.time()
+		print('It Took: ', end - start)
+
+		print(1)
+		start = time.time()
+
+		compressed = FivePointLoader.coil_compress(kdata, axis=0, target_channels=10)
+
+		end = time.time()
+
+		print('It Took: ', end - start)
