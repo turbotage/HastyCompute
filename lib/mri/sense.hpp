@@ -44,7 +44,8 @@ namespace hasty {
 		class LIB_EXPORT Sense {
 		public:
 
-			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -59,7 +60,8 @@ namespace hasty {
 		class LIB_EXPORT CUDASense {
 		public:
 
-			CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -75,7 +77,8 @@ namespace hasty {
 		class LIB_EXPORT SenseAdjoint {
 		public:
 
-			SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -90,7 +93,8 @@ namespace hasty {
 		class LIB_EXPORT CUDASenseAdjoint {
 		public:
 
-			CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -106,7 +110,9 @@ namespace hasty {
 		class LIB_EXPORT SenseNormal {
 		public:
 
-			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -124,7 +130,9 @@ namespace hasty {
 		class LIB_EXPORT CUDASenseNormal {
 		public:
 
-			CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+			CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -139,60 +147,6 @@ namespace hasty {
 
 		};
 
-
-		class LIB_EXPORT SenseNormalAdjoint {
-		public:
-
-			SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
-
-			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<at::Tensor>& imspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& midmanip,
-				const std::optional<CoilApplier>& postmanip);
-
-		private:
-			nufft::NufftNormal _normal_nufft;
-			std::vector<int64_t> _nmodes;
-		};
-
-		class LIB_EXPORT CUDASenseNormalAdjoint {
-		public:
-
-			CUDASenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
-
-			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<at::Tensor>& imspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& midmanip,
-				const std::optional<CoilApplier>& postmanip);
-
-		private:
-
-			nufft::CUDANufftNormal _normal_nufft;
-			std::vector<int64_t> _nmodes;
-		};
-
-
-
-
-		/*
-		class LIB_EXPORT SenseNormalToeplitz {
-		public:
-
-			SenseNormalToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, double tol);
-
-			SenseNormalToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes);
-
-			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage1, at::Tensor& storage2,
-				const at::Tensor& smaps, const std::vector<int64_t>& coils) const;
-
-		private:
-
-			nufft::NormalNufftToeplitz _normal_nufft;
-
-		};
-		*/
 
 	}
 }

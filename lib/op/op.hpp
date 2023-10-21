@@ -46,6 +46,8 @@ namespace hasty {
 
 			at::ScalarType dtype() const;
 
+			bool has_children() const;
+
 			Vector(const Vector& vec);
 			Vector& operator=(const Vector& vec);
 			
@@ -91,6 +93,9 @@ namespace hasty {
 		class Operator {
 		public:
 
+			Operator();
+			Operator(bool should_inplace_apply);
+
 			Vector operator()(const Vector& in) const;
 			friend Vector operator*(const Operator& lhs, const Vector& rhs);
 			
@@ -98,6 +103,8 @@ namespace hasty {
 			
 			virtual void apply_inplace(Vector& in) const;
 			virtual bool has_inplace_apply() const;
+
+			virtual bool should_inplace_apply() const;
 
 			friend Operator operator+(const Operator& lhs, const Operator& rhs);
 			friend Operator operator-(const Operator& lhs, const Operator& rhs);
@@ -112,8 +119,7 @@ namespace hasty {
 			const std::vector<Vector>& access_vecchilds(const Vector& vec) const;
 
 		private:
-
-
+			bool _should_inplace_apply;
 		};
 
 		class AddOp : public Operator {
@@ -152,6 +158,17 @@ namespace hasty {
 			Operator _right;
 		};
 
+		class ScaleOp : public Operator {
+		public:
+
+			ScaleOp(const at::Tensor& scalar);
+
+			Vector apply(const Vector& in) const override;
+
+		private:
+			at::Tensor _scalar;
+			at::optional<Operator> _opts;
+		};
 
 	}
 

@@ -89,6 +89,11 @@ at::ScalarType hasty::op::Vector::dtype() const
 	return _children[0].dtype();
 }
 
+bool hasty::op::Vector::has_children() const
+{
+	return !_children.empty();
+}
+
 hasty::op::Vector::Vector(const Vector& vec)
 	: _tensor(vec._tensor), _children(vec._children)
 {}
@@ -543,7 +548,15 @@ at::Tensor hasty::op::vdot(const Vector& a, const Vector& b)
 }
 
 
+hasty::op::Operator::Operator()
+	: _should_inplace_apply(false)
+{
+}
 
+hasty::op::Operator::Operator(bool should_inplace_apply)
+	: _should_inplace_apply(should_inplace_apply)
+{
+}
 
 hasty::op::Vector hasty::op::Operator::operator()(const Vector& in) const
 {
@@ -570,6 +583,10 @@ bool hasty::op::Operator::has_inplace_apply() const
 	return false;
 }
 
+bool hasty::op::Operator::should_inplace_apply() const
+{
+	return false;
+}
 
 hasty::op::Operator hasty::op::operator+(const Operator& lhs, const Operator& rhs)
 {
@@ -633,5 +650,25 @@ hasty::op::MulOp::MulOp(const Operator& lop, const Operator& rop)
 hasty::op::Vector hasty::op::MulOp::apply(const Vector& in) const
 {
 	return _left(_right(in));
+}
+
+hasty::op::ScaleOp::ScaleOp(const at::Tensor& scalar)
+	: _scalar(scalar)
+{}
+
+hasty::op::Vector hasty::op::ScaleOp::apply(const Vector& in) const
+{
+	if (in.has_children()) {
+		return Vector(_scalar * access_vectensor(in));
+	}
+	else {
+		auto childs = access_vecchilds(in);
+		std::vector<Vector> newchildren;
+		newchildren.reserve(childs.size());
+		for (auto& child : childs) {
+			newchildren.emplace_back(std::move(apply(child)));
+		}
+		return newchildren;
+	}
 }
 
