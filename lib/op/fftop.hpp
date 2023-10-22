@@ -92,5 +92,15 @@ namespace hasty {
 			std::unique_ptr<nufft::CUDANufftNormal> _cudanufft;
 		};
 
+		class DCT : public Operator {
+		public:
+
+
+
+		private:
+
+
+		};
+
 	}
 }

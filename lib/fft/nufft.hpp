@@ -273,6 +273,48 @@ namespace hasty {
 		};
 
 	}
+
+	namespace grid {
+
+		class Gridding {
+		public:
+
+			Gridding(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
+
+			void close();
+			~Nufft();
+
+			void apply(const at::Tensor& in, at::Tensor& out) const;
+
+			at::ScalarType coord_type();
+
+			at::ScalarType complex_type();
+
+			int32_t nfreq();
+
+			int32_t ndim();
+
+		private:
+			at::ScalarType			_type;
+			int32_t					_ndim;
+			int32_t					_ntransf;
+			int64_t					_nfreq;
+			const at::Tensor		_coords;
+			std::vector<int64_t>	_nmodes;
+			std::array<int64_t, 3>	_nmodes_flipped;
+			NufftOptions			_opts;
+
+			bool _closed = false;
+			finufft_plan			_plan;
+			finufftf_plan			_planf;
+
+			finufft_opts _finufft_opts;
+
+			int32_t _nvoxels;
+		};
+
+	}
+
 }
 
 

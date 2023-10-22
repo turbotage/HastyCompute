@@ -12,8 +12,8 @@ hasty::sense::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>&
 
 void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip,
-	const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip,
+	const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -94,8 +94,8 @@ hasty::sense::CUDASense::CUDASense(const at::Tensor& coords, const std::vector<i
 
 void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip,
-	const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip,
+	const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -176,7 +176,7 @@ hasty::sense::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::ve
 
 void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip, const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip, const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -254,7 +254,7 @@ hasty::sense::CUDASenseAdjoint::CUDASenseAdjoint(const at::Tensor& coords, const
 
 void hasty::sense::CUDASenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip, const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip, const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -335,9 +335,9 @@ hasty::sense::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vect
 
 void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip,
-	const std::optional<CoilApplier>& midmanip,
-	const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip,
+	const at::optional<CoilApplier>& midmanip,
+	const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 
@@ -424,9 +424,9 @@ hasty::sense::CUDASenseNormal::CUDASenseNormal(const at::Tensor& coords, const s
 
 void hasty::sense::CUDASenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-	const std::optional<CoilApplier>& premanip,
-	const std::optional<CoilApplier>& midmanip,
-	const std::optional<CoilApplier>& postmanip)
+	const at::optional<CoilApplier>& premanip,
+	const at::optional<CoilApplier>& midmanip,
+	const at::optional<CoilApplier>& postmanip)
 {
 	c10::InferenceMode inference_guard;
 

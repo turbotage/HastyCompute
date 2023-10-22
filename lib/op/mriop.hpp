@@ -21,6 +21,9 @@ namespace hasty {
 			std::vector<int64_t> _nmodes;
 			nufft::NufftOptions _opts;
 
+			at::Tensor _smaps;
+			std::vector<int64_t> _coils;
+
 			std::unique_ptr<sense::Sense> _cpusense;
 			std::unique_ptr<sense::CUDASense> _cudasense;
 		};
@@ -38,6 +41,11 @@ namespace hasty {
 			at::Tensor _coords;
 			std::vector<int64_t> _nmodes;
 			nufft::NufftOptions _opts;
+
+			bool _accumulate;
+
+			at::Tensor _smaps;
+			std::vector<int64_t> _coils;
 
 			std::unique_ptr<sense::SenseAdjoint> _cpusense;
 			std::unique_ptr<sense::CUDASenseAdjoint> _cudasense;
@@ -58,6 +66,9 @@ namespace hasty {
 			std::vector<int64_t> _nmodes;
 			nufft::NufftOptions _forward_opts;
 			nufft::NufftOptions _backward_opts;
+
+			at::Tensor _smaps;
+			std::vector<int64_t> _coils;
 
 			std::unique_ptr<sense::SenseNormal> _cpusense;
 			std::unique_ptr<sense::CUDASenseNormal> _cudasense;

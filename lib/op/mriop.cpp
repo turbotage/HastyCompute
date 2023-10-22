@@ -4,7 +4,7 @@
 hasty::op::SENSE::SENSE(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
 	const at::optional<nufft::NufftOptions>& opts)
-	: _coords(coords), _nmodes(nmodes)
+	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils)
 {
 	if (opts.has_value()) {
 		_opts = *opts;
@@ -27,9 +27,11 @@ hasty::op::Vector hasty::op::SENSE::apply(const Vector& in) const
 	if (children.empty()) {
 		at::Tensor out = nufft::allocate_out(_coords, _nmodes[0]);
 		if (_cudasense != nullptr)
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils, 
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		else
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		return Vector(out);
 	}
 
@@ -47,7 +49,7 @@ hasty::op::Vector hasty::op::SENSE::apply(const Vector& in) const
 hasty::op::SENSE_H::SENSE_H(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate, 
 	const at::optional<nufft::NufftOptions>& opts)
-	: _coords(coords), _nmodes(nmodes)
+	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils), _accumulate(accumulate)
 {
 	if (opts.has_value()) {
 		_opts = *opts;
@@ -70,9 +72,11 @@ hasty::op::Vector hasty::op::SENSE_H::apply(const Vector& in) const
 	if (children.empty()) {
 		at::Tensor out = nufft::allocate_adjoint_out(_coords, _nmodes);
 		if (_cudasense != nullptr)
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		else
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		return Vector(out);
 	}
 
@@ -89,8 +93,9 @@ hasty::op::Vector hasty::op::SENSE_H::apply(const Vector& in) const
 
 hasty::op::SENSE_N::SENSE_N(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
-	const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-	const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt)
+	const at::optional<nufft::NufftOptions>& forward_opts,
+	const at::optional<nufft::NufftOptions>& backward_opts)
+	: _smaps(smaps), _coils(coils)
 {
 	if (forward_opts.has_value()) {
 		_forward_opts = *forward_opts;
@@ -121,9 +126,11 @@ hasty::op::Vector hasty::op::SENSE_N::apply(const Vector& in) const
 		at::Tensor intens = access_vectensor(in);
 		at::Tensor out = at::empty_like(intens);
 		if (_cudasense != nullptr)
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		else
-			_cudasense->apply(access_vectensor(in), out);
+			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt, at::nullopt, at::nullopt, at::nullopt);
 		return Vector(out);
 	}
 

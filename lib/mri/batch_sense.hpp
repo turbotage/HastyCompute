@@ -265,6 +265,7 @@ namespace hasty {
 
 		};
 
+		/*
 		class LIB_EXPORT BatchedSenseNormalAdjoint : public BatchedSenseBase {
 		public:
 
@@ -284,6 +285,7 @@ namespace hasty {
 				DeviceContext& dctxt, int32_t outer_batch, const OuterManipulator& outmanip);
 
 		};
+		*/
 
 	}
 

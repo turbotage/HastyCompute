@@ -55,6 +55,7 @@ set(TEST_SOURCES
 
 set(FFT_SOURCES
 	"lib/fft/nufft.cpp"
+	"lib/fft/dct.cpp"
 )
 
 set(LINALG_SOURCES

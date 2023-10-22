@@ -49,8 +49,8 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 			nufft::Nufft _nufft;
@@ -65,8 +65,8 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 			nufft::CUDANufft _nufft;
@@ -82,8 +82,8 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 			nufft::Nufft _nufft;
@@ -98,8 +98,8 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 			nufft::CUDANufft _nufft;
@@ -116,9 +116,9 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& midmanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& midmanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 
@@ -136,15 +136,14 @@ namespace hasty {
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const std::optional<CoilApplier>& premanip,
-				const std::optional<CoilApplier>& midmanip,
-				const std::optional<CoilApplier>& postmanip);
+				const at::optional<CoilApplier>& premanip,
+				const at::optional<CoilApplier>& midmanip,
+				const at::optional<CoilApplier>& postmanip);
 
 		private:
 
 			nufft::CUDANufftNormal _normal_nufft;
 			std::vector<int64_t> _nmodes;
-
 		};
 
 
