@@ -172,6 +172,10 @@ namespace hasty {
 
 			void apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
 
+			void apply_forward(const at::Tensor& in, at::Tensor& out);
+
+			void apply_backward(const at::Tensor& in, at::Tensor& out);
+
 			at::ScalarType coord_type();
 
 			at::ScalarType complex_type();
@@ -198,6 +202,10 @@ namespace hasty {
 			void apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
 
 			void apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const;
+
+			void apply_forward(const at::Tensor& in, at::Tensor& out);
+
+			void apply_backward(const at::Tensor& in, at::Tensor& out);
 
 			at::ScalarType coord_type();
 
@@ -279,10 +287,9 @@ namespace hasty {
 		class Gridding {
 		public:
 
-			Gridding(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
+			Gridding(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
 			void close();
-			~Nufft();
 
 			void apply(const at::Tensor& in, at::Tensor& out) const;
 
@@ -302,7 +309,6 @@ namespace hasty {
 			const at::Tensor		_coords;
 			std::vector<int64_t>	_nmodes;
 			std::array<int64_t, 3>	_nmodes_flipped;
-			NufftOptions			_opts;
 
 			bool _closed = false;
 			finufft_plan			_plan;

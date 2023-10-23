@@ -809,6 +809,16 @@ void hasty::nufft::NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storag
 	_backward.apply(storage, in);
 }
 
+void hasty::nufft::NufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
+{
+	_forward.apply(in, out);
+}
+
+void hasty::nufft::NufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
+{
+	_backward.apply(in, out);
+}
+
 int32_t hasty::nufft::NufftNormal::nfreq()
 {
 	return _forward.nfreq();
@@ -868,6 +878,16 @@ void hasty::nufft::CUDANufftNormal::apply_inplace(at::Tensor& in, at::Tensor& st
 	}
 
 	_backward.apply(storage, in);
+}
+
+void hasty::nufft::CUDANufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
+{
+	_forward.apply(in, out);
+}
+
+void hasty::nufft::CUDANufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
+{
+	_backward.apply(in, out);
 }
 
 int32_t hasty::nufft::CUDANufftNormal::nfreq()

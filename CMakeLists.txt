@@ -26,6 +26,7 @@ message("BUILD_CUDA = ${BUILD_CUDA}")
 set(MRI_SOURCES
 	"lib/mri/sense.cpp"
 	"lib/mri/batch_sense.cpp"
+	"lib/mri/stacked_equal.cpp"
 	"lib/mri/svt.cpp"
 )
 

@@ -18,8 +18,8 @@ at::Tensor hasty::op::power_iteration(const Operator& A, Vector& v, int iters)
 	return max_eig;
 }
 
-void hasty::op::conjugate_gradient(const Operator& A, Vector& x, const Vector& b, const std::optional<Operator>& P, 
-	int iters, double tol)
+void hasty::op::conjugate_gradient(const Operator& A, Vector& x, const Vector& b, 
+	const std::optional<Operator>& P, int iters, double tol)
 {
 	if (iters < 1)
 		return;

@@ -115,10 +115,21 @@ namespace hasty {
 				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const at::optional<CoilApplier>& premanip,
-				const at::optional<CoilApplier>& midmanip,
-				const at::optional<CoilApplier>& postmanip);
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt,
+				const at::optional<CoilApplier>& premanip = at::nullopt,
+				const at::optional<CoilApplier>& midmanip = at::nullopt,
+				const at::optional<CoilApplier>& postmanip = at::nullopt);
+
+			void apply_forward(const at::Tensor& in, at::Tensor& out,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt);
+
+			void apply_backward(const at::Tensor& in, at::Tensor& out,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt);
 
 		private:
 
@@ -135,10 +146,21 @@ namespace hasty {
 				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
-				const at::optional<CoilApplier>& premanip,
-				const at::optional<CoilApplier>& midmanip,
-				const at::optional<CoilApplier>& postmanip);
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt,
+				const at::optional<CoilApplier>& premanip = at::nullopt,
+				const at::optional<CoilApplier>& midmanip = at::nullopt,
+				const at::optional<CoilApplier>& postmanip = at::nullopt);
+
+			void apply_forward(const at::Tensor& in, at::Tensor& out,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt);
+
+			void apply_backward(const at::Tensor& in, at::Tensor& out,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<at::Tensor>& kspace_storage = at::nullopt,
+				const at::optional<at::Tensor>& imspace_storage = at::nullopt);
 
 		private:
 

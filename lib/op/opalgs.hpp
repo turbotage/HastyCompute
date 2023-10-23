@@ -11,6 +11,9 @@ namespace hasty {
 		void conjugate_gradient(const Operator& A, Vector& x, const Vector& b, const std::optional<Operator>& P, 
 			int iters = 30, double tol = 0.0);
 
+		void stacked_conjugate_gradient(const Operator& A, Vector& x, const Vector& b, const std::optional<Operator>& P,
+			int iters = 30, double tol = 0.0);
+
 		void gradient_descent(const Operator& gradf, Vector& x);
 
 		struct ADMMCtx {

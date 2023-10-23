@@ -412,6 +412,118 @@ void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, con
 	}
 }
 
+void hasty::sense::SenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out, 
+	const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage,
+	const at::optional<at::Tensor>& kspace_storage)
+{
+	c10::InferenceMode inference_guard;
+
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
+	out.zero_();
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	}
+	else {
+		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
+	}
+
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	}
+	else {
+		kstore = at::empty({ ntransf, _normal_nufft.nfreq() }, in.options());
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (int brun = 0; brun < batch_runs; ++brun) {
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			imstore.select(0, j) = in.select(0, idx) * smaps.select(0, idx);
+		}
+
+		_normal_nufft.apply_forward(imstore, kstore);
+
+		for (int j = 0; j < ntransf; ++j) {
+			out.select(0, j).unsqueeze(0).add_(kstore.select(0, j));
+		}
+	}
+}
+
+void hasty::sense::SenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out, 
+	const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& kspace_storage,
+	const at::optional<at::Tensor>& imspace_storage)
+{
+	c10::InferenceMode inference_guard;
+
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
+	out.zero_();
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	}
+	else {
+		imstore = at::empty(at::makeArrayRef(_nmodes), out.options());
+	}
+
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	}
+	else {
+		kstore = at::empty({ ntransf, _normal_nufft.nfreq() }, in.options());
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (int brun = 0; brun < batch_runs; ++brun) {
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			kstore.select(0, j) = in.select(0, idx);
+		}
+
+		_normal_nufft.apply_backward(kstore, imstore);
+
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			imstore.select(0, j).mul_(smaps.select(0, coils[idx]).conj());
+		}
+
+
+		if (accumulate) {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				out.add_(imstore.select(0, j));
+			}
+		}
+		else {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				out.select(0, idx).add_(imstore.select(0, j));
+			}
+		}
+	}
+}
+
 
 hasty::sense::CUDASenseNormal::CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::optional<nufft::NufftOptions>& forward_opts, const at::optional<nufft::NufftOptions>& backward_opts)
@@ -501,4 +613,115 @@ void hasty::sense::CUDASenseNormal::apply(const at::Tensor& in, at::Tensor& out,
 	}
 }
 
+void hasty::sense::CUDASenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out,
+	const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& imspace_storage,
+	const at::optional<at::Tensor>& kspace_storage)
+{
+	c10::InferenceMode inference_guard;
+
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
+	out.zero_();
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	}
+	else {
+		imstore = at::empty(at::makeArrayRef(_nmodes), in.options());
+	}
+
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	}
+	else {
+		kstore = at::empty({ ntransf, _normal_nufft.nfreq() }, in.options());
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (int brun = 0; brun < batch_runs; ++brun) {
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			imstore.select(0, j) = in.select(0, idx) * smaps.select(0, idx);
+		}
+
+		_normal_nufft.apply_forward(imstore, kstore);
+
+		for (int j = 0; j < ntransf; ++j) {
+			out.select(0, j).unsqueeze(0).add_(kstore.select(0, j));
+		}
+	}
+}
+
+void hasty::sense::CUDASenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out,
+	const at::Tensor& smaps, const std::vector<int64_t>& coils,
+	const at::optional<at::Tensor>& kspace_storage,
+	const at::optional<at::Tensor>& imspace_storage)
+{
+	c10::InferenceMode inference_guard;
+
+	if (coils.size() % _nmodes[0] != 0)
+		throw std::runtime_error("Number of coils used in Sense::apply must be divisible by number of ntransf used for nufft");
+
+	int ntransf = _nmodes[0];
+	int batch_runs = coils.size() / ntransf;
+
+	out.zero_();
+
+	at::Tensor imstore;
+	if (imspace_storage.has_value()) {
+		imstore = *imspace_storage;
+	}
+	else {
+		imstore = at::empty(at::makeArrayRef(_nmodes), out.options());
+	}
+
+	at::Tensor kstore;
+	if (kspace_storage.has_value()) {
+		kstore = *kspace_storage;
+	}
+	else {
+		kstore = at::empty({ ntransf, _normal_nufft.nfreq() }, in.options());
+	}
+
+	bool accumulate = out.size(0) == 1;
+
+	for (int brun = 0; brun < batch_runs; ++brun) {
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			kstore.select(0, j) = in.select(0, idx);
+		}
+
+		_normal_nufft.apply_backward(kstore, imstore);
+
+
+		for (int j = 0; j < ntransf; ++j) {
+			int idx = brun * batch_runs + j;
+			imstore.select(0, j).mul_(smaps.select(0, coils[idx]).conj());
+		}
+
+
+		if (accumulate) {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				out.add_(imstore.select(0, j));
+			}
+		}
+		else {
+			for (int j = 0; j < ntransf; ++j) {
+				int idx = brun * batch_runs + j;
+				out.select(0, idx).add_(imstore.select(0, j));
+			}
+		}
+	}
+}
 

@@ -74,5 +74,8 @@ namespace hasty {
 			std::unique_ptr<sense::CUDASenseNormal> _cudasense;
 		};
 
+
+
+
 	}
 }
