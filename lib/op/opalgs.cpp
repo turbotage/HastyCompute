@@ -67,3 +67,18 @@ void hasty::op::conjugate_gradient(const Operator& A, Vector& x, const Vector& b
 	}
 
 }
+
+void hasty::op::gradient_descent(const Operator& gradf, Vector& x)
+{
+	throw std::runtime_error("Not Implemented yet.");
+}
+
+void hasty::op::ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, const std::function<void(ADMMCtx&)>& minL_z)
+{
+	for (int i = 0; i < ctx.max_iters; ++i) {
+		minL_x(ctx);
+		minL_z(ctx);
+
+		ctx.u = ctx.A(ctx.x) + ctx.B(ctx.z) - ctx.c;
+	}
+}

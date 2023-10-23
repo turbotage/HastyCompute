@@ -13,5 +13,19 @@ namespace hasty {
 
 		void gradient_descent(const Operator& gradf, Vector& x);
 
+		struct ADMMCtx {
+			at::Tensor rho;
+			Vector x;
+			Vector z;
+			Vector u;
+			Vector c;
+			Operator A;
+			Operator B;
+
+			int max_iters;
+		};
+
+		void ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, const std::function<void(ADMMCtx&)>& minL_z);
+
 	}
 }
