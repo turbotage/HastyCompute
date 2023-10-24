@@ -483,10 +483,13 @@ if __name__ == "__main__":
 		print('RelErr: ', torch.norm(CHECK - C_full) / torch.norm(C_full))
 		print('MaxErr:', torch.max(torch.abs(CHECK - C_full)))
 
-	C1 = torch.rand(32, 100000)
-	C2 = torch.rand(32, 100000)
-	C3 = torch.rand(32, 100000)
-	C4 = torch.rand(32, 100000)
+
+	NS = 1000000
+
+	C1 = torch.rand(44, NS)
+	C2 = torch.rand(44, NS)
+	C3 = torch.rand(44, NS)
+	C4 = torch.rand(44, NS)
 
 	start = time.time()
 	combined_svd(C1, C2, C3, C4, torch.device('cuda:0'))
@@ -523,7 +526,7 @@ if __name__ == "__main__":
 	if coil_compress:
 		c = 44
 
-		Np = 25000000
+		Np = 500000
 
 		start = time.time()
 
