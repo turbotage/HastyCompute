@@ -10,7 +10,7 @@ at::Tensor hasty::idct_irfft_impl(const at::Tensor V)
 	return at::fft_irfft(at::view_as_complex(V), V.size(1), 1);
 }
 
-at::Tensor hasty::dct(at::Tensor x, const std::string& norm = "")
+at::Tensor hasty::dct(at::Tensor x, const std::string& norm)
 {
 	using namespace torch::indexing;
 
@@ -38,7 +38,7 @@ at::Tensor hasty::dct(at::Tensor x, const std::string& norm = "")
 	return V;
 }
 
-at::Tensor hasty::idct(at::Tensor X, const std::string& norm = "")
+at::Tensor hasty::idct(at::Tensor X, const std::string& norm)
 {
 	using namespace at::indexing;
 

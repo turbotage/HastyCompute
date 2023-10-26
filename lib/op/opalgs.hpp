@@ -2,6 +2,7 @@
 
 #include "op.hpp"
 #include <optional>
+#include "../threading/thread_pool.hpp"
 
 namespace hasty {
 	namespace op {
@@ -16,6 +17,57 @@ namespace hasty {
 
 		void gradient_descent(const Operator& gradf, Vector& x);
 
+
+		template<typename DeviceContext>
+		class ConjugateGradientLoader {
+		public:
+
+			struct LoadResult {
+				op::Operator A;
+				op::Vector b;
+				std::optional<Operator> P;
+			};
+
+			virtual LoadResult load(DeviceContext& dctx, size_t idx) = 0;
+			
+		};
+
+		template<typename DeviceContext>
+		class DefaultConjugateGradientLoader : public ConjugateGradientLoader<DeviceContext> {
+		public:
+
+			DefaultConjugateGradientLoader(const LoadResult& lr)
+				: _load_result({lr}) {}
+
+			DefaultConjugateGradientLoader(const std::vector<LoadResult>& lrs)
+				: _load_result(lrs) {}
+
+			LoadResult load(DeviceContext& dctxt, size_t idx)
+			{
+
+			}
+
+		private:
+			std::vector<LoadResult> _load_results;
+		};
+
+		template<typename DeviceContext>
+		class ConjugateGradient {
+		public:
+
+			ConjugateGradient(const std::shared_ptr<ConjugateGradientLoader>& loader,
+				const std::shared_ptr<ContextThreadPool<DeviceContext>>& thread_pool,
+				int iters = 30, double tol = 0.0)
+			{
+
+			}
+
+		private:
+			std::shared_ptr<ConjugateGradientLoader> _cg_loader;
+			std::shared_ptr<ContextThreadPool<DeviceContext>> _thread_pool;
+		};
+
+
 		struct ADMMCtx {
 			at::Tensor rho;
 			Vector x;
@@ -29,6 +81,8 @@ namespace hasty {
 		};
 
 		void ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, const std::function<void(ADMMCtx&)>& minL_z);
+
+
 
 	}
 }

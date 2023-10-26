@@ -2,27 +2,36 @@
 
 #include "../torch_util.hpp"
 #include "../op/op.hpp"
+#include "../threading/thread_pool.hpp"
 
 namespace hasty {
 	namespace mri {
 
-		template<typename F> concept CGLoader =
-			std::invocable<F, at::Stream, size_t>&&
+		template<typename F, typename DeviceContext> concept CGLoaderTrait =
+			std::invocable<F, DeviceContext, size_t> &&
 			std::same_as <
 			std::tuple<op::Operator, op::Vector, at::optional<op::Operator>>,
-			std::invoke_result_t<F, at::Stream, size_t>>;
+			std::invoke_result_t<F, DeviceContext, size_t>>;
 
-		class BatchCG {
+
+		class ConjugateGradientLoader {
+
+		};
+
+		class BatchConjugateGradient {
 		public:
 
-			template<CGLoader T>
-			BatchCG(T const& loader, const std::vector<at::Stream>& streams) {
-
-			}
-
 		private:
-			
+
 		};
+
+
+		template<CGLoaderTrait CGLoader, typename DeviceContext>
+		void batch_cg(const CGLoader& loader, ContextThreadPool<DeviceContext>& pool)
+		{
+			
+		}
+
 
 	}
 }
