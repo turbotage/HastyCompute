@@ -88,6 +88,7 @@ namespace hasty {
 			std::vector<Vector> _children;
 
 			friend class Operator;
+			friend class OperatorAlg;
 		};
 
 		class Operator {
@@ -120,6 +121,8 @@ namespace hasty {
 
 		private:
 			bool _should_inplace_apply;
+
+			friend class OperatorAlg;
 		};
 
 		class AddOp : public Operator {

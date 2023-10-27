@@ -1,6 +1,32 @@
 #include "opalgs.hpp"
 
 
+at::Tensor& hasty::op::OperatorAlg::access_vectensor(Vector& vec) const
+{
+	return vec._tensor;
+}
+
+const at::Tensor& hasty::op::OperatorAlg::access_vectensor(const Vector& vec) const
+{
+	return vec._tensor;
+}
+
+std::vector<hasty::op::Vector>& hasty::op::OperatorAlg::access_vecchilds(Vector& vec) const
+{
+	return vec._children;
+}
+
+const std::vector<hasty::op::Vector>& hasty::op::OperatorAlg::access_vecchilds(const Vector& vec) const
+{
+	return vec._children;
+}
+
+
+
+
+
+
+
 at::Tensor hasty::op::power_iteration(const Operator& A, Vector& v, int iters)
 {
 	at::Tensor max_eig = v.norm();
@@ -18,27 +44,32 @@ at::Tensor hasty::op::power_iteration(const Operator& A, Vector& v, int iters)
 	return max_eig;
 }
 
-void hasty::op::conjugate_gradient(const Operator& A, Vector& x, const Vector& b, 
-	const std::optional<Operator>& P, int iters, double tol)
+
+
+hasty::op::ConjugateGradient::ConjugateGradient(const op::Operator& A, const op::Vector& b, const std::optional<op::Operator>& P)
+	: _A(A), _b(b), _P(P)
+{}
+
+void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 {
-	if (iters < 1)
+	if (iter < 1)
 		return;
 
-	Vector r = b - A * x;
-	
-	Vector z = P.has_value() ? (*P) * r : r;
+	Vector r = _b - _A * x;
+
+	Vector z = _P.has_value() ? (*_P) * r : r;
 
 	Vector p = z;
-	
+
 	at::Tensor rzold = at::real(vdot(r, z));
 	double resid = std::sqrt(rzold.item<double>());
 
-	for (int i = 0; i < iters; ++i) {
+	for (int i = 0; i < iter; ++i) {
 
 		if (resid < tol)
 			return;
 
-		Vector Ap = A * p;
+		Vector Ap = _A * p;
 		at::Tensor pAp = at::real(vdot(p, Ap));
 		if (pAp.item<double>() <= 0.0) {
 			throw std::runtime_error("A was not positive definite");
@@ -49,24 +80,25 @@ void hasty::op::conjugate_gradient(const Operator& A, Vector& x, const Vector& b
 
 		r -= Ap * alpha;
 
-		if (P.has_value())
-			z = (*P) * r;
+		if (_P.has_value())
+			z = (*_P) * r;
 		else
 			z = r;
 
 		at::Tensor rznew = at::real(vdot(r, z));
-		
+
 		// beta = rznew / rzold
 		p *= rznew / rzold;
 		p += z;
 
 		rzold = rznew;
-		
+
 		resid = std::sqrt(rzold.item<double>());
 
 	}
-
 }
+
+
 
 void hasty::op::gradient_descent(const Operator& gradf, Vector& x)
 {

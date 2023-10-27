@@ -119,6 +119,7 @@ namespace hasty {
 				for (auto it = contexts.begin(); it != contexts.end(); ++it) {
 					_threads.emplace_back([this, it]() { work(*it); });
 				}
+				_nthreads = _threads.size();
 			}
 			catch (...) {
 				{
@@ -167,6 +168,8 @@ namespace hasty {
 
 		int work_length() { return _work_length.load(); }
 
+		int nthreads() const { return _nthreads; }
+
 		ContextThreadPool(ContextThreadPool&&) = delete;
 		ContextThreadPool(const ContextThreadPool&) = delete;
 		ContextThreadPool& operator=(ContextThreadPool&&) = delete;
@@ -199,6 +202,7 @@ namespace hasty {
 		std::condition_variable _queue_notifier;
 		std::mutex _queue_mutex;
 		std::vector<std::thread> _threads;
+		int _nthreads;
 		bool _stop;
 
 		std::atomic<int> _work_length;
