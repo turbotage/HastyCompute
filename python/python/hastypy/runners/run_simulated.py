@@ -91,7 +91,6 @@ def run_full(settings, data):
 
 
 def run_from_difference(settings: RunSettings, data: Data, img_full):
-
 	cudev = torch.device('cuda:0')
 	smaps_cu = data.smaps.to(cudev)
 	coils = [i for i in range(data.smaps.shape[0])]
@@ -99,9 +98,11 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 		for enc in range(5):
 			kdata = SenseT(data.coord_vec[frame*5 + enc].to(cudev), smaps_cu, coils).apply(img_full[enc].to(cudev)).cpu()
 			data.kdata_vec[frame*5 + enc] -= kdata
-
+	
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
+	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
+
 	mean_images = torch.empty((settings.nframes,5) + settings.im_size, dtype=torch.complex64)
 	for frame in range(settings.nframes):
 		for enc in range(5):
@@ -114,38 +115,7 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
 	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
 
-	if settings.solver == 'PDHG':
-		precond_pdhg = False
-		precond_density = False
-		precond_ones = False
-		if precond_pdhg:
-			multicoil = False
-			preconds = []
-			print('Preconditioning matrices...')
-			for i in range(len(data.coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(data.coord_vec), end="")
-				if multicoil:
-					P = precond.kspace_precond(data.smaps, data.coord_vec[i])
-				else:
-					P = precond.kspace_precond(torch.ones_like(data.smaps), data.coord_vec[i])
-				preconds.append(P.to(device='cpu', non_blocking=False))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-		elif precond_ones:
-			preconds = []
-			print('Preconditioning matrices...')
-			for i in range(len(data.coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(data.coord_vec), end="")
-				preconds.append(torch.ones_like(data.kdata_vec[i], dtype=torch.float32))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-		else:
-			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='PDHG')
-	elif settings.solver == 'GD':
+	if settings.solver == 'GD':
 		use_weights = False
 		if use_weights:
 			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
@@ -158,7 +128,9 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 		raise RuntimeError('Unsupported solver type')
 
 	def err_callback(image: Vector, iter):
-		relerr = opalg.norm(mean_images + image - true_images) / true_images_norm
+		img = mean_images + image
+		img /= opalg.mean(img)
+		relerr = opalg.norm(img - true_images) / true_images_norm
 		print('RelErr: ', relerr)
 
 	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
@@ -169,128 +141,13 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 
 	images += mean_images.view((settings.nframes,5) + data.smaps.shape[1:])
 
-	vel_images = etv.enc_to_vel_linear(images.numpy(), 1.0)
-
-	pu.image_nd(vel_images)
-
 	return images
 
 def run_from_mean(settings: RunSettings):
-	pass
+
 
 def run_from_zero(settings: RunSettings):
-	coord_vec, kdata_vec, smaps, true_images = FivePointLoader.load_simulated(
-		settings.rawdata_filepath, settings.smaps_filepath, settings.true_filepath)
 	
-	settings.im_size = smaps.shape[1:]
-	nframes = len(coord_vec) // 5
-	
-	#pu.image_nd(true_images.numpy())
-
-	true_images = Vector(true_images.view((nframes*5,1)+smaps.shape[1:]))
-	true_images_norm = opalg.norm(true_images)
-
-	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
-			nblocks=0, thresh=0.001, soft=True)
-
-	print('Kdata points per frame: ', coord_vec[0].shape[1])
-	print('Kdata points kdata per pixel: ', coord_vec[0].shape[1] / math.prod(smaps.shape[1:]))
-
-	if settings.solver == 'PDHG':
-		precond_pdhg = False
-		precond_density = False
-		precond_ones = False
-		if precond_pdhg:
-			multicoil = False
-			preconds = []
-			print('Preconditioning matrices...')
-			for i in range(len(coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(coord_vec), end="")
-				if multicoil:
-					P = precond.kspace_precond(smaps, coord_vec[i])
-				else:
-					P = precond.kspace_precond(torch.ones_like(smaps), coord_vec[i])
-				preconds.append(P.to(device='cpu', non_blocking=False))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-		elif precond_density:
-			preconds = []
-			print('Preconditioning matrices...')
-			cudev = torch.device('cuda:0')
-			for i in range(len(coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(coord_vec), end="")
-				P = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
-				P = P.repeat(1,smaps.shape[0],1)
-				preconds.append(P.to(device='cpu', non_blocking=False))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-		elif precond_ones:
-			preconds = []
-			print('Preconditioning matrices...')
-			for i in range(len(coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(coord_vec), end="")
-				preconds.append(torch.ones_like(kdata_vec[i], dtype=torch.float32))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-		else:
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG')
-	elif settings.solver == 'GD':
-		use_weights = True
-		if use_weights:
-			weights_vec = []
-			print('Preconditioning matrices...')
-			cudev = torch.device('cuda:0')
-			for i in range(len(coord_vec)):
-				print("\r", end="")
-				print('Coord: ', i, '/', len(coord_vec), end="")
-				#weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
-				#weights = torch.sqrt(weights)
-				weights = precond.pipe_menon_dcf(coord_vec[i], settings.im_size)
-				weights_vec.append(weights.squeeze(0).to(device='cpu', non_blocking=False))
-			print(' Done.')
-
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, weights_vec, solver='GD')
-		else:
-			framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='GD')
-	elif settings.solver == 'Gridding':
-		weights_vec = []
-		print('Weight matrices...')
-		cudev = torch.device('cuda:0')
-		for i in range(len(coord_vec)):
-			print("\r", end="")
-			print('Coord: ', i, '/', len(coord_vec), end="")
-			#weights = tkbn.calc_density_compensation_function(ktraj=coord_vec[i].to(cudev), im_size=settings.im_size)
-			#weights = torch.sqrt(weights)
-			#weights = precond.pipe_menon_dcf(coord_vec[i], settings.im_size)
-			weights_vec.append(weights.squeeze(0).to(device='cpu', non_blocking=False))
-		print(' Done.')
-
-		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, weights_vec=weights_vec, solver='Gridding')
-	else:
-		raise RuntimeError('Unsupported solver type')
-
-	def err_callback(image: Vector, iter):
-		if iter==-1:
-			relerr = torch.norm(image - true_images.get_tensor().view((nframes,5) + smaps.shape[1:])) / true_images_norm
-		else:	
-			relerr = opalg.norm(image - true_images) / true_images_norm
-		print('RelErr: ', relerr)
-
-	images = torch.zeros((nframes, 5) + settings.im_size, dtype=torch.complex64)
-
-	images = framed_recon.run(images, iter=45, callback=err_callback)
-
-	err_callback(images, -1)
-
-	pu.image_nd(images.numpy())
-
-	return images
 
 if __name__ == '__main__':
 	with torch.inference_mode():

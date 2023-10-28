@@ -173,7 +173,21 @@ namespace hasty {
 			at::optional<Operator> _opts;
 		};
 
+		class StackedOperator : public Operator {
+		public:
 
+			StackedOperator(const std::vector<Operator>& ops);
+
+			Vector apply(const Vector& in) const override;
+
+			size_t stack_size() const;
+
+			op::Operator& get_stack(size_t idx);
+			const op::Operator& get_stack(size_t idx) const;
+
+		private:
+			std::vector<Operator> _ops;
+		};
 
 
 	}

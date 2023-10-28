@@ -672,3 +672,48 @@ hasty::op::Vector hasty::op::ScaleOp::apply(const Vector& in) const
 	}
 }
 
+
+
+hasty::op::StackedOperator::StackedOperator(const std::vector<Operator>& ops)
+	: _ops(ops)
+{
+}
+
+hasty::op::Vector hasty::op::StackedOperator::apply(const Vector& in) const
+{
+	if (!in.has_children()) {
+		if (_ops.size() != 1) {
+			throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
+		}
+		return _ops[0].apply(in);
+	}
+
+	auto& children = access_vecchilds(in);
+	if (children.size() != _ops.size()) {
+		throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
+	}
+
+	std::vector<op::Vector> newvecs;
+	newvecs.reserve(children.size());
+	for (int i = 0; i < _ops.size(); ++i) {
+		newvecs.push_back(std::move(_ops[i].apply(children[i])));
+	}
+}
+
+size_t hasty::op::StackedOperator::stack_size() const
+{
+	return _ops.size();
+}
+
+hasty::op::Operator& hasty::op::StackedOperator::get_stack(size_t idx)
+{
+	return _ops[idx];
+}
+
+const hasty::op::Operator& hasty::op::StackedOperator::get_stack(size_t idx) const
+{
+	return _ops[idx];
+}
+
+
+

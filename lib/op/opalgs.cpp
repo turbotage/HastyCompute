@@ -26,8 +26,11 @@ const std::vector<hasty::op::Vector>& hasty::op::OperatorAlg::access_vecchilds(c
 
 
 
+hasty::op::PowerIteration::PowerIteration(const op::Operator& A)
+	: _A(A)
+{}
 
-at::Tensor hasty::op::power_iteration(const Operator& A, Vector& v, int iters)
+at::Tensor hasty::op::PowerIteration::run(op::Vector& v, int iters)
 {
 	at::Tensor max_eig = v.norm();
 	for (int i = 0; i < iters; ++i) {
@@ -43,8 +46,6 @@ at::Tensor hasty::op::power_iteration(const Operator& A, Vector& v, int iters)
 
 	return max_eig;
 }
-
-
 
 hasty::op::ConjugateGradient::ConjugateGradient(const op::Operator& A, const op::Vector& b, const std::optional<op::Operator>& P)
 	: _A(A), _b(b), _P(P)
@@ -100,11 +101,25 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 
 
 
-void hasty::op::gradient_descent(const Operator& gradf, Vector& x)
+hasty::op::Admm::Admm(const std::shared_ptr<AdmmMinimizer>& xmin, const std::shared_ptr<AdmmMinimizer>& zmin)
+	: _xmin(xmin), _zmin(zmin)
 {
-	throw std::runtime_error("Not Implemented yet.");
 }
 
+void hasty::op::Admm::run(Admm::Context& ctx)
+{
+	for (int i = 0; i < ctx.admm_iter; ++i) {
+		_xmin->solve(ctx);
+		_zmin->solve(ctx);
+		ctx.u = ctx.A(ctx.x) + ctx.B(ctx.z) - ctx.z;
+	}
+
+}
+
+
+
+
+/*
 void hasty::op::ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, const std::function<void(ADMMCtx&)>& minL_z)
 {
 	for (int i = 0; i < ctx.max_iters; ++i) {
@@ -114,3 +129,4 @@ void hasty::op::ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, 
 		ctx.u = ctx.A(ctx.x) + ctx.B(ctx.z) - ctx.c;
 	}
 }
+*/

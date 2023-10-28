@@ -9,7 +9,7 @@ import hastypy.base.enc_to_vel as etv
 import hastypy.util.plot_utility as pu
 import hastypy.util.image_creation as ic
 
-import hastypy.base.svt as svt
+#import hastypy.base.svt as svt
 
 def test_data(noiceperc=0.0):
 	nx = 32
@@ -140,4 +140,6 @@ def test_real():
 
 
 if __name__ == '__main__':
-	test_real()
+	#test_real()
+	etv.enc_to_vel_nonlinear(np.zeros((1,)), 1.0)
+	#test_data()

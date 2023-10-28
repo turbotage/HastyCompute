@@ -17,15 +17,16 @@ namespace hasty {
 			const std::vector<Vector>& access_vecchilds(const Vector& vec) const;
 		};
 
-		at::Tensor power_iteration(const Operator& A, Vector& v, int iters=30);
+		class PowerIteration : public OperatorAlg {
+		public:
 
-		void conjugate_gradient(const Operator& A, Vector& x, const Vector& b, const std::optional<Operator>& P, 
-			int iters = 30, double tol = 0.0);
+			PowerIteration(const op::Operator& A);
 
+			at::Tensor run(op::Vector& v, int iters = 30);
 
-		void gradient_descent(const Operator& gradf, Vector& x);
-
-
+		private:
+			op::Operator _A;
+		};
 
 		class ConjugateGradient : public OperatorAlg {
 		public:
@@ -117,21 +118,46 @@ namespace hasty {
 			std::shared_ptr<ContextThreadPool<DeviceContext>> _thread_pool;
 		};
 
+		class AdmmMinimizer : public OperatorAlg {
+		public:
 
-		struct ADMMCtx {
-			at::Tensor rho;
-			Vector x;
-			Vector z;
-			Vector u;
-			Vector c;
-			Operator A;
-			Operator B;
+			virtual void solve(Admm::Context& ctx);
 
-			int max_iters;
+		private:
+
 		};
 
-		void ADMM(ADMMCtx& ctx, const std::function<void(ADMMCtx&)>& minL_x, const std::function<void(ADMMCtx&)>& minL_z);
+		class Admm {
+		public:
 
+			struct Context {
+				// Ax + Bz = c
+				op::Operator A;
+				op::Operator B;
+				op::Vector c;
+
+				op::Vector x; // x
+				op::Vector z; // z
+				op::Vector u; // scaled dual variable
+
+				int xiter = 30;
+				double xtol = 0.0;
+				int ziter = 30;
+				double ztol = 0.0;
+
+				int admm_iter = 30;
+				double admm_tol = 0.0;
+			};
+
+			Admm(const std::shared_ptr<AdmmMinimizer>& xmin, const std::shared_ptr<AdmmMinimizer>& zmin);
+
+			void run(Admm::Context& ctx);
+
+		private:
+			std::shared_ptr<Context> _ctx;
+			std::shared_ptr<AdmmMinimizer> _xmin;
+			std::shared_ptr<AdmmMinimizer> _zmin;
+		};
 
 
 	}
