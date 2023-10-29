@@ -48,6 +48,9 @@ namespace hasty {
 
 			bool has_children() const;
 
+			const std::vector<Vector>& children() const;
+			const at::Tensor& tensor() const;
+
 			Vector(const Vector& vec);
 			Vector& operator=(const Vector& vec);
 			

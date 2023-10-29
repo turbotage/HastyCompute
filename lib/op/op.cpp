@@ -94,6 +94,16 @@ bool hasty::op::Vector::has_children() const
 	return !_children.empty();
 }
 
+const std::vector<hasty::op::Vector>& hasty::op::Vector::children() const
+{
+	return _children;
+}
+
+const at::Tensor& hasty::op::Vector::tensor() const
+{
+	return _tensor;
+}
+
 hasty::op::Vector::Vector(const Vector& vec)
 	: _tensor(vec._tensor), _children(vec._children)
 {}
