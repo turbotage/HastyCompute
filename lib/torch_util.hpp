@@ -49,6 +49,11 @@ namespace hasty {
 
         void LIB_EXPORT future_catcher(const std::function<void()>& func);
 
+        at::Tensor upscale_with_zeropad(const at::Tensor& input, const std::vector<int64_t>& newsize);
+
+        at::Tensor upscale_with_zeropad(const at::Tensor& input, const at::ArrayRef<int64_t>& newsize);
+
+
 	}
 
 }

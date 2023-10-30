@@ -194,3 +194,43 @@ void hasty::torch_util::future_catcher(const std::function<void()>& func)
 		throw std::runtime_error("caught something strange: ");
 	}
 }
+
+at::Tensor hasty::torch_util::upscale_with_zeropad(const at::Tensor& input, const std::vector<int64_t>& newsize)
+{
+	using namespace at::indexing;
+
+	std::vector<TensorIndex> slices;
+	for (int i = 0; i < input.ndimension(); ++i) {
+		auto inpsize = input.size(i);
+		if (inpsize > newsize[i]) {
+			throw std::runtime_error("Cannot upscale to smaller image in dim " + std::to_string(i));
+		}
+		slices.push_back(Slice(None, inpsize));
+	}
+
+	at::Tensor output = at::zeros(at::makeArrayRef(newsize), input.options());
+	output.index_put_(at::makeArrayRef(slices), input);
+
+	return output;
+}
+
+at::Tensor hasty::torch_util::upscale_with_zeropad(const at::Tensor& input, const at::ArrayRef<int64_t>& newsize)
+{
+	using namespace at::indexing;
+
+	std::vector<TensorIndex> slices;
+	for (int i = 0; i < input.ndimension(); ++i) {
+		auto inpsize = input.size(i);
+		if (inpsize > newsize[i]) {
+			throw std::runtime_error("Cannot upscale to smaller image in dim " + std::to_string(i));
+		}
+		slices.push_back(Slice(None, inpsize));
+	}
+
+	at::Tensor output = at::zeros(at::makeArrayRef(newsize), input.options());
+	output.index_put_(at::makeArrayRef(slices), input);
+
+	return output;
+}
+
+
