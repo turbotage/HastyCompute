@@ -59,9 +59,10 @@ class RunSettings:
 		return self
 
 class Data:
-	def __init__(self, coord_vec, kdata_vec, smaps, true_images):
+	def __init__(self, coord_vec, kdata_vec, weights_vec, smaps, true_images):
 		self.coord_vec = coord_vec
 		self.kdata_vec = kdata_vec
+		self.weights_vec = weights_vec
 		self.smaps = smaps
 		self.true_images = true_images
 
@@ -98,7 +99,10 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 		for enc in range(5):
 			kdata = SenseT(data.coord_vec[frame*5 + enc].to(cudev), smaps_cu, coils).apply(img_full[enc].to(cudev)).cpu()
 			data.kdata_vec[frame*5 + enc] -= kdata
-	
+	del smaps_cu, coils
+	gc.collect()
+	torch.cuda.empty_cache()
+
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
@@ -122,32 +126,110 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 		else:
 			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='GD')
 	elif settings.solver == 'Gridding':
-
 		framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, weights_vec=data.weights_vec, solver='Gridding')
 	else:
 		raise RuntimeError('Unsupported solver type')
+
+	relerrs = []
 
 	def err_callback(image: Vector, iter):
 		img = mean_images + image
 		img /= opalg.mean(img)
 		relerr = opalg.norm(img - true_images) / true_images_norm
+		relerrs.append(relerr)
 		print('RelErr: ', relerr)
 
 	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
 
 	images = framed_recon.run(images, iter=45, callback=err_callback)
 
-	pu.image_nd(images.numpy())
+	#pu.image_nd(images.numpy())
+	#images += mean_images.view((settings.nframes,5) + data.smaps.shape[1:])
+	#return images
 
-	images += mean_images.view((settings.nframes,5) + data.smaps.shape[1:])
+	return relerrs
 
-	return images
+def run_from_mean(settings: RunSettings, data: Data, img_full):
+	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
+	true_images /= opalg.mean(true_images)
+	true_images_norm = opalg.norm(true_images)
 
-def run_from_mean(settings: RunSettings):
+	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
+			nblocks=0, thresh=0.001, soft=True)
 
+	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
+	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
 
-def run_from_zero(settings: RunSettings):
-	
+	if settings.solver == 'GD':
+		use_weights = False
+		if use_weights:
+			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
+		else:
+			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='GD')
+	elif settings.solver == 'Gridding':
+
+		framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, weights_vec=data.weights_vec, solver='Gridding')
+	else:
+		raise RuntimeError('Unsupported solver type')
+
+	relerrs = []
+
+	def err_callback(image: Vector, iter):
+		image /= opalg.mean(image)
+		relerr = opalg.norm(image - true_images) / true_images_norm
+		relerrs.append(relerr)
+		print('RelErr: ', relerr)
+
+	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
+	for frame in range(settings.nframes):
+		for enc in range(5):
+			images[frame,enc,...] = img_full[enc,0,...]
+
+	images = framed_recon.run(images, iter=45, callback=err_callback)
+
+	#pu.image_nd(images.numpy())
+	#return images
+
+	return relerrs
+
+def run_from_zero(settings: RunSettings, data: Data):
+	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
+	true_images /= opalg.mean(true_images)
+	true_images_norm = opalg.norm(true_images)
+
+	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
+			nblocks=0, thresh=0.001, soft=True)
+
+	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
+	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
+
+	if settings.solver == 'GD':
+		use_weights = False
+		if use_weights:
+			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
+		else:
+			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, solver='GD')
+	elif settings.solver == 'Gridding':
+
+		framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, weights_vec=data.weights_vec, solver='Gridding')
+	else:
+		raise RuntimeError('Unsupported solver type')
+
+	relerrs = []
+	def err_callback(image: Vector, iter):
+		image /= opalg.mean(image)
+		relerr = opalg.norm(image - true_images) / true_images_norm
+		relerrs.append(relerr)
+		print('RelErr: ', relerr)
+
+	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
+
+	images = framed_recon.run(images, iter=45, callback=err_callback)
+
+	#pu.image_nd(images.numpy())
+	#return images
+
+	return relerrs
 
 if __name__ == '__main__':
 	with torch.inference_mode():
@@ -162,8 +244,20 @@ if __name__ == '__main__':
 		settings.im_size = data.smaps.shape[1:]
 		settings.set_nframes(len(data.coord_vec) // 5)
 
-		img_full = run_full(settings, data)
+		calc_full = True
+		if calc_full:
+			img_full = run_full(settings, data)
+			with h5py.File('D:/4DRecon/dat/dat2/simulated_full_img.h5', 'w') as f:
+				f.create_dataset('img_full', data=img_full)
+		else:
+			with h5py.File('D:/4DRecon/dat/dat2/simulated_full_img.h5', 'r') as f:
+				img_full = f['img_full'][()]
 
-		run_from_difference(settings, data, img_full)
+
+		difference_err = run_from_difference(settings, data, img_full)
+		mean_err = run_from_mean(settings, data, img_full)
+		zero_err = run_from_zero(settings, data)
+
+		
 
 

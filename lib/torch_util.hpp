@@ -53,7 +53,9 @@ namespace hasty {
 
         at::Tensor upscale_with_zeropad(const at::Tensor& input, const at::ArrayRef<int64_t>& newsize);
 
+        at::Tensor resize(const at::Tensor& input, const std::vector<int64_t>& newsize);
 
+        at::Tensor resize(const at::Tensor& input, const at::ArrayRef<int64_t>& newsize);
 	}
 
 }

@@ -1204,3 +1204,38 @@ at::Tensor hasty::nufft::CUDANormalNufftToeplitz::get_diagonal()
 
 
 
+
+hasty::grid::Gridding::Gridding(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+{
+
+}
+
+void hasty::grid::Gridding::close()
+{
+}
+
+void hasty::grid::Gridding::apply(const at::Tensor& in, at::Tensor& out) const
+{
+}
+
+at::ScalarType hasty::grid::Gridding::coord_type()
+{
+	return at::ScalarType();
+}
+
+at::ScalarType hasty::grid::Gridding::complex_type()
+{
+	return at::ScalarType();
+}
+
+int32_t hasty::grid::Gridding::nfreq()
+{
+	return 0;
+}
+
+int32_t hasty::grid::Gridding::ndim()
+{
+	return 0;
+}
+
+

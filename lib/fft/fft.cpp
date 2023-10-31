@@ -6,7 +6,7 @@ at::Tensor hasty::fft::fftc(const at::Tensor& input, const at::OptionalArrayRef<
 {
 	//auto ndim = input.ndimension();
 
-	at::Tensor tmp = oshape.has_value() ? torch_util::upscale_with_zeropad(input, *oshape) : input;
+	at::Tensor tmp = oshape.has_value() ? torch_util::resize(input, *oshape) : input;
 
 	tmp = at::fft_ifftshift(tmp, axes);
 	tmp = at::fft_fftn(tmp, at::nullopt, axes, norm);
@@ -19,5 +19,10 @@ at::Tensor hasty::fft::ifftc(const at::Tensor& input, const at::OptionalArrayRef
 {
 	//auto ndim = input.ndimension();
 
+	at::Tensor tmp = oshape.has_value() ? torch_util::resize(input, *oshape) : input;
 
+	tmp = at::fft_ifftshift(tmp, axes);
+	tmp = at::fft_ifftn(tmp, at::nullopt, axes, norm);
+	tmp = at::fft_fftshift(tmp, axes);
+	return tmp;
 }

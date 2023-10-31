@@ -233,4 +233,32 @@ at::Tensor hasty::torch_util::upscale_with_zeropad(const at::Tensor& input, cons
 	return output;
 }
 
+at::Tensor hasty::torch_util::resize(const at::Tensor& input, const std::vector<int64_t>& newsize)
+{
+	using namespace at::indexing;
 
+	std::vector<TensorIndex> slices;
+	for (int i = 0; i < input.ndimension(); ++i) {
+		slices.push_back(Slice(None, std::min(newsize[i], input.size(i))));
+	}
+
+	at::Tensor output = at::zeros(at::makeArrayRef(newsize), input.options());
+	output.index_put_(at::makeArrayRef(slices), input);
+
+	return output;
+}
+
+at::Tensor hasty::torch_util::resize(const at::Tensor& input, const at::ArrayRef<int64_t>& newsize)
+{
+	using namespace at::indexing;
+
+	std::vector<TensorIndex> slices;
+	for (int i = 0; i < input.ndimension(); ++i) {
+		slices.push_back(Slice(None, std::min(newsize[i], input.size(i))));
+	}
+
+	at::Tensor output = at::zeros(at::makeArrayRef(newsize), input.options());
+	output.index_put_(at::makeArrayRef(slices), input);
+
+	return output;
+}
