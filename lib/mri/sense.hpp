@@ -18,27 +18,27 @@ namespace hasty {
 			CoilManipulator& setPreApply(const CoilApplier& apply) {
 				if (preapplier.has_value())
 					throw std::runtime_error("Tried to set non nullopt applier");
-				preapplier = std::make_optional(apply);
+				preapplier = at::make_optional(apply);
 				return *this;
 			}
 
 			CoilManipulator& setMidApply(const CoilApplier& apply) {
 				if (midapplier.has_value())
 					throw std::runtime_error("Tried to set non nullopt applier");
-				midapplier = std::make_optional(apply);
+				midapplier = at::make_optional(apply);
 				return *this;
 			}
 
 			CoilManipulator& setPostApply(const CoilApplier& apply) {
 				if (postapplier.has_value())
 					throw std::runtime_error("Tried to set non nullopt applier");
-				postapplier = std::make_optional(apply);
+				postapplier = at::make_optional(apply);
 				return *this;
 			}
 
-			std::optional<CoilApplier> preapplier;
-			std::optional<CoilApplier> midapplier;
-			std::optional<CoilApplier> postapplier;
+			at::optional<CoilApplier> preapplier;
+			at::optional<CoilApplier> midapplier;
+			at::optional<CoilApplier> postapplier;
 		};
 
 		class LIB_EXPORT Sense {

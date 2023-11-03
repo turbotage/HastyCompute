@@ -1,7 +1,7 @@
 #include "mriop.hpp"
 
 
-hasty::op::SENSE::SENSE(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+hasty::op::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
 	const at::optional<nufft::NufftOptions>& opts)
 	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils)
@@ -20,7 +20,7 @@ hasty::op::SENSE::SENSE(const at::Tensor& coords, const std::vector<int64_t>& nm
 		_cpusense = std::make_unique<sense::Sense>(_coords, _nmodes, _opts);
 }
 
-hasty::op::Vector hasty::op::SENSE::apply(const Vector& in) const
+hasty::op::Vector hasty::op::Sense::apply(const Vector& in) const
 {
 	const auto& children = access_vecchilds(in);
 
@@ -46,7 +46,7 @@ hasty::op::Vector hasty::op::SENSE::apply(const Vector& in) const
 
 
 
-hasty::op::SENSE_H::SENSE_H(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+hasty::op::SenseH::SenseH(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate, 
 	const at::optional<nufft::NufftOptions>& opts)
 	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils), _accumulate(accumulate)
@@ -65,7 +65,7 @@ hasty::op::SENSE_H::SENSE_H(const at::Tensor& coords, const std::vector<int64_t>
 		_cpusense = std::make_unique<sense::SenseAdjoint>(_coords, _nmodes, _opts);
 }
 
-hasty::op::Vector hasty::op::SENSE_H::apply(const Vector& in) const
+hasty::op::Vector hasty::op::SenseH::apply(const Vector& in) const
 {
 	const auto& children = access_vecchilds(in);
 
@@ -91,7 +91,7 @@ hasty::op::Vector hasty::op::SENSE_H::apply(const Vector& in) const
 
 
 
-hasty::op::SENSE_N::SENSE_N(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+hasty::op::SenseN::SenseN(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
 	const at::optional<nufft::NufftOptions>& forward_opts,
 	const at::optional<nufft::NufftOptions>& backward_opts)
@@ -118,7 +118,7 @@ hasty::op::SENSE_N::SENSE_N(const at::Tensor& coords, const std::vector<int64_t>
 		_cpusense = std::make_unique<sense::SenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
 }
 
-hasty::op::Vector hasty::op::SENSE_N::apply(const Vector& in) const
+hasty::op::Vector hasty::op::SenseN::apply(const Vector& in) const
 {
 	const auto& children = access_vecchilds(in);
 
@@ -143,3 +143,50 @@ hasty::op::Vector hasty::op::SENSE_N::apply(const Vector& in) const
 	return Vector(newchilds);
 }
 
+hasty::op::Vector hasty::op::SenseN::apply_forward(const Vector& in) const
+{
+	const auto& children = access_vecchilds(in);
+
+	if (children.empty()) {
+		at::Tensor out = nufft::allocate_out(_coords, _nmodes[0]);
+		if (_cudasense != nullptr)
+			_cudasense->apply_forward(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt);
+		else
+			_cudasense->apply_forward(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt);
+		return Vector(out);
+	}
+
+	std::vector<Vector> newchilds;
+	newchilds.reserve(children.size());
+	for (auto& child : children) {
+		newchilds.emplace_back(std::move(apply_forward(child)));
+	}
+
+	return Vector(newchilds);
+}
+
+hasty::op::Vector hasty::op::SenseN::apply_backward(const Vector& in) const
+{
+	const auto& children = access_vecchilds(in);
+
+	if (children.empty()) {
+		at::Tensor out = nufft::allocate_adjoint_out(_coords, _nmodes);
+		if (_cudasense != nullptr)
+			_cudasense->apply_backward(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt);
+		else
+			_cudasense->apply_backward(access_vectensor(in), out, _smaps, _coils,
+				at::nullopt, at::nullopt);
+		return Vector(out);
+	}
+
+	std::vector<Vector> newchilds;
+	newchilds.reserve(children.size());
+	for (auto& child : children) {
+		newchilds.emplace_back(std::move(apply_backward(child)));
+	}
+
+	return Vector(newchilds);
+}

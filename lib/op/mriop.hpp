@@ -7,10 +7,10 @@
 namespace hasty {
 	namespace op {
 
-		class SENSE : public Operator {
+		class Sense : public Operator {
 		public:
 
-			SENSE(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
@@ -28,10 +28,10 @@ namespace hasty {
 			std::unique_ptr<sense::CUDASense> _cudasense;
 		};
 		
-		class SENSE_H : public Operator {
+		class SenseH : public Operator {
 		public:
 
-			SENSE_H(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			SenseH(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
 				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
@@ -51,15 +51,19 @@ namespace hasty {
 			std::unique_ptr<sense::CUDASenseAdjoint> _cudasense;
 		};
 
-		class SENSE_N : public Operator {
+		class SenseN : public Operator {
 		public:
 
-			SENSE_N(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			SenseN(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
 				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
+
+			Vector apply_forward(const Vector& in) const;
+
+			Vector apply_backward(const Vector& in) const;
 
 		private:
 			at::Tensor _coords;
@@ -73,8 +77,6 @@ namespace hasty {
 			std::unique_ptr<sense::SenseNormal> _cpusense;
 			std::unique_ptr<sense::CUDASenseNormal> _cudasense;
 		};
-
-
 
 
 	}

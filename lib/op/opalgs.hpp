@@ -41,37 +41,37 @@ namespace hasty {
 			std::optional<op::Operator> _P;
 		};
 
+		struct ConjugateGradientLoadResult {
+			op::Operator A;
+			op::Vector b;
+			std::optional<Operator> P;
+		};
+
 		template<typename DeviceContext>
 		class BatchConjugateGradientLoader {
 		public:
 
-			struct LoadResult {
-				op::Operator A;
-				op::Vector b;
-				std::optional<Operator> P;
-			};
-
-			virtual LoadResult load(DeviceContext& dctx, size_t idx) = 0;
+			virtual ConjugateGradientLoadResult load(DeviceContext& dctx, size_t idx) = 0;
 			
 		};
 
 		template<typename DeviceContext>
-		class DefaultBatchConjugateGradientLoader : public ConjugateGradientLoader<DeviceContext> {
+		class DefaultBatchConjugateGradientLoader : public BatchConjugateGradientLoader<DeviceContext> {
 		public:
 
-			DefaultConjugateGradientLoader(const LoadResult& lr)
-				: _load_result({lr}) {}
+			DefaultConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
+				: _load_results({lr}) {}
 
-			DefaultConjugateGradientLoader(const std::vector<LoadResult>& lrs)
-				: _load_result(lrs) {}
+			DefaultConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
+				: _load_results(lrs) {}
 
-			ConjugateGradientLoader::LoadResult load(DeviceContext& dctxt, size_t idx) override
+			ConjugateGradientLoadResult load(DeviceContext& dctxt, size_t idx) override
 			{
 				return _load_results[idx];
 			}
 
 		private:
-			std::vector<ConjugateGradientLoader::LoadResult> _load_results;
+			std::vector<ConjugateGradientLoadResult> _load_results;
 		};
 
 		template<typename DeviceContext>
