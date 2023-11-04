@@ -6,9 +6,10 @@
 
 hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
 	const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
-	const std::vector<at::Tensor>& kdata, const at::Tensor& smaps, double rho, 
+	const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
+	const std::shared_ptr<op::Admm::Context>& ctx,
 	const at::optional<std::vector<at::Tensor>>& preconds)
-	: _coords(coords), _nmodes(nmodes), _kdata(kdata), _smaps(smaps), _rho(rho), _preconds(preconds)
+	: _coords(coords), _nmodes(nmodes), _kdata(kdata), _smaps(smaps), _ctx(ctx), _preconds(preconds)
 {
 
 }
@@ -26,9 +27,11 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	std::vector<int64_t> coils(dctx.smaps.size(0));
 	std::generate(coils.begin(), coils.end(), [n = 0]() mutable { return n++; });
 
-	op::SenseN senseop(coords, _nmodes, dctx.smaps, coils);
-	op::Operator A = senseop + op::ScaleOp(at::tensor(_rho));
+	op::SenseN SHS(coords, _nmodes, dctx.smaps, coils);
+	//op::Operator A = SHS + op::ScaleOp(at::tensor(_ctx->rho));
 
-	op::Vector b = senseop.apply_backward(op::Vector(kdata));
+	op::Vector b = SHS.apply_backward(op::Vector(kdata));
+
+
 }
 

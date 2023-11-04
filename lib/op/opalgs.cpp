@@ -34,10 +34,10 @@ at::Tensor hasty::op::PowerIteration::run(op::Vector& v, int iters)
 {
 	at::Tensor max_eig = v.norm();
 	for (int i = 0; i < iters; ++i) {
-		if (A.has_inplace_apply())
-			A.apply_inplace(v);
+		if (_A.has_inplace_apply())
+			_A.apply_inplace(v);
 		else
-			v = std::move(A * v);
+			v = std::move(_A * v);
 
 		max_eig = v.norm();
 

@@ -59,11 +59,13 @@ namespace hasty {
 		class DefaultBatchConjugateGradientLoader : public BatchConjugateGradientLoader<DeviceContext> {
 		public:
 
-			DefaultConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
-				: _load_results({lr}) {}
-
-			DefaultConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
-				: _load_results(lrs) {}
+			DefaultBatchConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
+				: _load_results(lrs) 
+			{}
+			
+			DefaultBatchConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
+				: _load_results({lr})
+			{}
 
 			ConjugateGradientLoadResult load(DeviceContext& dctxt, size_t idx) override
 			{
@@ -78,7 +80,7 @@ namespace hasty {
 		class BatchConjugateGradient : public OperatorAlg {
 		public:
 
-			BatchConjugateGradient(const std::shared_ptr<BatchConjugateGradientLoader>& loader,
+			BatchConjugateGradient(const std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>>& loader,
 				const std::shared_ptr<ContextThreadPool<DeviceContext>>& thread_pool)
 				: _cg_loader(loader), _thread_pool(thread_pool)
 			{}
@@ -94,7 +96,7 @@ namespace hasty {
 					auto& child = children[i];
 
 					batch_applier = [this, i, child](DeviceContext& context) {
-						BatchConjugateGradientLoader::LoadResult result = _cg_loader.load(context, i);
+						ConjugateGradientLoadResult result = _cg_loader.load(context, i);
 						ConjugateGradient(result.A, result.b, result.P).run(child, iter, tol);
 					};
 
@@ -114,31 +116,26 @@ namespace hasty {
 			}
 
 		private:
-			std::shared_ptr<BatchConjugateGradientLoader> _cg_loader;
+			std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>> _cg_loader;
 			std::shared_ptr<ContextThreadPool<DeviceContext>> _thread_pool;
 		};
 
-		class AdmmMinimizer : public OperatorAlg {
-		public:
-
-			virtual void solve(Admm::Context& ctx);
-
-		private:
-
-		};
+		class AdmmMinimizer;
 
 		class Admm {
 		public:
 
 			struct Context {
 				// Ax + Bz = c
-				op::Operator A;
-				op::Operator B;
+				op::AdjointableOp A;
+				op::AdjointableOp B;
 				op::Vector c;
 
 				op::Vector x; // x
 				op::Vector z; // z
 				op::Vector u; // scaled dual variable
+
+				double rho;
 
 				int xiter = 30;
 				double xtol = 0.0;
@@ -159,6 +156,13 @@ namespace hasty {
 			std::shared_ptr<AdmmMinimizer> _zmin;
 		};
 
+		class AdmmMinimizer : public OperatorAlg {
+		public:
 
+			virtual void solve(Admm::Context& ctx);
+
+		private:
+
+		};
 	}
 }
