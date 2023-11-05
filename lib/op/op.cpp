@@ -855,12 +855,12 @@ size_t hasty::op::StackedOp::stack_size() const
 	return _ops.size();
 }
 
-hasty::op::Operator& hasty::op::StackedOp::get_layer(size_t idx)
+hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx)
 {
 	return _ops[idx];
 }
 
-const hasty::op::Operator& hasty::op::StackedOp::get_layer(size_t idx) const
+const hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx) const
 {
 	return _ops[idx];
 }
@@ -897,7 +897,12 @@ size_t hasty::op::AdjointableStackedOp::stack_size() const
 	return _ops.size();
 }
 
-hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_layer()
+hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx)
 {
-	// TODO: insert return statement here
+	return _ops[idx];
+}
+
+const hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx) const
+{
+	return _ops[idx];
 }

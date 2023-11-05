@@ -265,8 +265,8 @@ namespace hasty {
 
 			size_t stack_size() const;
 
-			op::Operator& get_layer(size_t idx);
-			const op::Operator& get_layer(size_t idx) const;
+			Operator& get_slice(size_t idx);
+			const Operator& get_slice(size_t idx) const;
 
 		private:
 			std::vector<Operator> _ops;
@@ -281,7 +281,8 @@ namespace hasty {
 
 			size_t stack_size() const;
 
-			op::AdjointableOp& get_layer();
+			AdjointableOp& get_slice(size_t idx);
+			const AdjointableOp& get_slice(size_t idx) const;
 
 		private:
 			std::vector<AdjointableOp> _ops;
