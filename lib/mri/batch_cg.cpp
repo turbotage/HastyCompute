@@ -27,10 +27,10 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	std::vector<int64_t> coils(dctx.smaps.size(0));
 	std::generate(coils.begin(), coils.end(), [n = 0]() mutable { return n++; });
 
-	op::SenseN SHS(coords, _nmodes, dctx.smaps, coils);
-	//op::Operator A = SHS + op::ScaleOp(at::tensor(_ctx->rho));
-
-	op::Vector b = SHS.apply_backward(op::Vector(kdata));
+	std::shared_ptr<op::SenseNOp> SHS = std::make_shared<op::SenseNOp>(coords, _nmodes, dctx.smaps, coils);
+	
+	//op::Operator A = SHS + op::ScaleOp(at::tensor(_ctx->rho), );
+	//op::Vector b = SHS.apply_backward(op::Vector(kdata));
 
 
 }

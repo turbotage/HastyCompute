@@ -125,6 +125,8 @@ namespace hasty {
 			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs);
 			friend std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs);
 
+			virtual std::shared_ptr<Operator> to_device(at::Stream stream);
+
 		protected:
 
 			at::Tensor& access_vectensor(Vector& vec) const;
@@ -146,6 +148,8 @@ namespace hasty {
 			AdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
 
 			virtual std::shared_ptr<AdjointableOp> adjoint() const;
+
+			virtual std::shared_ptr<Operator> to_device(at::Stream stream) = 0;
 
 		private:
 			std::shared_ptr<Operator> _op;

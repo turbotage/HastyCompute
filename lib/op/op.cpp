@@ -645,6 +645,11 @@ std::shared_ptr<hasty::op::AdjointableScaleOp> hasty::op::mul(const at::Tensor& 
 	return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::Operator::to_device(at::Stream stream)
+{
+	return nullptr;
+}
+
 // VECTOR ACCESS
 
 at::Tensor& hasty::op::Operator::access_vectensor(Vector& vec) const
