@@ -1,4 +1,5 @@
 #include "op.hpp"
+#include "opalgebra.hpp"
 
 namespace {
 	std::mutex _oplock;
@@ -604,44 +605,44 @@ bool hasty::op::Operator::should_inplace_apply() const
 
 // OPERATOR OPERATORS
 
-hasty::op::AddOp hasty::op::operator+(const Operator& lhs, const Operator& rhs)
+std::shared_ptr<hasty::op::AddOp> hasty::op::add(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs)
 {
-	return AddOp(lhs, rhs);
+	return std::make_shared<AddOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::AdjointableAddOp hasty::op::operator+(const AdjointableOp& lhs, const AdjointableOp& rhs)
+std::shared_ptr<hasty::op::AdjointableAddOp> hasty::op::add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
 {
-	return AdjointableAddOp(lhs, rhs);
+	return std::make_shared<AdjointableAddOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::SubOp hasty::op::operator-(const Operator& lhs, const Operator& rhs)
+std::shared_ptr<hasty::op::SubOp> hasty::op::sub(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs)
 {
-	return SubOp(lhs, rhs);
+	return std::make_shared<SubOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::AdjointableSubOp hasty::op::operator-(const AdjointableOp& lhs, const AdjointableOp& rhs)
+std::shared_ptr<hasty::op::AdjointableSubOp> hasty::op::sub(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
 {
-	return AdjointableSubOp(lhs, rhs);
+	return std::make_shared<AdjointableSubOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::MulOp hasty::op::operator*(const Operator& lhs, const Operator& rhs)
+std::shared_ptr<hasty::op::MulOp> hasty::op::mul(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs)
 {
-	return MulOp(lhs, rhs);
+	return std::make_shared<MulOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::AdjointableMulOp hasty::op::operator*(const AdjointableOp& lhs, const AdjointableOp& rhs)
+std::shared_ptr<hasty::op::AdjointableMulOp> hasty::op::mul(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
 {
-	return AdjointableMulOp(lhs, rhs);
+	return std::make_shared<AdjointableMulOp>(std::move(lhs), std::move(rhs));
 }
 
-hasty::op::ScaleOp hasty::op::operator*(const at::Tensor& lhs, const Operator& rhs)
+std::shared_ptr<hasty::op::ScaleOp> hasty::op::mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs)
 {
-	return ScaleOp(lhs, rhs);
+	return std::make_shared<ScaleOp>(lhs, std::move(rhs));
 }
 
-hasty::op::AdjointableScaleOp hasty::op::operator*(const at::Tensor& lhs, const AdjointableOp& rhs)
+std::shared_ptr<hasty::op::AdjointableScaleOp> hasty::op::mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs)
 {
-	return AdjointableScaleOp(lhs, rhs);
+	return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
 }
 
 // VECTOR ACCESS
@@ -674,235 +675,14 @@ hasty::op::AdjointableOp::AdjointableOp()
 {
 }
 
-hasty::op::AdjointableOp::AdjointableOp(bool should_inplace_apply)
-	: Operator(should_inplace_apply)
+hasty::op::AdjointableOp::AdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
+	: _op(std::move(op)), _oph(std::move(oph))
 {
 }
 
-hasty::op::AdjointableOp::AdjointableOp(const at::optional<Operator>& op, const at::optional<Operator>& oph)
-	: _op(op), _oph(oph)
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableOp::adjoint() const
 {
+	return std::make_shared<AdjointableOp>(_oph, _op);
 }
 
-const hasty::op::AdjointableOp& hasty::op::AdjointableOp::adjoint() const
-{
-	std::lock_guard<std::mutex> guard(_oplock);
-	static AdjointableOp aop = AdjointableOp(_oph, _op);
-	aop = AdjointableOp(_oph, _op);
-	return aop;
-}
 
-// ADD OP
-
-hasty::op::AddOp::AddOp(const Operator& lop, const Operator& rop)
-	: _left(lop), _right(rop)
-{}
-
-hasty::op::Vector hasty::op::AddOp::apply(const Vector& in) const
-{
-	return _left(in) + _right(in);
-}
-
-// ADJOINTABLE ADD OP
-
-hasty::op::AdjointableAddOp::AdjointableAddOp(const AdjointableOp& lop, const AdjointableOp& rop)
-	: _left(lop), _right(rop)
-{
-}
-
-hasty::op::Vector hasty::op::AdjointableAddOp::apply(const Vector& in) const
-{
-	return _left(in) + _right(in);
-}
-
-const hasty::op::AdjointableAddOp& hasty::op::AdjointableAddOp::adjoint() const
-{
-	std::lock_guard<std::mutex> guard(_oplock);
-	static AdjointableAddOp aop = AdjointableAddOp(_left.adjoint(), _right.adjoint());
-	aop = AdjointableAddOp(_left.adjoint(), _right.adjoint());
-	return aop;
-}
-
-// SUB OP
-
-hasty::op::SubOp::SubOp(const Operator& lop, const Operator& rop)
-	: _left(lop), _right(rop)
-{}
-
-hasty::op::Vector hasty::op::SubOp::apply(const Vector& in) const
-{
-	return _left(in) - _right(in);
-}
-
-// ADJOINTABLE SUB OP
-
-hasty::op::AdjointableSubOp::AdjointableSubOp(const AdjointableOp& lop, const AdjointableOp& rop)
-	: _left(lop), _right(rop)
-{
-}
-
-hasty::op::Vector hasty::op::AdjointableSubOp::apply(const Vector& in) const
-{
-	return _left(in) - _right(in);
-}
-
-const hasty::op::AdjointableSubOp& hasty::op::AdjointableSubOp::adjoint() const
-{
-	std::lock_guard<std::mutex> guard(_oplock);
-	static AdjointableSubOp aop = AdjointableSubOp(_left.adjoint(), _right.adjoint());
-	aop = AdjointableSubOp(_left.adjoint(), _right.adjoint());
-	return aop;
-}
-
-// MUL OP
-
-hasty::op::MulOp::MulOp(const Operator& lop, const Operator& rop)
-	: _left(lop), _right(rop)
-{}
-
-hasty::op::Vector hasty::op::MulOp::apply(const Vector& in) const
-{
-	return _left(_right(in));
-}
-
-// ADJOINTABLE MUL OP
-
-hasty::op::AdjointableMulOp::AdjointableMulOp(const AdjointableOp& lop, const AdjointableOp& rop)
-	: _left(lop), _right(rop)
-{
-}
-
-hasty::op::Vector hasty::op::AdjointableMulOp::apply(const Vector& in) const
-{
-	return _left(_right(in));
-}
-
-const hasty::op::AdjointableMulOp& hasty::op::AdjointableMulOp::adjoint() const
-{
-	std::lock_guard<std::mutex> guard(_oplock);
-	static AdjointableMulOp aop = AdjointableMulOp(_right.adjoint(), _left.adjoint());
-	aop = AdjointableMulOp(_right.adjoint(), _left.adjoint());
-	return aop;
-}
-
-// SCALE OP
-
-hasty::op::ScaleOp::ScaleOp(const at::Tensor& scalar, const at::optional<Operator>& op)
-	: _scalar(scalar), _op(op)
-{}
-
-hasty::op::Vector hasty::op::ScaleOp::apply(const Vector& in) const
-{
-	Vector tmp = _scalar * in;
-	if (_op.has_value()) {
-		return (*_op)(tmp);
-	}
-	return tmp;
-}
-
-// ADJOINTABLE MUL OP
-
-hasty::op::AdjointableScaleOp::AdjointableScaleOp(const at::Tensor& scalar, const at::optional<AdjointableOp>& op)
-	: _scalar(scalar), _op(op)
-{}
-
-hasty::op::Vector hasty::op::AdjointableScaleOp::apply(const Vector& in) const
-{
-	Vector tmp = _scalar * in;
-	if (_op.has_value()) {
-		return (*_op)(tmp);
-	}
-	return tmp;
-}
-
-const hasty::op::AdjointableScaleOp& hasty::op::AdjointableScaleOp::adjoint() const
-{
-	std::lock_guard<std::mutex> guard(_oplock);
-	static AdjointableScaleOp aop = AdjointableScaleOp(_scalar, _op.has_value() ? at::make_optional((*_op).adjoint()) : at::nullopt);
-	aop = AdjointableScaleOp(_scalar, _op.has_value() ? at::make_optional((*_op).adjoint()) : at::nullopt);
-	return aop;
-}
-
-// STACKED OP
-
-hasty::op::StackedOp::StackedOp(const std::vector<Operator>& ops)
-	: _ops(ops)
-{}
-
-hasty::op::Vector hasty::op::StackedOp::apply(const Vector& in) const
-{
-	if (!in.has_children()) {
-		if (_ops.size() != 1) {
-			throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-		}
-		return _ops[0].apply(in);
-	}
-
-	auto& children = access_vecchilds(in);
-	if (children.size() != _ops.size()) {
-		throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-	}
-
-	std::vector<op::Vector> newvecs;
-	newvecs.reserve(children.size());
-	for (int i = 0; i < _ops.size(); ++i) {
-		newvecs.push_back(std::move(_ops[i].apply(children[i])));
-	}
-}
-
-size_t hasty::op::StackedOp::stack_size() const
-{
-	return _ops.size();
-}
-
-hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx)
-{
-	return _ops[idx];
-}
-
-const hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx) const
-{
-	return _ops[idx];
-}
-
-// ADJOINTABLE STACKED OP
-
-hasty::op::AdjointableStackedOp::AdjointableStackedOp(const std::vector<AdjointableOp>& ops)
-	: _ops(ops)
-{}
-
-hasty::op::Vector hasty::op::AdjointableStackedOp::apply(const Vector& in) const
-{
-	if (!in.has_children()) {
-		if (_ops.size() != 1) {
-			throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-		}
-		return _ops[0].apply(in);
-	}
-
-	auto& children = access_vecchilds(in);
-	if (children.size() != _ops.size()) {
-		throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-	}
-
-	std::vector<op::Vector> newvecs;
-	newvecs.reserve(children.size());
-	for (int i = 0; i < _ops.size(); ++i) {
-		newvecs.push_back(std::move(_ops[i].apply(children[i])));
-	}
-}
-
-size_t hasty::op::AdjointableStackedOp::stack_size() const
-{
-	return _ops.size();
-}
-
-hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx)
-{
-	return _ops[idx];
-}
-
-const hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx) const
-{
-	return _ops[idx];
-}

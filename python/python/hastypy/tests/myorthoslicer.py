@@ -545,7 +545,7 @@ def ortho_print_selector(data):
 with h5py.File('D:/4DRecon/dat/dat2/for_plotting_tests.h5', 'r') as f:
 	data = f['images'][()]
 
-dataf = np.abs(data).transpose((2,3,4,0,1))
+dataf = np.flip(np.abs(data).transpose((2,3,4,0,1)), axis=2)
 slicer = HastyOrthoSlicer(dataf[:,:,:,:,:])
 
 slicer.show()

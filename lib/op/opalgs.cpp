@@ -22,22 +22,14 @@ const std::vector<hasty::op::Vector>& hasty::op::OperatorAlg::access_vecchilds(c
 }
 
 
-
-
-
-
-hasty::op::PowerIteration::PowerIteration(const op::Operator& A)
-	: _A(A)
-{}
-
-at::Tensor hasty::op::PowerIteration::run(op::Vector& v, int iters)
+at::Tensor hasty::op::PowerIteration::run(const op::Operator& A, op::Vector& v, int iters)
 {
 	at::Tensor max_eig = v.norm();
 	for (int i = 0; i < iters; ++i) {
-		if (_A.has_inplace_apply())
-			_A.apply_inplace(v);
+		if (A.has_inplace_apply())
+			A.apply_inplace(v);
 		else
-			v = std::move(_A * v);
+			v = std::move(A * v);
 
 		max_eig = v.norm();
 
@@ -47,8 +39,8 @@ at::Tensor hasty::op::PowerIteration::run(op::Vector& v, int iters)
 	return max_eig;
 }
 
-hasty::op::ConjugateGradient::ConjugateGradient(const op::Operator& A, const op::Vector& b, const std::optional<op::Operator>& P)
-	: _A(A), _b(b), _P(P)
+hasty::op::ConjugateGradient::ConjugateGradient(std::shared_ptr<op::Operator> A, std::shared_ptr<op::Vector> b, std::shared_ptr<op::Operator> P)
+	: _A(std::move(A)), _b(std::move(b)), _P(std::move(P))
 {}
 
 void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
@@ -56,9 +48,9 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 	if (iter < 1)
 		return;
 
-	Vector r = _b - _A * x;
+	Vector r = *_b - (*_A) * x;
 
-	Vector z = _P.has_value() ? (*_P) * r : r;
+	Vector z = _P != nullptr ? (*_P) * r : r;
 
 	Vector p = z;
 
@@ -70,7 +62,7 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 		if (resid < tol)
 			return;
 
-		Vector Ap = _A * p;
+		Vector Ap = (*_A) * p;
 		at::Tensor pAp = at::real(vdot(p, Ap));
 		if (pAp.item<double>() <= 0.0) {
 			throw std::runtime_error("A was not positive definite");
@@ -81,7 +73,7 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 
 		r -= Ap * alpha;
 
-		if (_P.has_value())
+		if (_P != nullptr)
 			z = (*_P) * r;
 		else
 			z = r;
@@ -111,7 +103,7 @@ void hasty::op::Admm::run(Admm::Context& ctx)
 	for (int i = 0; i < ctx.admm_iter; ++i) {
 		_xmin->solve(ctx);
 		_zmin->solve(ctx);
-		ctx.u = ctx.A(ctx.x) + ctx.B(ctx.z) - ctx.z;
+		*ctx.u = (*ctx.A)(*ctx.x) + (*ctx.B)(*ctx.z) - (*ctx.z);
 	}
 
 }

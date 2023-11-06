@@ -73,6 +73,7 @@ set(NLSQ_SOURCES
 
 set(OP_SOURCES
 	"lib/op/op.cpp"
+	"lib/op/opalgebra.cpp"
 	"lib/op/proxop.cpp"
 	"lib/op/opalgs.cpp"
 	"lib/op/fftop.cpp"
