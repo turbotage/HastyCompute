@@ -29,8 +29,8 @@ namespace hasty {
 			friend class Operator;
 		};
 
-		class Operator;
-		class AdjointableOp;
+		//class Operator;
+		//class AdjointableOp;
 
 		class Vector {
 		public:
@@ -95,7 +95,11 @@ namespace hasty {
 			friend class OperatorAlg;
 		};
 
+		template<typename T>
+		concept OpConcept = std::is_base_of<class Operator, T>::value;
 
+		template<typename T>
+		concept AdjointableOpConcept = std::is_base_of<class AdjointableOp, T>::value;
 
 		class Operator {
 		public:
@@ -113,19 +117,32 @@ namespace hasty {
 
 			virtual bool should_inplace_apply() const;
 
-			virtual std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			template<OpConcept RetOp>
+			virtual std::shared_ptr<RetOp> to_device(at::Stream stream) const;
 
-			friend std::shared_ptr<class AddOp> add(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-			friend std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+			template<OpConcept Op1, OpConcept Op2>
+			friend std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
-			friend std::shared_ptr<class SubOp> sub(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-			friend std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+			friend std::shared_ptr<class AdjointableAddOp> add_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
-			friend std::shared_ptr<class MulOp> mul(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-			friend std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+			template<OpConcept Op1, OpConcept Op2>
+			friend std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
-			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs);
-			friend std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs);
+			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+			friend std::shared_ptr<class AdjointableSubOp> sub_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+
+			template<OpConcept Op1, OpConcept Op2>
+			friend std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			
+			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+			friend std::shared_ptr<class AdjointableMulOp> mul_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+
+			template<OpConcept Op>
+			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
+
+			template<AdjointableOpConcept Op>
+			friend std::shared_ptr<class AdjointableScaleOp> mul_adj(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
 
 		protected:
 
@@ -156,26 +173,53 @@ namespace hasty {
 			std::shared_ptr<Operator> _oph;
 		};
 
-		class SelfAdjointOp : public AdjointableOp {
-		public:
+		template<OpConcept Op1, OpConcept Op2>
+		std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<AddOp>(std::move(lhs), std::move(rhs));
+		}
 
-			std::shared_ptr<AdjointableOp> adjoint() const;
+		template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+		std::shared_ptr<class AdjointableAddOp> add_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<AdjointableAddOp>(std::move(lhs), std::move(rhs));
+		}
 
-		private:
+		template<OpConcept Op1, OpConcept Op2>
+		std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<SubOp>(std::move(lhs), std::move(rhs));
+		}
 
-		};
+		template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+		std::shared_ptr<class AdjointableSubOp> sub_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<AdjointableSubOp>(std::move(lhs), std::move(rhs));
+		}
 
-		std::shared_ptr<class AddOp> add(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-		std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+		template<OpConcept Op1, OpConcept Op2>
+		std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<MulOp>(std::move(lhs), std::move(rhs));
+		}
 
-		std::shared_ptr<class SubOp> sub(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-		std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+		template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
+		std::shared_ptr<class AdjointableMulOp> mul_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		{
+			return std::make_shared<AdjointableMulOp>(std::move(lhs), std::move(rhs));
+		}
 
-		std::shared_ptr<class MulOp> mul(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
-		std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+		template<OpConcept Op>
+		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
+		{
+			return std::make_shared<ScaleOp>(lhs, std::move(rhs));
+		}
 
-		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs);
-		std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs);
+		template<AdjointableOpConcept Op>
+		std::shared_ptr<class AdjointableScaleOp> mul_adj(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
+		{
+			return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
+		}
 
 	}
 

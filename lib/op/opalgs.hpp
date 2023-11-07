@@ -127,14 +127,14 @@ namespace hasty {
 				// Ax + Bz = c
 				std::unique_ptr<op::AdjointableOp> A;
 				std::unique_ptr<op::AdjointableOp> B;
-				std::unique_ptr<op::Vector> c;
+				std::unique_ptr<op::Vector> c; // offset
 
 				std::unique_ptr<op::Vector> x; // x
 				std::unique_ptr<op::Vector> z; // z
 				std::unique_ptr<op::Vector> u; // scaled dual variable
 
-				std::unique_ptr<op::Operator> AHA;
-				std::unique_ptr<op::Operator> BHB;
+				std::unique_ptr<op::AdjointableOp> AHA;
+				std::unique_ptr<op::AdjointableOp> BHB;
 
 				double rho;
 

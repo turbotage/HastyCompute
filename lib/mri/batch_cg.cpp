@@ -14,6 +14,7 @@ hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
 
 }
 
+
 hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDeviceContext& dctx, size_t idx)
 {
 	c10::InferenceMode im_guard;
@@ -27,20 +28,34 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	std::vector<int64_t> coils(dctx.smaps.size(0));
 	std::generate(coils.begin(), coils.end(), [n = 0]() mutable { return n++; });
 
-	std::shared_ptr<op::SenseNOp> SHS = std::make_shared<op::SenseNOp>(coords, _nmodes, dctx.smaps, coils);
-	
-	std::shared_ptr<op::Operator> AHA;
+	std::shared_ptr<op::Operator> CGOp;
+
+	std::shared_ptr<op::AdjointableOp> SHS = std::make_shared<op::SenseNOp>(coords, _nmodes, dctx.smaps, coils);
+	std::shared_ptr<op::AdjointableOp> AHA;
+
 	{
 		std::unique_lock<std::mutex> lock(_ctx->ctxmut);
+
+		auto AH = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+
 		if (_ctx->AHA != nullptr) {
-			AHA = _ctx->AHA->to_device(dctx.stream);
+			AHA = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
 		}
 		else {
-			auto AH = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+			
 			auto A = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
-			AHA = std::move(op::mul(std::move(AH), std::move(A)));
+			AHA = std::static_pointer_cast<op::AdjointableOp>(op::mul_adj(std::move(AH), std::move(A)));
 		}
 
+		if (!AHA)
+			throw std::runtime_error("AHA could not be cast to an AdjointableOp on this device");
+
+		AHA = std::static_pointer_cast<op::AdjointableOp>(
+			std::make_shared<op::AdjointableScaleOp>(at::tensor(_ctx->rho / 2.0), AHA)));
+
+		CGOp = std::static_pointer_cast<op::AdjointableOp>(op::add(SHS, AHA));
+
+		
 
 	}
 
@@ -52,4 +67,5 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 
 }
+
 
