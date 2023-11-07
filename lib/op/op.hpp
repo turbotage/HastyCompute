@@ -113,6 +113,8 @@ namespace hasty {
 
 			virtual bool should_inplace_apply() const;
 
+			virtual std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
 			friend std::shared_ptr<class AddOp> add(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
 			friend std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
 
@@ -124,8 +126,6 @@ namespace hasty {
 
 			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs);
 			friend std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs);
-
-			virtual std::shared_ptr<Operator> to_device(at::Stream stream);
 
 		protected:
 
@@ -149,12 +149,33 @@ namespace hasty {
 
 			virtual std::shared_ptr<AdjointableOp> adjoint() const;
 
-			virtual std::shared_ptr<Operator> to_device(at::Stream stream) = 0;
+			std::shared_ptr<Operator> to_device(at::Stream stream) const override;
 
 		private:
 			std::shared_ptr<Operator> _op;
 			std::shared_ptr<Operator> _oph;
 		};
+
+		class SelfAdjointOp : public AdjointableOp {
+		public:
+
+			std::shared_ptr<AdjointableOp> adjoint() const;
+
+		private:
+
+		};
+
+		std::shared_ptr<class AddOp> add(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
+		std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+
+		std::shared_ptr<class SubOp> sub(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
+		std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+
+		std::shared_ptr<class MulOp> mul(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs);
+		std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs);
+
+		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs);
+		std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs);
 
 	}
 

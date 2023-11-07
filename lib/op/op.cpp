@@ -645,7 +645,7 @@ std::shared_ptr<hasty::op::AdjointableScaleOp> hasty::op::mul(const at::Tensor& 
 	return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::Operator::to_device(at::Stream stream)
+std::shared_ptr<hasty::op::Operator> hasty::op::Operator::to_device(at::Stream stream) const
 {
 	return nullptr;
 }
@@ -690,4 +690,23 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableOp::adjoint() co
 	return std::make_shared<AdjointableOp>(_oph, _op);
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableOp::to_device(at::Stream stream) const
+{
+	auto ophcaster = std::dynamic_pointer_cast<AdjointableOp>(_oph->to_device(stream));
+	auto opcaster = std::dynamic_pointer_cast<AdjointableOp>(_op->to_device(stream));
+
+	if (!ophcaster)
+		throw std::runtime_error("failed dynamic cast _oph in AdjointableOp");
+	if (!opcaster)
+		throw std::runtime_error("failed dynamic cast _op in AdjointableOp");
+
+	return std::make_shared<AdjointableOp>(std::move(ophcaster), std::move(opcaster));
+}
+
+// SELF ADJOINT OP
+
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SelfAdjointOp::adjoint() const
+{
+	
+}
 

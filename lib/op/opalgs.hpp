@@ -145,6 +145,8 @@ namespace hasty {
 
 				int admm_iter = 30;
 				double admm_tol = 0.0;
+
+				std::mutex ctxmut;
 			};
 
 			Admm(const std::shared_ptr<AdmmMinimizer>& xmin, const std::shared_ptr<AdmmMinimizer>& zmin);

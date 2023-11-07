@@ -29,6 +29,24 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 	std::shared_ptr<op::SenseNOp> SHS = std::make_shared<op::SenseNOp>(coords, _nmodes, dctx.smaps, coils);
 	
+	std::shared_ptr<op::Operator> AHA;
+	{
+		std::unique_lock<std::mutex> lock(_ctx->ctxmut);
+		if (_ctx->AHA != nullptr) {
+			AHA = _ctx->AHA->to_device(dctx.stream);
+		}
+		else {
+			auto AH = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+			auto A = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
+			AHA = std::move(op::mul(std::move(AH), std::move(A)));
+		}
+
+
+	}
+
+
+
+	//std::shared_ptr<op::
 	//op::Operator A = SHS + op::ScaleOp(at::tensor(_ctx->rho), );
 	//op::Vector b = SHS.apply_backward(op::Vector(kdata));
 

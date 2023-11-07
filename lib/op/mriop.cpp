@@ -48,7 +48,7 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
 {
 	auto newops = _opts;
 	newops.type = nufft::NufftType::eType2;
-	return std::make_shared<AdjointableOp>(_coords, _nmodes, _smaps, _coils, newops);
+	return std::make_shared<SenseHOp>(_coords, _nmodes, _smaps, _coils, true, newops);
 }
 
 

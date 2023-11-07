@@ -12,6 +12,11 @@ hasty::op::Vector hasty::op::AddOp::apply(const Vector& in) const
 	return _left->apply(in) + _right->apply(in);
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::AddOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<AddOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
+}
+
 // ADJOINTABLE ADD OP
 
 hasty::op::AdjointableAddOp::AdjointableAddOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
@@ -29,6 +34,15 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableAddOp::adjoint()
 	return std::make_shared<AdjointableAddOp>(_left->adjoint(), _right->adjoint());
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableAddOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<AdjointableAddOp>(
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+}
+
 // SUB OP
 
 hasty::op::SubOp::SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
@@ -38,6 +52,11 @@ hasty::op::SubOp::SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator>
 hasty::op::Vector hasty::op::SubOp::apply(const Vector& in) const
 {
 	return _left->apply(in) - _right->apply(in);
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::SubOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<SubOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
 }
 
 // ADJOINTABLE SUB OP
@@ -57,6 +76,15 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableSubOp::adjoint()
 	return std::make_shared<AdjointableSubOp>(_left->adjoint(), _left->adjoint());
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableSubOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<AdjointableSubOp>(
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+}
+
 // MUL OP
 
 hasty::op::MulOp::MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
@@ -66,6 +94,11 @@ hasty::op::MulOp::MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator>
 hasty::op::Vector hasty::op::MulOp::apply(const Vector& in) const
 {
 	return _left->apply(_right->apply(in));
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::MulOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<MulOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
 }
 
 // ADJOINTABLE MUL OP
@@ -85,6 +118,15 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableMulOp::adjoint()
 	return std::make_shared<AdjointableMulOp>(_right->adjoint(), _left->adjoint());
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableMulOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<AdjointableMulOp>(
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+		std::move(
+			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+}
+
 // SCALE OP
 
 hasty::op::ScaleOp::ScaleOp(const at::Tensor& scalar, std::shared_ptr<Operator> op)
@@ -98,6 +140,11 @@ hasty::op::Vector hasty::op::ScaleOp::apply(const Vector& in) const
 		return _op->apply(tmp);
 	}
 	return tmp;
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::ScaleOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<ScaleOp>(_scalar, std::move(_op->to_device(stream)));
 }
 
 // ADJOINTABLE MUL OP
@@ -118,6 +165,12 @@ hasty::op::Vector hasty::op::AdjointableScaleOp::apply(const Vector& in) const
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableScaleOp::adjoint() const
 {
 	return std::make_shared<AdjointableScaleOp>(_scalar, _op ? _op->adjoint() : nullptr);
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableScaleOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<AdjointableScaleOp>(_scalar, 
+		std::move(std::dynamic_pointer_cast<AdjointableOp>(_op->to_device(stream))));
 }
 
 // STACKED OP
@@ -174,6 +227,16 @@ const hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx) const
 	return *_ops[idx];
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::StackedOp::to_device(at::Stream stream) const
+{
+	std::vector<std::shared_ptr<Operator>> ops;
+	ops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		ops.push_back(std::move(op->to_device(stream)));
+	}
+	return std::make_shared<StackedOp>(std::move(ops));
+}
+
 // ADJOINTABLE STACKED OP
 
 hasty::op::AdjointableStackedOp::AdjointableStackedOp(std::vector<std::shared_ptr<AdjointableOp>>& ops)
@@ -225,4 +288,14 @@ hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx)
 const hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx) const
 {
 	return *_ops[idx];
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableStackedOp::to_device(at::Stream stream) const
+{
+	std::vector<std::shared_ptr<AdjointableOp>> ops;
+	ops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		ops.push_back(std::move(std::dynamic_pointer_cast<AdjointableOp>(op->to_device(stream))));
+	}
+	return std::make_shared<AdjointableStackedOp>(std::move(ops));
 }
