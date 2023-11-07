@@ -41,6 +41,11 @@ hasty::op::Vector hasty::op::NUFFT::apply(const Vector& in) const
 	return Vector(newchilds);
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::NUFFT::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("No to_device() for NUFFT operators");
+}
+
 // NUFFT ADJOINT
 
 hasty::op::NUFFTAdjoint::NUFFTAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<nufft::NufftOptions>& opts)
@@ -80,6 +85,11 @@ hasty::op::Vector hasty::op::NUFFTAdjoint::apply(const Vector& in) const
 	}
 
 	return Vector(newchilds);
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::NUFFTAdjoint::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("No to_device() for NUFFT operators");
 }
 
 // NUFFT NORMAL
@@ -159,6 +169,11 @@ bool hasty::op::NUFFTNormal::has_inplace_apply() const
 	return true;
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::NUFFTNormal::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("No to_device() for NUFFT operators");
+}
+
 // NUFFT NORMAL ADJOINT
 
 hasty::op::NUFFTNormalAdjoint::NUFFTNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -236,3 +251,7 @@ bool hasty::op::NUFFTNormalAdjoint::has_inplace_apply() const
 	return true;
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::NUFFTNormalAdjoint::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("No to_device() for NUFFT operators");
+}

@@ -36,24 +36,26 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	{
 		std::unique_lock<std::mutex> lock(_ctx->ctxmut);
 
-		auto AH = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+		auto AH = op::op_dyncast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
 
 		if (_ctx->AHA != nullptr) {
-			AHA = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
+			AHA = op::op_dyncast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
 		}
 		else {
 			
-			auto A = std::dynamic_pointer_cast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
-			AHA = std::static_pointer_cast<op::AdjointableOp>(op::mul_adj(std::move(AH), std::move(A)));
+			auto A = op::op_dyncast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
+
+			auto mulled = op::mul_adj(std::move(AH), std::move(A));
+
+			AHA = op::op_cast<op::AdjointableOp>(mulled);
 		}
 
 		if (!AHA)
 			throw std::runtime_error("AHA could not be cast to an AdjointableOp on this device");
 
-		AHA = std::static_pointer_cast<op::AdjointableOp>(
-			std::make_shared<op::AdjointableScaleOp>(at::tensor(_ctx->rho / 2.0), AHA)));
+		auto added = op::add_adj(std::move(SHS), std::move(AHA));
 
-		CGOp = std::static_pointer_cast<op::AdjointableOp>(op::add(SHS, AHA));
+		CGOp = std::static_pointer_cast<op::AdjointableOp>(added);
 
 		
 

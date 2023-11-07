@@ -578,11 +578,6 @@ hasty::op::Vector hasty::op::Operator::operator()(const Vector& in) const
 	return apply(in);
 }
 
-hasty::op::Vector hasty::op::Operator::apply(const Vector& in) const
-{
-	throw std::runtime_error("apply() wasn't implemented");
-}
-
 hasty::op::Vector hasty::op::operator*(const Operator& lhs, const Vector& rhs)
 {
 	return lhs.apply(rhs);
@@ -602,7 +597,6 @@ bool hasty::op::Operator::should_inplace_apply() const
 {
 	return false;
 }
-
 // VECTOR ACCESS
 
 at::Tensor& hasty::op::Operator::access_vectensor(Vector& vec) const
@@ -645,60 +639,13 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableOp::adjoint() co
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableOp::to_device(at::Stream stream) const
 {
-	auto ophcaster = std::dynamic_pointer_cast<AdjointableOp>(_oph->to_device(stream));
-	auto opcaster = std::dynamic_pointer_cast<AdjointableOp>(_op->to_device(stream));
+	auto ophcaster = op_dyncast<AdjointableOp>(std::move(_oph->to_device(stream)));
+	auto opcaster = op_dyncast<AdjointableOp>(std::move(_op->to_device(stream)));
 
-	if (!ophcaster)
-		throw std::runtime_error("failed dynamic cast _oph in AdjointableOp");
-	if (!opcaster)
-		throw std::runtime_error("failed dynamic cast _op in AdjointableOp");
+	assert(!ophcaster);
+	assert(!opcaster);
 
 	return std::make_shared<AdjointableOp>(std::move(ophcaster), std::move(opcaster));
 }
 
-// OPERATOR OPERATORS
 
-// OPERATOR OPERATORS
-
-/*
-std::shared_ptr<hasty::op::AdjointableAddOp> hasty::op::add(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
-{
-	return std::make_shared<AdjointableAddOp>(std::move(lhs), std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::SubOp> hasty::op::sub(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs)
-{
-	return std::make_shared<SubOp>(std::move(lhs), std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::AdjointableSubOp> hasty::op::sub(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
-{
-	return std::make_shared<AdjointableSubOp>(std::move(lhs), std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::MulOp> hasty::op::mul(std::shared_ptr<Operator> lhs, std::shared_ptr<Operator> rhs)
-{
-	return std::make_shared<MulOp>(std::move(lhs), std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::AdjointableMulOp> hasty::op::mul(std::shared_ptr<AdjointableOp> lhs, std::shared_ptr<AdjointableOp> rhs)
-{
-	return std::make_shared<AdjointableMulOp>(std::move(lhs), std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::ScaleOp> hasty::op::mul(const at::Tensor& lhs, std::shared_ptr<Operator> rhs)
-{
-	return std::make_shared<ScaleOp>(lhs, std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::AdjointableScaleOp> hasty::op::mul(const at::Tensor& lhs, std::shared_ptr<AdjointableOp> rhs)
-{
-	return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
-}
-
-std::shared_ptr<hasty::op::Operator> hasty::op::Operator::to_device(at::Stream stream) const
-{
-	return nullptr;
-}
-
-*/

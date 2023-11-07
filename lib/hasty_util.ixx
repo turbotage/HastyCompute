@@ -96,6 +96,23 @@ namespace hasty {
         template<typename T>
         using crefw = std::reference_wrapper<const T>;
 
+        class multiple_inheritable_shared_from_this : public std::enable_shared_from_this<multiple_inheritable_shared_from_this> {
+        public:
+            virtual ~multiple_inheritable_shared_from_this(){}
+        };
+
+        template<class T>
+        class inheritable_enable_shared_from_this : virtual public multiple_inheritable_shared_from_this {
+        public:
+            std::shared_ptr<T> shared_from_this() {
+                return std::dynamic_pointer_cast<T>(multiple_inheritable_shared_from_this::shared_from_this());
+            }
+
+            template<class U>
+            std::shared_ptr<U> downcast_shared_from_this() {
+                return std::dynamic_pointer_cast<U>(multiple_inheritable_shared_from_this::shared_from_this());
+            }
+        };
 
 
         // Used to signal output, functions with these parameters will fill the variable which the

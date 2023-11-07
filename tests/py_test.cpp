@@ -470,9 +470,9 @@ void test_nufft_speed() {
 
 }
 
+
 int main() {
 
-	
 	try {
 		test_normal_svt();
 	}

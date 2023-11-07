@@ -14,6 +14,8 @@ namespace hasty {
 
 			Vector apply(const Vector& in) const;
 
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
 		private:
 			at::Tensor _coords;
 			std::vector<int64_t> _nmodes;
@@ -30,6 +32,8 @@ namespace hasty {
 				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:
 			at::Tensor _coords;
@@ -52,6 +56,8 @@ namespace hasty {
 
 			void apply_inplace(Vector& in) const override;
 			bool has_inplace_apply() const override;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:
 
@@ -78,6 +84,8 @@ namespace hasty {
 
 			void apply_inplace(Vector& in) const override;
 			bool has_inplace_apply() const override;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:
 

@@ -90,15 +90,15 @@ hasty::op::Vector hasty::op::Precomposition::_apply(const Vector& input, double 
 	return (1.0 / _a) * (apply(_a*input + _b, _a*_a*alpha) - _b);
 }
 
-hasty::op::UnitaryTransform::UnitaryTransform(const ProximalOperator& prox, const Operator& unitary, 
-	const Operator& unitary_adjoint, double base_alpha)
-	: ProximalOperator(base_alpha), _prox(prox), _unitary(unitary), _unitary_adjoint(unitary_adjoint)
+hasty::op::UnitaryTransform::UnitaryTransform(const ProximalOperator& prox, std::shared_ptr<Operator> unitary,
+	std::shared_ptr<Operator> unitary_adjoint, double base_alpha)
+	: ProximalOperator(base_alpha), _prox(prox), _unitary(std::move(unitary)), _unitary_adjoint(std::move(unitary_adjoint))
 {
 }
 
 hasty::op::Vector hasty::op::UnitaryTransform::_apply(const Vector& input, double alpha)
 {
-	return _unitary_adjoint(_prox(_unitary * input, alpha));
+	return _unitary_adjoint->apply(_prox(_unitary->apply(input), alpha));
 }
 
 hasty::op::AffineAddition::AffineAddition(const ProximalOperator& prox, const Vector& a, double base_alpha)

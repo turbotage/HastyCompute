@@ -75,15 +75,15 @@ namespace hasty {
 		class UnitaryTransform : public ProximalOperator {
 		public:
 
-			UnitaryTransform(const ProximalOperator& prox, const Operator& unitary, 
-				const Operator& unitary_adjoint, double base_alpha = 1.0);
+			UnitaryTransform(const ProximalOperator& prox, std::shared_ptr<Operator> unitary, 
+				std::shared_ptr<Operator> unitary_adjoint, double base_alpha = 1.0);
 
 			Vector _apply(const Vector& input, double alpha);
 
 		private:
 			ProximalOperator _prox;
-			Operator _unitary;
-			Operator _unitary_adjoint;
+			std::shared_ptr<Operator> _unitary;
+			std::shared_ptr<Operator> _unitary_adjoint;
 		};
 
 		class AffineAddition : public ProximalOperator {
