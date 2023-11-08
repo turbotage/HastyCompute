@@ -146,7 +146,7 @@ namespace hasty {
 			friend std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-			friend std::shared_ptr<class AdjointableSubOp> sub_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<OpConcept Op1, OpConcept Op2>
 			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
@@ -159,7 +159,7 @@ namespace hasty {
 			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
 
 			template<AdjointableOpConcept Op>
-			friend std::shared_ptr<class AdjointableScaleOp> mul_adj(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
+			friend std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
 			
 
 		protected:
@@ -179,10 +179,18 @@ namespace hasty {
 		class AdjointableOp : public Operator {
 		public:
 
-			AdjointableOp();
-			AdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
+			virtual std::shared_ptr<AdjointableOp> adjoint() const = 0;
 
-			virtual std::shared_ptr<AdjointableOp> adjoint() const;
+		};
+
+		class DefaultAdjointableOp : public AdjointableOp {
+		public:
+
+			DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
+
+			Vector apply(const Vector& in) const override;
+
+			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const override;
 

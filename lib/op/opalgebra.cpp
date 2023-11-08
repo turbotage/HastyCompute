@@ -290,6 +290,11 @@ const hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_
 	return *_ops[idx];
 }
 
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableStackedOp::adjoint() const
+{
+	
+}
+
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableStackedOp::to_device(at::Stream stream) const
 {
 	std::vector<std::shared_ptr<AdjointableOp>> ops;

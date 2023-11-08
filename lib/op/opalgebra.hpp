@@ -157,6 +157,8 @@ namespace hasty {
 			AdjointableOp& get_slice(size_t idx);
 			const AdjointableOp& get_slice(size_t idx) const;
 
+			std::shared_ptr<AdjointableOp> adjoint() const override;
+
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:

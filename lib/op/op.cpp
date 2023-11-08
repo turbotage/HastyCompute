@@ -622,24 +622,24 @@ const std::vector<hasty::op::Vector>& hasty::op::Operator::access_vecchilds(cons
 
 // ADJOINTABLE OP
 
-hasty::op::AdjointableOp::AdjointableOp()
-	: Operator()
-{
-}
-
-hasty::op::AdjointableOp::AdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
+hasty::op::DefaultAdjointableOp::DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
 	: _op(std::move(op)), _oph(std::move(oph))
 {
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableOp::adjoint() const
+hasty::op::Vector hasty::op::DefaultAdjointableOp::apply(const Vector& in) const
 {
-	return std::make_shared<AdjointableOp>(_oph, _op);
+	return _oph->apply(in);
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableOp::to_device(at::Stream stream) const
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::DefaultAdjointableOp::adjoint() const
 {
-	return std::make_shared<AdjointableOp>(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
+	return std::make_shared<DefaultAdjointableOp>(_oph, _op);
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::DefaultAdjointableOp::to_device(at::Stream stream) const
+{
+	return std::make_shared<DefaultAdjointableOp>(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
 }
 
 
