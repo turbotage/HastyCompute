@@ -2,8 +2,9 @@
 
 #include "../torch_util.hpp"
 #include "../op/op.hpp"
-#include "../op/mriop.hpp"
+#include "../op/opalgebra.hpp"
 #include "../op/opalgs.hpp"
+#include "../op/mriop.hpp"
 #include "../threading/thread_pool.hpp"
 
 namespace hasty {

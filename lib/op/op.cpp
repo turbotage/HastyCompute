@@ -639,13 +639,7 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableOp::adjoint() co
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableOp::to_device(at::Stream stream) const
 {
-	auto ophcaster = op_dyncast<AdjointableOp>(std::move(_oph->to_device(stream)));
-	auto opcaster = op_dyncast<AdjointableOp>(std::move(_op->to_device(stream)));
-
-	assert(!ophcaster);
-	assert(!opcaster);
-
-	return std::make_shared<AdjointableOp>(std::move(ophcaster), std::move(opcaster));
+	return std::make_shared<AdjointableOp>(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
 }
 
 

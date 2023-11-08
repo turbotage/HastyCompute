@@ -4,6 +4,8 @@
 #include "../fft/fft.hpp"
 #include "../op/fftop.hpp"
 
+#include <numeric>
+
 import hasty_util;
 
 at::Tensor hasty::op::CirculantPreconditioner::build_diagonal(at::Tensor smaps, at::Tensor coord, const at::optional<at::Tensor>& weights, const at::optional<double>& lambda)
@@ -18,8 +20,8 @@ at::Tensor hasty::op::CirculantPreconditioner::build_diagonal(at::Tensor smaps, 
 		});
 	int ndim = img_shape.size();
 
-	auto scale = std::pow(std::accumulate(img2_shape.begin(), img2_shape.end(), 1, std::multiplies<int64_t>()), 1.5);
-	scale /= std::pow(std::accumulate(img_shape.begin(), img_shape.end(), 1, std::multiplies<int64_t>()), 2.0);
+	auto scale = std::pow(std::accumulate(img2_shape.begin(), img2_shape.end(), int64_t(1), std::multiplies<int64_t>()), 1.5);
+	scale /= std::pow(std::accumulate(img_shape.begin(), img_shape.end(), int64_t(1), std::multiplies<int64_t>()), 2.0);
 
 	auto ones = at::ones({ coord.size(1) }, smaps.options());
 	if (weights.has_value()) {

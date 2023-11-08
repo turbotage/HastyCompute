@@ -36,24 +36,24 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	{
 		std::unique_lock<std::mutex> lock(_ctx->ctxmut);
 
-		auto AH = op::op_dyncast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+		auto AH = op::staticcast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
 
 		if (_ctx->AHA != nullptr) {
-			AHA = op::op_dyncast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
+			AHA = op::staticcast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
 		}
 		else {
 			
-			auto A = op::op_dyncast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
+			auto A = op::staticcast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
 
-			auto mulled = op::mul_adj(std::move(AH), std::move(A));
+			auto mulled = op::mul(std::move(AH), std::move(A));
 
-			AHA = op::op_cast<op::AdjointableOp>(mulled);
+			AHA = op::upcast<op::AdjointableOp>(std::move(mulled));
 		}
 
 		if (!AHA)
 			throw std::runtime_error("AHA could not be cast to an AdjointableOp on this device");
 
-		auto added = op::add_adj(std::move(SHS), std::move(AHA));
+		auto added = op::add(std::move(SHS), std::move(AHA));
 
 		CGOp = std::static_pointer_cast<op::AdjointableOp>(added);
 
