@@ -51,6 +51,12 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
 	return std::make_shared<SenseHOp>(_coords, _nmodes, _smaps, _coils, true, newops);
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::SenseOp::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
+}
+
+// SENSE ADJOINT
 
 hasty::op::SenseHOp::SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate, 
@@ -102,6 +108,12 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseHOp::adjoint() const
 	return std::make_shared<SenseOp>(_coords, _nmodes, _smaps, _coils, newops);
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::SenseHOp::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
+}
+
+// SENSE NORMAL OP
 
 hasty::op::SenseNOp::SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
@@ -216,6 +228,10 @@ hasty::op::Vector hasty::op::SenseNOp::apply_backward(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseNOp::adjoint() const
 {
-	return std::shared_ptr<SenseNOp>(new SenseNOp(_senseholder));
+	return downcast_shared_from_this<SenseNOp>();
 }
 
+std::shared_ptr<hasty::op::Operator> hasty::op::SenseNOp::to_device(at::Stream stream) const
+{
+	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
+}

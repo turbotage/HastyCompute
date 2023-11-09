@@ -2,6 +2,7 @@
 
 
 // ADD OP
+/*
 
 hasty::op::AddOp::AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -173,9 +174,9 @@ std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableScaleOp::to_device(at
 		std::move(std::dynamic_pointer_cast<AdjointableOp>(_op->to_device(stream))));
 }
 
-// STACKED OP
+// VERTICALLY STACKED OP
 
-hasty::op::StackedOp::StackedOp(std::vector<std::shared_ptr<Operator>>& ops)
+hasty::op::VStackedOp::VStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
 {
 	_ops.reserve(ops.size());
 	for (auto& op : ops) {
@@ -183,63 +184,56 @@ hasty::op::StackedOp::StackedOp(std::vector<std::shared_ptr<Operator>>& ops)
 	}
 }
 
-hasty::op::StackedOp::StackedOp(std::vector<std::shared_ptr<Operator>>&& ops)
+hasty::op::VStackedOp::VStackedOp(std::vector<std::shared_ptr<Operator>>&& ops)
 	: _ops(ops)
 {
 }
 
 
-hasty::op::Vector hasty::op::StackedOp::apply(const Vector& in) const
+hasty::op::Vector hasty::op::VStackedOp::apply(const Vector& in) const
 {
-	if (!in.has_children()) {
-		if (_ops.size() != 1) {
-			throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-		}
-		return _ops[0]->apply(in);
-	}
-
-	auto& children = access_vecchilds(in);
-	if (children.size() != _ops.size()) {
-		throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
-	}
-
 	std::vector<op::Vector> newvecs;
-	newvecs.reserve(children.size());
-	for (int i = 0; i < _ops.size(); ++i) {
-		newvecs.push_back(std::move(_ops[i]->apply(children[i])));
+	newvecs.reserve(_ops.size());
+
+	for (auto& op : _ops) {
+		newvecs.push_back(std::move(op->apply(in)));
 	}
 
 	return newvecs;
 }
 
-size_t hasty::op::StackedOp::stack_size() const
+size_t hasty::op::VStackedOp::stack_size() const
 {
 	return _ops.size();
 }
 
-hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx)
+hasty::op::Operator& hasty::op::VStackedOp::get_slice(size_t idx)
 {
 	return *_ops[idx];
 }
 
-const hasty::op::Operator& hasty::op::StackedOp::get_slice(size_t idx) const
+const hasty::op::Operator& hasty::op::VStackedOp::get_slice(size_t idx) const
 {
 	return *_ops[idx];
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::StackedOp::to_device(at::Stream stream) const
+std::shared_ptr<hasty::op::Operator> hasty::op::VStackedOp::get_slice_ptr(size_t idx) const
+{
+	return _ops[idx];
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::VStackedOp::to_device(at::Stream stream) const
 {
 	std::vector<std::shared_ptr<Operator>> ops;
 	ops.reserve(_ops.size());
 	for (auto& op : _ops) {
 		ops.push_back(std::move(op->to_device(stream)));
 	}
-	return std::make_shared<StackedOp>(std::move(ops));
+	return std::make_shared<VStackedOp>(std::move(ops));
 }
 
-// ADJOINTABLE STACKED OP
-
-hasty::op::AdjointableStackedOp::AdjointableStackedOp(std::vector<std::shared_ptr<AdjointableOp>>& ops)
+// HORIZONTALLY STACKED OP
+hasty::op::HStackedOp::HStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
 {
 	_ops.reserve(ops.size());
 	for (auto& op : ops) {
@@ -247,60 +241,183 @@ hasty::op::AdjointableStackedOp::AdjointableStackedOp(std::vector<std::shared_pt
 	}
 }
 
-hasty::op::AdjointableStackedOp::AdjointableStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
+hasty::op::HStackedOp::HStackedOp(std::vector<std::shared_ptr<Operator>>&& ops)
 	: _ops(ops)
 {
 }
 
-hasty::op::Vector hasty::op::AdjointableStackedOp::apply(const Vector& in) const
+hasty::op::Vector hasty::op::HStackedOp::apply(const Vector& in) const
 {
 	if (!in.has_children()) {
 		if (_ops.size() != 1) {
-			throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
+			throw std::runtime_error("HStackedOp stacksize not compatible with number of children in in vector");
 		}
 		return _ops[0]->apply(in);
 	}
 
 	auto& children = access_vecchilds(in);
 	if (children.size() != _ops.size()) {
-		throw std::runtime_error("StackedOperator stacksize not compatible with number of children in in vector");
+		throw std::runtime_error("HStackedOp stacksize not compatible with number of children in in vector");
 	}
 
+	Vector out = _ops[0]->apply(children[0]);
+	for (int i = 1; i < _ops.size(); ++i) {
+		out += _ops[i]->apply(children[i]);
+	}
+	return out;
+}
+
+size_t hasty::op::HStackedOp::stack_size() const
+{
+	return _ops.size();
+}
+
+hasty::op::Operator& hasty::op::HStackedOp::get_slice(size_t idx)
+{
+	return *_ops[idx];
+}
+
+const hasty::op::Operator& hasty::op::HStackedOp::get_slice(size_t idx) const
+{
+	return *_ops[idx];
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::get_slice_ptr(size_t idx) const
+{
+	return _ops[idx];
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::to_device(at::Stream stream) const
+{
+	std::vector<std::shared_ptr<Operator>> ops;
+	ops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		ops.push_back(std::move(op->to_device(stream)));
+	}
+	return std::make_shared<HStackedOp>(std::move(ops));
+}
+
+
+// ADJOINTABLE VSTACKED OP
+hasty::op::AdjointableVStackedOp::AdjointableVStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
+{
+	_ops.reserve(ops.size());
+	for (auto& op : ops) {
+		_ops.emplace_back(op);
+	}
+}
+
+hasty::op::AdjointableVStackedOp::AdjointableVStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
+	: _ops(std::move(ops))
+{
+	
+}
+
+hasty::op::Vector hasty::op::AdjointableVStackedOp::apply(const Vector& in) const
+{
 	std::vector<op::Vector> newvecs;
-	newvecs.reserve(children.size());
-	for (int i = 0; i < _ops.size(); ++i) {
-		newvecs.push_back(std::move(_ops[i]->apply(children[i])));
+	newvecs.reserve(_ops.size());
+
+	for (auto& op : _ops) {
+		newvecs.push_back(std::move(op->apply(in)));
 	}
 
 	return newvecs;
 }
 
-size_t hasty::op::AdjointableStackedOp::stack_size() const
+size_t hasty::op::AdjointableVStackedOp::stack_size() const
 {
 	return _ops.size();
 }
 
-hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx)
+hasty::op::AdjointableOp& hasty::op::AdjointableVStackedOp::get_slice(size_t idx)
 {
 	return *_ops[idx];
 }
 
-const hasty::op::AdjointableOp& hasty::op::AdjointableStackedOp::get_slice(size_t idx) const
+const hasty::op::AdjointableOp& hasty::op::AdjointableVStackedOp::get_slice(size_t idx) const
 {
 	return *_ops[idx];
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableStackedOp::adjoint() const
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableVStackedOp::adjoint() const
 {
 	
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableStackedOp::to_device(at::Stream stream) const
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableVStackedOp::to_device(at::Stream stream) const
 {
 	std::vector<std::shared_ptr<AdjointableOp>> ops;
 	ops.reserve(_ops.size());
 	for (auto& op : _ops) {
 		ops.push_back(std::move(std::dynamic_pointer_cast<AdjointableOp>(op->to_device(stream))));
 	}
-	return std::make_shared<AdjointableStackedOp>(std::move(ops));
+	return std::make_shared<AdjointableVStackedOp>(std::move(ops));
 }
+
+// ADJOINTABLE HSTACKED OP
+hasty::op::AdjointableHStackedOp::AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
+{
+	_ops.reserve(ops.size());
+	for (auto& op : ops) {
+		_ops.emplace_back(op);
+	}
+}
+
+hasty::op::AdjointableHStackedOp::AdjointableHStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
+	: _ops(std::move(ops))
+{
+}
+
+hasty::op::Vector hasty::op::AdjointableHStackedOp::apply(const Vector& in) const
+{
+	if (!in.has_children()) {
+		if (_ops.size() != 1) {
+			throw std::runtime_error("HStackedOp stacksize not compatible with number of children in in vector");
+		}
+		return _ops[0]->apply(in);
+	}
+
+	auto& children = access_vecchilds(in);
+	if (children.size() != _ops.size()) {
+		throw std::runtime_error("HStackedOp stacksize not compatible with number of children in in vector");
+	}
+
+	Vector out = _ops[0]->apply(children[0]);
+	for (int i = 1; i < _ops.size(); ++i) {
+		out += _ops[i]->apply(children[i]);
+	}
+	return out;
+}
+
+size_t hasty::op::AdjointableHStackedOp::stack_size() const
+{
+	return _ops.size();
+}
+
+hasty::op::AdjointableOp& hasty::op::AdjointableHStackedOp::get_slice(size_t idx)
+{
+	return *_ops[idx];
+}
+
+const hasty::op::AdjointableOp& hasty::op::AdjointableHStackedOp::get_slice(size_t idx) const
+{
+	return *_ops[idx];
+}
+
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableHStackedOp::adjoint() const
+{
+
+}
+
+std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableHStackedOp::to_device(at::Stream stream) const
+{
+	std::vector<std::shared_ptr<AdjointableOp>> ops;
+	ops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		ops.push_back(std::move(std::dynamic_pointer_cast<AdjointableOp>(op->to_device(stream))));
+	}
+	return std::make_shared<AdjointableHStackedOp>(std::move(ops));
+}
+
+*/

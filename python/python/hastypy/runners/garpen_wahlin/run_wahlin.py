@@ -3,6 +3,7 @@ import h5py
 
 import gc
 
+import numpy as np
 import garpen_runner
 
 from hastypy.base.opalg import Vector, MaxEig
@@ -52,10 +53,21 @@ def run(settings: RunSettings):
 	#pu.image_nd(smaps.numpy())
 
 	coords, kdata, weights, gating = FivePointLoader.load_raw(settings.rawdata_filepath, gating_names=['TIME_E0', 'RESP_E0'])
+	
+	timeidx = np.argsort(gating['TIME_E0'])
+
+	coords = coords[...,timeidx,:][...,0,:,:]
+	weights = weights[...,timeidx,:][...,0,:,:]
+	kdata = kdata[...,timeidx,:][...,0,:,:]
+
+	kdata *= np.cos(2*np.pi*0.1*gating['TIME_E0'])[None, None, :,][...,None]
+
 	#normalize kdata
 	kdata /= 0.5*(torch.mean(torch.real(kdata)) + torch.mean(torch.real(kdata)))
 
 	coord_vec, kdata_vec, weights_vec = FivePointLoader.load_as_full(coords, kdata, weights)
+
+
 
 	coord_vec, kdata_vec, weights_vec = lag.crop_kspace(coord_vec, kdata_vec, weights_vec, settings.im_size, 
 		crop_factors=settings.crop_factors, prefovkmuls=settings.prefovkmuls, postfovkmuls=settings.postfovkmuls)
@@ -91,7 +103,7 @@ def run(settings: RunSettings):
 
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=25, callback=None)
+	image = full_recon.run(image, iter=4, callback=None)
 
 	pu.image_nd(image.numpy())
 

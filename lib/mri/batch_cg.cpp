@@ -1,9 +1,8 @@
 #include "batch_cg.hpp"
 
-#include "../op/mriop.hpp"
+//#include <c10/cuda/CUDAGuard.h>
 
-#include <c10/cuda/CUDAGuard.h>
-
+/*
 hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
 	const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
 	const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
@@ -25,8 +24,9 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 	auto coords = _coords[idx].to(device, true);
 	auto kdata = _kdata[idx].to(device, true);
 
+	
 	std::vector<int64_t> coils(dctx.smaps.size(0));
-	std::generate(coils.begin(), coils.end(), [n = 0]() mutable { return n++; });
+	std::generate(coils.begin(), coils.end(), [n = int64_t(0)]() mutable { return n++; });
 
 	std::shared_ptr<op::Operator> CGOp;
 
@@ -60,6 +60,7 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 		
 
 	}
+	
 
 
 
@@ -71,3 +72,4 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 }
 
 
+*/

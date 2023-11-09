@@ -23,7 +23,7 @@ namespace hasty {
             std::vector<int64_t> indices(array.size());
             std::iota(indices.begin(), indices.end(), 0);
             std::sort(indices.begin(), indices.end(),
-                [&array](int left, int right) -> bool {
+                [&array](int64_t left, int64_t right) -> bool {
                     // sort indices according to corresponding array element
                     return array[left] < array[right];
                 });

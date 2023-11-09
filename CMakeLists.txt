@@ -72,6 +72,7 @@ set(NLSQ_SOURCES
 )
 
 set(OP_SOURCES
+	"lib/op/vec.cpp"
 	"lib/op/op.cpp"
 	"lib/op/opalgebra.cpp"
 	"lib/op/proxop.cpp"

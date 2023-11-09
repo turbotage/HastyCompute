@@ -18,6 +18,8 @@ namespace hasty {
 			
 			std::shared_ptr<AdjointableOp> adjoint() const;
 
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
 		private:
 			at::Tensor _coords;
 			std::vector<int64_t> _nmodes;
@@ -40,6 +42,8 @@ namespace hasty {
 			Vector apply(const Vector& in) const;
 
 			std::shared_ptr<AdjointableOp> adjoint() const;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:
 			at::Tensor _coords;
@@ -70,6 +74,8 @@ namespace hasty {
 			Vector apply_backward(const Vector& in) const;
 
 			std::shared_ptr<AdjointableOp> adjoint() const;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		private:
 

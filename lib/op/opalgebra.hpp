@@ -5,6 +5,7 @@
 namespace hasty {
 	namespace op {
 
+		/*
 		class AddOp : public Operator {
 		public:
 
@@ -125,11 +126,11 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> _op;
 		};
 
-		class StackedOp : public Operator {
+		class VStackedOp : public Operator {
 		public:
 
-			StackedOp(std::vector<std::shared_ptr<Operator>>& ops);
-			StackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
+			VStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
+			VStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -137,6 +138,7 @@ namespace hasty {
 
 			Operator& get_slice(size_t idx);
 			const Operator& get_slice(size_t idx) const;
+			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
@@ -144,11 +146,31 @@ namespace hasty {
 			std::vector<std::shared_ptr<Operator>> _ops;
 		};
 
-		class AdjointableStackedOp : public AdjointableOp {
+		class HStackedOp : public Operator {
 		public:
 
-			AdjointableStackedOp(std::vector<std::shared_ptr<AdjointableOp>>& ops);
-			AdjointableStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
+			HStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
+			HStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
+
+			Vector apply(const Vector& in) const override;
+
+			size_t stack_size() const;
+
+			Operator& get_slice(size_t idx);
+			const Operator& get_slice(size_t idx) const;
+			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		private:
+			std::vector<std::shared_ptr<Operator>> _ops;
+		};
+
+		class AdjointableVStackedOp : public AdjointableOp {
+		public:
+
+			AdjointableVStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+			AdjointableVStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -165,5 +187,27 @@ namespace hasty {
 			std::vector<std::shared_ptr<AdjointableOp>> _ops;
 		};
 
+		class AdjointableHStackedOp : public AdjointableOp {
+		public:
+
+			AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+			AdjointableHStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
+
+			Vector apply(const Vector& in) const override;
+
+			size_t stack_size() const;
+
+			AdjointableOp& get_slice(size_t idx);
+			const AdjointableOp& get_slice(size_t idx) const;
+
+			std::shared_ptr<AdjointableOp> adjoint() const override;
+
+			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		private:
+			std::vector<std::shared_ptr<AdjointableOp>> _ops;
+		};
+
+		*/
 	}
 }

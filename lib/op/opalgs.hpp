@@ -1,7 +1,7 @@
 #pragma once
 
-#include "op.hpp"
 #include <optional>
+#include "op.hpp"
 #include "../threading/thread_pool.hpp"
 
 namespace hasty {
