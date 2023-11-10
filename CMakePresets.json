@@ -2,12 +2,13 @@
   "version": 5,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 24,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
-    {
-      "name": "windows-base",
+    { // MSVC
+      "cmakeExecutable": "$env{cmake_path}/cmake.exe",
+      "name": "msvc-base",
       "description": "Target Windows with the Visual Studio development environment.",
       "hidden": true,
       "generator": "Visual Studio 17 2022",
@@ -34,14 +35,6 @@
         "VCPKG_TARGET_TRIPLET": {
           "type": "STRING",
           "value": "x64-windows"
-        },
-        "BUILD_CUDA": {
-          "type": "BOOL",
-          "value": "ON"
-        },
-        "CMAKE_CUDA_ARCHITECTURES": {
-          "type": "STRING",
-          "value": "60;75;89"
         }
       },
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -52,42 +45,228 @@
       }
     },
     {
-      "name": "x64-debug-cuda",
-      "displayName": "x64 Debug CUDA",
+      "name": "msvc-debug-cuda",
+      "displayName": "MSVC x64 Debug CUDA",
       "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Debug)",
-      "inherits": "windows-base",
+      "inherits": "msvc-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
           "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
         }
       }
     },
     {
-      "name": "x64-release-cuda",
-      "displayName": "x64 Release CUDA",
+      "name": "msvc-release-cuda",
+      "displayName": "MSVC x64 Release CUDA",
       "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Release)",
-      "inherits": "windows-base",
+      "inherits": "msvc-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_PREFIX_PATH": {
           "type": "FILEPATH",
           "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
+        }
+      }
+    },
+    { // Ninja Clang
+      "cmakeExecutable": "$env{cmake_path}/cmake.exe",
+      "name": "ninja-clang",
+      "description": "Ninja & Clang",
+      "hidden": true,
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "environment": {
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "clang-cl.exe",
+        "CMAKE_CONFIGURATION_TYPES": {
+          "type": "STRING",
+          "value": "Release;Debug"
+        },
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows"
+        }
+      },
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "ninja-clang-debug-cuda",
+      "displayName": "Ninja Clang x64 Debug CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Debug)",
+      "inherits": "ninja-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
+        }
+      }
+    },
+    {
+      "name": "ninja-clang-release-cuda",
+      "displayName": "Ninja Clang x64 Release CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Release)",
+      "inherits": "ninja-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
+        }
+      }
+    },
+    { // MSVC Clang
+      "cmakeExecutable": "$env{cmake_path}/cmake.exe",
+      "name": "msvc-clang",
+      "description": "MSVC & Clang",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "environment": {
+        "FINUFFT_PREFIX": "D:\\Packages\\finufft\\lib\\cmake"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "clang-cl.exe",
+        "CMAKE_CONFIGURATION_TYPES": {
+          "type": "STRING",
+          "value": "Release;Debug"
+        },
+        "CMAKE_TOOLCHAIN_FILE": {
+          "type": "FILEPATH",
+          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows"
+        }
+      },
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "msvc-clang-debug-cuda",
+      "displayName": "MSVC Clang x64 Debug CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Debug)",
+      "inherits": "msvc-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/debug;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
+        }
+      }
+    },
+    {
+      "name": "msvc-clang-release-cuda",
+      "displayName": "MSVC Clang x64 Release CUDA",
+      "description": "Target Windows Visual Studio Env(64-bit) - build with CUDA. (Release)",
+      "inherits": "msvc-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": {
+          "type": "FILEPATH",
+          "value": "$env{TORCH_CUDA_DIR}/release;$env{FINUFFT_PREFIX}"
+        },
+        "BUILD_CUDA": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_CUDA_ARCHITECTURES": {
+          "type": "STRING",
+          "value": "60;75;89"
         }
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "x64-debug-cuda",
-      "configurePreset": "x64-debug-cuda",
+      "name": "ninja-clang-release-cuda",
+      "configurePreset": "ninja-clang-release-cuda",
+      "configuration": "Release"
+    },
+    {
+      "name": "ninja-clang-debug-cuda",
+      "configurePreset": "ninja-clang-debug-cuda",
       "configuration": "Debug"
     },
     {
-      "name": "x64-release-cuda",
-      "configurePreset": "x64-release-cuda",
+      "name": "msvc-clang-release-cuda",
+      "configurePreset": "msvc-clang-release-cuda",
       "configuration": "Release"
+    },
+    {
+      "name": "msvc-clang-debug-cuda",
+      "configurePreset": "msvc-clang-debug-cuda",
+      "configuration": "Debug"
+    },
+    {
+      "name": "msvc-release-cuda",
+      "configurePreset": "msvc-release-cuda",
+      "configuration": "Release"
+    },
+    {
+      "name": "msvc-debug-cuda",
+      "configurePreset": "msvc-debug-cuda",
+      "configuration": "Debug"
     }
   ],
   "testPresets": []

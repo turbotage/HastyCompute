@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.28)
 
 project("HastyCompute" VERSION 0.1)
 
 include(FetchContent)
 #include(cmake/CPM.cmake)
 
-set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API "2182bf5c-ef0d-489a-91da-49dbc3090d2a")
-if (MSVC)
-	set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
-endif()
+#set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API "2182bf5c-ef0d-489a-91da-49dbc3090d2a")
+#if (MSVC)
+#	set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
+#endif()
+
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 20)
+
 
 set(BUILD_SHARED_LIBS ON)
 if (MSVC)
@@ -23,91 +27,78 @@ message("CMAKE_PREFIX_PATH = ${CMAKE_PREFIX_PATH}")
 message("BUILD_CUDA = ${BUILD_CUDA}")
 
 
-set(MRI_SOURCES
-	"lib/mri/sense.cpp"
-	"lib/mri/batch_sense.cpp"
-	"lib/mri/batch_cg.cpp"
-	"lib/mri/precond.cpp"
-	"lib/mri/svt.cpp"
-)
-
-set(EXPR_SOURCES
-	"lib/expr/parser/token.ixx" 
-	"lib/expr/parser/lexer.ixx" 
-	"lib/expr/parser/defaultexp.ixx"
-	"lib/expr/parser/shunter.ixx"
-	"lib/expr/algebra/token_algebra.ixx"
-	"lib/expr/algebra/unary/neg.ixx"
-	"lib/expr/algebra/unary/trig.ixx"
-	"lib/expr/algebra/unary/unary.ixx"
-	"lib/expr/algebra/binary/add.ixx"
-	"lib/expr/algebra/binary/div.ixx"
-	"lib/expr/algebra/binary/mul.ixx"
-	"lib/expr/algebra/binary/pow.ixx"
-	"lib/expr/algebra/binary/sub.ixx"
-	"lib/expr/expr.ixx" 
-	"lib/expr/expr.cpp"
-	"lib/expr/symbolic.ixx"
-)
-
-set(TEST_SOURCES
-	"lib/tests/tests1.cpp"
-	"lib/tests/tests2.cpp"
-)
-
-set(FFT_SOURCES
-	"lib/fft/nufft.cpp"
-	"lib/fft/dct.cpp"
-	"lib/fft/fft.cpp"
-)
-
-set(LINALG_SOURCES
-	"lib/linalg/permute.ixx"
-	"lib/linalg/solver.ixx"
-)
-
-set(NLSQ_SOURCES
-	"lib/nlsq/nlsq_symbolic.ixx"
-	"lib/nlsq/nlsq.ixx"
-)
-
-set(OP_SOURCES
-	"lib/op/vec.cpp"
-	"lib/op/op.cpp"
-	"lib/op/opalgebra.cpp"
-	"lib/op/proxop.cpp"
-	"lib/op/opalgs.cpp"
-	"lib/op/fftop.cpp"
-	"lib/op/mriop.cpp"
-)
-
-set(OPTION_SOURCES)
-
-set(THREADING_SOURCES
-	"lib/threading/thread_pool.cpp"
-)
-
 set(BACKEND_HEADERS
 	"lib/fft/nufft.hpp"
 )
 
 add_library(HastyComputeLib SHARED
-	${MRI_SOURCES}
-	${FFT_SOURCES}
-	${THREADING_SOURCES}
+	"lib/mri/batch_sense.cpp"
+	"lib/mri/batch_cg.cpp"
+	"lib/mri/precond.cpp"
+	"lib/mri/svt.cpp"
 
-	"lib/hasty.ixx"
-	"lib/hasty_compute.ixx"
-	"lib/hasty_util.ixx"
-	"lib/metadata.ixx"
+	"lib/tests/tests1.cpp"
+	"lib/tests/tests2.cpp"
+
+	"lib/fft/dct.cpp"
+	"lib/fft/fft.cpp"
+
+	"lib/threading/thread_pool.cpp"
+
 	"lib/torch_util.cpp"
 	
-	${EXPR_SOURCES}
-	${LINALG_SOURCES}
-	${NLSQ_SOURCES}
-	${OP_SOURCES}
+	"lib/op/fftop.cpp"
 
-	${TEST_SOURCES}
+)
+
+target_sources(HastyComputeLib 
+	PUBLIC FILE_SET CXX_MODULES FILES
+		"lib/hasty.ixx"
+		"lib/hasty_compute.ixx"
+		"lib/hasty_util.ixx"
+		"lib/metadata.ixx"
+	
+		"lib/expr/parser/token.ixx" 
+		"lib/expr/parser/lexer.ixx" 
+		"lib/expr/parser/defaultexp.ixx"
+		"lib/expr/parser/shunter.ixx"
+		"lib/expr/algebra/token_algebra.ixx"
+		"lib/expr/algebra/unary/neg.ixx"
+		"lib/expr/algebra/unary/trig.ixx"
+		"lib/expr/algebra/unary/unary.ixx"
+		"lib/expr/algebra/binary/add.ixx"
+		"lib/expr/algebra/binary/div.ixx"
+		"lib/expr/algebra/binary/mul.ixx"
+		"lib/expr/algebra/binary/pow.ixx"
+		"lib/expr/algebra/binary/sub.ixx"
+		"lib/expr/expr.ixx" 
+		"lib/expr/expr.cpp"
+		"lib/expr/symbolic.ixx"
+
+		"lib/linalg/permute.ixx"
+		"lib/linalg/solver.ixx"
+
+		"lib/nlsq/nlsq_symbolic.ixx"
+		"lib/nlsq/nlsq.ixx"
+
+		"lib/fft/nufft.ixx"
+		"lib/fft/nufft.cpp"
+
+		"lib/mri/sense.ixx"
+		"lib/mri/sense.cpp"
+
+		"lib/op/vec.ixx"
+		"lib/op/vec.cpp"
+		"lib/op/op.ixx"
+		"lib/op/op.cpp"
+		"lib/op/opalgebra.ixx"
+		"lib/op/opalgebra.cpp"
+		"lib/op/opalgs.ixx"
+		"lib/op/opalgs.cpp"
+		"lib/op/mriop.ixx"
+		"lib/op/mriop.cpp"
+		"lib/op/proxop.ixx"
+		"lib/op/proxop.cpp"
 )
 
 target_sources(HastyComputeLib PUBLIC 
@@ -167,8 +158,8 @@ find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
 
-target_compile_features(HastyComputeLib PUBLIC cxx_std_23)
-set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
+#target_compile_features(HastyComputeLib PUBLIC cxx_std_23)
+#set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)
 
 if (MSVC)
   file(GLOB finufft_DLLS "${finufft_INSTALL_PREFIX}/../../../bin/*.dll")
@@ -193,13 +184,13 @@ endif()
 
 add_executable(HastyTest "tests/test.cpp")
 target_link_libraries(HastyTest PUBLIC HastyComputeLib)
-target_compile_features(HastyTest PRIVATE cxx_std_23)
+#target_compile_features(HastyTest PRIVATE cxx_std_23)
 
 
 
 
 # Python Interface
-find_package(PythonLibs REQUIRED)
+#find_package(PythonLibs REQUIRED)
 find_package(Python3 3.11 EXACT COMPONENTS Interpreter Development REQUIRED)
 
 FetchContent_Declare(
@@ -218,8 +209,6 @@ add_library(HastyPyInterface SHARED
 )
 #pybind11_add_module(HastyPyInterface SHARED "python/cpp/py_interface.cpp")
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
-#target_link_libraries(HastyPyInterface PUBLIC ${TORCH_LIBRARIES})
-#set_property(TARGET HastyPyInterface PROPERTY CXX_STANDARD 17)
 target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
 target_link_libraries(HastyPyInterface PUBLIC ${Python3_LIBRARY_RELEASE})
 target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
@@ -234,12 +223,15 @@ target_include_directories(HastyPyTest PRIVATE ${MATPLOTLIB_CPP_INCLUDE_DIRS})
 set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
 
 
+#[[
+
 
 install(TARGETS HastyComputeLib
 	EXPORT hasty-targets
 	RUNTIME DESTINATION bin
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib
+	CXX_MODULES_BMI DESTINATION lib
 	PUBLIC_HEADER DESTINATION include
 	INCLUDES DESTINATION include
 )
@@ -303,4 +295,5 @@ install(
               "${CMAKE_CURRENT_BINARY_DIR}/hasty/hastyConfigVersion.cmake"
   DESTINATION ${ConfigPackageLocation})
 
+]]
 

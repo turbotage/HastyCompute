@@ -108,8 +108,8 @@ namespace hasty {
                 return std::dynamic_pointer_cast<T>(multiple_inheritable_shared_from_this::shared_from_this());
             }
 
-            std::shared_ptr<T> shared_from_this() const {
-                return std::dynamic_pointer_cast<T>(multiple_inheritable_shared_from_this::shared_from_this());
+            std::shared_ptr<const T> shared_from_this() const {
+                return std::dynamic_pointer_cast<const T>(multiple_inheritable_shared_from_this::shared_from_this());
             }
 
             template<class U>
@@ -118,8 +118,8 @@ namespace hasty {
             }
 
             template<class U>
-            std::shared_ptr<U> downcast_shared_from_this() const {
-                return std::dynamic_pointer_cast<U>(multiple_inheritable_shared_from_this::shared_from_this());
+            std::shared_ptr<const U> downcast_shared_from_this() const {
+                return std::dynamic_pointer_cast<const U>(multiple_inheritable_shared_from_this::shared_from_this());
             }
 
         };

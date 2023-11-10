@@ -1,5 +1,8 @@
-#include "proxop.hpp"
+module;
 
+#include "../torch_util.hpp"
+
+module proxop;
 
 hasty::op::ProximalOperator::ProximalOperator(double base_alpha)
 	: _base_alpha(base_alpha)

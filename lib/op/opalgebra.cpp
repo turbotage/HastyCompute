@@ -1,8 +1,11 @@
-#include "opalgebra.hpp"
+module;
 
+#include "../torch_util.hpp"
+
+module opalgebra;
 
 // ADD OP
-/*
+
 
 hasty::op::AddOp::AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -298,6 +301,16 @@ std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::to_device(at::Stream
 }
 
 
+std::unique_ptr<hasty::op::AdjointableVStackedOp> hasty::op::AdjointableVStackedOp::Create(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
+{
+	static 
+}
+
+std::unique_ptr<hasty::op::AdjointableVStackedOp> hasty::op::AdjointableVStackedOp::Create(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
+{
+	return std::unique_ptr<AdjointableVStackedOp>();
+}
+
 // ADJOINTABLE VSTACKED OP
 hasty::op::AdjointableVStackedOp::AdjointableVStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
 {
@@ -407,7 +420,7 @@ const hasty::op::AdjointableOp& hasty::op::AdjointableHStackedOp::get_slice(size
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableHStackedOp::adjoint() const
 {
-
+	
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableHStackedOp::to_device(at::Stream stream) const
@@ -420,4 +433,4 @@ std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableHStackedOp::to_device
 	return std::make_shared<AdjointableHStackedOp>(std::move(ops));
 }
 
-*/
+

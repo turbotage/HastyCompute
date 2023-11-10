@@ -1,13 +1,19 @@
-#pragma once
+module;
 
-#include <optional>
-#include "op.hpp"
-#include "../threading/thread_pool.hpp"
+#include "../torch_util.hpp"
+
+export module opalgs;
+
+import vec;
+import op;
 
 namespace hasty {
 	namespace op {
 
-		class OperatorAlg {
+		template<typename T>
+		class ContextThreadPool;
+
+		export class OperatorAlg {
 		protected:
 
 			at::Tensor& access_vectensor(Vector& vec) const;
@@ -17,7 +23,7 @@ namespace hasty {
 			const std::vector<Vector>& access_vecchilds(const Vector& vec) const;
 		};
 
-		class PowerIteration : public OperatorAlg {
+		export class PowerIteration : public OperatorAlg {
 		public:
 
 			PowerIteration() = default;
@@ -26,7 +32,7 @@ namespace hasty {
 
 		};
 
-		class ConjugateGradient : public OperatorAlg {
+		export class ConjugateGradient : public OperatorAlg {
 		public:
 
 			ConjugateGradient(std::shared_ptr<op::Operator> A, std::shared_ptr<op::Vector> b, std::shared_ptr<op::Operator> P);
@@ -39,30 +45,30 @@ namespace hasty {
 			std::shared_ptr<op::Operator> _P;
 		};
 
-		struct ConjugateGradientLoadResult {
+		export struct ConjugateGradientLoadResult {
 			std::shared_ptr<op::Operator> A;
 			std::shared_ptr<op::Vector> b;
 			std::shared_ptr<Operator> P;
 		};
 
-		template<typename DeviceContext>
+		export template<typename DeviceContext>
 		class BatchConjugateGradientLoader {
 		public:
 
 			virtual ConjugateGradientLoadResult load(DeviceContext& dctx, size_t idx) = 0;
-			
+
 		};
 
-		template<typename DeviceContext>
+		export template<typename DeviceContext>
 		class DefaultBatchConjugateGradientLoader : public BatchConjugateGradientLoader<DeviceContext> {
 		public:
 
 			DefaultBatchConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
-				: _load_results(lrs) 
+				: _load_results(lrs)
 			{}
-			
+
 			DefaultBatchConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
-				: _load_results({lr})
+				: _load_results({ lr })
 			{}
 
 			ConjugateGradientLoadResult load(DeviceContext& dctxt, size_t idx) override
@@ -74,7 +80,7 @@ namespace hasty {
 			std::vector<ConjugateGradientLoadResult> _load_results;
 		};
 
-		template<typename DeviceContext>
+		export template<typename DeviceContext>
 		class BatchConjugateGradient : public OperatorAlg {
 		public:
 
@@ -96,7 +102,7 @@ namespace hasty {
 					batch_applier = [this, i, child](DeviceContext& context) {
 						ConjugateGradientLoadResult result = _cg_loader.load(context, i);
 						ConjugateGradient(result.A, result.b, result.P).run(child, iter, tol);
-					};
+						};
 
 					futures.emplace_back(_thread_pool->enqueue(batch_applier));
 
@@ -120,7 +126,7 @@ namespace hasty {
 
 		class AdmmMinimizer;
 
-		class Admm {
+		export class Admm {
 		public:
 
 			struct Context {
@@ -159,7 +165,7 @@ namespace hasty {
 			std::shared_ptr<AdmmMinimizer> _zmin;
 		};
 
-		class AdmmMinimizer : public OperatorAlg {
+		export class AdmmMinimizer : public OperatorAlg {
 		public:
 
 			virtual void solve(Admm::Context& ctx);

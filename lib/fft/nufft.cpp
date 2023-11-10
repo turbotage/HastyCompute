@@ -1,14 +1,13 @@
-
-//#include <cufinufft.h>
-
-#include "nufft.hpp"
+module;
 
 #include <finufft.h>
 #include <cufinufft.h>
 
+#include "../torch_util.hpp"
+
+module nufft;
 
 import hasty_util;
-
 
 
 at::Tensor hasty::nufft::allocate_out(const at::Tensor& coords, int ntransf)

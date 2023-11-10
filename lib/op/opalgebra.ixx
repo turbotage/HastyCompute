@@ -1,12 +1,16 @@
-#pragma once
+module;
 
-#include "op.hpp"
+#include "../torch_util.hpp"
+
+export module opalgebra;
+
+import op;
 
 namespace hasty {
 	namespace op {
 
-		/*
-		class AddOp : public Operator {
+
+		export class AddOp : public Operator {
 		public:
 
 			AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
@@ -20,7 +24,7 @@ namespace hasty {
 			std::shared_ptr<Operator> _right;
 		};
 
-		class AdjointableAddOp : public AdjointableOp {
+		export class AdjointableAddOp : public AdjointableOp {
 		public:
 
 			AdjointableAddOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
@@ -36,7 +40,7 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> _right;
 		};
 
-		class SubOp : public Operator {
+		export class SubOp : public Operator {
 		public:
 
 			SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
@@ -50,7 +54,7 @@ namespace hasty {
 			std::shared_ptr<Operator> _right;
 		};
 
-		class AdjointableSubOp : public AdjointableOp {
+		export class AdjointableSubOp : public AdjointableOp {
 		public:
 
 			AdjointableSubOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
@@ -66,7 +70,7 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> _right;
 		};
 
-		class MulOp : public Operator {
+		export class MulOp : public Operator {
 		public:
 
 			MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
@@ -80,7 +84,7 @@ namespace hasty {
 			std::shared_ptr<Operator> _right;
 		};
 
-		class AdjointableMulOp : public AdjointableOp {
+		export class AdjointableMulOp : public AdjointableOp {
 		public:
 
 			AdjointableMulOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
@@ -96,7 +100,7 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> _right;
 		};
 
-		class ScaleOp : public Operator {
+		export class ScaleOp : public Operator {
 		public:
 
 			ScaleOp(const at::Tensor& scalar, std::shared_ptr<Operator> op);
@@ -110,7 +114,7 @@ namespace hasty {
 			std::shared_ptr<Operator> _op;
 		};
 
-		class AdjointableScaleOp : public AdjointableOp {
+		export class AdjointableScaleOp : public AdjointableOp {
 		public:
 
 			AdjointableScaleOp(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op);
@@ -126,7 +130,7 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> _op;
 		};
 
-		class VStackedOp : public Operator {
+		export class VStackedOp : public Operator {
 		public:
 
 			VStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
@@ -146,7 +150,7 @@ namespace hasty {
 			std::vector<std::shared_ptr<Operator>> _ops;
 		};
 
-		class HStackedOp : public Operator {
+		export class HStackedOp : public Operator {
 		public:
 
 			HStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
@@ -166,11 +170,12 @@ namespace hasty {
 			std::vector<std::shared_ptr<Operator>> _ops;
 		};
 
-		class AdjointableVStackedOp : public AdjointableOp {
+		export class AdjointableVStackedOp : public AdjointableOp {
 		public:
 
-			AdjointableVStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
-			AdjointableVStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
+			static std::unique_ptr<AdjointableVStackedOp> Create(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+
+			static std::unique_ptr<AdjointableVStackedOp> Create(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -183,11 +188,16 @@ namespace hasty {
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
+		protected:
+
+			AdjointableVStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+			AdjointableVStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
+
 		private:
 			std::vector<std::shared_ptr<AdjointableOp>> _ops;
 		};
 
-		class AdjointableHStackedOp : public AdjointableOp {
+		export class AdjointableHStackedOp : public AdjointableOp {
 		public:
 
 			AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
@@ -208,6 +218,9 @@ namespace hasty {
 			std::vector<std::shared_ptr<AdjointableOp>> _ops;
 		};
 
-		*/
+
 	}
 }
+
+
+

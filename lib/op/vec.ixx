@@ -1,13 +1,16 @@
-#pragma once
+module;
 
 #include "../torch_util.hpp"
+
+export module vec;
+
 
 import hasty_util;
 
 namespace hasty {
 	namespace op {
 
-		class VectorShape {
+		export class VectorShape {
 		public:
 
 			VectorShape(const std::initializer_list<int64_t>& dims);
@@ -33,7 +36,7 @@ namespace hasty {
 		class Operator;
 		class AdjointableOp;
 
-		class Vector {
+		export class Vector {
 		public:
 
 			Vector(float scalar);

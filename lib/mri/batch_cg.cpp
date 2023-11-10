@@ -1,8 +1,8 @@
 #include "batch_cg.hpp"
 
-//#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAGuard.h>
 
-/*
+
 hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
 	const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
 	const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
@@ -43,11 +43,13 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 		}
 		else {
 			
+			//assert(std::derived_from<op::AdjointableMulOp, op::AdjointableOp>)
+
 			auto A = op::staticcast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
 
 			auto mulled = op::mul(std::move(AH), std::move(A));
 
-			AHA = op::upcast<op::AdjointableOp>(std::move(mulled));
+			AHA = op::upcast<op::AdjointableOp>(mulled);
 		}
 
 		if (!AHA)
@@ -72,4 +74,4 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 }
 
 
-*/
+

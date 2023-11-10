@@ -1,18 +1,19 @@
-#pragma once
+module;
 
-#include "../fft/nufft.hpp"
-#include "../threading/thread_pool.hpp"
+#include "../torch_util.hpp"
 
-#include "../export.hpp"
+export module sense;
+
+import nufft;
 
 namespace hasty {
 
-	using TensorVec = std::vector<at::Tensor>;
+	export using TensorVec = std::vector<at::Tensor>;
 
 	namespace sense {
 
-		using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
-		struct CoilManipulator {
+		export using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
+		export struct CoilManipulator {
 			CoilManipulator() = default;
 
 			CoilManipulator& setPreApply(const CoilApplier& apply) {
@@ -41,7 +42,7 @@ namespace hasty {
 			at::optional<CoilApplier> postapplier;
 		};
 
-		class LIB_EXPORT Sense {
+		export class Sense {
 		public:
 
 			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -57,7 +58,7 @@ namespace hasty {
 			std::vector<int64_t> _nmodes;
 		};
 
-		class LIB_EXPORT CUDASense {
+		export class CUDASense {
 		public:
 
 			CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -74,7 +75,7 @@ namespace hasty {
 		};
 
 
-		class LIB_EXPORT SenseAdjoint {
+		export class SenseAdjoint {
 		public:
 
 			SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -90,7 +91,7 @@ namespace hasty {
 			std::vector<int64_t> _nmodes;
 		};
 
-		class LIB_EXPORT CUDASenseAdjoint {
+		export class CUDASenseAdjoint {
 		public:
 
 			CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -107,7 +108,7 @@ namespace hasty {
 		};
 
 
-		class LIB_EXPORT SenseNormal {
+		export class SenseNormal {
 		public:
 
 			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -138,7 +139,7 @@ namespace hasty {
 
 		};
 
-		class LIB_EXPORT CUDASenseNormal {
+		export class CUDASenseNormal {
 		public:
 
 			CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,

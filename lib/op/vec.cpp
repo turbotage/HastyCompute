@@ -1,4 +1,8 @@
-#include "vec.hpp"
+module;
+
+#include "../torch_util.hpp"
+
+module vec;
 
 
 hasty::op::VectorShape::VectorShape(const std::initializer_list<int64_t>& dims)

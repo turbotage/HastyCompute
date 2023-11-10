@@ -1,5 +1,13 @@
-#include "mriop.hpp"
+module;
 
+#include "../torch_util.hpp"
+
+module mriop;
+
+std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& opts)
+{
+	return std::unique_ptr<SenseOp>();
+}
 
 hasty::op::SenseOp::SenseOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
@@ -228,7 +236,11 @@ hasty::op::Vector hasty::op::SenseNOp::apply_backward(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseNOp::adjoint() const
 {
-	return downcast_shared_from_this<SenseNOp>();
+	struct creator : public SenseNOp { 
+		creator(std::shared_ptr<SenseNHolder> _sh)
+			: SenseNOp(std::move(_sh)) {}
+	};
+	return std::make_shared<creator>(_senseholder);
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::SenseNOp::to_device(at::Stream stream) const

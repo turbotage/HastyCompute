@@ -1,4 +1,9 @@
-#include "opalgs.hpp"
+module;
+
+#include "../torch_util.hpp"
+
+
+module opalgs;
 
 
 at::Tensor& hasty::op::OperatorAlg::access_vectensor(Vector& vec) const

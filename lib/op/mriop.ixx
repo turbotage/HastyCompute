@@ -1,24 +1,34 @@
-#pragma once
+module;
 
-#include "op.hpp"
-#include "../fft/nufft.hpp"
-#include "../mri/sense.hpp"
+#include "../torch_util.hpp"
+
+export module mriop;
+
+import op;
+import nufft;
+import sense;
 
 namespace hasty {
 	namespace op {
 
-		class SenseOp : public AdjointableOp {
+		export class SenseOp : public AdjointableOp {
 		public:
 
-			SenseOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static std::unique_ptr<SenseOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
-			
+
 			std::shared_ptr<AdjointableOp> adjoint() const;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+
+			SenseOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 		private:
 			at::Tensor _coords;
@@ -31,8 +41,8 @@ namespace hasty {
 			std::unique_ptr<sense::Sense> _cpusense;
 			std::unique_ptr<sense::CUDASense> _cudasense;
 		};
-		
-		class SenseHOp : public AdjointableOp {
+
+		export class SenseHOp : public AdjointableOp {
 		public:
 
 			SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -59,7 +69,7 @@ namespace hasty {
 			std::unique_ptr<sense::CUDASenseAdjoint> _cudasense;
 		};
 
-		class SenseNOp : public AdjointableOp {
+		export class SenseNOp : public AdjointableOp {
 		public:
 
 			SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -108,3 +118,4 @@ namespace hasty {
 
 	}
 }
+

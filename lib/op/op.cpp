@@ -1,5 +1,8 @@
-#include "op.hpp"
-#include "opalgebra.hpp"
+module;
+
+#include "../torch_util.hpp"
+
+module op;
 
 namespace {
 	std::mutex _oplock;

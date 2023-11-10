@@ -1,9 +1,10 @@
-#pragma once
+module;
 
 #include "../torch_util.hpp"
 #include <cufinufft_opts.h>
 #include <finufft_opts.h>
 
+export module nufft;
 
 typedef struct finufft_plan_s* finufft_plan;
 typedef struct finufftf_plan_s* finufftf_plan;
@@ -14,13 +15,13 @@ typedef struct cufinufft_fplan_s* cufinufftf_plan;
 namespace hasty {
 	namespace nufft {
 
-		enum NufftType {
+		export enum NufftType {
 			eType1 = 1, // ADJOINT
 			eType2 = 2, // FORWARD
 			eType3 = 3
 		};
 
-		class LIB_EXPORT NufftOptions {
+		export class NufftOptions {
 		public:
 
 			NufftOptions() = default;
@@ -62,11 +63,11 @@ namespace hasty {
 			double get_tol() const { return tol; }
 		};
 
-		at::Tensor allocate_out(const at::Tensor& coords, int ntransf);
+		export at::Tensor allocate_out(const at::Tensor& coords, int ntransf);
 
-		at::Tensor allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		export at::Tensor allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-		class LIB_EXPORT Nufft {
+		export class Nufft {
 		public:
 
 			Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
@@ -110,7 +111,7 @@ namespace hasty {
 			int32_t _nvoxels;
 		};
 
-		class LIB_EXPORT CUDANufft {
+		export class CUDANufft {
 		public:
 
 			CUDANufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts = NufftOptions{});
@@ -154,15 +155,15 @@ namespace hasty {
 			int32_t _nvoxels;
 		};
 
-		at::Tensor allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		export at::Tensor allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-		at::Tensor allocate_normal_storage(const at::Tensor& coords, int ntransf);
+		export at::Tensor allocate_normal_storage(const at::Tensor& coords, int ntransf);
 
-		at::Tensor allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf);
+		export at::Tensor allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf);
 
-		at::Tensor allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
+		export at::Tensor allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
 
-		class LIB_EXPORT NufftNormal {
+		export class NufftNormal {
 		public:
 
 			NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -193,7 +194,7 @@ namespace hasty {
 			Nufft				_backward;
 		};
 
-		class LIB_EXPORT CUDANufftNormal {
+		export class CUDANufftNormal {
 		public:
 
 			CUDANufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -225,11 +226,7 @@ namespace hasty {
 		};
 
 
-
-
-
-
-		class LIB_EXPORT CUDANormalNufftToeplitz {
+		class CUDANormalNufftToeplitz {
 		public:
 
 			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
@@ -243,7 +240,7 @@ namespace hasty {
 		public:
 
 			CUDANormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
-				const at::optional<std::reference_wrapper<at::Tensor>>& diagonal, 
+				const at::optional<std::reference_wrapper<at::Tensor>>& diagonal,
 				const at::optional<std::reference_wrapper<at::Tensor>>& frequency_storage,
 				const at::optional<std::reference_wrapper<at::Tensor>>& input_storage);
 
@@ -260,7 +257,7 @@ namespace hasty {
 			at::Tensor get_diagonal();
 
 		private:
-			
+
 			bool _created_from_diagonal;
 
 			at::ScalarType								_type;
@@ -322,6 +319,5 @@ namespace hasty {
 	}
 
 }
-
 
 

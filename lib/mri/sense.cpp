@@ -1,8 +1,9 @@
-#include "sense.hpp"
-#include <numeric>
+module;
 
+#include "../torch_util.hpp"
 #include <c10/cuda/CUDAGuard.h>
 
+module sense;
 
 hasty::sense::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::optional<nufft::NufftOptions>& opts)
