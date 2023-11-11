@@ -133,8 +133,9 @@ namespace hasty {
 		export class VStackedOp : public Operator {
 		public:
 
-			VStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
-			VStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
+			static std::unique_ptr<VStackedOp> Create(const std::vector<std::shared_ptr<Operator>>& ops);
+
+			static std::unique_ptr<VStackedOp> Create(std::vector<std::shared_ptr<Operator>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -145,6 +146,11 @@ namespace hasty {
 			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			VStackedOp(const std::vector<std::shared_ptr<Operator>>& ops);
+			VStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
 
 		private:
 			std::vector<std::shared_ptr<Operator>> _ops;
@@ -153,8 +159,9 @@ namespace hasty {
 		export class HStackedOp : public Operator {
 		public:
 
-			HStackedOp(std::vector<std::shared_ptr<Operator>>& ops);
-			HStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
+			static std::unique_ptr<HStackedOp> Create(const std::vector<std::shared_ptr<Operator>>& ops);
+
+			static std::unique_ptr<HStackedOp> Create(std::vector<std::shared_ptr<Operator>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -165,6 +172,11 @@ namespace hasty {
 			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+
+			HStackedOp(const std::vector<std::shared_ptr<Operator>>& ops);
+			HStackedOp(std::vector<std::shared_ptr<Operator>>&& ops);
 
 		private:
 			std::vector<std::shared_ptr<Operator>> _ops;
@@ -200,8 +212,9 @@ namespace hasty {
 		export class AdjointableHStackedOp : public AdjointableOp {
 		public:
 
-			AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
-			AdjointableHStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
+			static std::unique_ptr<AdjointableHStackedOp> Create(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+
+			static std::unique_ptr<AdjointableHStackedOp> Create(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
 
 			Vector apply(const Vector& in) const override;
 
@@ -213,6 +226,11 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+
+			AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops);
+			AdjointableHStackedOp(std::vector<std::shared_ptr<AdjointableOp>>&& ops);
 
 		private:
 			std::vector<std::shared_ptr<AdjointableOp>> _ops;

@@ -179,7 +179,26 @@ std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableScaleOp::to_device(at
 
 // VERTICALLY STACKED OP
 
-hasty::op::VStackedOp::VStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
+std::unique_ptr<hasty::op::VStackedOp> hasty::op::VStackedOp::Create(const std::vector<std::shared_ptr<Operator>>& ops)
+{
+	struct creator : public VStackedOp {
+		creator(const std::vector<std::shared_ptr<Operator>>& a)
+			: VStackedOp(a) {}
+	};
+	return std::make_unique<creator>(ops);
+}
+
+std::unique_ptr<hasty::op::VStackedOp> hasty::op::VStackedOp::Create(std::vector<std::shared_ptr<Operator>>&& ops)
+{
+	struct creator : public VStackedOp {
+		creator(std::vector<std::shared_ptr<Operator>>&& a)
+			: VStackedOp(a) {}
+	};
+	return std::make_unique<creator>(std::move(ops));
+}
+
+
+hasty::op::VStackedOp::VStackedOp(const std::vector<std::shared_ptr<Operator>>& ops)
 {
 	_ops.reserve(ops.size());
 	for (auto& op : ops) {
@@ -188,10 +207,9 @@ hasty::op::VStackedOp::VStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
 }
 
 hasty::op::VStackedOp::VStackedOp(std::vector<std::shared_ptr<Operator>>&& ops)
-	: _ops(ops)
+	: _ops(std::move(ops))
 {
 }
-
 
 hasty::op::Vector hasty::op::VStackedOp::apply(const Vector& in) const
 {
@@ -232,11 +250,29 @@ std::shared_ptr<hasty::op::Operator> hasty::op::VStackedOp::to_device(at::Stream
 	for (auto& op : _ops) {
 		ops.push_back(std::move(op->to_device(stream)));
 	}
-	return std::make_shared<VStackedOp>(std::move(ops));
+	return VStackedOp::Create(std::move(ops));
 }
 
 // HORIZONTALLY STACKED OP
-hasty::op::HStackedOp::HStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
+std::unique_ptr<hasty::op::HStackedOp> hasty::op::HStackedOp::Create(const std::vector<std::shared_ptr<Operator>>& ops)
+{
+	struct creator : public HStackedOp {
+		creator(const std::vector<std::shared_ptr<Operator>>& a)
+			: HStackedOp(a) {}
+	};
+	return std::make_unique<creator>(ops);
+}
+
+std::unique_ptr<hasty::op::HStackedOp> hasty::op::HStackedOp::Create(std::vector<std::shared_ptr<Operator>>&& ops)
+{
+	struct creator : public HStackedOp {
+		creator(std::vector<std::shared_ptr<Operator>>&& a)
+			: HStackedOp(std::move(a)) {}
+	};
+	return std::make_unique<creator>(std::move(ops));
+}
+
+hasty::op::HStackedOp::HStackedOp(const std::vector<std::shared_ptr<Operator>>& ops)
 {
 	_ops.reserve(ops.size());
 	for (auto& op : ops) {
@@ -245,7 +281,7 @@ hasty::op::HStackedOp::HStackedOp(std::vector<std::shared_ptr<Operator>>& ops)
 }
 
 hasty::op::HStackedOp::HStackedOp(std::vector<std::shared_ptr<Operator>>&& ops)
-	: _ops(ops)
+	: _ops(std::move(ops))
 {
 }
 
@@ -297,18 +333,26 @@ std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::to_device(at::Stream
 	for (auto& op : _ops) {
 		ops.push_back(std::move(op->to_device(stream)));
 	}
-	return std::make_shared<HStackedOp>(std::move(ops));
+	return HStackedOp::Create(std::move(ops));
 }
 
 
 std::unique_ptr<hasty::op::AdjointableVStackedOp> hasty::op::AdjointableVStackedOp::Create(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
 {
-	static 
+	struct creator : public AdjointableVStackedOp {
+		creator(const std::vector<std::shared_ptr<AdjointableOp>>& a)
+			: AdjointableVStackedOp(a) {}
+	};
+	return std::make_unique<creator>(ops);
 }
 
 std::unique_ptr<hasty::op::AdjointableVStackedOp> hasty::op::AdjointableVStackedOp::Create(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
 {
-	return std::unique_ptr<AdjointableVStackedOp>();
+	struct creator : public AdjointableVStackedOp {
+		creator(std::vector<std::shared_ptr<AdjointableOp>>&& a)
+			: AdjointableVStackedOp(std::move(a)) {}
+	};
+	return std::make_unique<creator>(std::move(ops));
 }
 
 // ADJOINTABLE VSTACKED OP
@@ -365,10 +409,29 @@ std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableVStackedOp::to_device
 	for (auto& op : _ops) {
 		ops.push_back(std::move(std::dynamic_pointer_cast<AdjointableOp>(op->to_device(stream))));
 	}
-	return std::make_shared<AdjointableVStackedOp>(std::move(ops));
+	return AdjointableVStackedOp::Create(std::move(ops));
 }
 
 // ADJOINTABLE HSTACKED OP
+
+std::unique_ptr<hasty::op::AdjointableHStackedOp> hasty::op::AdjointableHStackedOp::Create(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
+{
+	struct creator : public AdjointableHStackedOp {
+		creator(const std::vector<std::shared_ptr<AdjointableOp>>& a)
+			: AdjointableHStackedOp(a) {}
+	};
+	return std::make_unique<creator>(ops);
+}
+
+std::unique_ptr<hasty::op::AdjointableHStackedOp> hasty::op::AdjointableHStackedOp::Create(std::vector<std::shared_ptr<AdjointableOp>>&& ops)
+{
+	struct creator : public AdjointableHStackedOp {
+		creator(std::vector<std::shared_ptr<AdjointableOp>>&& a)
+			: AdjointableHStackedOp(std::move(a)) {}
+	};
+	return std::make_unique<creator>(std::move(ops));
+}
+
 hasty::op::AdjointableHStackedOp::AdjointableHStackedOp(const std::vector<std::shared_ptr<AdjointableOp>>& ops)
 {
 	_ops.reserve(ops.size());
@@ -430,7 +493,7 @@ std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableHStackedOp::to_device
 	for (auto& op : _ops) {
 		ops.push_back(std::move(std::dynamic_pointer_cast<AdjointableOp>(op->to_device(stream))));
 	}
-	return std::make_shared<AdjointableHStackedOp>(std::move(ops));
+	return AdjointableHStackedOp::Create(std::move(ops));
 }
 
 

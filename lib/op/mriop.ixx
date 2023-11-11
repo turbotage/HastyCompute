@@ -45,7 +45,7 @@ namespace hasty {
 		export class SenseHOp : public AdjointableOp {
 		public:
 
-			SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static std::unique_ptr<SenseHOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
 				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
@@ -54,6 +54,12 @@ namespace hasty {
 			std::shared_ptr<AdjointableOp> adjoint() const;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
+				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
 
 		private:
 			at::Tensor _coords;
@@ -72,7 +78,7 @@ namespace hasty {
 		export class SenseNOp : public AdjointableOp {
 		public:
 
-			SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static std::unique_ptr<SenseNOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
 				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
@@ -107,6 +113,11 @@ namespace hasty {
 				std::unique_ptr<sense::SenseNormal> _cpusense;
 				std::unique_ptr<sense::CUDASenseNormal> _cudasense;
 			};
+
+			SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+				const at::Tensor& smaps, const std::vector<int64_t>& coils,
+				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
 
 			SenseNOp(std::shared_ptr<SenseNHolder> shoulder);
 
