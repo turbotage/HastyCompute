@@ -4,7 +4,8 @@ module;
 
 module mriop;
 
-std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& opts)
+std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+	const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& opts)
 {
 	struct creator : public SenseOp {
 		creator(const at::Tensor& a, const std::vector<int64_t>& b, const at::Tensor& c, 
@@ -85,7 +86,6 @@ std::unique_ptr<hasty::op::SenseHOp> hasty::op::SenseHOp::Create(const at::Tenso
 	return std::make_unique<creator>(coords, nmodes, smaps, coils, accumulate, opts);
 }
 
-
 hasty::op::SenseHOp::SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate, 
 	const at::optional<nufft::NufftOptions>& opts)
@@ -133,7 +133,7 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseHOp::adjoint() const
 {
 	auto newops = _opts;
 	newops.type = nufft::NufftType::eType2;
-	return std::make_shared<SenseOp>(_coords, _nmodes, _smaps, _coils, newops);
+	return SenseOp::Create(_coords, _nmodes, _smaps, _coils, newops);
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::SenseHOp::to_device(at::Stream stream) const

@@ -28,26 +28,19 @@ message("BUILD_CUDA = ${BUILD_CUDA}")
 
 
 set(BACKEND_HEADERS
-	"lib/fft/nufft.hpp"
+	
 )
 
 add_library(HastyComputeLib SHARED
 	"lib/mri/batch_sense.cpp"
 	"lib/mri/batch_cg.cpp"
-	"lib/mri/precond.cpp"
-	"lib/mri/svt.cpp"
 
 	"lib/tests/tests1.cpp"
 	"lib/tests/tests2.cpp"
 
-	"lib/fft/dct.cpp"
-	"lib/fft/fft.cpp"
-
-	"lib/threading/thread_pool.cpp"
+	
 
 	"lib/torch_util.cpp"
-	
-	"lib/op/fftop.cpp"
 
 )
 
@@ -58,6 +51,8 @@ target_sources(HastyComputeLib
 		"lib/hasty_util.ixx"
 		"lib/metadata.ixx"
 	
+		"lib/threading/thread_pool.ixx"
+
 		"lib/expr/parser/token.ixx" 
 		"lib/expr/parser/lexer.ixx" 
 		"lib/expr/parser/defaultexp.ixx"
@@ -81,6 +76,14 @@ target_sources(HastyComputeLib
 		"lib/nlsq/nlsq_symbolic.ixx"
 		"lib/nlsq/nlsq.ixx"
 
+		"lib/mri/block.ixx"
+		"lib/mri/svt.ixx"
+		"lib/mri/svt.cpp"
+
+		"lib/fft/dct.ixx"
+		"lib/fft/dct.cpp"
+		"lib/fft/fft.ixx"
+		"lib/fft/fft.cpp"
 		"lib/fft/nufft.ixx"
 		"lib/fft/nufft.cpp"
 
@@ -99,6 +102,12 @@ target_sources(HastyComputeLib
 		"lib/op/mriop.cpp"
 		"lib/op/proxop.ixx"
 		"lib/op/proxop.cpp"
+		"lib/op/fftop.ixx"
+		"lib/op/fftop.cpp"
+
+		"lib/mri/precond.ixx"
+		"lib/mri/precond.cpp"
+
 )
 
 target_sources(HastyComputeLib PUBLIC 

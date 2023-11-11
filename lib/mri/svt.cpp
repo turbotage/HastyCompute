@@ -1,11 +1,14 @@
-#include "svt.hpp"
+module;
 
-#include <random>
+#include "../torch_util.hpp"
 #include <c10/cuda/CUDAGuard.h>
 
+module svt;
+
+import <random>;
 import hasty_util;
 
-at::Tensor hasty::svt::extract_block(const at::Tensor& in, const Block<4>& block, const std::optional<std::vector<int64_t>>& perms, int flatten_split, bool transpose)
+at::Tensor hasty::svt::extract_block(const at::Tensor& in, const hasty::Block<4>& block, const std::optional<std::vector<int64_t>>& perms, int flatten_split, bool transpose)
 {
 	using namespace at::indexing;
 	std::array<TensorIndex, 5> idx = {

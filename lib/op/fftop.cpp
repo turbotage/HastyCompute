@@ -1,4 +1,8 @@
-#include "fftop.hpp"
+module;
+
+#include "../torch_util.hpp"
+
+module fftop;
 
 // NUFFT
 

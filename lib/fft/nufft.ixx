@@ -226,7 +226,7 @@ namespace hasty {
 		};
 
 
-		class CUDANormalNufftToeplitz {
+		export class CUDANormalNufftToeplitz {
 		public:
 
 			static void build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal);
@@ -281,7 +281,7 @@ namespace hasty {
 
 	namespace grid {
 
-		class Gridding {
+		export class Gridding {
 		public:
 
 			Gridding(const at::Tensor& coords, const std::vector<int64_t>& nmodes);

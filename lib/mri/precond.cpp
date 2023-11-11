@@ -1,12 +1,13 @@
-#include "precond.hpp"
-//#include "../fft/nufft.hpp"
+module;
 
-#include "../fft/fft.hpp"
-#include "../op/fftop.hpp"
+#include "../torch_util.hpp"
 
-#include <numeric>
+module precond;
 
 import hasty_util;
+import fft;
+import fftop;
+import nufft;
 
 at::Tensor hasty::op::CirculantPreconditioner::build_diagonal(at::Tensor smaps, at::Tensor coord, const at::optional<at::Tensor>& weights, const at::optional<double>& lambda)
 {

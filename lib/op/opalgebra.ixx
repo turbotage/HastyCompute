@@ -145,6 +145,8 @@ namespace hasty {
 			const Operator& get_slice(size_t idx) const;
 			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
 
+			const std::vector<std::shared_ptr<Operator>>& get_stack() const;
+
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		protected:
@@ -171,6 +173,8 @@ namespace hasty {
 			const Operator& get_slice(size_t idx) const;
 			std::shared_ptr<Operator> get_slice_ptr(size_t idx) const;
 
+			const std::vector<std::shared_ptr<Operator>>& get_stack() const;
+
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
 
 		protected:
@@ -195,6 +199,9 @@ namespace hasty {
 
 			AdjointableOp& get_slice(size_t idx);
 			const AdjointableOp& get_slice(size_t idx) const;
+			std::shared_ptr<AdjointableOp> get_slice_ptr(size_t idx) const;
+
+			const std::vector<std::shared_ptr<AdjointableOp>>& get_stack() const;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
@@ -222,6 +229,9 @@ namespace hasty {
 
 			AdjointableOp& get_slice(size_t idx);
 			const AdjointableOp& get_slice(size_t idx) const;
+			std::shared_ptr<AdjointableOp> get_slice_ptr(size_t idx) const;
+
+			const std::vector<std::shared_ptr<AdjointableOp>>& get_stack() const;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 

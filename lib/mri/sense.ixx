@@ -13,6 +13,7 @@ namespace hasty {
 	namespace sense {
 
 		export using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
+
 		export struct CoilManipulator {
 			CoilManipulator() = default;
 

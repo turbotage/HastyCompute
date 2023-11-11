@@ -1,16 +1,17 @@
-#pragma once
+module;
 
-#include <future>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <thread>
-#include <functional>
+export module thread_pool;
 
+import <future>;
+import <queue>;
+import <mutex>;
+import <condition_variable>;
+import <thread>;
+import <functional>;
 
 namespace hasty {
 
-	class ThreadPool {
+	export class ThreadPool {
 	public:
 
 		explicit ThreadPool(int num_workers = std::thread::hardware_concurrency())
@@ -106,7 +107,7 @@ namespace hasty {
 	};
 
 
-	template<typename T>
+	export template<typename T>
 	class ContextThreadPool {
 	public:
 
@@ -136,7 +137,7 @@ namespace hasty {
 			}
 		}
 
-		~ContextThreadPool() 
+		~ContextThreadPool()
 		{
 			{
 				std::lock_guard<std::mutex> lock(_queue_mutex);
@@ -210,3 +211,5 @@ namespace hasty {
 
 
 }
+
+

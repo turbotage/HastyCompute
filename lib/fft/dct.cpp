@@ -1,4 +1,8 @@
-#include "dct.hpp"
+module;
+
+#include "../torch_util.hpp"
+
+module dct;
 
 at::Tensor hasty::dct_fft_impl(const at::Tensor v)
 {

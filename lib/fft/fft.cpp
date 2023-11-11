@@ -1,5 +1,8 @@
-#include "fft.hpp"
+module;
 
+#include "../torch_util.hpp"
+
+module fft;
 
 at::Tensor hasty::fft::fftc(const at::Tensor& input, const at::OptionalArrayRef<int64_t>& oshape,
 	const at::OptionalArrayRef<int64_t>& axes, const at::optional<at::string_view>& norm)

@@ -1,6 +1,11 @@
 module;
 
+#include "../torch_util.hpp"
+
 export module fftop;
+
+import op;
+import nufft;
 
 namespace hasty {
 	namespace op {

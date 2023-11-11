@@ -243,6 +243,11 @@ std::shared_ptr<hasty::op::Operator> hasty::op::VStackedOp::get_slice_ptr(size_t
 	return _ops[idx];
 }
 
+const std::vector<std::shared_ptr<hasty::op::Operator>>& hasty::op::VStackedOp::get_stack() const
+{
+	return _ops;
+}
+
 std::shared_ptr<hasty::op::Operator> hasty::op::VStackedOp::to_device(at::Stream stream) const
 {
 	std::vector<std::shared_ptr<Operator>> ops;
@@ -326,6 +331,11 @@ std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::get_slice_ptr(size_t
 	return _ops[idx];
 }
 
+const std::vector<std::shared_ptr<hasty::op::Operator>>& hasty::op::HStackedOp::get_stack() const
+{
+	return _ops;
+}
+
 std::shared_ptr<hasty::op::Operator> hasty::op::HStackedOp::to_device(at::Stream stream) const
 {
 	std::vector<std::shared_ptr<Operator>> ops;
@@ -397,9 +407,24 @@ const hasty::op::AdjointableOp& hasty::op::AdjointableVStackedOp::get_slice(size
 	return *_ops[idx];
 }
 
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableVStackedOp::get_slice_ptr(size_t idx) const
+{
+	return _ops[idx];
+}
+
+const std::vector<std::shared_ptr<hasty::op::AdjointableOp>>& hasty::op::AdjointableVStackedOp::get_stack() const
+{
+	return _ops;
+}
+
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableVStackedOp::adjoint() const
 {
-	
+	std::vector<std::shared_ptr<AdjointableOp>> newops;
+	newops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		newops.push_back(std::move(op->adjoint()));
+	}
+	return AdjointableHStackedOp::Create(std::move(newops));
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableVStackedOp::to_device(at::Stream stream) const
@@ -481,9 +506,24 @@ const hasty::op::AdjointableOp& hasty::op::AdjointableHStackedOp::get_slice(size
 	return *_ops[idx];
 }
 
+std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableHStackedOp::get_slice_ptr(size_t idx) const
+{
+	return _ops[idx];
+}
+
+const std::vector<std::shared_ptr<hasty::op::AdjointableOp>>& hasty::op::AdjointableHStackedOp::get_stack() const
+{
+	return _ops;
+}
+
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableHStackedOp::adjoint() const
 {
-	
+	std::vector<std::shared_ptr<AdjointableOp>> newops;
+	newops.reserve(_ops.size());
+	for (auto& op : _ops) {
+		newops.push_back(std::move(op->adjoint()));
+	}
+	return AdjointableVStackedOp::Create(std::move(newops));
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableHStackedOp::to_device(at::Stream stream) const

@@ -1,7 +1,10 @@
-#pragma once
+module;
 
 #include "../torch_util.hpp"
-#include "../op/op.hpp"
+
+export module precond;
+
+import op;
 
 namespace hasty {
 	namespace op {
@@ -12,7 +15,7 @@ namespace hasty {
 			at::Tensor build_diagonal(at::Tensor smaps, at::Tensor coord, const at::optional<at::Tensor>& weights = at::nullopt,
 				const at::optional<double>& lambda = 0.0);
 
-			
+
 
 		private:
 
