@@ -1,6 +1,9 @@
-#include "batch_cg.hpp"
+module;
 
+#include "../torch_util.hpp"
 #include <c10/cuda/CUDAGuard.h>
+
+module batch_cg;
 
 
 hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
@@ -30,7 +33,7 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 	std::shared_ptr<op::Operator> CGOp;
 
-	std::shared_ptr<op::AdjointableOp> SHS = std::make_shared<op::SenseNOp>(coords, _nmodes, dctx.smaps, coils);
+	std::shared_ptr<op::AdjointableOp> SHS = op::SenseNOp::Create(coords, _nmodes, dctx.smaps, coils);
 	std::shared_ptr<op::AdjointableOp> AHA;
 
 	{

@@ -1,6 +1,10 @@
-#include "batch_sense.hpp"
+module;
 
+#include "../torch_util.hpp"
 #include <c10/cuda/CUDAGuard.h>
+
+module batch_sense;
+
 
 // BATCH SENSE BASE
 

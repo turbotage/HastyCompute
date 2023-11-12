@@ -1,11 +1,12 @@
 #include "tests1.hpp"
 
-#include "../fft/nufft.hpp"
+#include "../torch_util.hpp"
 
 import hasty_util;
 import hasty_compute;
 import solver;
 import permute;
+import nufft;
 
 #include <iostream>
 

@@ -1,9 +1,11 @@
-#pragma once
+module;
 
-#include "../fft/nufft.hpp"
-#include "../threading/thread_pool.hpp"
+#include "../torch_util.hpp"
 
-#include "sense.hpp"
+export module batch_sense;
+
+import sense;
+import thread_pool;
 
 namespace hasty {
 
@@ -98,7 +100,7 @@ namespace hasty {
 								});
 						}
 					);
-				};
+					};
 				return *this;
 			}
 
@@ -114,7 +116,7 @@ namespace hasty {
 								});
 						}
 					);
-				};
+					};
 				return *this;
 			}
 
@@ -131,7 +133,7 @@ namespace hasty {
 								});
 						}
 					);
-				};
+					};
 				return *this;
 			}
 

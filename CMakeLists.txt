@@ -32,8 +32,6 @@ set(BACKEND_HEADERS
 )
 
 add_library(HastyComputeLib SHARED
-	"lib/mri/batch_sense.cpp"
-	"lib/mri/batch_cg.cpp"
 
 	"lib/tests/tests1.cpp"
 	"lib/tests/tests2.cpp"
@@ -107,6 +105,11 @@ target_sources(HastyComputeLib
 
 		"lib/mri/precond.ixx"
 		"lib/mri/precond.cpp"
+
+		"lib/mri/batch_sense.ixx"
+		"lib/mri/batch_sense.cpp"
+		"lib/mri/batch_cg.ixx"
+		"lib/mri/batch_cg.cpp"
 
 )
 

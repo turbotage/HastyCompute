@@ -1,8 +1,12 @@
-#pragma once
+module;
 
-#include "../op/opalgebra.hpp"
-#include "../op/opalgs.hpp"
-#include "../op/mriop.hpp"
+#include "../torch_util.hpp"
+
+export module batch_cg;
+
+import opalgs;
+import opalgebra;
+import mriop;
 
 namespace hasty {
 	namespace mri {
@@ -38,4 +42,3 @@ namespace hasty {
 
 	}
 }
-

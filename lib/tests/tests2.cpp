@@ -2,9 +2,10 @@
 
 import hasty_util;
 import nlsq_symbolic;
+import nufft;
+
 
 #include <iostream>
-
 import <string>;
 import <vector>;
 
