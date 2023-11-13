@@ -42,6 +42,7 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 		auto AH = op::staticcast<op::AdjointableOp>(std::move(_ctx->A->adjoint()->to_device(dctx.stream)));
 		auto A = op::staticcast<op::AdjointableOp>(std::move(_ctx->A->to_device(dctx.stream)));
+		auto B = op::staticcast<op::AdjointableOp>(std::move(_ctx->B->to_device(dctx.stream)));
 
 		if (_ctx->AHA != nullptr) {
 			AHA = op::staticcast<op::AdjointableOp>(std::move(_ctx->AHA->to_device(dctx.stream)));
@@ -57,13 +58,12 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 		CGOp = op::staticcast<op::AdjointableOp>(op::add(std::move(SHS), std::move(AHA)));
 
-		CGvec = AH->apply(A->apply(*_ctx->x) + );
+		CGvec = _ctx->rho * AH->apply(*_ctx->c - A->apply(*_ctx->x) - B->apply(*_ctx->z) - *_ctx->u);
 		
+		CGvec += SHS->apply_backward(op::Vector(kdata));
 
 	}
 	
-
-
 
 	//std::shared_ptr<op::
 	//op::Operator A = SHS + op::ScaleOp(at::tensor(_ctx->rho), );

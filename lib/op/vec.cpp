@@ -101,6 +101,22 @@ at::TensorOptions hasty::op::Vector::tensor_opts() const
 	return _children[0].tensor_opts();
 }
 
+hasty::op::Vector& hasty::op::Vector::operator[](size_t idx)
+{
+	if (_children.size() < idx)
+		throw std::runtime_error("Index out of bounds, Vector");
+
+	return _children[idx];
+}
+
+const hasty::op::Vector& hasty::op::Vector::operator[](size_t idx) const
+{
+	if (_children.size() < idx)
+		throw std::runtime_error("Index out of bounds, Vector");
+
+	return _children[idx];
+}
+
 bool hasty::op::Vector::has_children() const
 {
 	return !_children.empty();

@@ -52,6 +52,9 @@ namespace hasty {
 			at::ScalarType dtype() const;
 			at::TensorOptions tensor_opts() const;
 
+			Vector& operator[](size_t idx);
+			const Vector& operator[](size_t idx) const;
+
 			bool has_children() const;
 
 			const std::vector<Vector>& children() const;
