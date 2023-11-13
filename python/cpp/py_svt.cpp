@@ -1,5 +1,7 @@
 #include "py_svt.hpp"
 
+import torch_util;
+import svt;
 
 namespace {
 

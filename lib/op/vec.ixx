@@ -1,10 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module vec;
 
-
+import torch_util;
 import hasty_util;
 
 namespace hasty {

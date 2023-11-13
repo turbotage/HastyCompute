@@ -1,11 +1,19 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 module opalgebra;
 
 // ADD OP
 
+std::unique_ptr<hasty::op::AddOp> hasty::op::AddOp::Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
+{
+	struct creator : public AddOp {
+		creator(std::shared_ptr<Operator> a, std::shared_ptr<Operator> b)
+			: AddOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::AddOp::AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -18,10 +26,19 @@ hasty::op::Vector hasty::op::AddOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AddOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<AddOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
+	return AddOp::Create(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
 }
 
 // ADJOINTABLE ADD OP
+
+std::unique_ptr<hasty::op::AdjointableAddOp> hasty::op::AdjointableAddOp::Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
+{
+	struct creator : public AdjointableAddOp {
+		creator(std::shared_ptr<AdjointableOp> a, std::shared_ptr<AdjointableOp> b)
+			: AdjointableAddOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::AdjointableAddOp::AdjointableAddOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -35,19 +52,28 @@ hasty::op::Vector hasty::op::AdjointableAddOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableAddOp::adjoint() const
 {
-	return std::make_shared<AdjointableAddOp>(_left->adjoint(), _right->adjoint());
+	return AdjointableAddOp::Create(std::move(_left->adjoint()), std::move(_right->adjoint()));
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableAddOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<AdjointableAddOp>(
+	return AdjointableAddOp::Create(
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+			downcast<AdjointableOp>(std::move(_left->to_device(stream)))),
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+			downcast<AdjointableOp>(std::move(_right->to_device(stream)))));
 }
 
 // SUB OP
+
+std::unique_ptr<hasty::op::SubOp> hasty::op::SubOp::Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
+{
+	struct creator : public SubOp {
+		creator(std::shared_ptr<Operator> a, std::shared_ptr<Operator> b)
+			: SubOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::SubOp::SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -60,10 +86,19 @@ hasty::op::Vector hasty::op::SubOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::Operator> hasty::op::SubOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<SubOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
+	return SubOp::Create(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
 }
 
 // ADJOINTABLE SUB OP
+
+std::unique_ptr<hasty::op::AdjointableSubOp> hasty::op::AdjointableSubOp::Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
+{
+	struct creator : public AdjointableSubOp {
+		creator(std::shared_ptr<AdjointableOp> a, std::shared_ptr<AdjointableOp> b)
+			: AdjointableSubOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::AdjointableSubOp::AdjointableSubOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -77,19 +112,28 @@ hasty::op::Vector hasty::op::AdjointableSubOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableSubOp::adjoint() const
 {
-	return std::make_shared<AdjointableSubOp>(_left->adjoint(), _left->adjoint());
+	return AdjointableSubOp::Create(std::move(_left->adjoint()), std::move(_right->adjoint()));
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableSubOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<AdjointableSubOp>(
+	return AdjointableSubOp::Create(
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+			downcast<AdjointableOp>(std::move(_left->to_device(stream)))),
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+			downcast<AdjointableOp>(std::move(_right->to_device(stream)))));
 }
 
 // MUL OP
+
+std::unique_ptr<hasty::op::MulOp> hasty::op::MulOp::Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
+{
+	struct creator : public MulOp {
+		creator(std::shared_ptr<Operator> a, std::shared_ptr<Operator> b)
+			: MulOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::MulOp::MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -102,10 +146,19 @@ hasty::op::Vector hasty::op::MulOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::Operator> hasty::op::MulOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<MulOp>(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
+	return MulOp::Create(std::move(_left->to_device(stream)), std::move(_right->to_device(stream)));
 }
 
 // ADJOINTABLE MUL OP
+
+std::unique_ptr<hasty::op::AdjointableMulOp> hasty::op::AdjointableMulOp::Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
+{
+	struct creator : public AdjointableMulOp {
+		creator(std::shared_ptr<AdjointableOp> a, std::shared_ptr<AdjointableOp> b)
+			: AdjointableMulOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(lop), std::move(rop));
+}
 
 hasty::op::AdjointableMulOp::AdjointableMulOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop)
 	: _left(std::move(lop)), _right(std::move(rop))
@@ -119,19 +172,28 @@ hasty::op::Vector hasty::op::AdjointableMulOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableMulOp::adjoint() const
 {
-	return std::make_shared<AdjointableMulOp>(_right->adjoint(), _left->adjoint());
+	return AdjointableMulOp::Create(std::move(_right->adjoint()), std::move(_left->adjoint()));
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableMulOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<AdjointableMulOp>(
+	return AdjointableMulOp::Create(
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_left->to_device(stream))), 
+			downcast<AdjointableOp>(std::move(_left->to_device(stream)))),
 		std::move(
-			std::dynamic_pointer_cast<AdjointableOp>(_right->to_device(stream))));
+			downcast<AdjointableOp>(std::move(_right->to_device(stream)))));
 }
 
 // SCALE OP
+
+std::unique_ptr<hasty::op::ScaleOp> hasty::op::ScaleOp::Create(const at::Tensor& scalar, std::shared_ptr<Operator> rop)
+{
+	struct creator : public ScaleOp {
+		creator(const at::Tensor& a, std::shared_ptr<Operator> b)
+			: ScaleOp(a, std::move(b)) {}
+	};
+	return std::make_unique<creator>(scalar, std::move(rop));
+}
 
 hasty::op::ScaleOp::ScaleOp(const at::Tensor& scalar, std::shared_ptr<Operator> op)
 	: _scalar(scalar), _op(std::move(op))
@@ -148,10 +210,19 @@ hasty::op::Vector hasty::op::ScaleOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::Operator> hasty::op::ScaleOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<ScaleOp>(_scalar, std::move(_op->to_device(stream)));
+	return ScaleOp::Create(_scalar, std::move(_op->to_device(stream)));
 }
 
-// ADJOINTABLE MUL OP
+// ADJOINTABLE SCALE OP
+
+std::unique_ptr<hasty::op::AdjointableScaleOp> hasty::op::AdjointableScaleOp::Create(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op)
+{
+	struct creator : public AdjointableScaleOp {
+		creator(const at::Tensor& a, std::shared_ptr<AdjointableOp> b)
+			: AdjointableScaleOp(a, std::move(b)) {}
+	};
+	return std::make_unique<creator>(scalar, std::move(op));
+}
 
 hasty::op::AdjointableScaleOp::AdjointableScaleOp(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op)
 	: _scalar(scalar), _op(std::move(op))
@@ -168,13 +239,12 @@ hasty::op::Vector hasty::op::AdjointableScaleOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::AdjointableScaleOp::adjoint() const
 {
-	return std::make_shared<AdjointableScaleOp>(_scalar, _op ? _op->adjoint() : nullptr);
+	return AdjointableScaleOp::Create(_scalar.conj(), _op ? _op->adjoint() : nullptr);
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::AdjointableScaleOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<AdjointableScaleOp>(_scalar, 
-		std::move(std::dynamic_pointer_cast<AdjointableOp>(_op->to_device(stream))));
+	return AdjointableScaleOp::Create(_scalar, std::move(downcast<AdjointableOp>(std::move(_op->to_device(stream)))));
 }
 
 // VERTICALLY STACKED OP

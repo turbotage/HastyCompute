@@ -1,6 +1,6 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 module proxop;
 

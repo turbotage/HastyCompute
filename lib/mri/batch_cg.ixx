@@ -1,9 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module batch_cg;
 
+import torch_util;
 import opalgs;
 import opalgebra;
 import mriop;

@@ -1,6 +1,6 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 #include <cufinufft_opts.h>
 #include <finufft_opts.h>
 
@@ -11,6 +11,8 @@ typedef struct finufftf_plan_s* finufftf_plan;
 
 typedef struct cufinufft_plan_s* cufinufft_plan;
 typedef struct cufinufft_fplan_s* cufinufftf_plan;
+
+import torch_util;
 
 namespace hasty {
 	namespace nufft {

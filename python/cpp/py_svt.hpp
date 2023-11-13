@@ -2,7 +2,13 @@
 
 #include "py_util.hpp"
 
+
 namespace hasty {
+	namespace svt {
+		class Random3DBlocksSVT;
+		class Normal3DBlocksSVT;
+	}
+
 	namespace ffi {
 
 		class LIB_EXPORT Random3DBlocksSVT : public torch::CustomClassHolder {

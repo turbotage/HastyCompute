@@ -3,6 +3,12 @@
 #include "py_util.hpp"
 
 namespace hasty {
+	namespace sense {
+		class Sense;
+		class SenseAdjoint;
+		class SenseNormal;
+	}
+
 	namespace ffi {
 
 		class LIB_EXPORT Sense : public torch::CustomClassHolder {
@@ -39,18 +45,6 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<hasty::sense::SenseNormal> _senseop;
-		};
-
-		class LIB_EXPORT SenseNormalAdjoint : public torch::CustomClassHolder {
-		public:
-
-			SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
-
-			void apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<at::Tensor>& imspace_storage);
-
-		private:
-			std::unique_ptr<hasty::sense::SenseNormalAdjoint> _senseop;
 		};
 
 	}

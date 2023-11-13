@@ -1,6 +1,6 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 #include <c10/cuda/CUDAGuard.h>
 
 module batch_cg;
@@ -35,33 +35,29 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 
 	std::shared_ptr<op::AdjointableOp> SHS = op::SenseNOp::Create(coords, _nmodes, dctx.smaps, coils);
 	std::shared_ptr<op::AdjointableOp> AHA;
+	op::Vector CGvec;
 
 	{
 		std::unique_lock<std::mutex> lock(_ctx->ctxmut);
 
-		auto AH = op::staticcast<op::AdjointableOp>(_ctx->A->adjoint()->to_device(dctx.stream));
+		auto AH = op::staticcast<op::AdjointableOp>(std::move(_ctx->A->adjoint()->to_device(dctx.stream)));
+		auto A = op::staticcast<op::AdjointableOp>(std::move(_ctx->A->to_device(dctx.stream)));
 
 		if (_ctx->AHA != nullptr) {
-			AHA = op::staticcast<op::AdjointableOp>(_ctx->AHA->to_device(dctx.stream));
+			AHA = op::staticcast<op::AdjointableOp>(std::move(_ctx->AHA->to_device(dctx.stream)));
 		}
 		else {
-			
-			//assert(std::derived_from<op::AdjointableMulOp, op::AdjointableOp>)
-
-			auto A = op::staticcast<op::AdjointableOp>(_ctx->A->to_device(dctx.stream));
-
-			auto mulled = op::mul(std::move(AH), std::move(A));
-
-			AHA = op::upcast<op::AdjointableOp>(mulled);
+			AHA = op::upcast<op::AdjointableOp>(std::move(op::mul(AH, A)));
 		}
 
 		if (!AHA)
 			throw std::runtime_error("AHA could not be cast to an AdjointableOp on this device");
 
-		auto added = op::add(std::move(SHS), std::move(AHA));
+		AHA = op::mul(at::tensor(_ctx->rho), AHA);
 
-		CGOp = std::static_pointer_cast<op::AdjointableOp>(added);
+		CGOp = op::staticcast<op::AdjointableOp>(op::add(std::move(SHS), std::move(AHA)));
 
+		CGvec = AH->apply(A->apply(*_ctx->x) + );
 		
 
 	}

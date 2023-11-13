@@ -15,10 +15,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 
 set(BUILD_SHARED_LIBS ON)
-if (MSVC)
-	#set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
-#set(CMAKE_VERBOSE_MAKEFILE ON)
 
 option(BUILD_CUDA OFF)
 
@@ -36,14 +32,18 @@ add_library(HastyComputeLib SHARED
 	"lib/tests/tests1.cpp"
 	"lib/tests/tests2.cpp"
 
-	
-
-	"lib/torch_util.cpp"
-
 )
+
+if (MSVC)
+	#set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+	set_target_properties(HastyComputeLib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 
 target_sources(HastyComputeLib 
 	PUBLIC FILE_SET CXX_MODULES FILES
+		"lib/torch_util.ixx"
+		"lib/torch_util.cpp"
+
 		"lib/hasty.ixx"
 		"lib/hasty_compute.ixx"
 		"lib/hasty_util.ixx"
@@ -213,18 +213,21 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(pybind11)
 
 add_library(HastyPyInterface SHARED 
-	"python/cpp/py_interface.cpp"
 	"python/cpp/py_batched_sense.cpp"
+	"python/cpp/py_interface.cpp"
 	"python/cpp/py_sense.cpp"
 	"python/cpp/py_nufft.cpp"
 	"python/cpp/py_svt.cpp"
 )
+
 #pybind11_add_module(HastyPyInterface SHARED "python/cpp/py_interface.cpp")
 target_link_libraries(HastyPyInterface PUBLIC HastyComputeLib)
 target_link_libraries(HastyPyInterface PUBLIC Python3::Python)
 target_link_libraries(HastyPyInterface PUBLIC ${Python3_LIBRARY_RELEASE})
 target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
 set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
+
+
 
 find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
 # Tests of the Python Interface

@@ -1,9 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module opalgebra;
 
+import torch_util;
 import op;
 
 namespace hasty {
@@ -13,11 +14,15 @@ namespace hasty {
 		export class AddOp : public Operator {
 		public:
 
-			AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
+			static std::unique_ptr<AddOp> Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			AddOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 		private:
 			std::shared_ptr<Operator> _left;
@@ -27,13 +32,17 @@ namespace hasty {
 		export class AdjointableAddOp : public AdjointableOp {
 		public:
 
-			AdjointableAddOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
+			static std::unique_ptr<AdjointableAddOp> Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			AdjointableAddOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 		private:
 			std::shared_ptr<AdjointableOp> _left;
@@ -43,11 +52,15 @@ namespace hasty {
 		export class SubOp : public Operator {
 		public:
 
-			SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
+			static std::unique_ptr<SubOp> Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+
+			SubOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 		private:
 			std::shared_ptr<Operator> _left;
@@ -57,13 +70,17 @@ namespace hasty {
 		export class AdjointableSubOp : public AdjointableOp {
 		public:
 
-			AdjointableSubOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
+			static std::unique_ptr<AdjointableSubOp> Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			
+		protected:
+			
+			AdjointableSubOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 		private:
 			std::shared_ptr<AdjointableOp> _left;
@@ -73,11 +90,15 @@ namespace hasty {
 		export class MulOp : public Operator {
 		public:
 
-			MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
+			static std::unique_ptr<MulOp> Create(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			MulOp(std::shared_ptr<Operator> lop, std::shared_ptr<Operator> rop);
 
 		private:
 			std::shared_ptr<Operator> _left;
@@ -87,13 +108,17 @@ namespace hasty {
 		export class AdjointableMulOp : public AdjointableOp {
 		public:
 
-			AdjointableMulOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
+			static std::unique_ptr<AdjointableMulOp> Create(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+			
+			AdjointableMulOp(std::shared_ptr<AdjointableOp> lop, std::shared_ptr<AdjointableOp> rop);
 
 		private:
 			std::shared_ptr<AdjointableOp> _left;
@@ -103,11 +128,15 @@ namespace hasty {
 		export class ScaleOp : public Operator {
 		public:
 
-			ScaleOp(const at::Tensor& scalar, std::shared_ptr<Operator> op);
+			static std::unique_ptr<ScaleOp> Create(const at::Tensor& scalar, std::shared_ptr<Operator> rop);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+
+		protected:
+
+			ScaleOp(const at::Tensor& scalar, std::shared_ptr<Operator> op);
 
 		private:
 			at::Tensor _scalar;
@@ -117,13 +146,17 @@ namespace hasty {
 		export class AdjointableScaleOp : public AdjointableOp {
 		public:
 
-			AdjointableScaleOp(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op);
+			static std::unique_ptr<AdjointableScaleOp> Create(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			
+		protected:
+
+			AdjointableScaleOp(const at::Tensor& scalar, std::shared_ptr<AdjointableOp> op);
 
 		private:
 			at::Tensor _scalar;

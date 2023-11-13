@@ -1,5 +1,8 @@
 #include "py_nufft.hpp"
 
+import torch_util;
+import nufft;
+
 hasty::ffi::NufftOptions::NufftOptions(int64_t type, const at::optional<bool>& positive, const at::optional<double>& tol)
 {
 	if (type > 3 || type < 1) {

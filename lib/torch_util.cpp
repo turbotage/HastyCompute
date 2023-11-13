@@ -1,7 +1,11 @@
-#include "torch_util.hpp"
+module;
+
+#include <torch/torch.h>
 #include <c10/cuda/CUDAGuard.h>
 
 #include <memory>
+
+module torch_util;
 
 std::vector<at::Stream> hasty::torch_util::get_streams(const at::optional<std::vector<at::Stream>>& streams)
 {

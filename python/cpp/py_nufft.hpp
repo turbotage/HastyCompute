@@ -4,6 +4,12 @@
 #include "py_interface.hpp"
 
 namespace hasty {
+	namespace nufft {
+		class NufftOptions;
+		class Nufft;
+		class NufftNormal;
+	}
+
 	namespace ffi {
 
 		class LIB_EXPORT NufftOptions : public torch::CustomClassHolder {

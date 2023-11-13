@@ -1,5 +1,9 @@
 #include "py_sense.hpp"
 
+import torch_util;
+
+import sense;
+
 hasty::ffi::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 	: _senseop(std::make_unique<hasty::sense::Sense>(coords, nmodes))
 {
@@ -9,7 +13,7 @@ void hasty::ffi::Sense::apply(const at::Tensor& in, at::Tensor out, const at::Te
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, std::nullopt, std::nullopt);
+		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
 	};
 
 	torch_util::future_catcher(func);
@@ -24,7 +28,7 @@ void hasty::ffi::SenseAdjoint::apply(const at::Tensor& in, at::Tensor out, const
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, std::nullopt, std::nullopt);
+		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
 	};
 
 	torch_util::future_catcher(func);
@@ -39,22 +43,7 @@ void hasty::ffi::SenseNormal::apply(const at::Tensor& in, at::Tensor out, const 
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, std::nullopt, std::nullopt, std::nullopt);
-	};
-
-	torch_util::future_catcher(func);
-}
-
-hasty::ffi::SenseNormalAdjoint::SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::sense::SenseNormalAdjoint>(coords, nmodes))
-{
-}
-
-void hasty::ffi::SenseNormalAdjoint::apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-	const at::optional<at::Tensor>& imspace_storage)
-{
-	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, std::nullopt, std::nullopt, std::nullopt);
+		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt, at::nullopt);
 	};
 
 	torch_util::future_catcher(func);
@@ -74,10 +63,6 @@ TORCH_LIBRARY(HastySense, hs) {
 	hs.class_<hasty::ffi::SenseNormal>("SenseNormal")
 		.def(torch::init<const at::Tensor&, const std::vector<int64_t>&>())
 		.def("apply", &hasty::ffi::SenseNormal::apply);
-
-	hs.class_<hasty::ffi::SenseNormalAdjoint>("SenseNormalAdjoint")
-		.def(torch::init<const at::Tensor&, const std::vector<int64_t>&>())
-		.def("apply", &hasty::ffi::SenseNormalAdjoint::apply);
 
 
 	hs.def("doc", []() -> std::string {
@@ -120,18 +105,6 @@ public:
 
 private:
 	std::unique_ptr<hasty::sense::SenseNormal> _senseop;
-};
-
-class LIB_EXPORT SenseNormalAdjoint : public torch::CustomClassHolder {
-public:
-
-	SenseNormalAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes);
-
-	void apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
-		const at::optional<at::Tensor>& imspace_storage);
-
-private:
-	std::unique_ptr<hasty::sense::SenseNormalAdjoint> _senseop;
 };
 
 )DOC";

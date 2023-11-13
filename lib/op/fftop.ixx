@@ -1,9 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module fftop;
 
+import torch_util;
 import op;
 import nufft;
 

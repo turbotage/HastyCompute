@@ -1,18 +1,16 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module svt;
 
 import <optional>;
 import block;
 
+import torch_util;
 import thread_pool;
 
 namespace hasty {
-
-	template<typename DeviceContext>
-	class ContextThreadPool;
 
 	namespace svt {
 

@@ -1,9 +1,12 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module opalgs;
 
+import <future>;
+
+import torch_util;
 import vec;
 import op;
 

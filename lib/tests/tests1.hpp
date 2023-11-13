@@ -5,25 +5,25 @@
 namespace hasty {
 	namespace tests {
 
-		LIB_EXPORT void test_deterministic_1d();
+		void test_deterministic_1d();
 
-		LIB_EXPORT void test_deterministic_3d();
+		void test_deterministic_3d();
 
-		LIB_EXPORT void test_speed();
+		void test_speed();
 
-		LIB_EXPORT void test_space_cufinufft();
+		void test_space_cufinufft();
 
-		LIB_EXPORT void test_svd_speed();
+		void test_svd_speed();
 
-		LIB_EXPORT void compare_normal_methods();
+		void compare_normal_methods();
 
-		LIB_EXPORT void test_nufft_speeds(bool toep);
+		void test_nufft_speeds(bool toep);
 
-		LIB_EXPORT int test_torch_speed(int n, int nc);
+		int test_torch_speed(int n, int nc);
 
-		LIB_EXPORT int test_speed(int n, int nc, int nf = 200000);
+		int test_speed(int n, int nc, int nf = 200000);
 
-		LIB_EXPORT void speed_comparisons_torch_af_cufinufft(int nres, int nrun);
+		void speed_comparisons_torch_af_cufinufft(int nres, int nrun);
 
 	}
 }

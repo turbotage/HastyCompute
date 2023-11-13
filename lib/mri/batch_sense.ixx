@@ -1,9 +1,13 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module batch_sense;
 
+import <optional>;
+import <functional>;
+
+import torch_util;
 import sense;
 import thread_pool;
 
@@ -11,13 +15,13 @@ namespace hasty {
 
 	namespace batched_sense {
 
-		struct InnerData {
+		export struct InnerData {
 			at::Tensor weights;
 			at::Tensor kdata;
 		};
-		using InnerBatchFetcher = std::function<sense::CoilManipulator(int32_t, const InnerData&, at::Stream)>;
-		using InnerBatchApplier = std::function<void(at::Tensor&, int32_t, const InnerData&, at::Stream)>;
-		struct InnerManipulator {
+		export using InnerBatchFetcher = std::function<sense::CoilManipulator(int32_t, const InnerData&, at::Stream)>;
+		export using InnerBatchApplier = std::function<void(at::Tensor&, int32_t, const InnerData&, at::Stream)>;
+		export struct InnerManipulator {
 
 			InnerManipulator() = default;
 			InnerManipulator(const InnerBatchFetcher& fet) : fetcher(fet) {}
@@ -56,9 +60,9 @@ namespace hasty {
 
 		};
 
-		using OuterBatchFetcher = std::function<InnerManipulator(int32_t, at::Stream)>;
-		using OuterBatchApplier = std::function<void(at::Tensor&, int32_t, at::Stream)>;
-		struct OuterManipulator {
+		export using OuterBatchFetcher = std::function<InnerManipulator(int32_t, at::Stream)>;
+		export using OuterBatchApplier = std::function<void(at::Tensor&, int32_t, at::Stream)>;
+		export struct OuterManipulator {
 
 			OuterManipulator() = default;
 			OuterManipulator(const OuterBatchFetcher& fet) : fetcher(fet) {}
@@ -147,7 +151,7 @@ namespace hasty {
 		};
 
 
-		class BatchedSenseBase {
+		export class BatchedSenseBase {
 		public:
 			struct DeviceContext {
 
@@ -187,7 +191,7 @@ namespace hasty {
 			std::unique_ptr<ContextThreadPool<DeviceContext>> _tpool;
 		};
 
-		class LIB_EXPORT BatchedSense : public BatchedSenseBase {
+		export class BatchedSense : public BatchedSenseBase {
 		public:
 
 			BatchedSense(
@@ -211,7 +215,7 @@ namespace hasty {
 
 		};
 
-		class LIB_EXPORT BatchedSenseAdjoint : public BatchedSenseBase {
+		export class BatchedSenseAdjoint : public BatchedSenseBase {
 		public:
 
 			BatchedSenseAdjoint(
@@ -235,7 +239,7 @@ namespace hasty {
 
 		};
 
-		class LIB_EXPORT BatchedSenseNormal : public BatchedSenseBase {
+		export class BatchedSenseNormal : public BatchedSenseBase {
 		public:
 
 			BatchedSenseNormal(
@@ -267,27 +271,6 @@ namespace hasty {
 
 		};
 
-		/*
-		class LIB_EXPORT BatchedSenseNormalAdjoint : public BatchedSenseBase {
-		public:
-
-			BatchedSenseNormalAdjoint(
-				const std::vector<DeviceContext>& contexts,
-				const at::TensorList& coords,
-				const at::optional<at::TensorList>& kdata,
-				const at::optional<at::TensorList>& weights);
-
-			void apply(const at::TensorList& in, at::TensorList out, const std::vector<std::vector<int64_t>>& coils, const OuterManipulator& manips);
-
-			static OuterManipulator standard_imspace_manipulator(const at::TensorList& imspace_weights);
-
-		private:
-
-			void apply_outer_batch(const at::Tensor& in, at::Tensor out, const std::vector<int64_t>& coils,
-				DeviceContext& dctxt, int32_t outer_batch, const OuterManipulator& outmanip);
-
-		};
-		*/
 
 	}
 

@@ -1,9 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module op;
 
+import torch_util;
 import hasty_util;
 import vec;
 
@@ -28,9 +29,6 @@ namespace hasty {
 
 		export class Operator : public hasty::inheritable_enable_shared_from_this<Operator> {
 		public:
-
-			Operator();
-			Operator(bool should_inplace_apply);
 
 			Vector operator()(const Vector& in) const;
 			friend Vector operator*(const Operator& lhs, const Vector& rhs);
@@ -81,6 +79,9 @@ namespace hasty {
 
 		protected:
 
+			Operator();
+			Operator(bool should_inplace_apply);
+
 			at::Tensor& access_vectensor(Vector& vec) const;
 			const at::Tensor& access_vectensor(const Vector& vec) const;
 
@@ -98,18 +99,27 @@ namespace hasty {
 
 			virtual std::shared_ptr<AdjointableOp> adjoint() const = 0;
 
+		protected:
+
+			AdjointableOp();
+			AdjointableOp(bool should_inplace_apply);
+
 		};
 
 		export class DefaultAdjointableOp : public AdjointableOp {
 		public:
 
-			DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
+			static std::unique_ptr<DefaultAdjointableOp> Create(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
 
 			Vector apply(const Vector& in) const override;
 
 			std::shared_ptr<AdjointableOp> adjoint() const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const override;
+
+		protected:
+
+			DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
 
 		private:
 			std::shared_ptr<Operator> _op;
@@ -142,28 +152,28 @@ namespace hasty {
 		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 		std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<AddOp>(std::move(lhs), std::move(rhs));
+			return AddOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// ADD ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 		std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<AdjointableAddOp>(std::move(lhs), std::move(rhs));
+			return AdjointableAddOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// SUB
 		export template<OpConcept Op1, OpConcept Op2>
 		std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<SubOp>(std::move(lhs), std::move(rhs));
+			return SubOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// SUB ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 		std::shared_ptr<class AdjointableSubOp> sub_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<AdjointableSubOp>(std::move(lhs), std::move(rhs));
+			return AdjointableSubOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// MUL
@@ -171,28 +181,28 @@ namespace hasty {
 		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 		std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<MulOp>(std::move(lhs), std::move(rhs));
+			return MulOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// MUL ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 		std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
-			return std::make_shared<AdjointableMulOp>(std::move(lhs), std::move(rhs));
+			return AdjointableMulOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// SCALE MUL
 		export template<OpConcept Op>
 		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
 		{
-			return std::make_shared<ScaleOp>(lhs, std::move(rhs));
+			return ScaleOp::Create(lhs, std::move(rhs));
 		}
 
 		// SCALE MUL ADJ
 		export template<AdjointableOpConcept Op>
 		std::shared_ptr<class AdjointableScaleOp> mul_adj(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
 		{
-			return std::make_shared<AdjointableScaleOp>(lhs, std::move(rhs));
+			return AdjointableScaleOp::Create(lhs, std::move(rhs));
 		}
 
 	}

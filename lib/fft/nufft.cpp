@@ -1,9 +1,9 @@
 module;
 
+#include <torch/torch.h>
+
 #include <finufft.h>
 #include <cufinufft.h>
-
-#include "../torch_util.hpp"
 
 module nufft;
 

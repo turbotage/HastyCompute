@@ -3,7 +3,7 @@
 #include "../lib/hasty.hpp"
 
 #include <chrono>
-
+#include <iostream>
 
 int main() {
 	

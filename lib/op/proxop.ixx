@@ -1,12 +1,13 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module proxop;
 
 import <memory>;
 import <optional>;
 
+import torch_util;
 import vec;
 import op;
 

@@ -1,9 +1,13 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module sense;
 
+import <vector>;
+import <functional>;
+
+import torch_util;
 import nufft;
 
 namespace hasty {

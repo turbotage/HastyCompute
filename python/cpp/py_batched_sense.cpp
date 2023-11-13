@@ -1,5 +1,7 @@
 #include "py_batched_sense.hpp"
 
+import torch_util;
+import batch_sense;
 
 namespace {
 	std::vector<hasty::batched_sense::BatchedSense::DeviceContext> get_batch_contexts(const std::vector<c10::Stream>& streams, const at::Tensor& smaps)
@@ -163,35 +165,6 @@ void hasty::ffi::BatchedSenseNormal::apply(const at::Tensor& in, at::Tensor out,
 	torch_util::future_catcher(func);
 }
 
-// BATCHED SENSE NORMAL
-
-hasty::ffi::BatchedSenseNormalAdjoint::BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
-	const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
-	const at::optional<at::TensorList>& imspace_weights,
-	const at::optional<at::ArrayRef<at::Stream>>& streams)
-{
-	std::vector<hasty::batched_sense::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
-
-	_imspace_weights = imspace_weights;
-	_bs = std::make_unique<hasty::batched_sense::BatchedSenseNormalAdjoint>(std::move(contexts), coords, kdata, weights);
-}
-
-
-void hasty::ffi::BatchedSenseNormalAdjoint::apply(const at::TensorList& in, at::TensorList out, const at::optional<std::vector<std::vector<int64_t>>>& coils)
-{
-	auto func = [this, &in, &out, &coils]() {
-		if (_imspace_weights.has_value()) {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), 
-				hasty::batched_sense::BatchedSenseNormalAdjoint::standard_imspace_manipulator(*_imspace_weights));
-		}
-		else {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
-		}
-	};
-
-	torch_util::future_catcher(func);
-}
-
 
 TORCH_LIBRARY(HastyBatchedSense, hbs) {
 
@@ -212,13 +185,6 @@ TORCH_LIBRARY(HastyBatchedSense, hbs) {
 			const at::optional<at::TensorList>&, const at::optional<at::TensorList>&,
 			const at::optional<at::ArrayRef<at::Stream>>&>())
 		.def("apply", &hasty::ffi::BatchedSenseNormal::apply);
-
-	hbs.class_<hasty::ffi::BatchedSenseNormalAdjoint>("BatchedSenseNormalAdjoint")
-		.def(torch::init<const at::TensorList&, const at::Tensor&,
-			const at::optional<at::TensorList>&, const at::optional<at::TensorList>&,
-			const at::optional<at::TensorList>&,
-			const at::optional<at::ArrayRef<at::Stream>>&>())
-		.def("apply", &hasty::ffi::BatchedSenseNormalAdjoint::apply);
 
 
 
@@ -268,20 +234,6 @@ public:
 
 private:
 	std::unique_ptr<hasty::batched_sense::BatchedSenseNormal> _bs;
-};
-
-class LIB_EXPORT BatchedSenseNormalAdjoint : public torch::CustomClassHolder {
-public:
-
-	BatchedSenseNormalAdjoint(const at::TensorList& coords, const at::Tensor& smaps,
-		const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
-		const at::optional<at::ArrayRef<at::Stream>>& streams);
-
-	void apply(const at::TensorList& in, at::TensorList out,
-		const at::optional<std::vector<std::vector<int64_t>>>& coils);
-
-private:
-	std::unique_ptr<hasty::batched_sense::BatchedSenseNormalAdjoint> _bs;
 };
 
 )DOC";

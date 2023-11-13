@@ -1,8 +1,10 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 export module dct;
+
+import torch_util;
 
 namespace hasty {
 

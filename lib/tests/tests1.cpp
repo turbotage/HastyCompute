@@ -1,6 +1,9 @@
 #include "tests1.hpp"
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
+#include <iostream>
+
+import torch_util;
 
 import hasty_util;
 import hasty_compute;
@@ -8,7 +11,7 @@ import solver;
 import permute;
 import nufft;
 
-#include <iostream>
+
 
 void hasty::tests::test_deterministic_1d() {
 	int nfb = 8;

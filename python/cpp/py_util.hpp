@@ -1,5 +1,6 @@
 #pragma once
 
+
 #if defined(_WIN32)
 #define LIB_EXPORT __declspec(dllexport)
 #define LIB_IMPORT __declspec(dllimport)
@@ -12,15 +13,6 @@
 #pragma warning Unknown dynamic link import/export semantics
 #endif
 
-/*
-#ifdef _DEBUG
-#undef _DEBUG
-#include <torch/extension.h>
-#define _DEBUG
-#else
-#include <torch/extension.h>
-#endif
-*/
 
 #include <torch/extension.h>
 #include <torch/library.h>

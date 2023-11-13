@@ -1,6 +1,6 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 #include <c10/cuda/CUDAGuard.h>
 
 module svt;
@@ -357,6 +357,9 @@ void hasty::svt::Normal3DBlocksSVT::apply(at::Tensor in, const std::array<int64_
 
 	std::deque<std::future<void>> futures;
 
+	if (block_iter < 1)
+		throw std::runtime_error("Can't perform Normal3DBlocksSVT with block_iter < 1");
+
 	std::array<int64_t, 3> bounds{ in.size(2) - block_shape[0], in.size(3) - block_shape[1], in.size(4) - block_shape[2] };
 
 	int Sx = in.size(2);
@@ -376,9 +379,13 @@ void hasty::svt::Normal3DBlocksSVT::apply(at::Tensor in, const std::array<int64_
 	// Randomize shifts
 	for (int d = 0; d < 3; ++d) {
 		shifts[d].resize(block_iter);
-		std::uniform_int_distribution<int> distribution(0, block_shape[d]);
-		for (int biter = 0; biter < block_iter; ++biter) {
-			shifts[d][biter] = distribution(generator);
+		shifts[d][0] = 0;
+		
+		if (block_iter > 1) {
+			std::uniform_int_distribution<int> distribution(0, block_shape[d]);
+			for (int biter = 1; biter < block_iter; ++biter) {
+				shifts[d][biter] = distribution(generator);
+			}
 		}
 	}
 

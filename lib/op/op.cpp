@@ -1,6 +1,6 @@
 module;
 
-#include "../torch_util.hpp"
+#include <torch/torch.h>
 
 module op;
 
@@ -70,6 +70,27 @@ const std::vector<hasty::op::Vector>& hasty::op::Operator::access_vecchilds(cons
 
 // ADJOINTABLE OP
 
+hasty::op::AdjointableOp::AdjointableOp()
+{
+
+}
+
+hasty::op::AdjointableOp::AdjointableOp(bool should_inplace_apply)
+	: Operator(should_inplace_apply)
+{
+}
+
+// DEFAULT ADJOINTABLE OP
+
+std::unique_ptr<hasty::op::DefaultAdjointableOp> hasty::op::DefaultAdjointableOp::Create(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
+{
+	struct creator : public DefaultAdjointableOp {
+		creator(std::shared_ptr<Operator> a, std::shared_ptr<Operator> b)
+			: DefaultAdjointableOp(std::move(a), std::move(b)) {}
+	};
+	return std::make_unique<creator>(std::move(op), std::move(oph));
+}
+
 hasty::op::DefaultAdjointableOp::DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
 	: _op(std::move(op)), _oph(std::move(oph))
 {
@@ -82,12 +103,12 @@ hasty::op::Vector hasty::op::DefaultAdjointableOp::apply(const Vector& in) const
 
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::DefaultAdjointableOp::adjoint() const
 {
-	return std::make_shared<DefaultAdjointableOp>(_oph, _op);
+	return DefaultAdjointableOp::Create(_oph, _op);
 }
 
 std::shared_ptr<hasty::op::Operator> hasty::op::DefaultAdjointableOp::to_device(at::Stream stream) const
 {
-	return std::make_shared<DefaultAdjointableOp>(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
+	return DefaultAdjointableOp::Create(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
 }
 
 
