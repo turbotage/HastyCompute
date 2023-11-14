@@ -49,22 +49,28 @@ namespace hasty {
 			Vector(const at::Tensor& tensor);
 			Vector(const std::vector<Vector>& children);
 
+			Vector() = default;
+
+			Vector(const Vector& vec) = default;
+			Vector& operator=(const Vector& vec) = default;
+
+			Vector(Vector&& vec) = default;
+			Vector& operator=(Vector&& vec) = default;
+
 			at::ScalarType dtype() const;
 			at::TensorOptions tensor_opts() const;
 
+			Vector& to_device(at::Stream stream);
+
 			Vector& operator[](size_t idx);
 			const Vector& operator[](size_t idx) const;
+
+			Vector copy() const;
 
 			bool has_children() const;
 
 			const std::vector<Vector>& children() const;
 			const at::Tensor& tensor() const;
-
-			Vector(const Vector& vec);
-			Vector& operator=(const Vector& vec);
-
-			Vector(Vector&& vec);
-			Vector& operator=(Vector&& vec);
 
 			VectorShape get_shape() const;
 

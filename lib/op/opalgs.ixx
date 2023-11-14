@@ -50,7 +50,7 @@ namespace hasty {
 
 		export struct ConjugateGradientLoadResult {
 			std::shared_ptr<op::Operator> A;
-			std::shared_ptr<op::Vector> b;
+			op::Vector b;
 			std::shared_ptr<Operator> P;
 		};
 
@@ -134,16 +134,16 @@ namespace hasty {
 
 			struct Context {
 				// Ax + Bz = c
-				std::unique_ptr<op::AdjointableOp> A;
-				std::unique_ptr<op::AdjointableOp> B;
-				std::unique_ptr<op::Vector> c; // offset
+				std::shared_ptr<op::AdjointableOp> A;
+				std::shared_ptr<op::AdjointableOp> B;
+				op::Vector c; // offset
 
-				std::unique_ptr<op::Vector> x; // x
-				std::unique_ptr<op::Vector> z; // z
-				std::unique_ptr<op::Vector> u; // scaled dual variable
+				op::Vector x; // x
+				op::Vector z; // z
+				op::Vector u; // scaled dual variable
 
-				std::unique_ptr<op::AdjointableOp> AHA;
-				std::unique_ptr<op::AdjointableOp> BHB;
+				std::shared_ptr<op::AdjointableOp> AHA;
+				std::shared_ptr<op::AdjointableOp> BHB;
 
 				double rho;
 
@@ -176,5 +176,8 @@ namespace hasty {
 		private:
 
 		};
+
+
+
 	}
 }

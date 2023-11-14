@@ -171,7 +171,7 @@ namespace hasty {
 
 		// SUB ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-		std::shared_ptr<class AdjointableSubOp> sub_adj(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
 			return AdjointableSubOp::Create(std::move(lhs), std::move(rhs));
 		}
@@ -200,7 +200,7 @@ namespace hasty {
 
 		// SCALE MUL ADJ
 		export template<AdjointableOpConcept Op>
-		std::shared_ptr<class AdjointableScaleOp> mul_adj(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
+		std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
 		{
 			return AdjointableScaleOp::Create(lhs, std::move(rhs));
 		}

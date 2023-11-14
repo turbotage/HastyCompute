@@ -12,19 +12,18 @@ import mriop;
 namespace hasty {
 	namespace mri {
 
-		struct SenseDeviceContext {
+		export struct SenseDeviceContext {
 			at::Tensor smaps;
-
 			at::Stream stream;
 		};
 
-		class SenseAdmmLoader : public op::BatchConjugateGradientLoader<SenseDeviceContext> {
+		export class SenseAdmmLoader : public op::BatchConjugateGradientLoader<SenseDeviceContext> {
 		public:
 
 			SenseAdmmLoader(
 				const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
 				const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
-				const std::shared_ptr<op::Admm::Context>& ctx,
+				std::shared_ptr<op::Admm::Context> ctx,
 				const at::optional<std::vector<at::Tensor>>& preconds = at::nullopt);
 
 			op::ConjugateGradientLoadResult load(SenseDeviceContext& dctx, size_t idx) override;

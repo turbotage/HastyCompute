@@ -101,6 +101,19 @@ at::TensorOptions hasty::op::Vector::tensor_opts() const
 	return _children[0].tensor_opts();
 }
 
+hasty::op::Vector& hasty::op::Vector::to_device(at::Stream stream)
+{
+	if (_children.empty()) {
+		_tensor.to(stream.device());
+		return *this;
+	}
+
+	for (auto& child : _children) {
+		child.to_device(stream);
+	}
+	return *this;
+}
+
 hasty::op::Vector& hasty::op::Vector::operator[](size_t idx)
 {
 	if (_children.size() < idx)
@@ -115,6 +128,11 @@ const hasty::op::Vector& hasty::op::Vector::operator[](size_t idx) const
 		throw std::runtime_error("Index out of bounds, Vector");
 
 	return _children[idx];
+}
+
+hasty::op::Vector hasty::op::Vector::copy() const
+{
+	return *this;
 }
 
 bool hasty::op::Vector::has_children() const
@@ -132,6 +150,7 @@ const at::Tensor& hasty::op::Vector::tensor() const
 	return _tensor;
 }
 
+/*
 hasty::op::Vector::Vector(const Vector& vec)
 	: _tensor(vec._tensor), _children(vec._children)
 {}
@@ -155,6 +174,7 @@ hasty::op::Vector& hasty::op::Vector::operator=(Vector&& vec)
 	_children = std::move(vec._children);
 	return *this;
 }
+*/
 
 hasty::op::VectorShape hasty::op::Vector::get_shape() const {
 	if (_children.empty()) {
