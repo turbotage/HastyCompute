@@ -136,7 +136,7 @@ namespace hasty {
 				// Ax + Bz = c
 				std::shared_ptr<op::AdjointableOp> A;
 				std::shared_ptr<op::AdjointableOp> B;
-				op::Vector c; // offset
+				std::optional<op::Vector> c; // offset
 
 				op::Vector x; // x
 				op::Vector z; // z

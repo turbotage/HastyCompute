@@ -4,17 +4,17 @@ module;
 
 module dct;
 
-at::Tensor hasty::dct_fft_impl(const at::Tensor v)
+at::Tensor hasty::fft::dct_fft_impl(const at::Tensor v)
 {
 	return at::view_as_real(at::fft_fft(v, at::nullopt, 1));
 }
 
-at::Tensor hasty::idct_irfft_impl(const at::Tensor V)
+at::Tensor hasty::fft::idct_irfft_impl(const at::Tensor V)
 {
 	return at::fft_irfft(at::view_as_complex(V), V.size(1), 1);
 }
 
-at::Tensor hasty::dct(at::Tensor x, const std::string& norm)
+at::Tensor hasty::fft::dct(at::Tensor x, const std::string& norm)
 {
 	using namespace torch::indexing;
 
@@ -42,7 +42,7 @@ at::Tensor hasty::dct(at::Tensor x, const std::string& norm)
 	return V;
 }
 
-at::Tensor hasty::idct(at::Tensor X, const std::string& norm)
+at::Tensor hasty::fft::idct(at::Tensor X, const std::string& norm)
 {
 	using namespace at::indexing;
 
@@ -78,21 +78,21 @@ at::Tensor hasty::idct(at::Tensor X, const std::string& norm)
 	return x.view(x_shape);
 }
 
-at::Tensor hasty::dct_2d(at::Tensor x, const std::string& norm)
+at::Tensor hasty::fft::dct_2d(at::Tensor x, const std::string& norm)
 {
 	auto X1 = dct(x, norm);
 	X1 = dct(X1.transpose(-1, -2), norm);
 	return X1.transpose(-1, -2);
 }
 
-at::Tensor hasty::idct_2d(at::Tensor X, const std::string& norm)
+at::Tensor hasty::fft::idct_2d(at::Tensor X, const std::string& norm)
 {
 	auto x1 = idct(X, norm);
 	x1 = idct(x1.transpose(-1, -2), norm);
 	return x1.transpose(-1, -2);
 }
 
-at::Tensor hasty::dct_3d(at::Tensor x, const std::string& norm)
+at::Tensor hasty::fft::dct_3d(at::Tensor x, const std::string& norm)
 {
 	auto X1 = dct(x, norm);
 	X1 = dct(X1.transpose(-1, -2), norm);
@@ -100,7 +100,7 @@ at::Tensor hasty::dct_3d(at::Tensor x, const std::string& norm)
 	return X1.transpose(-1, -3).transpose(-1, -2);
 }
 
-at::Tensor hasty::idct_3d(at::Tensor X, const std::string& norm)
+at::Tensor hasty::fft::idct_3d(at::Tensor X, const std::string& norm)
 {
 	auto x1 = idct(X, norm);
 	x1 = idct(x1.transpose(-1, -2), norm);

@@ -15,7 +15,7 @@ typedef struct cufinufft_fplan_s* cufinufftf_plan;
 import torch_util;
 
 namespace hasty {
-	namespace nufft {
+	namespace fft {
 
 		export enum NufftType {
 			eType1 = 1, // ADJOINT

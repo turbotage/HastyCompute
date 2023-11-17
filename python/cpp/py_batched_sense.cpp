@@ -4,10 +4,10 @@ import torch_util;
 import batch_sense;
 
 namespace {
-	std::vector<hasty::batched_sense::BatchedSense::DeviceContext> get_batch_contexts(const std::vector<c10::Stream>& streams, const at::Tensor& smaps)
+	std::vector<hasty::mri::BatchedSense::DeviceContext> get_batch_contexts(const std::vector<c10::Stream>& streams, const at::Tensor& smaps)
 	{
 		std::unordered_map<c10::Device, at::Tensor> smaps_dict;
-		std::vector<hasty::batched_sense::BatchedSense::DeviceContext> contexts(streams.begin(), streams.end());
+		std::vector<hasty::mri::BatchedSense::DeviceContext> contexts(streams.begin(), streams.end());
 		for (auto& context : contexts) {
 			const auto& device = context.stream.device();
 			if (smaps_dict.contains(device)) {
@@ -21,10 +21,10 @@ namespace {
 		return contexts;
 	}
 
-	std::vector<hasty::batched_sense::BatchedSense::DeviceContext> get_batch_contexts(const at::ArrayRef<c10::Stream>& streams, const at::Tensor& smaps)
+	std::vector<hasty::mri::BatchedSense::DeviceContext> get_batch_contexts(const at::ArrayRef<c10::Stream>& streams, const at::Tensor& smaps)
 	{
 		std::unordered_map<c10::Device, at::Tensor> smaps_dict;
-		std::vector<hasty::batched_sense::BatchedSense::DeviceContext> contexts(streams.begin(), streams.end());
+		std::vector<hasty::mri::BatchedSense::DeviceContext> contexts(streams.begin(), streams.end());
 		for (auto& context : contexts) {
 			const auto& device = context.stream.device();
 			if (smaps_dict.contains(device)) {
@@ -66,9 +66,9 @@ hasty::ffi::BatchedSense::BatchedSense(const at::TensorList& coords, const at::T
 	const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
 	const at::optional<at::ArrayRef<at::Stream>>& streams)
 {
-	std::vector<hasty::batched_sense::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
+	std::vector<hasty::mri::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
 
-	_bs = std::make_unique<hasty::batched_sense::BatchedSense>(std::move(contexts), coords, kdata, weights);
+	_bs = std::make_unique<hasty::mri::BatchedSense>(std::move(contexts), coords, kdata, weights);
 }
 
 
@@ -77,18 +77,18 @@ void hasty::ffi::BatchedSense::apply(const at::Tensor& in, at::TensorList out, c
 	auto func = [this, &in, &out, &coils]() {
 		if (_bs->has_kdata() && _bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSense::standard_weighted_kdata_manipulator());
+				hasty::mri::BatchedSense::standard_weighted_kdata_manipulator());
 		}
 		else if (_bs->has_kdata()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSense::standard_kdata_manipulator());
+				hasty::mri::BatchedSense::standard_kdata_manipulator());
 		}
 		else if (_bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSense::standard_weighted_manipulator());
+				hasty::mri::BatchedSense::standard_weighted_manipulator());
 		}
 		else {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::mri::OuterManipulator());
 		}
 	};
 	
@@ -101,9 +101,9 @@ hasty::ffi::BatchedSenseAdjoint::BatchedSenseAdjoint(const at::TensorList& coord
 	const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
 	const at::optional<at::ArrayRef<at::Stream>>& streams)
 {
-	std::vector<hasty::batched_sense::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
+	std::vector<hasty::mri::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
 
-	_bs = std::make_unique<hasty::batched_sense::BatchedSenseAdjoint>(std::move(contexts), coords, kdata, weights);
+	_bs = std::make_unique<hasty::mri::BatchedSenseAdjoint>(std::move(contexts), coords, kdata, weights);
 }
 
 
@@ -112,18 +112,18 @@ void hasty::ffi::BatchedSenseAdjoint::apply(const at::TensorList& in, at::Tensor
 	auto func = [this, &in, &out, &coils]() {
 		if (_bs->has_kdata() && _bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseAdjoint::standard_weighted_kdata_manipulator());
+				hasty::mri::BatchedSenseAdjoint::standard_weighted_kdata_manipulator());
 		}
 		else if (_bs->has_kdata()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseAdjoint::standard_kdata_manipulator());
+				hasty::mri::BatchedSenseAdjoint::standard_kdata_manipulator());
 		}
 		else if (_bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseAdjoint::standard_weighted_manipulator());
+				hasty::mri::BatchedSenseAdjoint::standard_weighted_manipulator());
 		}
 		else {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::mri::OuterManipulator());
 		}
 	};
 
@@ -136,9 +136,9 @@ hasty::ffi::BatchedSenseNormal::BatchedSenseNormal(const at::TensorList& coords,
 	const at::optional<at::TensorList>& kdata, const at::optional<at::TensorList>& weights,
 	const at::optional<at::ArrayRef<at::Stream>>& streams)
 {
-	std::vector<hasty::batched_sense::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
+	std::vector<hasty::mri::BatchedSenseBase::DeviceContext> contexts = get_batch_contexts(get_streams(streams), smaps);
 
-	_bs = std::make_unique<hasty::batched_sense::BatchedSenseNormal>(std::move(contexts), coords, kdata, weights);
+	_bs = std::make_unique<hasty::mri::BatchedSenseNormal>(std::move(contexts), coords, kdata, weights);
 }
 
 
@@ -147,18 +147,18 @@ void hasty::ffi::BatchedSenseNormal::apply(const at::Tensor& in, at::Tensor out,
 	auto func = [this, &in, &out, &coils]() {
 		if (_bs->has_kdata() && _bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_weighted_kdata_manipulator());
+				hasty::mri::BatchedSenseNormal::standard_weighted_kdata_manipulator());
 		}
 		else if (_bs->has_kdata()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_kdata_manipulator());
+				hasty::mri::BatchedSenseNormal::standard_kdata_manipulator());
 		}
 		else if (_bs->has_weights()) {
 			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()),
-				hasty::batched_sense::BatchedSenseNormal::standard_weighted_manipulator());
+				hasty::mri::BatchedSenseNormal::standard_weighted_manipulator());
 		}
 		else {
-			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::batched_sense::OuterManipulator());
+			_bs->apply(in, out, coils.has_value() ? *coils : get_coils(_bs->nouter_batches(), _bs->ncoils()), hasty::mri::OuterManipulator());
 		}
 	};
 
@@ -205,7 +205,7 @@ public:
 		const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 private:
-	std::unique_ptr<hasty::batched_sense::BatchedSense> _bs;
+	std::unique_ptr<hasty::mri::BatchedSense> _bs;
 };
 
 class LIB_EXPORT BatchedSenseAdjoint : public torch::CustomClassHolder {
@@ -219,7 +219,7 @@ public:
 		const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 private:
-	std::unique_ptr<hasty::batched_sense::BatchedSenseAdjoint> _bs;
+	std::unique_ptr<hasty::mri::BatchedSenseAdjoint> _bs;
 };
 
 class LIB_EXPORT BatchedSenseNormal : public torch::CustomClassHolder {
@@ -233,7 +233,7 @@ public:
 		const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 private:
-	std::unique_ptr<hasty::batched_sense::BatchedSenseNormal> _bs;
+	std::unique_ptr<hasty::mri::BatchedSenseNormal> _bs;
 };
 
 )DOC";

@@ -5,13 +5,13 @@ module;
 
 module sense;
 
-hasty::sense::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& opts)
-	: _nufft(coords, nmodes, opts.has_value() ? *opts : nufft::NufftOptions::type2()), _nmodes(nmodes)
+hasty::mri::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& opts)
+	: _nufft(coords, nmodes, opts.has_value() ? *opts : fft::NufftOptions::type2()), _nmodes(nmodes)
 {	
 }
 
-void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::Sense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip,
 	const at::optional<CoilApplier>& postmanip)
@@ -87,13 +87,13 @@ void hasty::sense::Sense::apply(const at::Tensor& in, at::Tensor& out, const at:
 }
 
 
-hasty::sense::CUDASense::CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& opts)
-	: _nufft(coords, nmodes, opts.has_value() ? *opts : nufft::NufftOptions::type2()), _nmodes(nmodes)
+hasty::mri::CUDASense::CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& opts)
+	: _nufft(coords, nmodes, opts.has_value() ? *opts : fft::NufftOptions::type2()), _nmodes(nmodes)
 {
 }
 
-void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip,
 	const at::optional<CoilApplier>& postmanip)
@@ -169,13 +169,13 @@ void hasty::sense::CUDASense::apply(const at::Tensor& in, at::Tensor& out, const
 }
 
 
-hasty::sense::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& opts)
-	: _nufft(coords, nmodes, opts.has_value() ? *opts : nufft::NufftOptions::type1()), _nmodes(nmodes)
+hasty::mri::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& opts)
+	: _nufft(coords, nmodes, opts.has_value() ? *opts : fft::NufftOptions::type1()), _nmodes(nmodes)
 {
 }
 
-void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip, const at::optional<CoilApplier>& postmanip)
 {
@@ -247,13 +247,13 @@ void hasty::sense::SenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, co
 }
 
 
-hasty::sense::CUDASenseAdjoint::CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& opts)
-	: _nufft(coords, nmodes, opts.has_value() ? *opts : nufft::NufftOptions::type1()), _nmodes(nmodes)
+hasty::mri::CUDASenseAdjoint::CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& opts)
+	: _nufft(coords, nmodes, opts.has_value() ? *opts : fft::NufftOptions::type1()), _nmodes(nmodes)
 {
 }
 
-void hasty::sense::CUDASenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::CUDASenseAdjoint::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip, const at::optional<CoilApplier>& postmanip)
 {
@@ -325,16 +325,16 @@ void hasty::sense::CUDASenseAdjoint::apply(const at::Tensor& in, at::Tensor& out
 }
 
 
-hasty::sense::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& forward_opts, const at::optional<nufft::NufftOptions>& backward_opts)
+hasty::mri::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& forward_opts, const at::optional<fft::NufftOptions>& backward_opts)
 	: _normal_nufft(coords, nmodes, 
-		forward_opts.has_value() ? *forward_opts : nufft::NufftOptions::type2(),
-		backward_opts.has_value() ? *backward_opts : nufft::NufftOptions::type1()),
+		forward_opts.has_value() ? *forward_opts : fft::NufftOptions::type2(),
+		backward_opts.has_value() ? *backward_opts : fft::NufftOptions::type1()),
 		_nmodes(nmodes)
 {
 }
 
-void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip,
 	const at::optional<CoilApplier>& midmanip,
@@ -413,7 +413,7 @@ void hasty::sense::SenseNormal::apply(const at::Tensor& in, at::Tensor& out, con
 	}
 }
 
-void hasty::sense::SenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out, 
+void hasty::mri::SenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage,
 	const at::optional<at::Tensor>& kspace_storage)
@@ -461,7 +461,7 @@ void hasty::sense::SenseNormal::apply_forward(const at::Tensor& in, at::Tensor& 
 	}
 }
 
-void hasty::sense::SenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out, 
+void hasty::mri::SenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<at::Tensor>& imspace_storage)
@@ -526,16 +526,16 @@ void hasty::sense::SenseNormal::apply_backward(const at::Tensor& in, at::Tensor&
 }
 
 
-hasty::sense::CUDASenseNormal::CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-	const at::optional<nufft::NufftOptions>& forward_opts, const at::optional<nufft::NufftOptions>& backward_opts)
+hasty::mri::CUDASenseNormal::CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+	const at::optional<fft::NufftOptions>& forward_opts, const at::optional<fft::NufftOptions>& backward_opts)
 	: _normal_nufft(coords, nmodes, 
-		forward_opts.has_value() ? *forward_opts : nufft::NufftOptions::type2(),
-		backward_opts.has_value() ? *backward_opts : nufft::NufftOptions::type1()),
+		forward_opts.has_value() ? *forward_opts : fft::NufftOptions::type2(),
+		backward_opts.has_value() ? *backward_opts : fft::NufftOptions::type1()),
 		_nmodes(nmodes)
 {
 }
 
-void hasty::sense::CUDASenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
+void hasty::mri::CUDASenseNormal::apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<CoilApplier>& premanip,
 	const at::optional<CoilApplier>& midmanip,
@@ -614,7 +614,7 @@ void hasty::sense::CUDASenseNormal::apply(const at::Tensor& in, at::Tensor& out,
 	}
 }
 
-void hasty::sense::CUDASenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out,
+void hasty::mri::CUDASenseNormal::apply_forward(const at::Tensor& in, at::Tensor& out,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage,
 	const at::optional<at::Tensor>& kspace_storage)
@@ -662,7 +662,7 @@ void hasty::sense::CUDASenseNormal::apply_forward(const at::Tensor& in, at::Tens
 	}
 }
 
-void hasty::sense::CUDASenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out,
+void hasty::mri::CUDASenseNormal::apply_backward(const at::Tensor& in, at::Tensor& out,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& kspace_storage,
 	const at::optional<at::Tensor>& imspace_storage)

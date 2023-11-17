@@ -14,7 +14,7 @@ namespace hasty {
 
 	export using TensorVec = std::vector<at::Tensor>;
 
-	namespace sense {
+	namespace mri {
 
 		export using CoilApplier = std::function<void(at::Tensor&, int32_t)>;
 
@@ -51,7 +51,7 @@ namespace hasty {
 		public:
 
 			Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -59,7 +59,7 @@ namespace hasty {
 				const at::optional<CoilApplier>& postmanip);
 
 		private:
-			nufft::Nufft _nufft;
+			fft::Nufft _nufft;
 			std::vector<int64_t> _nmodes;
 		};
 
@@ -67,7 +67,7 @@ namespace hasty {
 		public:
 
 			CUDASense(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -75,7 +75,7 @@ namespace hasty {
 				const at::optional<CoilApplier>& postmanip);
 
 		private:
-			nufft::CUDANufft _nufft;
+			fft::CUDANufft _nufft;
 			std::vector<int64_t> _nmodes;
 		};
 
@@ -84,7 +84,7 @@ namespace hasty {
 		public:
 
 			SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -92,7 +92,7 @@ namespace hasty {
 				const at::optional<CoilApplier>& postmanip);
 
 		private:
-			nufft::Nufft _nufft;
+			fft::Nufft _nufft;
 			std::vector<int64_t> _nmodes;
 		};
 
@@ -100,7 +100,7 @@ namespace hasty {
 		public:
 
 			CUDASenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage,
@@ -108,7 +108,7 @@ namespace hasty {
 				const at::optional<CoilApplier>& postmanip);
 
 		private:
-			nufft::CUDANufft _nufft;
+			fft::CUDANufft _nufft;
 			std::vector<int64_t> _nmodes;
 		};
 
@@ -117,8 +117,8 @@ namespace hasty {
 		public:
 
 			SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
@@ -139,7 +139,7 @@ namespace hasty {
 
 		private:
 
-			nufft::NufftNormal _normal_nufft;
+			fft::NufftNormal _normal_nufft;
 			std::vector<int64_t> _nmodes;
 
 		};
@@ -148,8 +148,8 @@ namespace hasty {
 		public:
 
 			CUDASenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
-				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
 			void apply(const at::Tensor& in, at::Tensor& out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<at::Tensor>& imspace_storage = at::nullopt,
@@ -170,7 +170,7 @@ namespace hasty {
 
 		private:
 
-			nufft::CUDANufftNormal _normal_nufft;
+			fft::CUDANufftNormal _normal_nufft;
 			std::vector<int64_t> _nmodes;
 		};
 

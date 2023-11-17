@@ -5,7 +5,7 @@ import torch_util;
 import sense;
 
 hasty::ffi::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::sense::Sense>(coords, nmodes))
+	: _senseop(std::make_unique<hasty::mri::Sense>(coords, nmodes))
 {
 }
 
@@ -20,7 +20,7 @@ void hasty::ffi::Sense::apply(const at::Tensor& in, at::Tensor out, const at::Te
 }
 
 hasty::ffi::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::sense::SenseAdjoint>(coords, nmodes))
+	: _senseop(std::make_unique<hasty::mri::SenseAdjoint>(coords, nmodes))
 {
 }
 
@@ -35,7 +35,7 @@ void hasty::ffi::SenseAdjoint::apply(const at::Tensor& in, at::Tensor out, const
 }
 
 hasty::ffi::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::sense::SenseNormal>(coords, nmodes))
+	: _senseop(std::make_unique<hasty::mri::SenseNormal>(coords, nmodes))
 {
 }
 

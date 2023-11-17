@@ -36,7 +36,7 @@ void hasty::tests::test_deterministic_1d() {
 
 	std::cout << "coords: " << coords << std::endl;
 
-	hasty::nufft::Nufft nu2(coords, { nt,nx }, { hasty::nufft::NufftType::eType2, true, 1e-6 });
+	hasty::fft::Nufft nu2(coords, { nt,nx }, { hasty::fft::NufftType::eType2, true, 1e-6 });
 
 	std::cout << "\n" << (float*)coords.data_ptr() << std::endl;
 
@@ -182,8 +182,8 @@ void hasty::tests::test_deterministic_3d() {
 
 	std::vector<int64_t> nmodes_ns = { nt, 2 * n3, 2 * n2, 2 * n1 };
 
-	hasty::nufft::Nufft nu2(coords, nmodes_ns, { hasty::nufft::NufftType::eType2, false, 1e-6 });
-	hasty::nufft::Nufft nu1(coords, nmodes_ns, { hasty::nufft::NufftType::eType1, true, 1e-6 });
+	hasty::fft::Nufft nu2(coords, nmodes_ns, { hasty::fft::NufftType::eType2, false, 1e-6 });
+	hasty::fft::Nufft nu1(coords, nmodes_ns, { hasty::fft::NufftType::eType1, true, 1e-6 });
 
 	auto f = at::empty({ nt,nf }, options1);
 	auto c = at::zeros(nmodes_ns, options1); // *c10::complex<float>(0.0f, 1.0f);
@@ -230,9 +230,9 @@ void hasty::tests::test_speed() {
 	//hasty::Nufft nu1(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType1, true, 1e-5f});
 	//hasty::Nufft nu2(coords, { nt,nx,nx,nx }, {hasty::NufftType::eType2, false, 1e-5f });
 
-	hasty::nufft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
-		{ hasty::nufft::NufftType::eType2, false, 1e-5f },
-		{ hasty::nufft::NufftType::eType1, true, 1e-5f });
+	hasty::fft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::fft::NufftType::eType2, false, 1e-5f },
+		{ hasty::fft::NufftType::eType1, true, 1e-5f });
 
 	auto freq = at::rand({ 1,nf }, options1);
 	auto in = at::rand({ nc,nx,nx,nx }, options1);
@@ -272,8 +272,8 @@ void hasty::tests::test_space_cufinufft() {
 
 	auto coords = torch::rand({ 3,nf }, options2);
 
-	hasty::nufft::Nufft nu1(coords, { nt,nx,nx,nx }, { hasty::nufft::NufftType::eType1, true, 1e-5f });
-	hasty::nufft::Nufft nu2(coords, { nt,nx,nx,nx }, { hasty::nufft::NufftType::eType2, true, 1e-5f });
+	hasty::fft::Nufft nu1(coords, { nt,nx,nx,nx }, { hasty::fft::NufftType::eType1, true, 1e-5f });
+	hasty::fft::Nufft nu2(coords, { nt,nx,nx,nx }, { hasty::fft::NufftType::eType2, true, 1e-5f });
 
 	auto f = torch::rand({ nt,nf }, options1);
 	auto c = torch::rand({ nt,nx,nx,nx }, options1);
@@ -503,22 +503,22 @@ void hasty::tests::compare_normal_methods()
 
 	// Explicit forward backward
 	{
-		hasty::nufft::Nufft nu1(coords, { nt,nz,ny,nx }, { hasty::nufft::NufftType::eType1, false, 1e-6f });
-		hasty::nufft::Nufft nu2(coords, { nt,nz,ny,nx }, { hasty::nufft::NufftType::eType2, true, 1e-6f });
+		hasty::fft::Nufft nu1(coords, { nt,nz,ny,nx }, { hasty::fft::NufftType::eType1, false, 1e-6f });
+		hasty::fft::Nufft nu2(coords, { nt,nz,ny,nx }, { hasty::fft::NufftType::eType2, true, 1e-6f });
 
 		nu2.apply(c, freq_temp);
 		nu1.apply(freq_temp, out1);
 	}
 	// Normal Nufft
 	{
-		hasty::nufft::CUDANufftNormal nu_normal(coords, { nt,nz,ny,nx },
-			{ hasty::nufft::NufftType::eType2, false, 1e-6 }, { hasty::nufft::NufftType::eType1, true, 1e-6 });
+		hasty::fft::CUDANufftNormal nu_normal(coords, { nt,nz,ny,nx },
+			{ hasty::fft::NufftType::eType2, false, 1e-6 }, { hasty::fft::NufftType::eType1, true, 1e-6 });
 
 		nu_normal.apply(c, out2, freq_temp, at::nullopt);
 	}
 	// Toeplitz Normal Nufft
 	{
-		hasty::nufft::CUDANormalNufftToeplitz top_normal(coords, { nt,nz,ny,nx }, 1e-6, at::nullopt, at::nullopt, at::nullopt);
+		hasty::fft::CUDANormalNufftToeplitz top_normal(coords, { nt,nz,ny,nx }, 1e-6, at::nullopt, at::nullopt, at::nullopt);
 
 		out3 = top_normal.apply(c, full_temp1, full_temp2);
 		//top_normal.apply(torch::fft_fftshift(c), out3, full_temp1, full_temp2);
@@ -579,8 +579,8 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 
 		auto start = std::chrono::high_resolution_clock::now();
 
-		hasty::nufft::CUDANufftNormal normal_nufft(coords, { nt, nx, nx, nx }, 
-			hasty::nufft::NufftOptions::type2(1e-4), hasty::nufft::NufftOptions::type1(1e-4));
+		hasty::fft::CUDANufftNormal normal_nufft(coords, { nt, nx, nx, nx }, 
+			hasty::fft::NufftOptions::type2(1e-4), hasty::fft::NufftOptions::type1(1e-4));
 
 		for (int i = 0; i < nrun; ++i) {
 			normal_nufft.apply(in, out, freq_temp, at::nullopt);
@@ -599,7 +599,7 @@ void hasty::tests::test_nufft_speeds(bool toep) {
 		torch::cuda::synchronize();
 		auto start = std::chrono::high_resolution_clock::now();
 
-		hasty::nufft::CUDANormalNufftToeplitz normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, at::nullopt, freq_temp, storage1);
+		hasty::fft::CUDANormalNufftToeplitz normal_nufft(coords, { nt, nx, nx, nx }, 1e-4, at::nullopt, freq_temp, storage1);
 		for (int i = 0; i < nrun; ++i) {
 			out = normal_nufft.apply(in, storage1, storage2);
 		}
@@ -678,9 +678,9 @@ int hasty::tests::test_speed(int n, int nc, int nf) {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	hasty::nufft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
-		{ hasty::nufft::NufftType::eType2, false, 1e-5f },
-		{ hasty::nufft::NufftType::eType1, true, 1e-5f });
+	hasty::fft::CUDANufftNormal nufft_normal(coords, { 1, nx, nx, nx },
+		{ hasty::fft::NufftType::eType2, false, 1e-5f },
+		{ hasty::fft::NufftType::eType1, true, 1e-5f });
 
 	for (int i = 0; i < nc; ++i) {
 		using namespace at::indexing;

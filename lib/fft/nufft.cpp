@@ -10,13 +10,13 @@ module nufft;
 import hasty_util;
 
 
-at::Tensor hasty::nufft::allocate_out(const at::Tensor& coords, int ntransf)
+at::Tensor hasty::fft::allocate_out(const at::Tensor& coords, int ntransf)
 {
 	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
 }
 
-at::Tensor hasty::nufft::allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+at::Tensor hasty::fft::allocate_adjoint_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 {
 	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
@@ -24,7 +24,7 @@ at::Tensor hasty::nufft::allocate_adjoint_out(const at::Tensor& coords, const st
 
 // NUFFT
 
-hasty::nufft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)
+hasty::fft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)
 	: _coords(coords), _nmodes(nmodes), _opts(opts)
 {
 	_type = _coords.dtype().toScalarType();
@@ -55,7 +55,7 @@ hasty::nufft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>&
 
 }
 
-void hasty::nufft::Nufft::close()
+void hasty::fft::Nufft::close()
 {
 	if (!_closed) {
 		_closed = true;
@@ -88,7 +88,7 @@ void hasty::nufft::Nufft::close()
 	}
 }
 
-hasty::nufft::Nufft::~Nufft() {
+hasty::fft::Nufft::~Nufft() {
 	try {
 		close();
 	}
@@ -101,7 +101,7 @@ hasty::nufft::Nufft::~Nufft() {
 	}
 }
 
-void hasty::nufft::Nufft::apply(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::Nufft::apply(const at::Tensor& in, at::Tensor& out) const
 {
 	switch (_opts.get_type()) {
 	case eType1:
@@ -122,12 +122,12 @@ void hasty::nufft::Nufft::apply(const at::Tensor& in, at::Tensor& out) const
 	}
 }
 
-at::ScalarType hasty::nufft::Nufft::coord_type()
+at::ScalarType hasty::fft::Nufft::coord_type()
 {
 	return _type;
 }
 
-at::ScalarType hasty::nufft::Nufft::complex_type()
+at::ScalarType hasty::fft::Nufft::complex_type()
 {
 	switch (_type) {
 	case c10::ScalarType::Float:
@@ -141,17 +141,17 @@ at::ScalarType hasty::nufft::Nufft::complex_type()
 	}
 }
 
-int32_t hasty::nufft::Nufft::nfreq()
+int32_t hasty::fft::Nufft::nfreq()
 {
 	return _nfreq;
 }
 
-int32_t hasty::nufft::Nufft::ndim()
+int32_t hasty::fft::Nufft::ndim()
 {
 	return _ndim;
 }
 
-void hasty::nufft::Nufft::make_plan_set_pts()
+void hasty::fft::Nufft::make_plan_set_pts()
 {
 
 	using namespace at::indexing;
@@ -249,7 +249,7 @@ void hasty::nufft::Nufft::make_plan_set_pts()
 	}
 }
 
-void hasty::nufft::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
 {
 	// Checks
 	{
@@ -314,7 +314,7 @@ void hasty::nufft::Nufft::apply_type1(const at::Tensor& in, at::Tensor& out) con
 	}
 }
 
-void hasty::nufft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) const
 {
 	// checks
 	{
@@ -381,25 +381,25 @@ void hasty::nufft::Nufft::apply_type2(const at::Tensor& in, at::Tensor& out) con
 }
 
 
-at::Tensor hasty::nufft::allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+at::Tensor hasty::fft::allocate_normal_out(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 {
 	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
 }
 
-at::Tensor hasty::nufft::allocate_normal_storage(const at::Tensor& coords, int ntransf)
+at::Tensor hasty::fft::allocate_normal_storage(const at::Tensor& coords, int ntransf)
 {
 	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
 }
 
-at::Tensor hasty::nufft::allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf)
+at::Tensor hasty::fft::allocate_normal_adjoint_out(const at::Tensor& coords, int ntransf)
 {
 	return at::empty({ ntransf, coords.size(1) }, at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
 }
 
-at::Tensor hasty::nufft::allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
+at::Tensor hasty::fft::allocate_normal_adjoint_storage(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
 {
 	return at::empty(at::makeArrayRef(nmodes), at::TensorOptions(coords.device()).dtype(
 		torch_util::complex_type(coords.dtype().toScalarType(), {})));
@@ -407,7 +407,7 @@ at::Tensor hasty::nufft::allocate_normal_adjoint_storage(const at::Tensor& coord
 
 // CUDA-NUFFT
 
-hasty::nufft::CUDANufft::CUDANufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)
+hasty::fft::CUDANufft::CUDANufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& opts)
 	: _coords(coords), _nmodes(nmodes), _opts(opts)
 {
 	_type = _coords.dtype().toScalarType();
@@ -438,7 +438,7 @@ hasty::nufft::CUDANufft::CUDANufft(const at::Tensor& coords, const std::vector<i
 
 }
 
-void hasty::nufft::CUDANufft::close()
+void hasty::fft::CUDANufft::close()
 {
 	if (!_closed) {
 		_closed = true;
@@ -471,7 +471,7 @@ void hasty::nufft::CUDANufft::close()
 	}
 }
 
-hasty::nufft::CUDANufft::~CUDANufft() {
+hasty::fft::CUDANufft::~CUDANufft() {
 	try {
 		close();
 	}
@@ -484,7 +484,7 @@ hasty::nufft::CUDANufft::~CUDANufft() {
 	}
 }
 
-void hasty::nufft::CUDANufft::apply(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::CUDANufft::apply(const at::Tensor& in, at::Tensor& out) const
 {
 	switch (_opts.get_type()) {
 	case eType1:
@@ -505,12 +505,12 @@ void hasty::nufft::CUDANufft::apply(const at::Tensor& in, at::Tensor& out) const
 	}
 }
 
-at::ScalarType hasty::nufft::CUDANufft::coord_type()
+at::ScalarType hasty::fft::CUDANufft::coord_type()
 {
 	return _type;
 }
 
-at::ScalarType hasty::nufft::CUDANufft::complex_type()
+at::ScalarType hasty::fft::CUDANufft::complex_type()
 {
 	switch (_type) {
 	case c10::ScalarType::Float:
@@ -524,17 +524,17 @@ at::ScalarType hasty::nufft::CUDANufft::complex_type()
 	}
 }
 
-int32_t hasty::nufft::CUDANufft::nfreq()
+int32_t hasty::fft::CUDANufft::nfreq()
 {
 	return _nfreq;
 }
 
-int32_t hasty::nufft::CUDANufft::ndim()
+int32_t hasty::fft::CUDANufft::ndim()
 {
 	return _ndim;
 }
 
-void hasty::nufft::CUDANufft::make_plan_set_pts()
+void hasty::fft::CUDANufft::make_plan_set_pts()
 {
 
 	using namespace at::indexing;
@@ -636,7 +636,7 @@ void hasty::nufft::CUDANufft::make_plan_set_pts()
 	}
 }
 
-void hasty::nufft::CUDANufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::CUDANufft::apply_type1(const at::Tensor& in, at::Tensor& out) const
 {
 	// Checks
 	{
@@ -701,7 +701,7 @@ void hasty::nufft::CUDANufft::apply_type1(const at::Tensor& in, at::Tensor& out)
 	}
 }
 
-void hasty::nufft::CUDANufft::apply_type2(const at::Tensor& in, at::Tensor& out) const
+void hasty::fft::CUDANufft::apply_type2(const at::Tensor& in, at::Tensor& out) const
 {
 	// checks
 	{
@@ -772,7 +772,7 @@ void hasty::nufft::CUDANufft::apply_type2(const at::Tensor& in, at::Tensor& out)
 
 namespace {
 
-	hasty::nufft::NufftOptions make_ops_type(const hasty::nufft::NufftOptions& ops, hasty::nufft::NufftType type)
+	hasty::fft::NufftOptions make_ops_type(const hasty::fft::NufftOptions& ops, hasty::fft::NufftType type)
 	{
 		auto ret = ops;
 		ret.type = type;
@@ -782,13 +782,13 @@ namespace {
 }
 
 
-hasty::nufft::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops)
+hasty::fft::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops)
 	: _forward(coords, nmodes, forward_ops), _backward(coords, nmodes, backward_ops)
 {
 
 }
 
-void hasty::nufft::NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
+void hasty::fft::NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
 {
 	_forward.apply(in, storage);
 	if (func_between.has_value()) {
@@ -797,7 +797,7 @@ void hasty::nufft::NufftNormal::apply(const at::Tensor& in, at::Tensor& out, at:
 	_backward.apply(storage, out);
 }
 
-void hasty::nufft::NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
+void hasty::fft::NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
 {
 	_forward.apply(in, storage);
 
@@ -808,42 +808,42 @@ void hasty::nufft::NufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storag
 	_backward.apply(storage, in);
 }
 
-void hasty::nufft::NufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
+void hasty::fft::NufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
 {
 	_forward.apply(in, out);
 }
 
-void hasty::nufft::NufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
+void hasty::fft::NufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
 {
 	_backward.apply(in, out);
 }
 
-int32_t hasty::nufft::NufftNormal::nfreq()
+int32_t hasty::fft::NufftNormal::nfreq()
 {
 	return _forward.nfreq();
 }
 
-int32_t hasty::nufft::NufftNormal::ndim()
+int32_t hasty::fft::NufftNormal::ndim()
 {
 	return _forward.ndim();
 }
 
-at::ScalarType hasty::nufft::NufftNormal::coord_type()
+at::ScalarType hasty::fft::NufftNormal::coord_type()
 {
 	return _forward.coord_type();
 }
 
-at::ScalarType hasty::nufft::NufftNormal::complex_type()
+at::ScalarType hasty::fft::NufftNormal::complex_type()
 {
 	return _forward.complex_type();
 }
 
-const hasty::nufft::Nufft& hasty::nufft::NufftNormal::get_forward()
+const hasty::fft::Nufft& hasty::fft::NufftNormal::get_forward()
 {
 	return _forward;
 }
 
-const hasty::nufft::Nufft& hasty::nufft::NufftNormal::get_backward()
+const hasty::fft::Nufft& hasty::fft::NufftNormal::get_backward()
 {
 	return _backward;
 }
@@ -853,13 +853,13 @@ const hasty::nufft::Nufft& hasty::nufft::NufftNormal::get_backward()
 
 
 
-hasty::nufft::CUDANufftNormal::CUDANufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops)
+hasty::fft::CUDANufftNormal::CUDANufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const NufftOptions& forward_ops, const NufftOptions& backward_ops)
 	: _forward(coords, nmodes, forward_ops), _backward(coords, nmodes, backward_ops)
 {
 
 }
 
-void hasty::nufft::CUDANufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
+void hasty::fft::CUDANufftNormal::apply(const at::Tensor& in, at::Tensor& out, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
 {
 	_forward.apply(in, storage);
 	if (func_between.has_value()) {
@@ -868,7 +868,7 @@ void hasty::nufft::CUDANufftNormal::apply(const at::Tensor& in, at::Tensor& out,
 	_backward.apply(storage, out);
 }
 
-void hasty::nufft::CUDANufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
+void hasty::fft::CUDANufftNormal::apply_inplace(at::Tensor& in, at::Tensor& storage, at::optional<std::function<void(at::Tensor&)>> func_between) const
 {
 	_forward.apply(in, storage);
 
@@ -879,42 +879,42 @@ void hasty::nufft::CUDANufftNormal::apply_inplace(at::Tensor& in, at::Tensor& st
 	_backward.apply(storage, in);
 }
 
-void hasty::nufft::CUDANufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
+void hasty::fft::CUDANufftNormal::apply_forward(const at::Tensor& in, at::Tensor& out)
 {
 	_forward.apply(in, out);
 }
 
-void hasty::nufft::CUDANufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
+void hasty::fft::CUDANufftNormal::apply_backward(const at::Tensor& in, at::Tensor& out)
 {
 	_backward.apply(in, out);
 }
 
-int32_t hasty::nufft::CUDANufftNormal::nfreq()
+int32_t hasty::fft::CUDANufftNormal::nfreq()
 {
 	return _forward.nfreq();
 }
 
-int32_t hasty::nufft::CUDANufftNormal::ndim()
+int32_t hasty::fft::CUDANufftNormal::ndim()
 {
 	return _forward.ndim();
 }
 
-at::ScalarType hasty::nufft::CUDANufftNormal::coord_type()
+at::ScalarType hasty::fft::CUDANufftNormal::coord_type()
 {
 	return _forward.coord_type();
 }
 
-at::ScalarType hasty::nufft::CUDANufftNormal::complex_type()
+at::ScalarType hasty::fft::CUDANufftNormal::complex_type()
 {
 	return _forward.complex_type();
 }
 
-const hasty::nufft::CUDANufft& hasty::nufft::CUDANufftNormal::get_forward()
+const hasty::fft::CUDANufft& hasty::fft::CUDANufftNormal::get_forward()
 {
 	return _forward;
 }
 
-const hasty::nufft::CUDANufft& hasty::nufft::CUDANufftNormal::get_backward()
+const hasty::fft::CUDANufft& hasty::fft::CUDANufftNormal::get_backward()
 {
 	return _backward;
 }
@@ -934,7 +934,7 @@ namespace {
 	{
 		c10::InferenceMode guard;
 
-		hasty::nufft::CUDANufftNormal normal(coords, nmodes_ns, { hasty::nufft::NufftType::eType2, false, 1e-6 }, { hasty::nufft::NufftType::eType1, true, 1e-6 });
+		hasty::fft::CUDANufftNormal normal(coords, nmodes_ns, { hasty::fft::NufftType::eType2, false, 1e-6 }, { hasty::fft::NufftType::eType1, true, 1e-6 });
 
 		using namespace at::indexing;
 		
@@ -973,7 +973,7 @@ namespace {
 }
 
 
-void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal)
+void hasty::fft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
 	for (int i = 0; i < nmodes.size(); ++i) {
@@ -1003,7 +1003,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coo
 
 }
 
-void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+void hasty::fft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& storage, bool storage_is_frequency)
 {
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -1040,7 +1040,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coo
 
 }
 
-void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
+void hasty::fft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coords, std::vector<int64_t> nmodes, double tol, at::Tensor& diagonal,
 	at::Tensor& frequency_storage, at::Tensor& input_storage)
 {	
 	std::vector<int64_t> nmodes_ns(nmodes.size());
@@ -1052,7 +1052,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::build_diagonal(const at::Tensor& coo
 	build_diagonal_base(coords, nmodes_ns, tol, diagonal, frequency_storage, input_storage);
 }
 
-hasty::nufft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
+hasty::fft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::optional<double>& tol,
 	const at::optional<std::reference_wrapper<at::Tensor>>& diagonal,
 	const at::optional<std::reference_wrapper<at::Tensor>>& frequency_storage,
 	const at::optional<std::reference_wrapper<at::Tensor>>& input_storage)
@@ -1130,7 +1130,7 @@ hasty::nufft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(const at::Tensor&
 
 }
 
-hasty::nufft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
+hasty::fft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(at::Tensor&& diagonal, const std::vector<int64_t>& nmodes)
 	: _diagonal(std::move(diagonal)), _nmodes(nmodes), _created_from_diagonal(true)
 {
 	c10::InferenceMode guard;
@@ -1160,7 +1160,7 @@ hasty::nufft::CUDANormalNufftToeplitz::CUDANormalNufftToeplitz(at::Tensor&& diag
 	_indices = at::makeArrayRef(_index_vector);
 }
 
-at::Tensor hasty::nufft::CUDANormalNufftToeplitz::apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
+at::Tensor hasty::fft::CUDANormalNufftToeplitz::apply(const at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
 	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
@@ -1169,7 +1169,7 @@ at::Tensor hasty::nufft::CUDANormalNufftToeplitz::apply(const at::Tensor& in, at
 	return storage2.index(_indices);
 }
 
-void hasty::nufft::CUDANormalNufftToeplitz::apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const
+void hasty::fft::CUDANormalNufftToeplitz::apply_add(const at::Tensor& in, at::Tensor& add_to, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
 	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
@@ -1178,7 +1178,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::apply_add(const at::Tensor& in, at::
 	add_to.add_(storage2.index(_indices));
 }
 
-void hasty::nufft::CUDANormalNufftToeplitz::apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const
+void hasty::fft::CUDANormalNufftToeplitz::apply_addcmul(const at::Tensor& in, at::Tensor& add_to, const at::Tensor& mul, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
 	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
@@ -1187,7 +1187,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::apply_addcmul(const at::Tensor& in, 
 	add_to.addcmul_(storage2.index(_indices), mul);
 }
 
-void hasty::nufft::CUDANormalNufftToeplitz::apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
+void hasty::fft::CUDANormalNufftToeplitz::apply_inplace(at::Tensor& in, at::Tensor& storage1, at::Tensor& storage2) const
 {
 	c10::InferenceMode guard;
 	at::fft_fftn_out(storage1, in, _expanded_dims, _transform_dims);
@@ -1196,7 +1196,7 @@ void hasty::nufft::CUDANormalNufftToeplitz::apply_inplace(at::Tensor& in, at::Te
 	in.copy_(storage2.index(_indices));
 }
 
-at::Tensor hasty::nufft::CUDANormalNufftToeplitz::get_diagonal()
+at::Tensor hasty::fft::CUDANormalNufftToeplitz::get_diagonal()
 {
 	return _diagonal;
 }

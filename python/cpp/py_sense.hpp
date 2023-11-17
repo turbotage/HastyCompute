@@ -3,7 +3,7 @@
 #include "py_util.hpp"
 
 namespace hasty {
-	namespace sense {
+	namespace mri {
 		class Sense;
 		class SenseAdjoint;
 		class SenseNormal;
@@ -20,7 +20,7 @@ namespace hasty {
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage);
 
 		private:
-			std::unique_ptr<hasty::sense::Sense> _senseop;
+			std::unique_ptr<hasty::mri::Sense> _senseop;
 		};
 
 		class LIB_EXPORT SenseAdjoint : public torch::CustomClassHolder {
@@ -32,7 +32,7 @@ namespace hasty {
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage);
 
 		private:
-			std::unique_ptr<hasty::sense::SenseAdjoint> _senseop;
+			std::unique_ptr<hasty::mri::SenseAdjoint> _senseop;
 		};
 
 		class LIB_EXPORT SenseNormal : public torch::CustomClassHolder {
@@ -44,7 +44,7 @@ namespace hasty {
 				const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage);
 
 		private:
-			std::unique_ptr<hasty::sense::SenseNormal> _senseop;
+			std::unique_ptr<hasty::mri::SenseNormal> _senseop;
 		};
 
 	}

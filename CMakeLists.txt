@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
+set(VCPKG_FEATURE_FLAGS "versions")
+
 project("HastyCompute" VERSION 0.1)
 
 include(FetchContent)
@@ -74,10 +76,6 @@ target_sources(HastyComputeLib
 		"lib/nlsq/nlsq_symbolic.ixx"
 		"lib/nlsq/nlsq.ixx"
 
-		"lib/mri/block.ixx"
-		"lib/mri/svt.ixx"
-		"lib/mri/svt.cpp"
-
 		"lib/fft/dct.ixx"
 		"lib/fft/dct.cpp"
 		"lib/fft/fft.ixx"
@@ -102,14 +100,15 @@ target_sources(HastyComputeLib
 		"lib/op/proxop.cpp"
 		"lib/op/fftop.ixx"
 		"lib/op/fftop.cpp"
+		"lib/op/block.ixx"
+		"lib/op/svt.ixx"
+		"lib/op/svt.cpp"
 
 		"lib/mri/precond.ixx"
 		"lib/mri/precond.cpp"
 
 		"lib/mri/batch_sense.ixx"
 		"lib/mri/batch_sense.cpp"
-		"lib/mri/batch_cg.ixx"
-		"lib/mri/batch_cg.cpp"
 
 )
 
@@ -236,6 +235,65 @@ target_link_libraries(HastyPyTest PUBLIC HastyComputeLib)
 target_link_libraries(HastyPyTest PUBLIC HastyPyInterface)
 target_include_directories(HastyPyTest PRIVATE ${MATPLOTLIB_CPP_INCLUDE_DIRS})
 set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
+
+
+
+include(FetchContent)
+FetchContent_Declare(
+    fetch_vk_bootstrap
+    GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
+    GIT_TAG		v1.3.269 #suggest using a tag so the library doesn't update whenever new commits are pushed to a branch
+)
+FetchContent_MakeAvailable(fetch_vk_bootstrap)
+
+
+
+#find_package(glfw3 REQUIRED)
+find_package(Vulkan REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(ktx CONFIG REQUIRED)
+find_package(unofficial-skia CONFIG REQUIRED)
+add_executable(HastyViz 
+	"viz/viz.cpp" 
+	"viz/vizapp.cpp" 
+	"viz/orthoslicer.cpp"
+
+	"viz/base/VulkanDevice.cpp"
+	"viz/base/VulkanBuffer.cpp"
+	"viz/base/VulkanTexture.cpp"
+	"viz/base/VulkanTools.cpp"
+)
+target_link_libraries(HastyViz PUBLIC vk-bootstrap::vk-bootstrap)
+target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
+target_link_libraries(HastyViz PUBLIC imgui::imgui)
+target_link_libraries(HastyViz PUBLIC glm::glm)
+target_link_libraries(HastyViz PUBLIC KTX::ktx)
+target_link_libraries(HastyViz PUBLIC unofficial::skia::skia)
+
+target_include_directories(HastyViz PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_custom_command(
+    TARGET HastyViz
+    POST_BUILD
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/viz/shaders ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR})
+
+configure_file (
+    "${PROJECT_SOURCE_DIR}/viz/shaders_path_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/shaders_path_config.h"
+)
+
+
+
+#target_link_libraries(HastyViz PUBLIC glfw)
+
+
+
+
+
+
 
 
 #[[

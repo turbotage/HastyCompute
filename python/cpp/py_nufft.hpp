@@ -4,7 +4,7 @@
 #include "py_interface.hpp"
 
 namespace hasty {
-	namespace nufft {
+	namespace fft {
 		class NufftOptions;
 		class Nufft;
 		class NufftNormal;
@@ -17,10 +17,10 @@ namespace hasty {
 
 			NufftOptions(int64_t type, const at::optional<bool>& positive, const at::optional<double>& tol);
 
-			const nufft::NufftOptions& getOptions() const;
+			const fft::NufftOptions& getOptions() const;
 
 		private:
-			std::unique_ptr<nufft::NufftOptions> _opts;
+			std::unique_ptr<fft::NufftOptions> _opts;
 		};
 
 		class LIB_EXPORT Nufft : public torch::CustomClassHolder {
@@ -31,7 +31,7 @@ namespace hasty {
 			void apply(const at::Tensor& in, at::Tensor out) const;
 
 		private:
-			std::unique_ptr<nufft::Nufft> _nufftop;
+			std::unique_ptr<fft::Nufft> _nufftop;
 		};
 
 		
@@ -45,7 +45,7 @@ namespace hasty {
 				const at::optional<FunctionLambda>& func_between) const;
 
 		private:
-			std::unique_ptr<nufft::NufftNormal> _nufftop;
+			std::unique_ptr<fft::NufftNormal> _nufftop;
 		};
 		
 

@@ -5,7 +5,7 @@
 
 namespace hasty {
 
-	namespace batched_sense {
+	namespace mri {
 		class BatchedSense;
 		class BatchedSenseAdjoint;
 		class BatchedSenseNormal;
@@ -25,7 +25,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::batched_sense::BatchedSense> _bs;
+			std::unique_ptr<hasty::mri::BatchedSense> _bs;
 		};
 
 		class LIB_EXPORT BatchedSenseAdjoint : public torch::CustomClassHolder {
@@ -39,7 +39,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::batched_sense::BatchedSenseAdjoint> _bs;
+			std::unique_ptr<hasty::mri::BatchedSenseAdjoint> _bs;
 		};
 
 		class LIB_EXPORT BatchedSenseNormal : public torch::CustomClassHolder {
@@ -53,7 +53,7 @@ namespace hasty {
 				const at::optional<std::vector<std::vector<int64_t>>>& coils);
 
 		private:
-			std::unique_ptr<hasty::batched_sense::BatchedSenseNormal> _bs;
+			std::unique_ptr<hasty::mri::BatchedSenseNormal> _bs;
 		};
 
 	}

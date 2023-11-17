@@ -10,7 +10,7 @@ import fftop;
 import nufft;
 
 
-std::unique_ptr<hasty::op::CirculantPreconditionerOp> hasty::op::CirculantPreconditionerOp::Create(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify)
+std::unique_ptr<hasty::mri::CirculantPreconditionerOp> hasty::mri::CirculantPreconditionerOp::Create(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify)
 {
 	struct creator : public CirculantPreconditionerOp {
 		creator(at::Tensor a, bool b, const std::optional<std::string>& c, bool d)
@@ -19,12 +19,12 @@ std::unique_ptr<hasty::op::CirculantPreconditionerOp> hasty::op::CirculantPrecon
 	return std::make_unique<creator>(std::move(diag), centered, norm, adjointify);
 }
 
-hasty::op::CirculantPreconditionerOp::CirculantPreconditionerOp(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify)
+hasty::mri::CirculantPreconditionerOp::CirculantPreconditionerOp(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify)
 	: _diag(std::move(diag)), _centered(centered), _norm(norm), _adjointify(adjointify)
 {
 }
 
-hasty::op::Vector hasty::op::CirculantPreconditionerOp::apply(const Vector& in) const
+hasty::op::Vector hasty::mri::CirculantPreconditionerOp::apply(const op::Vector& in) const
 {
 
 	if (_adjointify) {
@@ -49,12 +49,12 @@ hasty::op::Vector hasty::op::CirculantPreconditionerOp::apply(const Vector& in) 
 	}
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::CirculantPreconditionerOp::to_device(at::Stream stream) const
+std::shared_ptr<hasty::op::Operator> hasty::mri::CirculantPreconditionerOp::to_device(at::Stream stream) const
 {
 	return CirculantPreconditionerOp::Create(_diag.to(stream.device()), _centered, _norm, _adjointify);
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::CirculantPreconditionerOp::adjoint() const
+std::shared_ptr<hasty::op::AdjointableOp> hasty::mri::CirculantPreconditionerOp::adjoint() const
 {
 	return CirculantPreconditionerOp::Create(_diag, _centered, _norm, !_adjointify);
 }
@@ -62,7 +62,7 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::CirculantPreconditionerOp::
 /*
 based on sigpy
 */
-at::Tensor hasty::op::CirculantPreconditionerOp::build_diagonal(at::Tensor smaps, at::Tensor coord, const at::optional<at::Tensor>& weights, const at::optional<double>& lambda)
+at::Tensor hasty::mri::CirculantPreconditionerOp::build_diagonal(at::Tensor smaps, at::Tensor coord, const at::optional<at::Tensor>& weights, const at::optional<double>& lambda)
 {
 	using namespace at::indexing;
 
@@ -83,7 +83,7 @@ at::Tensor hasty::op::CirculantPreconditionerOp::build_diagonal(at::Tensor smaps
 	}
 
 	auto nmodes = util::vec_concat<int64_t>({1}, img2_shape);
-	at::Tensor psf = NUFFTAdjoint(coord, nmodes, nufft::NufftOptions::type1()).apply(ones).tensor();
+	at::Tensor psf = op::NUFFTAdjoint(coord, nmodes, fft::NufftOptions::type1()).apply(ones).tensor();
 
 	std::vector<TensorIndex> idx;
 	idx.reserve(ndim);

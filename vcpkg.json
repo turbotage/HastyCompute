@@ -1,8 +1,27 @@
 {
   "name": "hasty-compute",
-  "version-string": "0.1.0",
+  "version": "0.1.0",
   "dependencies": [
-    "symengine",
-    "matplotlib-cpp"
-  ]
+    {
+      "name": "symengine",
+      "version>=": "0.11.1"
+    },
+    "matplotlib-cpp",
+    "glfw3",
+    "glm",
+    "ktx",
+    {
+      "name": "imgui",
+      "features": [
+        "glfw-binding",
+        "vulkan-binding",
+        "docking-experimental"
+      ]
+    },
+    {
+      "name": "skia",
+      "version>=": "0.38.2"
+    }
+  ],
+  "builtin-baseline": "98f22593167d1d20a433d9ad09aa40ccd2552749"
 }

@@ -1,0 +1,20 @@
+{
+  "dependencies": [
+    "symengine",
+    "matplotlib-cpp",
+    "bgfx"
+/*
+    "glfw3",
+    {
+      "name": "imgui",
+      "features": [
+        "glfw-binding",
+        "vulkan-binding",
+        "docking-experimental"
+      ]
+    }
+*/
+  ],
+  "name": "hasty-compute",
+  "version-string": "0.1.0"
+}

@@ -9,17 +9,17 @@ hasty::ffi::NufftOptions::NufftOptions(int64_t type, const at::optional<bool>& p
 		throw std::runtime_error("Not available type");
 	}
 
-	_opts = std::make_unique<nufft::NufftOptions>((nufft::NufftType)type, positive, tol);
+	_opts = std::make_unique<fft::NufftOptions>((fft::NufftType)type, positive, tol);
 }
 
-const hasty::nufft::NufftOptions& hasty::ffi::NufftOptions::getOptions() const
+const hasty::fft::NufftOptions& hasty::ffi::NufftOptions::getOptions() const
 {
 	return *_opts;
 }
 
 
 hasty::ffi::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const ffi::NufftOptions& opts)
-	: _nufftop(std::make_unique<nufft::Nufft>(coords, nmodes, opts.getOptions()))
+	: _nufftop(std::make_unique<fft::Nufft>(coords, nmodes, opts.getOptions()))
 {}
 
 void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
@@ -34,7 +34,7 @@ void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
 
 hasty::ffi::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const ffi::NufftOptions& forward, const ffi::NufftOptions& backward)
-	: _nufftop(std::make_unique<nufft::NufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions()))
+	: _nufftop(std::make_unique<fft::NufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions()))
 {}
 
 void hasty::ffi::NufftNormal::apply(const at::Tensor& in, at::Tensor out, at::Tensor storage,

@@ -51,26 +51,28 @@ namespace hasty {
 			*/
 
 			template<OpConcept Op1, OpConcept Op2>
-				requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
+			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 			friend std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 			friend std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<OpConcept Op1, OpConcept Op2>
+			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 			friend std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 			friend std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<OpConcept Op1, OpConcept Op2>
-				requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
+			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 			friend std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
 			friend std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
 
 			template<OpConcept Op>
+			requires NotAdjointableOpConcept<Op>
 			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
 
 			template<AdjointableOpConcept Op>
@@ -164,6 +166,7 @@ namespace hasty {
 
 		// SUB
 		export template<OpConcept Op1, OpConcept Op2>
+		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
 		std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
 		{
 			return SubOp::Create(std::move(lhs), std::move(rhs));
@@ -193,6 +196,7 @@ namespace hasty {
 
 		// SCALE MUL
 		export template<OpConcept Op>
+		requires NotAdjointableOpConcept<Op>
 		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
 		{
 			return ScaleOp::Create(lhs, std::move(rhs));

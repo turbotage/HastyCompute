@@ -11,15 +11,19 @@ import torch_util;
 import sense;
 import thread_pool;
 
+import opalgs;
+import opalgebra;
+import mriop;
+
 namespace hasty {
 
-	namespace batched_sense {
+	namespace mri {
 
 		export struct InnerData {
 			at::Tensor weights;
 			at::Tensor kdata;
 		};
-		export using InnerBatchFetcher = std::function<sense::CoilManipulator(int32_t, const InnerData&, at::Stream)>;
+		export using InnerBatchFetcher = std::function<mri::CoilManipulator(int32_t, const InnerData&, at::Stream)>;
 		export using InnerBatchApplier = std::function<void(at::Tensor&, int32_t, const InnerData&, at::Stream)>;
 		export struct InnerManipulator {
 
@@ -51,11 +55,11 @@ namespace hasty {
 				return *this;
 			}
 
-			sense::CoilManipulator getCoilManipulator(int32_t inner_batch, const InnerData& data, at::Stream stream) {
+			mri::CoilManipulator getCoilManipulator(int32_t inner_batch, const InnerData& data, at::Stream stream) {
 				if (fetcher.has_value()) {
 					return (*fetcher)(inner_batch, data, stream);
 				}
-				return sense::CoilManipulator();
+				return mri::CoilManipulator();
 			}
 
 		};
@@ -98,8 +102,8 @@ namespace hasty {
 
 				fetcher = [](int32_t outer_batch, at::Stream) -> InnerManipulator {
 					return InnerManipulator(
-						[](int32_t inner_batch, const InnerData& data, at::Stream) -> sense::CoilManipulator {
-							return sense::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
+						[](int32_t inner_batch, const InnerData& data, at::Stream) -> mri::CoilManipulator {
+							return mri::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
 								in.sub_(data.kdata.select(0, coil).unsqueeze(0));
 								});
 						}
@@ -114,8 +118,8 @@ namespace hasty {
 
 				fetcher = [](int32_t outer_batch, at::Stream) -> InnerManipulator {
 					return InnerManipulator(
-						[](int32_t inner_batch, const InnerData& data, at::Stream) -> sense::CoilManipulator {
-							return sense::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
+						[](int32_t inner_batch, const InnerData& data, at::Stream) -> mri::CoilManipulator {
+							return mri::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
 								in.mul_(data.weights);
 								});
 						}
@@ -130,8 +134,8 @@ namespace hasty {
 
 				fetcher = [](int32_t outer_batch, at::Stream) -> InnerManipulator {
 					return InnerManipulator(
-						[](int32_t inner_batch, const InnerData& data, at::Stream) -> sense::CoilManipulator {
-							return sense::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
+						[](int32_t inner_batch, const InnerData& data, at::Stream) -> mri::CoilManipulator {
+							return mri::CoilManipulator().setMidApply([&data](at::Tensor& in, int32_t coil) -> void {
 								in.sub_(data.kdata.select(0, coil).unsqueeze(0));
 								in.mul_(data.weights);
 								});
@@ -270,6 +274,37 @@ namespace hasty {
 			*/
 
 		};
+
+
+
+		export struct SenseDeviceContext {
+			at::Tensor smaps;
+			at::Stream stream;
+		};
+
+		export class SenseAdmmLoader : public op::BatchConjugateGradientLoader<SenseDeviceContext> {
+		public:
+
+			SenseAdmmLoader(
+				const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
+				const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
+				std::shared_ptr<op::Admm::Context> ctx,
+				const at::optional<std::vector<at::Tensor>>& preconds = at::nullopt);
+
+			op::ConjugateGradientLoadResult load(SenseDeviceContext& dctx, size_t idx) override;
+
+		private:
+			std::vector<at::Tensor> _coords;
+			std::vector<int64_t> _nmodes;
+			std::vector<at::Tensor> _kdata;
+			at::Tensor _smaps;
+
+			std::shared_ptr<op::Admm::Context> _ctx;
+
+			at::optional<std::vector<at::Tensor>> _preconds;
+		};
+
+
 
 
 	}

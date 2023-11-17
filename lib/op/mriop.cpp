@@ -5,11 +5,11 @@ module;
 module mriop;
 
 std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
-	const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& opts)
+	const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<fft::NufftOptions>& opts)
 {
 	struct creator : public SenseOp {
 		creator(const at::Tensor& a, const std::vector<int64_t>& b, const at::Tensor& c, 
-			const std::vector<int64_t>& d, const at::optional<nufft::NufftOptions>& e)
+			const std::vector<int64_t>& d, const at::optional<fft::NufftOptions>& e)
 			: SenseOp(a, b, c, d, e) {}
 	};
 	return std::make_unique<creator>(coords, nmodes, smaps, coils, opts);
@@ -17,21 +17,21 @@ std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor&
 
 hasty::op::SenseOp::SenseOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
-	const at::optional<nufft::NufftOptions>& opts)
+	const at::optional<fft::NufftOptions>& opts)
 	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils)
 {
 	if (opts.has_value()) {
 		_opts = *opts;
-		_opts.type = nufft::NufftType::eType2;
+		_opts.type = fft::NufftType::eType2;
 	}
 	else {
-		_opts = nufft::NufftOptions::type2();
+		_opts = fft::NufftOptions::type2();
 	}
 
 	if (_coords.is_cuda())
-		_cudasense = std::make_unique<sense::CUDASense>(_coords, _nmodes, _opts);
+		_cudasense = std::make_unique<mri::CUDASense>(_coords, _nmodes, _opts);
 	else
-		_cpusense = std::make_unique<sense::Sense>(_coords, _nmodes, _opts);
+		_cpusense = std::make_unique<mri::Sense>(_coords, _nmodes, _opts);
 }
 
 hasty::op::Vector hasty::op::SenseOp::apply(const Vector& in) const
@@ -39,7 +39,7 @@ hasty::op::Vector hasty::op::SenseOp::apply(const Vector& in) const
 	const auto& children = access_vecchilds(in);
 
 	if (children.empty()) {
-		at::Tensor out = nufft::allocate_out(_coords, _nmodes[0]);
+		at::Tensor out = fft::allocate_out(_coords, _nmodes[0]);
 		if (_cudasense != nullptr)
 			_cudasense->apply(access_vectensor(in), out, _smaps, _coils, 
 				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
@@ -61,7 +61,7 @@ hasty::op::Vector hasty::op::SenseOp::apply(const Vector& in) const
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
 {
 	auto newops = _opts;
-	newops.type = nufft::NufftType::eType2;
+	newops.type = fft::NufftType::eType2;
 
 	return SenseHOp::Create(_coords, _nmodes, _smaps, _coils, true, newops);
 }
@@ -75,12 +75,12 @@ std::shared_ptr<hasty::op::Operator> hasty::op::SenseOp::to_device(at::Stream st
 
 std::unique_ptr<hasty::op::SenseHOp> hasty::op::SenseHOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate,
-	const at::optional<nufft::NufftOptions>& opts)
+	const at::optional<fft::NufftOptions>& opts)
 {
 	struct creator : public SenseHOp {
 		creator(const at::Tensor& a, const std::vector<int64_t>& b,
 			const at::Tensor& c, const std::vector<int64_t>& d, bool e,
-			const at::optional<nufft::NufftOptions>& f)
+			const at::optional<fft::NufftOptions>& f)
 			: SenseHOp(a, b, c, d, e, f) {}
 	};
 	return std::make_unique<creator>(coords, nmodes, smaps, coils, accumulate, opts);
@@ -88,21 +88,21 @@ std::unique_ptr<hasty::op::SenseHOp> hasty::op::SenseHOp::Create(const at::Tenso
 
 hasty::op::SenseHOp::SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate, 
-	const at::optional<nufft::NufftOptions>& opts)
+	const at::optional<fft::NufftOptions>& opts)
 	: _coords(coords), _nmodes(nmodes), _smaps(smaps), _coils(coils), _accumulate(accumulate)
 {
 	if (opts.has_value()) {
 		_opts = *opts;
-		_opts.type = nufft::NufftType::eType1;
+		_opts.type = fft::NufftType::eType1;
 	}
 	else {
-		_opts = nufft::NufftOptions::type1();
+		_opts = fft::NufftOptions::type1();
 	}
 
 	if (_coords.is_cuda())
-		_cudasense = std::make_unique<sense::CUDASenseAdjoint>(_coords, _nmodes, _opts);
+		_cudasense = std::make_unique<mri::CUDASenseAdjoint>(_coords, _nmodes, _opts);
 	else
-		_cpusense = std::make_unique<sense::SenseAdjoint>(_coords, _nmodes, _opts);
+		_cpusense = std::make_unique<mri::SenseAdjoint>(_coords, _nmodes, _opts);
 }
 
 hasty::op::Vector hasty::op::SenseHOp::apply(const Vector& in) const
@@ -110,7 +110,7 @@ hasty::op::Vector hasty::op::SenseHOp::apply(const Vector& in) const
 	const auto& children = access_vecchilds(in);
 
 	if (children.empty()) {
-		at::Tensor out = nufft::allocate_adjoint_out(_coords, _nmodes);
+		at::Tensor out = fft::allocate_adjoint_out(_coords, _nmodes);
 		if (_cudasense != nullptr)
 			_cudasense->apply(access_vectensor(in), out, _smaps, _coils,
 				at::nullopt, at::nullopt, at::nullopt, at::nullopt);
@@ -132,7 +132,7 @@ hasty::op::Vector hasty::op::SenseHOp::apply(const Vector& in) const
 std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseHOp::adjoint() const
 {
 	auto newops = _opts;
-	newops.type = nufft::NufftType::eType2;
+	newops.type = fft::NufftType::eType2;
 	return SenseOp::Create(_coords, _nmodes, _smaps, _coils, newops);
 }
 
@@ -144,11 +144,11 @@ std::shared_ptr<hasty::op::Operator> hasty::op::SenseHOp::to_device(at::Stream s
 // SENSE NORMAL OP
 
 std::unique_ptr<hasty::op::SenseNOp> hasty::op::SenseNOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps,
-	const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& forward_opts, const at::optional<nufft::NufftOptions>& backward_opts)
+	const std::vector<int64_t>& coils, const at::optional<fft::NufftOptions>& forward_opts, const at::optional<fft::NufftOptions>& backward_opts)
 {
 	struct creator : public SenseNOp {
 		creator(const at::Tensor& a, const std::vector<int64_t>& b, const at::Tensor& c,
-			const std::vector<int64_t>& d, const at::optional<nufft::NufftOptions>& e, const at::optional<nufft::NufftOptions>& f)
+			const std::vector<int64_t>& d, const at::optional<fft::NufftOptions>& e, const at::optional<fft::NufftOptions>& f)
 			: SenseNOp(a, b, c, d, e, f) {}
 	};
 	return std::make_unique<creator>(coords, nmodes, smaps, coils, forward_opts, backward_opts);
@@ -156,35 +156,35 @@ std::unique_ptr<hasty::op::SenseNOp> hasty::op::SenseNOp::Create(const at::Tenso
 
 hasty::op::SenseNOp::SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, 
-	const at::optional<nufft::NufftOptions>& forward_opts,
-	const at::optional<nufft::NufftOptions>& backward_opts)
+	const at::optional<fft::NufftOptions>& forward_opts,
+	const at::optional<fft::NufftOptions>& backward_opts)
 	: _senseholder(std::make_shared<SenseNHolder>(coords, nmodes, smaps, coils, forward_opts, backward_opts))
 {
 }
 
 hasty::op::SenseNOp::SenseNHolder::SenseNHolder(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps,
-	const std::vector<int64_t>& coils, const at::optional<nufft::NufftOptions>& forward_opts, const at::optional<nufft::NufftOptions>& backward_opts)
+	const std::vector<int64_t>& coils, const at::optional<fft::NufftOptions>& forward_opts, const at::optional<fft::NufftOptions>& backward_opts)
 	: _smaps(smaps), _coils(coils)
 {
 	if (forward_opts.has_value()) {
 		_forward_opts = *forward_opts;
-		_forward_opts.type = nufft::NufftType::eType2;
+		_forward_opts.type = fft::NufftType::eType2;
 	}
 	else {
-		_forward_opts = nufft::NufftOptions::type2();
+		_forward_opts = fft::NufftOptions::type2();
 	}
 	if (backward_opts.has_value()) {
 		_backward_opts = *backward_opts;
-		_backward_opts.type = nufft::NufftType::eType2;
+		_backward_opts.type = fft::NufftType::eType2;
 	}
 	else {
-		_backward_opts = nufft::NufftOptions::type2();
+		_backward_opts = fft::NufftOptions::type2();
 	}
 
 	if (_coords.is_cuda())
-		_cudasense = std::make_unique<sense::CUDASenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
+		_cudasense = std::make_unique<mri::CUDASenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
 	else
-		_cpusense = std::make_unique<sense::SenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
+		_cpusense = std::make_unique<mri::SenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
 }
 
 hasty::op::SenseNOp::SenseNOp(std::shared_ptr<SenseNHolder> shoulder)
@@ -222,7 +222,7 @@ hasty::op::Vector hasty::op::SenseNOp::apply_forward(const Vector& in) const
 	const auto& children = access_vecchilds(in);
 
 	if (children.empty()) {
-		at::Tensor out = nufft::allocate_out(_senseholder->_coords, _senseholder->_nmodes[0]);
+		at::Tensor out = fft::allocate_out(_senseholder->_coords, _senseholder->_nmodes[0]);
 		if (_senseholder->_cudasense != nullptr)
 			_senseholder->_cudasense->apply_forward(access_vectensor(in), out, _senseholder->_smaps, _senseholder->_coils,
 				at::nullopt, at::nullopt);
@@ -246,7 +246,7 @@ hasty::op::Vector hasty::op::SenseNOp::apply_backward(const Vector& in) const
 	const auto& children = access_vecchilds(in);
 
 	if (children.empty()) {
-		at::Tensor out = nufft::allocate_adjoint_out(_senseholder->_coords, _senseholder->_nmodes);
+		at::Tensor out = fft::allocate_adjoint_out(_senseholder->_coords, _senseholder->_nmodes);
 		if (_senseholder->_cudasense != nullptr)
 			_senseholder->_cudasense->apply_backward(access_vectensor(in), out, _senseholder->_smaps, _senseholder->_coils,
 				at::nullopt, at::nullopt);

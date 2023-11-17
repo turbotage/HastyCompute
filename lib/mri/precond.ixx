@@ -8,9 +8,9 @@ import torch_util;
 import op;
 
 namespace hasty {
-	namespace op {
+	namespace mri {
 
-		class CirculantPreconditionerOp : public op::AdjointableOp {
+		export class CirculantPreconditionerOp : public op::AdjointableOp {
 		public:
 
 			static std::unique_ptr<CirculantPreconditionerOp> Create(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify);
@@ -22,7 +22,7 @@ namespace hasty {
 
 			CirculantPreconditionerOp(at::Tensor diag, bool centered, const std::optional<std::string>& norm, bool adjointify);
 
-			Vector apply(const Vector& in) const override;
+			op::Vector apply(const op::Vector& in) const override;
 
 			std::shared_ptr<Operator> to_device(at::Stream stream) const override;
 

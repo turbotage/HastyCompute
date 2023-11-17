@@ -17,7 +17,7 @@ namespace hasty {
 
 			static std::unique_ptr<SenseOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
 
@@ -29,18 +29,18 @@ namespace hasty {
 
 			SenseOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 		private:
 			at::Tensor _coords;
 			std::vector<int64_t> _nmodes;
-			nufft::NufftOptions _opts;
+			fft::NufftOptions _opts;
 
 			at::Tensor _smaps;
 			std::vector<int64_t> _coils;
 
-			std::unique_ptr<sense::Sense> _cpusense;
-			std::unique_ptr<sense::CUDASense> _cudasense;
+			std::unique_ptr<mri::Sense> _cpusense;
+			std::unique_ptr<mri::CUDASense> _cudasense;
 		};
 
 		export class SenseHOp : public AdjointableOp {
@@ -48,7 +48,7 @@ namespace hasty {
 
 			static std::unique_ptr<SenseHOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
 
@@ -60,20 +60,20 @@ namespace hasty {
 			
 			SenseHOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
-				const at::optional<nufft::NufftOptions>& opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 		private:
 			at::Tensor _coords;
 			std::vector<int64_t> _nmodes;
-			nufft::NufftOptions _opts;
+			fft::NufftOptions _opts;
 
 			bool _accumulate;
 
 			at::Tensor _smaps;
 			std::vector<int64_t> _coils;
 
-			std::unique_ptr<sense::SenseAdjoint> _cpusense;
-			std::unique_ptr<sense::CUDASenseAdjoint> _cudasense;
+			std::unique_ptr<mri::SenseAdjoint> _cpusense;
+			std::unique_ptr<mri::CUDASenseAdjoint> _cudasense;
 		};
 
 		export class SenseNOp : public AdjointableOp {
@@ -81,8 +81,8 @@ namespace hasty {
 
 			static std::unique_ptr<SenseNOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
 
@@ -100,25 +100,25 @@ namespace hasty {
 
 				SenseNHolder(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 					const at::Tensor& smaps, const std::vector<int64_t>& coils,
-					const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-					const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
+					const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
+					const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
 				at::Tensor _coords;
 				std::vector<int64_t> _nmodes;
-				nufft::NufftOptions _forward_opts;
-				nufft::NufftOptions _backward_opts;
+				fft::NufftOptions _forward_opts;
+				fft::NufftOptions _backward_opts;
 
 				at::Tensor _smaps;
 				std::vector<int64_t> _coils;
 
-				std::unique_ptr<sense::SenseNormal> _cpusense;
-				std::unique_ptr<sense::CUDASenseNormal> _cudasense;
+				std::unique_ptr<mri::SenseNormal> _cpusense;
+				std::unique_ptr<mri::CUDASenseNormal> _cudasense;
 			};
 
 			SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
-				const at::optional<nufft::NufftOptions>& forward_opts = at::nullopt,
-				const at::optional<nufft::NufftOptions>& backward_opts = at::nullopt);
+				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
+				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
 			SenseNOp(std::shared_ptr<SenseNHolder> shoulder);
 
