@@ -2,8 +2,6 @@
 
 #include "VulkanDevice.hpp"
 #include "VulkanBuffer.hpp"
-#include "VulkanFrameBuffer.hpp"
-#include "VulkanTexture.hpp"
 #include "VulkanInitializers.hpp"
 #include "VulkanTools.hpp"
 

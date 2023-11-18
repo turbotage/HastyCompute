@@ -9,7 +9,12 @@
     "matplotlib-cpp",
     "glfw3",
     "glm",
-    "ktx",
+    {
+      "name": "ktx",
+      "features": [
+        "vulkan"
+      ]
+    },
     {
       "name": "imgui",
       "features": [
@@ -20,7 +25,10 @@
     },
     {
       "name": "skia",
-      "version>=": "0.38.2"
+      "version>=": "0.38.2",
+      "features": [
+        "vulkan"
+      ]
     }
   ],
   "builtin-baseline": "98f22593167d1d20a433d9ad09aa40ccd2552749"

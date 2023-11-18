@@ -10,6 +10,8 @@
 // Read comments in imgui_impl_vulkan.h.
 
 #include "vizapp.hpp"
+#include "orthoslicer.hpp"
+
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -443,6 +445,19 @@ int main(int, char**)
     init_info.CheckVkResultFn = check_vk_result;
     ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 
+    hasty::viz::SkiaContext skctx(
+        g_Instance,
+        g_PhysicalDevice,
+        g_Device,
+        g_Queue,
+        g_QueueFamily,
+        nullptr, nullptr,
+        VK_MAKE_VERSION(1, 1, 0)
+    );
+
+
+    hasty::viz::SkiaOrthoslicer orthoslice(skctx);
+
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
     // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
@@ -524,7 +539,7 @@ int main(int, char**)
         ImGui::NewFrame();
 
         
-        hasty::viz::Application::Render(io);
+        //hasty::viz::Application::Render(io);
         
 
         // Rendering

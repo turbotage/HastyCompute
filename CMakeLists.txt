@@ -261,7 +261,6 @@ add_executable(HastyViz
 
 	"viz/base/VulkanDevice.cpp"
 	"viz/base/VulkanBuffer.cpp"
-	"viz/base/VulkanTexture.cpp"
 	"viz/base/VulkanTools.cpp"
 )
 target_link_libraries(HastyViz PUBLIC vk-bootstrap::vk-bootstrap)
