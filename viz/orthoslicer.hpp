@@ -88,6 +88,44 @@ namespace hasty {
 
 		};
 
+		struct SlicerRenderer {
+
+			SlicerRenderer(Slicer& slicer)
+				: slicer(slicer)
+			{
+
+			}
+
+			void RenderSlice() {
+				static ImPlotHeatmapFlags hm_flags = 0;
+				static float scale_min = 0.0f;
+				static float scale_max = 1.0f;
+
+				ImGui::SetNextItemWidth(225);
+				ImGui::DragFloatRange2("Min / Max", &scale_min, &scale_max, 0.01f, -20, 20);
+
+				static ImPlotColormap map = ImPlotColormap_Viridis;
+
+				ImPlot::PushColormap(map);
+
+				static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
+				if (ImPlot::BeginPlot("##Heatmap1", ImVec2(500, 500), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+					ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
+					ImPlot::PlotHeatmap("heat", (const float*)_slice.const_data_ptr(), _slice.size(0), _slice.size(1), scale_min, scale_max, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1, 1), hm_flags);
+					ImPlot::EndPlot();
+				}
+				ImGui::SameLine();
+				ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(60, 225));
+
+				ImGui::SameLine();
+
+				ImPlot::PopColormap();
+			}
+
+			Slicer& slicer;
+
+		};
+
 		class Orthoslicer {
 		public:
 
@@ -101,12 +139,7 @@ namespace hasty {
 				
 			}
 
-			void Render() {
-				
-				_slice = _axialSlicer.GetTensorSlice({ 0 }, 40, 40, 40);
-				
-				//std::cout << _slice.sizes() << _slice.dtype() << std::endl;
-
+			void RenderSlice() {
 				static ImPlotHeatmapFlags hm_flags = 0;
 				static float scale_min = 0.0f;
 				static float scale_max = 1.0f;
@@ -117,8 +150,6 @@ namespace hasty {
 				static ImPlotColormap map = ImPlotColormap_Viridis;
 
 				ImPlot::PushColormap(map);
-
-				
 
 				static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
 				if (ImPlot::BeginPlot("##Heatmap1", ImVec2(500, 500), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
@@ -134,6 +165,13 @@ namespace hasty {
 				ImGui::SameLine();
 
 				ImPlot::PopColormap();
+			}
+
+			void Render() {
+				
+				_slice = _axialSlicer.GetTensorSlice({ 0 }, 40, 40, 40);
+
+				
 			}
 
 		private:

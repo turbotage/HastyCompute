@@ -227,71 +227,62 @@ target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
 set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
 
 
-
-find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
-# Tests of the Python Interface
-add_executable(HastyPyTest "tests/py_test.cpp")
-target_link_libraries(HastyPyTest PUBLIC HastyComputeLib)
-target_link_libraries(HastyPyTest PUBLIC HastyPyInterface)
-target_include_directories(HastyPyTest PRIVATE ${MATPLOTLIB_CPP_INCLUDE_DIRS})
-set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
-
-
-
-include(FetchContent)
-FetchContent_Declare(
-    fetch_vk_bootstrap
-    GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
-    GIT_TAG		v1.3.269 #suggest using a tag so the library doesn't update whenever new commits are pushed to a branch
-)
-FetchContent_MakeAvailable(fetch_vk_bootstrap)
+set(HASTY_BUILD_PY_TESTS OFF)
+if (${HASTY_BUILD_PY_TESTS})
+	find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
+	# Tests of the Python Interface
+	add_executable(HastyPyTest "tests/py_test.cpp")
+	target_link_libraries(HastyPyTest PUBLIC HastyComputeLib)
+	target_link_libraries(HastyPyTest PUBLIC HastyPyInterface)
+	target_include_directories(HastyPyTest PRIVATE ${MATPLOTLIB_CPP_INCLUDE_DIRS})
+	set_target_properties(HastyPyTest PROPERTIES LINKER_LANGUAGE CXX)
+endif()
 
 
 
-#find_package(glfw3 REQUIRED)
-find_package(Vulkan REQUIRED)
-find_package(imgui CONFIG REQUIRED)
-find_package(implot CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
-find_package(ktx CONFIG REQUIRED)
-find_package(unofficial-skia CONFIG REQUIRED)
-add_executable(HastyViz 
-	"viz/viz.cpp" 
-	"viz/skia.cpp"
+set(HASTY_BUILD_VIZ ON)
+if (${HASTY_BUILD_VIZ})
+	find_package(glfw3 REQUIRED)
+	find_package(Vulkan REQUIRED)
+	find_package(imgui CONFIG REQUIRED)
+	find_package(implot CONFIG REQUIRED)
+	find_package(glm CONFIG REQUIRED)
+	find_package(ktx CONFIG REQUIRED)
+	find_package(unofficial-skia CONFIG REQUIRED)
+	add_executable(HastyViz 
+		"viz/viz.cpp" 
+		"viz/skia.cpp"
+		"viz/vizapp.cpp" 
+		"viz/orthoslicer.cpp"
 
-	"viz/vizapp.cpp" 
-	
-	
-	"viz/orthoslicer.cpp"
+		"viz/base/VulkanDevice.cpp"
+		"viz/base/VulkanBuffer.cpp"
+		"viz/base/VulkanTools.cpp"
+	)
+	target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
+	target_link_libraries(HastyViz PUBLIC imgui::imgui)
+	target_link_libraries(HastyViz PUBLIC implot::implot)
+	target_link_libraries(HastyViz PUBLIC glm::glm)
+	target_link_libraries(HastyViz PUBLIC KTX::ktx)
+	target_link_libraries(HastyViz PUBLIC unofficial::skia::skia)
+	target_link_libraries(HastyViz PUBLIC HastyComputeLib)
+	target_link_libraries(HastyViz PUBLIC glfw)
 
-	"viz/base/VulkanDevice.cpp"
-	"viz/base/VulkanBuffer.cpp"
-	"viz/base/VulkanTools.cpp"
-)
-target_link_libraries(HastyViz PUBLIC vk-bootstrap::vk-bootstrap)
-target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
-target_link_libraries(HastyViz PUBLIC imgui::imgui)
-target_link_libraries(HastyViz PUBLIC implot::implot)
-target_link_libraries(HastyViz PUBLIC glm::glm)
-target_link_libraries(HastyViz PUBLIC KTX::ktx)
-target_link_libraries(HastyViz PUBLIC unofficial::skia::skia)
-target_link_libraries(HastyViz PUBLIC HastyComputeLib)
+	target_include_directories(HastyViz PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+	add_custom_command(
+		TARGET HastyViz
+		POST_BUILD
+		COMMAND
+			${CMAKE_COMMAND} -E copy_directory
+			${CMAKE_SOURCE_DIR}/viz/shaders ${CMAKE_CURRENT_BINARY_DIR}
+		DEPENDS ${CMAKE_CURRENT_BINARY_DIR})
 
-target_include_directories(HastyViz PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-add_custom_command(
-    TARGET HastyViz
-    POST_BUILD
-    COMMAND
-        ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/viz/shaders ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR})
+	configure_file (
+		"${PROJECT_SOURCE_DIR}/viz/shaders_path_config.h.in"
+		"${CMAKE_CURRENT_BINARY_DIR}/shaders_path_config.h"
+	)
 
-configure_file (
-    "${PROJECT_SOURCE_DIR}/viz/shaders_path_config.h.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/shaders_path_config.h"
-)
-
-
+endif()
 
 #target_link_libraries(HastyViz PUBLIC glfw)
 

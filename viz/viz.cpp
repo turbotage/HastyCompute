@@ -448,9 +448,7 @@ int main(int, char**)
     ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 
 
-    at::Tensor tensor = at::rand({ 20, 128, 128, 128 }, at::ScalarType::Float);
-
-    /*
+    
     std::shared_ptr<hasty::viz::SkiaContext> pskctx = std::make_shared<hasty::viz::SkiaContext>(
         g_Instance,
         g_PhysicalDevice,
@@ -460,9 +458,11 @@ int main(int, char**)
         nullptr, nullptr,
         VK_MAKE_VERSION(1, 1, 0)
     );
-    */
 
-    hasty::viz::Orthoslicer orthoslice(tensor);
+    hasty::viz::VizApp vizapp(std::move(pskctx));
+
+
+    //hasty::viz::Orthoslicer orthoslice(tensor);
 
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
@@ -546,7 +546,7 @@ int main(int, char**)
 
         
         //hasty::viz::Application::Render(io);
-        orthoslice.Render();
+        vizapp.Render();
 
 
         // Rendering
