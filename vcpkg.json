@@ -24,6 +24,10 @@
       ]
     },
     {
+      "name": "implot",
+      "version>=": "0.16"
+    },
+    {
       "name": "skia",
       "version>=": "0.38.2",
       "features": [

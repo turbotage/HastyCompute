@@ -251,12 +251,17 @@ FetchContent_MakeAvailable(fetch_vk_bootstrap)
 #find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(implot CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(ktx CONFIG REQUIRED)
 find_package(unofficial-skia CONFIG REQUIRED)
 add_executable(HastyViz 
 	"viz/viz.cpp" 
+	"viz/skia.cpp"
+
 	"viz/vizapp.cpp" 
+	
+	
 	"viz/orthoslicer.cpp"
 
 	"viz/base/VulkanDevice.cpp"
@@ -266,9 +271,11 @@ add_executable(HastyViz
 target_link_libraries(HastyViz PUBLIC vk-bootstrap::vk-bootstrap)
 target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
 target_link_libraries(HastyViz PUBLIC imgui::imgui)
+target_link_libraries(HastyViz PUBLIC implot::implot)
 target_link_libraries(HastyViz PUBLIC glm::glm)
 target_link_libraries(HastyViz PUBLIC KTX::ktx)
 target_link_libraries(HastyViz PUBLIC unofficial::skia::skia)
+target_link_libraries(HastyViz PUBLIC HastyComputeLib)
 
 target_include_directories(HastyViz PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 add_custom_command(

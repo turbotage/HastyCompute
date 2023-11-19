@@ -417,6 +417,8 @@ int main(int, char**)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
+
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
@@ -445,7 +447,11 @@ int main(int, char**)
     init_info.CheckVkResultFn = check_vk_result;
     ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 
-    hasty::viz::SkiaContext skctx(
+
+    at::Tensor tensor = at::rand({ 20, 128, 128, 128 }, at::ScalarType::Float);
+
+    /*
+    std::shared_ptr<hasty::viz::SkiaContext> pskctx = std::make_shared<hasty::viz::SkiaContext>(
         g_Instance,
         g_PhysicalDevice,
         g_Device,
@@ -454,9 +460,9 @@ int main(int, char**)
         nullptr, nullptr,
         VK_MAKE_VERSION(1, 1, 0)
     );
+    */
 
-
-    hasty::viz::SkiaOrthoslicer orthoslice(skctx);
+    hasty::viz::Orthoslicer orthoslice(tensor);
 
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
@@ -540,7 +546,8 @@ int main(int, char**)
 
         
         //hasty::viz::Application::Render(io);
-        
+        orthoslice.Render();
+
 
         // Rendering
         ImGui::Render();
@@ -567,6 +574,8 @@ int main(int, char**)
     check_vk_result(err);
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     CleanupVulkanWindow();

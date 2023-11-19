@@ -2,73 +2,196 @@
 
 #include "base/VulkanBase.hpp"
 
-#include <skia/gpu/vk/VulkanBackendContext.h>
-#include <skia/gpu/vk/VulkanExtensions.h>
-#include <skia/gpu/vk/GrVkBackendContext.h>
+#include <torch/torch.h>
 
-#include <skia/gpu/GrDirectContext.h>
+#include <imgui.h>
+#include <implot.h>
 
-
-#include <skia/core/SkImage.h>
-#include <skia/core/SkSurface.h>
-#include <skia/core/SkCanvas.h>
-#include <skia/core/SkBitmap.h>
-#include <skia/core/SkRect.h>
-#include <skia/core/SkPaint.h>
-#include <skia/core/SkColor.h>
-
-#include <skia/gpu/ganesh/SkSurfaceGanesh.h>
-#include <skia/gpu/ganesh/SkImageGanesh.h>
+#include "skia.hpp"
 
 namespace hasty {
 	namespace viz {
 
-		class SkiaContext {
+		enum SliceView : int {
+			eAxial,
+			eSagital,
+			eCoronal
+		};
+
+		struct Slicer {
+
+			Slicer(SliceView view, at::Tensor& tensor)
+				: view(view), tensor(tensor)
+			{
+				uint64_t ndim = tensor.ndimension();
+				uint64_t xlen = tensor.size(ndim - 3);
+				uint64_t ylen = tensor.size(ndim - 2);
+				uint64_t zlen = tensor.size(ndim - 1);
+
+				switch (view) {
+				case eAxial:
+					width = xlen;
+					height = ylen;
+					break;
+				case eSagital:
+					width = xlen;
+					height = zlen;
+					break;
+				case eCoronal:
+					width = ylen;
+					height = zlen;
+					break;
+				default:
+					throw std::runtime_error("View can only be eAxial, eSagital or eCoronal");
+				}
+
+			}
+
+			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint)
+			{
+				using namespace torch::indexing;
+				std::vector<TensorIndex> indices;
+				indices.reserve(startslice.size() + 3);
+				for (auto s : startslice) {
+					indices.push_back(s);
+				}
+
+				switch (view) {
+				case eAxial:
+				{
+					indices.push_back(Slice()); indices.push_back(Slice()); indices.push_back(zpoint);
+				}
+				break;
+				case eSagital:
+				{
+					indices.push_back(Slice()); indices.push_back(ypoint); indices.push_back(Slice());
+				}
+				break;
+				case eCoronal:
+				{
+					indices.push_back(xpoint); indices.push_back(Slice()); indices.push_back(Slice());
+				}
+				break;
+				default:
+					throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
+				}
+
+				return tensor.index(at::makeArrayRef(indices)).contiguous();
+			}
+
+			SliceView view;
+
+			uint32_t width;
+			uint32_t height;
+
+			at::Tensor& tensor;
+
+		};
+
+		class Orthoslicer {
 		public:
 
-			SkiaContext(
-				VkInstance instance, 
-				VkPhysicalDevice physicalDevice, 
-				VkDevice device,
-				VkQueue graphicsQueue, 
-				uint32_t graphicsQueueIndex, 
-				VkPhysicalDeviceFeatures* pFeatures,
-				VkPhysicalDeviceFeatures2* pFeatures2,
-				uint32_t apiVersion);
-
-			operator GrDirectContext*() const
+			Orthoslicer(at::Tensor tensor)
+				: _tensor(tensor),
+				_axialSlicer(SliceView::eAxial, _tensor),
+				_sagitalSlicer(SliceView::eSagital, _tensor),
+				_coronalSlicer(SliceView::eCoronal, _tensor)
 			{
-				return _directContext.get();
-			};
+
+				
+			}
+
+			void Render() {
+				
+				_slice = _axialSlicer.GetTensorSlice({ 0 }, 40, 40, 40);
+				
+				//std::cout << _slice.sizes() << _slice.dtype() << std::endl;
+
+				static ImPlotHeatmapFlags hm_flags = 0;
+				static float scale_min = 0.0f;
+				static float scale_max = 1.0f;
+
+				ImGui::SetNextItemWidth(225);
+				ImGui::DragFloatRange2("Min / Max", &scale_min, &scale_max, 0.01f, -20, 20);
+
+				static ImPlotColormap map = ImPlotColormap_Viridis;
+
+				ImPlot::PushColormap(map);
+
+				
+
+				static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
+				if (ImPlot::BeginPlot("##Heatmap1", ImVec2(500, 500), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+					ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
+					//ImPlot::SetupAxisTicks(ImAxis_X1, 0 + 1.0 / 14.0, 1 - 1.0 / 14.0, 7, nullptr);
+					//ImPlot::SetupAxisTicks(ImAxis_Y1, 1 - 1.0 / 14.0, 0 + 1.0 / 14.0, 7, nullptr);
+					ImPlot::PlotHeatmap("heat", (const float*)_slice.const_data_ptr(), _slice.size(0), _slice.size(1), scale_min, scale_max, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1, 1), hm_flags);
+					ImPlot::EndPlot();
+				}
+				ImGui::SameLine();
+				ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(60, 225));
+
+				ImGui::SameLine();
+
+				ImPlot::PopColormap();
+			}
 
 		private:
-			GrVkBackendContext _grVkBackendContext;
-			skgpu::VulkanBackendContext _vulkanBackendContext;
-			sk_sp<GrDirectContext> _directContext;
+			at::Tensor _slice;
+
+			at::Tensor _tensor;
+			Slicer _axialSlicer;
+			Slicer _sagitalSlicer;
+			Slicer _coronalSlicer;
+		};
+
+
+
+
+		struct SkiaSlicer : public Slicer {
+
+			SkiaSlicer(SkiaContext& skiaCtx, SliceView view, at::Tensor& tensor)
+				: skiaCtx(skiaCtx), Slicer(view, tensor)
+			{
+				imageInfo = SkImageInfo::Make(width, height, SkColorType::kRGBA_8888_SkColorType, SkAlphaType::kUnpremul_SkAlphaType);
+				rgbaBuffer.resize(width * height * 4);
+			}
+
+			sk_sp<SkImage> GetSlice(const std::vector<int64_t>& startslice,
+				int64_t xpoint, int64_t ypoint, int64_t zpoint,
+				std::function<void(const at::Tensor&, std::vector<char>&)> colormap)
+			{
+				auto slice = GetTensorSlice(startslice, xpoint, ypoint, zpoint);
+				colormap(slice, rgbaBuffer);
+				auto skia_tensordata = SkData::MakeWithoutCopy(rgbaBuffer.data(), rgbaBuffer.size());
+				return SkImages::RasterFromData(imageInfo, skia_tensordata, width);
+			}
+
+			SkiaContext& skiaCtx;
+			SkImageInfo imageInfo;
+			sk_sp<SkSurface> slicerSurface;
+			std::vector<char> rgbaBuffer;
 		};
 
 		class SkiaOrthoslicer {
 		public:
 
-			SkiaOrthoslicer(SkiaContext& skiaCtx, uint32_t xlen, uint32_t ylen) {
-				
-				SkImageInfo imageInfo = SkImageInfo::Make(16, 16, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-				sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(skiaCtx, skgpu::Budgeted::kYes, imageInfo);
-
-
-				sk_sp<SkData> skData = SkData::MakeWithCopy(tensorpointer, datalength);
-				
-				//SkImages::
+			SkiaOrthoslicer(std::shared_ptr<SkiaContext> pSkiaCtx, at::Tensor tensor)
+				: _tensor(tensor), _pSkiaCtx(pSkiaCtx),
+				_axialSlicer(*pSkiaCtx, SliceView::eAxial, _tensor),
+				_sagitalSlicer(*pSkiaCtx, SliceView::eSagital, _tensor),
+				_coronalSlicer(*pSkiaCtx, SliceView::eCoronal, _tensor)
+			{
 
 			}
 
+		private:
+			at::Tensor _tensor;
+			std::shared_ptr<SkiaContext> _pSkiaCtx;
+			SkiaSlicer _axialSlicer;
+			SkiaSlicer _sagitalSlicer;
+			SkiaSlicer _coronalSlicer;
 		};
-
-
-
-
-
-
 
 
 
