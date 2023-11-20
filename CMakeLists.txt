@@ -168,6 +168,9 @@ endif()
 find_package(SymEngine CONFIG REQUIRED)
 target_link_libraries(HastyComputeLib PUBLIC symengine)
 
+find_package(HighFive CONFIG REQUIRED)
+target_link_libraries(HastyComputeLib PUBLIC HighFive)
+
 
 #target_compile_features(HastyComputeLib PUBLIC cxx_std_23)
 #set_property(TARGET HastyComputeLib PROPERTY CXX_STANDARD 23)

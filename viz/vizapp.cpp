@@ -1,11 +1,50 @@
 #include "vizapp.hpp"
 
 import thread_pool;
+import hasty_util;
+
+#include <highfive/H5Easy.hpp>
+
+namespace {
+	at::Tensor import_tensor() {
+		at::InferenceMode imode;
+		
+		
+		H5Easy::File file("D:\\4DRecon\\dat\\dat2\\my_framed_20f.h5", H5Easy::File::ReadOnly);
+
+		HighFive::DataSet dataset = file.getDataSet("images");
+
+		HighFive::DataType dtype = dataset.getDataType();
+		std::string dtype_str = dtype.string();
+		size_t dtype_size = dtype.getSize();
+		std::vector<int64_t> dims = hasty::util::vector_cast<int64_t>(dataset.getDimensions());
+		size_t nelem = dataset.getElementCount();
+
+		std::vector<std::byte> tensorbytes(dataset.getStorageSize());
+
+		at::ScalarType scalar_type;
+		if (dtype_str == "Float32")
+			scalar_type = at::ScalarType::Float;
+		if (dtype_str == "Float64")
+			scalar_type = at::ScalarType::Double;
+		else
+			throw std::runtime_error("Unsupported type");
+
+		at::Tensor blobtensor = at::from_blob(tensorbytes.data(), at::makeArrayRef(dims), scalar_type);
+
+		blobtensor =  blobtensor.detach().clone().to(at::ScalarType::Float).permute({ 3,4,0,1,2 }).detach().clone();
+
+		blobtensor /= blobtensor.abs().max();
+
+		return blobtensor;
+	}
+}
+
 
 hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
-	_tensor = at::rand({ 20, 128, 128, 128 }, at::ScalarType::Float);
+	_tensor = import_tensor();
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
 	_tpool = std::make_unique<ThreadPool>(2);
 }

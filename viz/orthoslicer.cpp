@@ -112,10 +112,10 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 {
 	auto beg = std::chrono::high_resolution_clock::now();
 	if (renderInfo.doubleBuffer) {
-		slice0 = slicer.GetTensorSlice({ 0 }, 40, 40, 40).contiguous();
+		slice0 = slicer.GetTensorSlice({ 0, 0 }, 40, 40, 40).contiguous();
 	}
 	else {
-		slice1 = slicer.GetTensorSlice({ 0 }, 40, 40, 40).contiguous();
+		slice1 = slicer.GetTensorSlice({ 0, 0 }, 40, 40, 40).contiguous();
 	}
 	auto end1 = std::chrono::high_resolution_clock::now();
 	auto duration = duration_cast<std::chrono::milliseconds>(end1 - beg);
@@ -129,18 +129,21 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 		uint32_t tensor_width = slice.size(0); uint32_t tensor_height = slice.size(1);
 		float hw_tensor_ratio = tensor_height / tensor_width;
 
-		float window_width = windowsize.x * 0.9f;
+		float window_width = windowsize.x * 0.95f;
 		float window_height = window_width * hw_tensor_ratio;
 
 		static ImPlotHeatmapFlags hm_flags = 0;
 
 		ImGui::SetNextItemWidth(window_width);
-		ImGui::DragFloatRange2("Min Multiplier / Max Multiplier", &scale_min_mult, &scale_max_mult, 0.01f, -40, 40);
+		ImGui::DragFloatRange2("Min Multiplier / Max Multiplier", &scale_min_mult, &scale_max_mult, 0.01f, -10.0f, 10.0f);
 
 		ImPlot::PushColormap(renderInfo.map);
 
 		float minscale = renderInfo.min_scale * scale_min_mult;
 		float maxscale = renderInfo.max_scale * scale_max_mult;
+		if (minscale > maxscale)
+			minscale = maxscale - 0.1f;
+		
 
 		static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
 		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
@@ -153,7 +156,7 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 			ImPlot::EndPlot();
 		}
 		ImGui::SameLine();
-		ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(0.08 * windowsize.x, window_height));
+		ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(0.05 * windowsize.x, window_height));
 
 		ImGui::SameLine();
 
@@ -173,6 +176,9 @@ hasty::viz::Orthoslicer::Orthoslicer(at::Tensor tensor)
 	_sagitalSlicerRenderer(_sagitalSlicer),
 	_coronalSlicerRenderer(_coronalSlicer)
 {
+
+	_renderInfo.min_scale = -1.0f;
+	_renderInfo.max_scale = 1.0f;
 
 }
 
