@@ -1,10 +1,6 @@
 // Dear ImGui: standalone example application for Glfw + Vulkan
-
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
+// If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
+// Read online: https://github.com/ocornut/imgui/tree/master/docs
 
 // Important note to the reader who wish to integrate imgui_impl_vulkan.cpp/.h in their own engine/app.
 // - Common ImGui_ImplVulkan_XXX functions and structures are used to interface with imgui_impl_vulkan.cpp/.h.
@@ -16,9 +12,11 @@
 #include "vizapp.hpp"
 #include "orthoslicer.hpp"
 
+
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
 #define GLFW_INCLUDE_NONE
@@ -40,7 +38,7 @@
 #endif
 
 // Data
-static VkAllocationCallbacks* g_Allocator = nullptr;
+static VkAllocationCallbacks*   g_Allocator = nullptr;
 static VkInstance               g_Instance = VK_NULL_HANDLE;
 static VkPhysicalDevice         g_PhysicalDevice = VK_NULL_HANDLE;
 static VkDevice                 g_Device = VK_NULL_HANDLE;
@@ -449,7 +447,9 @@ int main(int, char**)
 	init_info.CheckVkResultFn = check_vk_result;
 	ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 
-	std::unique_ptr<hasty::viz::SkiaContext> pskiactx = std::make_unique<hasty::viz::SkiaContext>(
+
+	/*
+	std::shared_ptr<hasty::viz::SkiaContext> pskctx = std::make_shared<hasty::viz::SkiaContext>(
 		g_Instance,
 		g_PhysicalDevice,
 		g_Device,
@@ -458,8 +458,12 @@ int main(int, char**)
 		nullptr, nullptr,
 		VK_MAKE_VERSION(1, 1, 0)
 	);
+	*/
 
-	hasty::viz::VizApp vizapp(*pskiactx);
+	hasty::viz::VizApp vizapp(nullptr);
+
+
+	//hasty::viz::Orthoslicer orthoslice(tensor);
 
 	// Load Fonts
 	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
@@ -476,6 +480,36 @@ int main(int, char**)
 	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
 	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
 	//IM_ASSERT(font != nullptr);
+
+	// Upload Fonts
+	{
+		// Use any command queue
+		VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
+		VkCommandBuffer command_buffer = wd->Frames[wd->FrameIndex].CommandBuffer;
+
+		err = vkResetCommandPool(g_Device, command_pool, 0);
+		check_vk_result(err);
+		VkCommandBufferBeginInfo begin_info = {};
+		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		err = vkBeginCommandBuffer(command_buffer, &begin_info);
+		check_vk_result(err);
+
+		ImGui_ImplVulkan_CreateFontsTexture(command_buffer);
+
+		VkSubmitInfo end_info = {};
+		end_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		end_info.commandBufferCount = 1;
+		end_info.pCommandBuffers = &command_buffer;
+		err = vkEndCommandBuffer(command_buffer);
+		check_vk_result(err);
+		err = vkQueueSubmit(g_Queue, 1, &end_info, VK_NULL_HANDLE);
+		check_vk_result(err);
+
+		err = vkDeviceWaitIdle(g_Device);
+		check_vk_result(err);
+		ImGui_ImplVulkan_DestroyFontUploadObjects();
+	}
 
 	// Our state
 	bool show_demo_window = true;
@@ -511,7 +545,8 @@ int main(int, char**)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		// Personal Rendering
+		
+		//hasty::viz::Application::Render(io);
 		vizapp.Render();
 
 
@@ -534,10 +569,6 @@ int main(int, char**)
 			FramePresent(wd);
 		}
 	}
-
-
-	// Release SkiaCtx
-	pskiactx.reset();
 
 	// Cleanup
 	err = vkDeviceWaitIdle(g_Device);

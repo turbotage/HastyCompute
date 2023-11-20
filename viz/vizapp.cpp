@@ -2,8 +2,8 @@
 
 
 
-hasty::viz::VizApp::VizApp(std::shared_ptr<SkiaContext> skiactx)
-	: _skiactx(std::move(skiactx))
+hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
+	: _skiactx(skiactx)
 {
 	_tensor = at::rand({ 20, 128, 128, 128 }, at::ScalarType::Float);
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
@@ -12,9 +12,15 @@ hasty::viz::VizApp::VizApp(std::shared_ptr<SkiaContext> skiactx)
 void hasty::viz::VizApp::Render()
 {
 	ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+	
+	Orthoslicer::RenderInfo renderInfo;
+	renderInfo.doubleBuffer = doubleBuffer;
 
-	_oslicer->Render();
+	_oslicer->Render(renderInfo);
 
+
+	doubleBuffer = !doubleBuffer;
 }
 
 

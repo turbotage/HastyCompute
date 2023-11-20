@@ -40,8 +40,8 @@ namespace hasty {
 			};
 
 		private:
-			GrVkBackendContext _grVkBackendContext;
 			skgpu::VulkanBackendContext _vulkanBackendContext;
+			GrVkBackendContext _grVkBackendContext;
 			sk_sp<GrDirectContext> _directContext;
 		};
 

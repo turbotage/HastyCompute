@@ -1,6 +1,5 @@
 #pragma once
 
-#include <imgui.h>
 #include <torch/torch.h>
 
 #include "skia.hpp"
@@ -12,14 +11,17 @@ namespace viz {
 	class VizApp {
 	public:
 
-		VizApp(std::shared_ptr<SkiaContext> skiactx);
+		VizApp(SkiaContext& skiactx);
 		
 		void Render();
 
 	private:
-		std::shared_ptr<SkiaContext> _skiactx;
+		SkiaContext& _skiactx;
 		at::Tensor _tensor;
 		std::unique_ptr<Orthoslicer> _oslicer;
+
+
+		bool doubleBuffer = false;
 	};
 
 

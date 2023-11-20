@@ -29,7 +29,6 @@ hasty::viz::SkiaContext::SkiaContext(
 
 	_vulkanBackendContext.fProtectedContext = skgpu::Protected::kNo;
 
-
 	_grVkBackendContext.fInstance = _vulkanBackendContext.fInstance;
 	_grVkBackendContext.fPhysicalDevice = _vulkanBackendContext.fPhysicalDevice;
 	_grVkBackendContext.fDevice = _vulkanBackendContext.fDevice;
@@ -42,14 +41,12 @@ hasty::viz::SkiaContext::SkiaContext(
 	_grVkBackendContext.fMemoryAllocator = _vulkanBackendContext.fMemoryAllocator;
 	_grVkBackendContext.fGetProc = _vulkanBackendContext.fGetProc;
 	_grVkBackendContext.fProtectedContext = _vulkanBackendContext.fProtectedContext;
+	_grVkBackendContext.fOwnsInstanceAndDevice = false;
 
 	_directContext = GrDirectContext::MakeVulkan(_grVkBackendContext);
 	if (!_directContext) {
 		throw std::runtime_error("Failed to create direct context");
 	}
-
-	GrVkImageInfo imageInfo;
-
 }
 
 

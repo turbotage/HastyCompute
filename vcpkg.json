@@ -17,6 +17,7 @@
     },
     {
       "name": "imgui",
+      "version>=": "1.90",
       "features": [
         "glfw-binding",
         "vulkan-binding",
