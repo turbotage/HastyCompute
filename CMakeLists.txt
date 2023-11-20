@@ -259,13 +259,13 @@ if (${HASTY_BUILD_VIZ})
 		"viz/base/VulkanBuffer.cpp"
 		"viz/base/VulkanTools.cpp"
 	)
+	target_link_libraries(HastyViz PUBLIC HastyComputeLib)
 	target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
 	target_link_libraries(HastyViz PUBLIC imgui::imgui)
 	target_link_libraries(HastyViz PUBLIC implot::implot)
 	target_link_libraries(HastyViz PUBLIC glm::glm)
 	target_link_libraries(HastyViz PUBLIC KTX::ktx)
 	target_link_libraries(HastyViz PUBLIC unofficial::skia::skia)
-	target_link_libraries(HastyViz PUBLIC HastyComputeLib)
 	target_link_libraries(HastyViz PUBLIC glfw)
 
 	target_include_directories(HastyViz PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

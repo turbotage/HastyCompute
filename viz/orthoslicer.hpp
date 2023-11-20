@@ -12,6 +12,9 @@
 #include "skia.hpp"
 
 namespace hasty {
+
+	class ThreadPool;
+
 	namespace viz {
 
 		enum SliceView : int {
@@ -22,37 +25,9 @@ namespace hasty {
 
 		struct Slicer {
 
-			Slicer(SliceView view, at::Tensor& tensor)
-				: view(view), tensor(tensor)
-			{
+			Slicer(SliceView view, at::Tensor& tensor);
 
-			}
-
-			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint)
-			{
-				using namespace torch::indexing;
-				std::vector<TensorIndex> indices;
-				indices.reserve(startslice.size() + 3);
-				for (auto s : startslice) {
-					indices.push_back(s);
-				}
-
-				switch (view) {
-				case eAxial:
-					indices.push_back(Slice()); indices.push_back(Slice()); indices.push_back(zpoint);
-				break;
-				case eSagital:
-					indices.push_back(Slice()); indices.push_back(ypoint); indices.push_back(Slice());
-				break;
-				case eCoronal:
-					indices.push_back(xpoint); indices.push_back(Slice()); indices.push_back(Slice());
-				break;
-				default:
-					throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
-				}
-
-				return tensor.index(at::makeArrayRef(indices));
-			}
+			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint);
 
 			SliceView view;
 
@@ -60,154 +35,42 @@ namespace hasty {
 
 		};
 
-		struct SliceRenderInfo {
-
-			std::vector<int64_t> preslices;
-
-			float xpoint;
-			float ypoint;
-			float zpoint;
-
-			float newxpoint;
-			float newypoint;
-			float newzpoint;
-
-			float min_scale = 0.0;
-			float max_scale = 1.0;
-			ImPlotColormap map = ImPlotColormap_Viridis;
-
-			bool plot_cursor_lines = true;
-
-			bool doubleBuffer;
-		};
-
 		struct SlicerRenderer {
 
-			SlicerRenderer(Slicer& slicer)
-				: slicer(slicer)
-			{
-				switch (slicer.view) {
-				case SliceView::eAxial:
-					slicername = "Axial Slicer";
-					plotname = "##Axial Plot";
-					heatname = "##Axial Heat";
-					break;
-				case SliceView::eSagital:
-					slicername = "Sagital Slicer";
-					plotname = "##Sagital Plot";
-					heatname = "##Sagital Heat";
-					break;
-				case SliceView::eCoronal:
-					slicername = "Coronal Slicer";
-					plotname = "##Coronal Plot";
-					heatname = "##Coronal Heat";
-					break;
-				default:
-					throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
-				}
-			}
+			struct RenderInfo {
 
-			void HandleAxialCursor(SliceRenderInfo& renderInfo)
-			{
-				if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-					ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-					//std::cout << "Hovered  " << "x: " << mousepos.x << " y: " << mousepos.y << std::endl;
+				std::vector<int64_t> preslices;
 
-					printf("Hovered");
+				float xpoint;
+				float ypoint;
+				float zpoint;
 
-					renderInfo.newxpoint = mousepos.x;
-					renderInfo.newypoint = mousepos.y;
-				}
+				float newxpoint;
+				float newypoint;
+				float newzpoint;
 
-			}
+				float min_scale = 0.0;
+				float max_scale = 1.0;
+				ImPlotColormap map = ImPlotColormap_Viridis;
 
-			void HandleSagitalCursor(SliceRenderInfo& renderInfo)
-			{
-				if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-					ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-					renderInfo.newxpoint = mousepos.x;
-					renderInfo.newzpoint = mousepos.y;
-				}
-			}
+				bool plot_cursor_lines = true;
 
-			void HandleCoronalCursor(SliceRenderInfo& renderInfo)
-			{
-				if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-					ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-					renderInfo.newypoint = mousepos.x;
-					renderInfo.newzpoint = mousepos.y;
-				}
+				bool doubleBuffer;
 
-			}
+				ThreadPool* tpool;
+			};
 
-			void HandleCursor(SliceRenderInfo& renderInfo)
-			{
-				switch (slicer.view) {
-				case eAxial:
-					HandleAxialCursor(renderInfo);
-					break;
-				case eSagital:
-					HandleSagitalCursor(renderInfo);
-					break;
-				case eCoronal:
-					HandleCoronalCursor(renderInfo);
-					break;
-				default:
-					throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
-				}
-			}
+			SlicerRenderer(Slicer& slicer);
 
-			void Render(SliceRenderInfo& renderInfo) {
+			void HandleAxialCursor(RenderInfo& renderInfo);
 
-				if (renderInfo.doubleBuffer) {
-					slice0 = slicer.GetTensorSlice({ 0 }, 40, 40, 40).contiguous();;
-				}
-				else {
-					slice1 = slicer.GetTensorSlice({ 0 }, 40, 40, 40).contiguous();;
-				}
+			void HandleSagitalCursor(RenderInfo& renderInfo);
 
-				at::Tensor& slice = renderInfo.doubleBuffer ? slice0 : slice1;
-				
-				if (ImGui::Begin(slicername.c_str())) {
+			void HandleCoronalCursor(RenderInfo& renderInfo);
 
-					auto windowsize = ImGui::GetWindowSize();
-					uint32_t tensor_width = slice.size(0); uint32_t tensor_height = slice.size(1);
-					float hw_tensor_ratio = tensor_height / tensor_width;
+			void HandleCursor(RenderInfo& renderInfo);
 
-					float window_width = windowsize.x * 0.9f;
-					float window_height = window_width * hw_tensor_ratio;
-					
-					static ImPlotHeatmapFlags hm_flags = 0;
-
-					ImGui::SetNextItemWidth(window_width);
-					ImGui::DragFloatRange2("Min Multiplier / Max Multiplier", &scale_min_mult, &scale_max_mult, 0.01f, -40, 40);
-
-					ImPlot::PushColormap(renderInfo.map);
-
-					float minscale = renderInfo.min_scale * scale_min_mult;
-					float maxscale = renderInfo.max_scale * scale_max_mult;
-
-					static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
-					if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
-						ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
-						ImPlot::PlotHeatmap(heatname.c_str(), (const float*)slice.const_data_ptr(), slice.size(0), slice.size(1),
-							minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(slice.size(0), slice.size(1)), hm_flags);
-					
-						HandleCursor(renderInfo);
-
-						ImPlot::EndPlot();
-					}
-					ImGui::SameLine();
-					ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(0.08 * windowsize.x, window_height));
-
-					ImGui::SameLine();
-
-					ImPlot::PopColormap();
-				}
-
-
-				ImGui::End();
-			}
+			void Render(RenderInfo& renderInfo);
 
 			Slicer& slicer;
 			at::Tensor slice0;
@@ -225,54 +88,13 @@ namespace hasty {
 		public:
 
 			struct RenderInfo {
+				ThreadPool* tpool;
 				bool doubleBuffer;
 			};
 
-			Orthoslicer(at::Tensor tensor)
-				: _tensor(tensor),
-				_axialSlicer(SliceView::eAxial, _tensor),
-				_sagitalSlicer(SliceView::eSagital, _tensor),
-				_coronalSlicer(SliceView::eCoronal, _tensor),
-				_axialSlicerRenderer(_axialSlicer),
-				_sagitalSlicerRenderer(_sagitalSlicer),
-				_coronalSlicerRenderer(_coronalSlicer)
-			{
+			Orthoslicer(at::Tensor tensor);
 
-			}
-
-			void Render(const RenderInfo& rinfo) {
-				
-				_renderInfo.doubleBuffer = rinfo.doubleBuffer;
-
-				ImGuiWindowClass slicer_class;
-				slicer_class.ClassId = ImGui::GetID("SlicerWindowClass");
-				slicer_class.DockingAllowUnclassed = false;
-
-
-				static ImGuiID dockid = ImGui::GetID("Orthoslicer Dockspace");
-
-				if (ImGui::Begin("Orthoslicer")) {
-
-					//ImGui::BeginChild("SlicerAnchor");
-
-					ImGui::DockSpace(dockid, ImVec2(0.0f, 0.0f), 0, &slicer_class);
-
-					ImGui::SetNextWindowClass(&slicer_class);
-					_axialSlicerRenderer.Render(_renderInfo);
-					ImGui::SetNextWindowClass(&slicer_class);
-					_sagitalSlicerRenderer.Render(_renderInfo);
-					ImGui::SetNextWindowClass(&slicer_class);
-					_coronalSlicerRenderer.Render(_renderInfo);
-
-					//ImGui::EndChild();
-				}
-
-				ImGui::End();
-
-				_renderInfo.xpoint = _renderInfo.newxpoint;
-				_renderInfo.ypoint = _renderInfo.newypoint;
-				_renderInfo.zpoint = _renderInfo.newzpoint;
-			}
+			void Render(const RenderInfo& rinfo);
 
 		private:
 			at::Tensor _slice;
@@ -286,60 +108,8 @@ namespace hasty {
 			SlicerRenderer _sagitalSlicerRenderer;
 			SlicerRenderer _coronalSlicerRenderer;
 
-			SliceRenderInfo _renderInfo;
+			SlicerRenderer::RenderInfo _renderInfo;
 		};
-
-
-
-		/*
-		struct SkiaSlicer : public Slicer {
-
-			SkiaSlicer(SkiaContext& skiaCtx, SliceView view, at::Tensor& tensor)
-				: skiaCtx(skiaCtx), Slicer(view, tensor)
-			{
-				imageInfo = SkImageInfo::Make(width, height, SkColorType::kRGBA_8888_SkColorType, SkAlphaType::kUnpremul_SkAlphaType);
-				rgbaBuffer.resize(width * height * 4);
-			}
-
-			sk_sp<SkImage> GetSlice(const std::vector<int64_t>& startslice,
-				int64_t xpoint, int64_t ypoint, int64_t zpoint,
-				std::function<void(const at::Tensor&, std::vector<char>&)> colormap)
-			{
-				auto slice = GetTensorSlice(startslice, xpoint, ypoint, zpoint);
-				colormap(slice, rgbaBuffer);
-				auto skia_tensordata = SkData::MakeWithoutCopy(rgbaBuffer.data(), rgbaBuffer.size());
-				return SkImages::RasterFromData(imageInfo, skia_tensordata, width);
-			}
-
-			SkiaContext& skiaCtx;
-			SkImageInfo imageInfo;
-			sk_sp<SkSurface> slicerSurface;
-			std::vector<char> rgbaBuffer;
-		};
-		*/
-
-		/*
-		class SkiaOrthoslicer {
-		public:
-
-			SkiaOrthoslicer(std::shared_ptr<SkiaContext> pSkiaCtx, at::Tensor tensor)
-				: _tensor(tensor), _pSkiaCtx(pSkiaCtx),
-				_axialSlicer(*pSkiaCtx, SliceView::eAxial, _tensor),
-				_sagitalSlicer(*pSkiaCtx, SliceView::eSagital, _tensor),
-				_coronalSlicer(*pSkiaCtx, SliceView::eCoronal, _tensor)
-			{
-
-			}
-
-		private:
-			at::Tensor _tensor;
-			std::shared_ptr<SkiaContext> _pSkiaCtx;
-			SkiaSlicer _axialSlicer;
-			SkiaSlicer _sagitalSlicer;
-			SkiaSlicer _coronalSlicer;
-		};
-		*/
-
 
 
 

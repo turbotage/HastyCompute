@@ -1,12 +1,13 @@
 #include "vizapp.hpp"
 
-
+import thread_pool;
 
 hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
 	_tensor = at::rand({ 20, 128, 128, 128 }, at::ScalarType::Float);
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
+	_tpool = std::make_unique<ThreadPool>(2);
 }
 
 void hasty::viz::VizApp::Render()
@@ -15,6 +16,7 @@ void hasty::viz::VizApp::Render()
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
 	
 	Orthoslicer::RenderInfo renderInfo;
+	renderInfo.tpool = _tpool.get();
 	renderInfo.doubleBuffer = doubleBuffer;
 
 	_oslicer->Render(renderInfo);
