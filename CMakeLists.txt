@@ -252,6 +252,7 @@ if (${HASTY_BUILD_VIZ})
 	find_package(glm CONFIG REQUIRED)
 	find_package(ktx CONFIG REQUIRED)
 	find_package(unofficial-skia CONFIG REQUIRED)
+	
 	add_executable(HastyViz 
 		"viz/viz.cpp" 
 		"viz/skia.cpp"
@@ -262,6 +263,11 @@ if (${HASTY_BUILD_VIZ})
 		"viz/base/VulkanBuffer.cpp"
 		"viz/base/VulkanTools.cpp"
 	)
+	target_include_directories(HastyViz PUBLIC 
+		${CMAKE_CURRENT_LIST_DIR}/imgui
+		${CMAKE_CURRENT_LIST_DIR}/imgui/backends
+	)
+
 	target_link_libraries(HastyViz PUBLIC HastyComputeLib)
 	target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
 	target_link_libraries(HastyViz PUBLIC imgui::imgui)
@@ -286,9 +292,6 @@ if (${HASTY_BUILD_VIZ})
 	)
 
 endif()
-
-#target_link_libraries(HastyViz PUBLIC glfw)
-
 
 
 

@@ -21,6 +21,7 @@ import thread_pool;
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
 #define GLFW_INCLUDE_NONE
@@ -298,7 +299,6 @@ static void CleanupVulkanWindow()
 static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
 {
 	VkResult err;
-
 	VkSemaphore image_acquired_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].ImageAcquiredSemaphore;
 	VkSemaphore render_complete_semaphore = wd->FrameSemaphores[wd->SemaphoreIndex].RenderCompleteSemaphore;
 	err = vkAcquireNextImageKHR(g_Device, wd->Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &wd->FrameIndex);
@@ -428,6 +428,7 @@ int main(int, char**)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -520,9 +521,6 @@ int main(int, char**)
 		// Rendering
 		ImGui::Render();
 
-		// Update and Render additional Platform Windows
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
 
 		ImDrawData* draw_data = ImGui::GetDrawData();
 		const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
@@ -533,6 +531,11 @@ int main(int, char**)
 			wd->ClearValue.color.float32[2] = clear_color.z * clear_color.w;
 			wd->ClearValue.color.float32[3] = clear_color.w;
 			FrameRender(wd, draw_data);
+
+			// Update and Render additional Platform Windows
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+
 			FramePresent(wd);
 		}
 	}

@@ -37,5 +37,8 @@
       ]
     }
   ],
-  "builtin-baseline": "98f22593167d1d20a433d9ad09aa40ccd2552749"
+  "builtin-baseline": "98f22593167d1d20a433d9ad09aa40ccd2552749",
+  "overrides": [
+    {"name": "imgui", "version": "1.90"}
+  ]
 }
