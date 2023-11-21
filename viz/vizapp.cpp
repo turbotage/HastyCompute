@@ -9,8 +9,7 @@ namespace {
 	at::Tensor import_tensor() {
 		at::InferenceMode imode;
 		
-		
-		H5Easy::File file("D:\\4DRecon\\dat\\dat2\\my_framed_20f.h5", H5Easy::File::ReadOnly);
+		H5Easy::File file("D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5", H5Easy::File::ReadOnly);
 
 		HighFive::DataSet dataset = file.getDataSet("images");
 
@@ -23,20 +22,34 @@ namespace {
 		std::vector<std::byte> tensorbytes(dataset.getStorageSize());
 
 		at::ScalarType scalar_type;
-		if (dtype_str == "Float32")
+		if (dtype_str == "Float32") {
 			scalar_type = at::ScalarType::Float;
-		if (dtype_str == "Float64")
+		}
+		else if (dtype_str == "Float64") {
 			scalar_type = at::ScalarType::Double;
-		else
-			throw std::runtime_error("Unsupported type");
-
+		}
+		else if (dtype_str == "Compound64") {
+			HighFive::CompoundType ctype(std::move(dtype));
+			auto members = ctype.getMembers();
+			if (members.size() != 2)
+				throw std::runtime_error("HighFive reported an Compound64 type");
+			scalar_type = at::ScalarType::ComplexFloat;
+		}
+		else if (dtype_str == "Compound128") {
+			HighFive::CompoundType ctype(std::move(dtype));
+			auto members = ctype.getMembers();
+			if (members.size() != 2)
+				throw std::runtime_error("HighFive reported an Compound64 type");
+			scalar_type = at::ScalarType::ComplexDouble;
+		}
+		else {
+			throw std::runtime_error("disallowed dtype");
+		}
+			
 		at::Tensor blobtensor = at::from_blob(tensorbytes.data(), at::makeArrayRef(dims), scalar_type);
 
-		blobtensor =  blobtensor.detach().clone().to(at::ScalarType::Float).permute({ 3,4,0,1,2 }).detach().clone();
+		return blobtensor.detach().clone();
 
-		blobtensor /= blobtensor.abs().max();
-
-		return blobtensor;
 	}
 }
 
@@ -44,7 +57,12 @@ namespace {
 hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
-	_tensor = import_tensor();
+	_tensor = at::abs(import_tensor()).contiguous();
+
+	std::cout << "Tensor max: " << _tensor.max() << std::endl;
+
+	_tensor /= _tensor.max();
+
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
 	_tpool = std::make_unique<ThreadPool>(2);
 }
@@ -56,12 +74,11 @@ void hasty::viz::VizApp::Render()
 	
 	Orthoslicer::RenderInfo renderInfo;
 	renderInfo.tpool = _tpool.get();
-	renderInfo.doubleBuffer = doubleBuffer;
+	renderInfo.bufferidx = 0;
 
 	_oslicer->Render(renderInfo);
 
-
-	doubleBuffer = !doubleBuffer;
+	renderInfo.bufferidx = renderInfo.bufferidx == 1 ? 0 : 1;
 }
 
 

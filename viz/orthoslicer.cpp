@@ -16,15 +16,17 @@ at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& starts
 		indices.push_back(s);
 	}
 
+	auto slice = Slice(0, None, 3);
+
 	switch (view) {
 	case eAxial:
-		indices.push_back(Slice()); indices.push_back(Slice()); indices.push_back(zpoint);
+		indices.push_back(slice); indices.push_back(slice); indices.push_back(zpoint);
 		break;
 	case eSagital:
-		indices.push_back(Slice()); indices.push_back(ypoint); indices.push_back(Slice());
+		indices.push_back(slice); indices.push_back(ypoint); indices.push_back(slice);
 		break;
 	case eCoronal:
-		indices.push_back(xpoint); indices.push_back(Slice()); indices.push_back(Slice());
+		indices.push_back(xpoint); indices.push_back(slice); indices.push_back(slice);
 		break;
 	default:
 		throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
@@ -108,20 +110,42 @@ void hasty::viz::SlicerRenderer::HandleCursor(RenderInfo& renderInfo)
 	}
 }
 
-void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
+void hasty::viz::SlicerRenderer::SliceUpdate(RenderInfo& renderInfo)
 {
-	auto beg = std::chrono::high_resolution_clock::now();
-	if (renderInfo.doubleBuffer) {
-		slice0 = slicer.GetTensorSlice({ 0, 0 }, 40, 40, 40).contiguous();
+
+	if ((renderInfo.bufferidx != 0) || (renderInfo.bufferidx != 1))
+	{
+		auto slice_lambda = [&slicer_ref = slicer, p = renderInfo.preslices]() mutable
+			{
+				return slicer_ref.GetTensorSlice(p, 0, 0, 0).contiguous();
+			};
+
+		auto slice_lambda2 = slice_lambda;
+
+		slice0 = std::async(std::launch::async, slice_lambda);
+		slice1 = std::async(std::launch::async, slice_lambda2);
+		return;
+	}
+
+	//auto& slicer_ref = slicer;
+	auto slice_lambda =	[&slicer_ref = slicer, p = renderInfo.preslices, xpoint = renderInfo.xpoint,
+		ypoint = renderInfo.ypoint, zpoint = renderInfo.zpoint]() mutable
+		{
+			return slicer_ref.GetTensorSlice(p, xpoint, ypoint, zpoint).contiguous();
+		};
+
+	if (renderInfo.bufferidx == 0) {
+		slice0 = renderInfo.tpool->enqueue(std::move(slice_lambda));
 	}
 	else {
-		slice1 = slicer.GetTensorSlice({ 0, 0 }, 40, 40, 40).contiguous();
+		slice1 = renderInfo.tpool->enqueue(std::move(slice_lambda));
 	}
-	auto end1 = std::chrono::high_resolution_clock::now();
-	auto duration = duration_cast<std::chrono::milliseconds>(end1 - beg);
-	printf("Time: %d\n", duration.count());
 
-	at::Tensor& slice = renderInfo.doubleBuffer ? slice0 : slice1;
+}
+
+void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
+{
+	at::Tensor slice = renderInfo.bufferidx == 0 ? slice1.get() : slice0.get();
 
 	if (ImGui::Begin(slicername.c_str())) {
 
@@ -144,12 +168,15 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 		if (minscale > maxscale)
 			minscale = maxscale - 0.1f;
 		
+		int rows = slice.size(0);
+		int cols = slice.size(1);
 
 		static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
 		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
 			ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
-			ImPlot::PlotHeatmap(heatname.c_str(), (const float*)slice.const_data_ptr(), slice.size(0), slice.size(1),
-				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(slice.size(0), slice.size(1)), hm_flags);
+			auto slice_ptr = static_cast<const float*>(slice.const_data_ptr());
+			ImPlot::PlotHeatmap(heatname.c_str(), slice_ptr, rows, cols,
+				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1.0, 1.0), hm_flags);
 
 			HandleCursor(renderInfo);
 
@@ -161,10 +188,12 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 		ImGui::SameLine();
 
 		ImPlot::PopColormap();
+
 	}
 
-
 	ImGui::End();
+
+	SliceUpdate(renderInfo);
 }
 
 hasty::viz::Orthoslicer::Orthoslicer(at::Tensor tensor)
@@ -177,14 +206,36 @@ hasty::viz::Orthoslicer::Orthoslicer(at::Tensor tensor)
 	_coronalSlicerRenderer(_coronalSlicer)
 {
 
+	auto ndim = tensor.ndimension();
+	std::vector<int64_t> preslices(ndim - 3, 0);
+	_renderInfo.preslices = std::move(preslices);
+
+	_renderInfo.xpoint = 0;
+	_renderInfo.ypoint = 0;
+	_renderInfo.zpoint = 0;
+
+	_renderInfo.newxpoint = 0;
+	_renderInfo.newypoint = 0;
+	_renderInfo.newzpoint = 0;
+
 	_renderInfo.min_scale = -1.0f;
 	_renderInfo.max_scale = 1.0f;
 
+	_renderInfo.map = ImPlotColormap_Viridis;
+
+	_renderInfo.plot_cursor_lines = true;
+
+	_renderInfo.bufferidx = -1;
+	_renderInfo.tpool = nullptr;
+
+	_axialSlicerRenderer.SliceUpdate(_renderInfo);
+	_sagitalSlicerRenderer.SliceUpdate(_renderInfo);
+	_coronalSlicerRenderer.SliceUpdate(_renderInfo);
 }
 
 void hasty::viz::Orthoslicer::Render(const RenderInfo& rinfo)
 {
-	_renderInfo.doubleBuffer = rinfo.doubleBuffer;
+	_renderInfo.bufferidx = rinfo.bufferidx;
 	_renderInfo.tpool = rinfo.tpool;
 
 	ImGui::ShowMetricsWindow();

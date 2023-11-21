@@ -4,6 +4,7 @@
 
 #include <torch/torch.h>
 
+#include <future>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -49,13 +50,13 @@ namespace hasty {
 				float newypoint;
 				float newzpoint;
 
-				float min_scale = 0.0;
-				float max_scale = 1.0;
-				ImPlotColormap map = ImPlotColormap_Viridis;
+				float min_scale;
+				float max_scale;
+				ImPlotColormap map;
 
-				bool plot_cursor_lines = true;
+				bool plot_cursor_lines;
 
-				bool doubleBuffer;
+				uint16_t bufferidx;
 
 				ThreadPool* tpool;
 			};
@@ -70,11 +71,13 @@ namespace hasty {
 
 			void HandleCursor(RenderInfo& renderInfo);
 
+			void SliceUpdate(RenderInfo& renderInfo);
+
 			void Render(RenderInfo& renderInfo);
 
 			Slicer& slicer;
-			at::Tensor slice0;
-			at::Tensor slice1;
+			std::future<at::Tensor> slice0;
+			std::future<at::Tensor> slice1;
 
 			std::string slicername;
 			std::string plotname;
@@ -89,7 +92,7 @@ namespace hasty {
 
 			struct RenderInfo {
 				ThreadPool* tpool;
-				bool doubleBuffer;
+				uint16_t bufferidx;
 			};
 
 			Orthoslicer(at::Tensor tensor);

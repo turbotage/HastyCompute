@@ -5,9 +5,9 @@
 #include "skia.hpp"
 #include "orthoslicer.hpp"
 
-namespace hasty {
-	class ThreadPool;
+import thread_pool;
 
+namespace hasty {
 namespace viz {
 
 	class VizApp {
@@ -24,7 +24,7 @@ namespace viz {
 
 		std::unique_ptr<ThreadPool> _tpool;
 
-		bool doubleBuffer = false;
+		int bufferidx;
 	};
 
 
