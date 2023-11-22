@@ -2,64 +2,16 @@
 
 import thread_pool;
 import hasty_util;
-
-#include <highfive/H5Easy.hpp>
-
-namespace {
-	at::Tensor import_tensor() {
-		at::InferenceMode imode;
-		
-		H5Easy::File file("D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5", H5Easy::File::ReadOnly);
-
-		HighFive::DataSet dataset = file.getDataSet("images");
-
-		HighFive::DataType dtype = dataset.getDataType();
-		std::string dtype_str = dtype.string();
-		size_t dtype_size = dtype.getSize();
-		std::vector<int64_t> dims = hasty::util::vector_cast<int64_t>(dataset.getDimensions());
-		size_t nelem = dataset.getElementCount();
-
-		std::vector<std::byte> tensorbytes(dataset.getStorageSize());
-
-		at::ScalarType scalar_type;
-		if (dtype_str == "Float32") {
-			scalar_type = at::ScalarType::Float;
-		}
-		else if (dtype_str == "Float64") {
-			scalar_type = at::ScalarType::Double;
-		}
-		else if (dtype_str == "Compound64") {
-			HighFive::CompoundType ctype(std::move(dtype));
-			auto members = ctype.getMembers();
-			if (members.size() != 2)
-				throw std::runtime_error("HighFive reported an Compound64 type");
-			scalar_type = at::ScalarType::ComplexFloat;
-		}
-		else if (dtype_str == "Compound128") {
-			HighFive::CompoundType ctype(std::move(dtype));
-			auto members = ctype.getMembers();
-			if (members.size() != 2)
-				throw std::runtime_error("HighFive reported an Compound64 type");
-			scalar_type = at::ScalarType::ComplexDouble;
-		}
-		else {
-			throw std::runtime_error("disallowed dtype");
-		}
-			
-		at::Tensor blobtensor = at::from_blob(tensorbytes.data(), at::makeArrayRef(dims), scalar_type);
-
-		return blobtensor.detach().clone();
-
-	}
-}
+import hdf5;
 
 
 hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
-	_tensor = at::abs(import_tensor()).contiguous();
-
-	std::cout << "Tensor max: " << _tensor.max() << std::endl;
+	_tensor = at::abs(hasty::import_tensor(
+		"D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5",
+		"images"
+	)).contiguous();
 
 	_tensor /= _tensor.max();
 

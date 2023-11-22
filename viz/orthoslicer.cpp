@@ -72,6 +72,11 @@ void hasty::viz::SlicerRenderer::HandleAxialCursor(RenderInfo& renderInfo)
 		renderInfo.newypoint = mousepos.y;
 	}
 
+	if (renderInfo.plot_cursor_lines) {
+		ImPlot::PlotInfLines("##Vertical", &renderInfo.xpoint, 1);
+		ImPlot::PlotInfLines("##Horizontal", &renderInfo.ypoint, 1, ImPlotInfLinesFlags_Horizontal);
+	}
+
 }
 
 void hasty::viz::SlicerRenderer::HandleSagitalCursor(RenderInfo& renderInfo)
@@ -150,13 +155,16 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 	if (ImGui::Begin(slicername.c_str())) {
 
 		auto windowsize = ImGui::GetWindowSize();
-		uint32_t tensor_width = slice.size(0); uint32_t tensor_height = slice.size(1);
-		float hw_tensor_ratio = tensor_height / tensor_width;
+		uint32_t tensor_width = slice.size(0); 
+		uint32_t tensor_height = slice.size(1);
 
 		float window_width = windowsize.x * 0.95f;
-		float window_height = window_width * hw_tensor_ratio;
+		float window_height = window_width * (tensor_height / tensor_width);
+		if (window_height > windowsize.y * 0.95f) {
+			window_height = windowsize.y * 0.95f;
+			window_width = window_height * (tensor_width / tensor_height);
+		}
 
-		static ImPlotHeatmapFlags hm_flags = 0;
 
 		ImGui::SetNextItemWidth(window_width);
 		ImGui::DragFloatRange2("Min Multiplier / Max Multiplier", &scale_min_mult, &scale_max_mult, 0.01f, -10.0f, 10.0f);
@@ -171,19 +179,23 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 		int rows = slice.size(0);
 		int cols = slice.size(1);
 
-		static ImPlotAxisFlags axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
-		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
-			ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
-			auto slice_ptr = static_cast<const float*>(slice.const_data_ptr());
-			ImPlot::PlotHeatmap(heatname.c_str(), slice_ptr, rows, cols,
-				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1.0, 1.0), hm_flags);
+		static ImPlotAxisFlags axes_flags = 
+			ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | 
+			ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
 
+		static ImPlotFlags plot_flags = ImPlotFlags_NoInputs | ImPlotFlags_CanvasOnly;
+		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), plot_flags)) {
+			ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
+			ImPlot::SetupAxesLimits(0, cols, 0, rows);
+			static ImPlotHeatmapFlags hm_flags = 0;
+			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(slice.const_data_ptr()), rows, cols,
+				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(cols, rows), hm_flags);
 			HandleCursor(renderInfo);
 
 			ImPlot::EndPlot();
 		}
 		ImGui::SameLine();
-		ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(0.05 * windowsize.x, window_height));
+		ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(50, window_height));
 
 		ImGui::SameLine();
 

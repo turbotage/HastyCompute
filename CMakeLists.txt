@@ -50,6 +50,8 @@ target_sources(HastyComputeLib
 		"lib/hasty_compute.ixx"
 		"lib/hasty_util.ixx"
 		"lib/metadata.ixx"
+		"lib/hdf5.ixx"
+		"lib/hdf5.cpp"
 	
 		"lib/threading/thread_pool.ixx"
 
