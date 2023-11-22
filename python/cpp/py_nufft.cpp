@@ -61,7 +61,7 @@ void hasty::ffi::NufftNormal::apply(const at::Tensor& in, at::Tensor out, at::Te
 {
 	at::optional<std::function<void(at::Tensor&)>> lambda;
 	if (func_between.has_value()) {
-		lambda = at::make_optional<std::function<void(at::Tensor-&)>>([func_between](at::Tensor& in) {
+		lambda = at::make_optional<std::function<void(at::Tensor&)>>([func_between](at::Tensor& in) {
 			(*func_between).apply(in);
 		});
 	}

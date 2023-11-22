@@ -8,6 +8,9 @@ namespace hasty {
 		class NufftOptions;
 		class Nufft;
 		class NufftNormal;
+
+		class CUDANufft;
+		class CUDANufftNormal;
 	}
 
 	namespace ffi {
