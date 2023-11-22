@@ -19,8 +19,13 @@ const hasty::fft::NufftOptions& hasty::ffi::NufftOptions::getOptions() const
 
 
 hasty::ffi::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const ffi::NufftOptions& opts)
-	: _nufftop(std::make_unique<fft::Nufft>(coords, nmodes, opts.getOptions()))
-{}
+{
+	if (coords.is_cuda()) {
+		_nufftop = nullptr;
+	}
+
+	_nufftop(std::make_unique<fft::Nufft>(coords, nmodes, opts.getOptions()))
+}
 
 void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
 {
