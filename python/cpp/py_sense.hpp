@@ -7,6 +7,10 @@ namespace hasty {
 		class Sense;
 		class SenseAdjoint;
 		class SenseNormal;
+
+		class CUDASense;
+		class CUDASenseAdjoint;
+		class CUDASenseNormal;
 	}
 
 	namespace ffi {
@@ -21,6 +25,7 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<hasty::mri::Sense> _senseop;
+			std::unique_ptr<hasty::mri::CUDASense> _cudasenseop;
 		};
 
 		class LIB_EXPORT SenseAdjoint : public torch::CustomClassHolder {
@@ -33,6 +38,7 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<hasty::mri::SenseAdjoint> _senseop;
+			std::unique_ptr<hasty::mri::CUDASenseAdjoint> _cudasenseop;
 		};
 
 		class LIB_EXPORT SenseNormal : public torch::CustomClassHolder {
@@ -45,6 +51,7 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<hasty::mri::SenseNormal> _senseop;
+			std::unique_ptr<hasty::mri::CUDASenseNormal> _cudasenseop;
 		};
 
 	}

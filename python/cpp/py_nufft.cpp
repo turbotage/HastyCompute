@@ -22,15 +22,23 @@ hasty::ffi::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& n
 {
 	if (coords.is_cuda()) {
 		_nufftop = nullptr;
+		_cudanufftop = std::make_unique<fft::CUDANufft>(coords, nmodes, opts.getOptions());
 	}
-
-	_nufftop(std::make_unique<fft::Nufft>(coords, nmodes, opts.getOptions()))
+	else {
+		_cudanufftop = nullptr;
+		_nufftop = std::make_unique<fft::Nufft>(coords, nmodes, opts.getOptions());
+	}
 }
 
 void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
 {
 	auto func = [this, &in, &out]() {
-		_nufftop->apply(in, out);
+		if (_nufftop) {
+			_nufftop->apply(in, out);
+		}
+		else {
+			_cudanufftop->apply(in, out);
+		}
 	};
 
 	torch_util::future_catcher(func);
@@ -39,21 +47,32 @@ void hasty::ffi::Nufft::apply(const at::Tensor& in, at::Tensor out) const
 
 hasty::ffi::NufftNormal::NufftNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const ffi::NufftOptions& forward, const ffi::NufftOptions& backward)
-	: _nufftop(std::make_unique<fft::NufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions()))
-{}
+{
+	if (coords.is_cuda()) {
+		_cudanufftop = std::make_unique<fft::CUDANufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions());
+	}
+	else {
+		_nufftop = std::make_unique<fft::NufftNormal>(coords, nmodes, forward.getOptions(), backward.getOptions());
+	}
+}
 
 void hasty::ffi::NufftNormal::apply(const at::Tensor& in, at::Tensor out, at::Tensor storage,
 	const at::optional<FunctionLambda>& func_between) const
 {
 	at::optional<std::function<void(at::Tensor&)>> lambda;
 	if (func_between.has_value()) {
-		lambda = at::make_optional<std::function<void(at::Tensor&)>>([func_between](at::Tensor& in) {
+		lambda = at::make_optional<std::function<void(at::Tensor-&)>>([func_between](at::Tensor& in) {
 			(*func_between).apply(in);
 		});
 	}
 
 	auto func = [this, &in, &out, &storage, &lambda]() {
-		_nufftop->apply(in, out, storage, lambda);
+		if (_nufftop) {
+			_nufftop->apply(in, out, storage, lambda);
+		}
+		else {
+			_cudanufftop->apply(in, out, storage, lambda);
+		}
 	};
 
 	torch_util::future_catcher(func);

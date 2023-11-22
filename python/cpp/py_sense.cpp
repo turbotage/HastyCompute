@@ -5,45 +5,75 @@ import torch_util;
 import sense;
 
 hasty::ffi::Sense::Sense(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::mri::Sense>(coords, nmodes))
 {
+	if (coords.is_cuda()) {
+		_cudasenseop = std::make_unique<hasty::mri::CUDASense>(coords, nmodes);
+	}
+	else {
+		_senseop = std::make_unique<hasty::mri::Sense>(coords, nmodes);
+	}
 }
 
 void hasty::ffi::Sense::apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		if (_senseop) {
+			_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		}
+		else {
+			_cudasenseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		}
 	};
 
 	torch_util::future_catcher(func);
 }
 
 hasty::ffi::SenseAdjoint::SenseAdjoint(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::mri::SenseAdjoint>(coords, nmodes))
 {
+	if (coords.is_cuda()) {
+		_cudasenseop = std::make_unique<hasty::mri::CUDASenseAdjoint>(coords, nmodes);
+	}
+	else {
+		_senseop = std::make_unique<hasty::mri::SenseAdjoint>(coords, nmodes);
+	}
 }
 
 void hasty::ffi::SenseAdjoint::apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		if (_senseop) {
+			_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		}
+		else {
+			_cudasenseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt);
+		}
 	};
 
 	torch_util::future_catcher(func);
 }
 
 hasty::ffi::SenseNormal::SenseNormal(const at::Tensor& coords, const std::vector<int64_t>& nmodes)
-	: _senseop(std::make_unique<hasty::mri::SenseNormal>(coords, nmodes))
 {
+	if (coords.is_cuda()) {
+		_cudasenseop = std::make_unique<hasty::mri::CUDASenseNormal>(coords, nmodes);
+	}
+	else {
+		_senseop = std::make_unique<hasty::mri::SenseNormal>(coords, nmodes);
+	}
 }
 
 void hasty::ffi::SenseNormal::apply(const at::Tensor& in, at::Tensor out, const at::Tensor& smaps, const std::vector<int64_t>& coils,
 	const at::optional<at::Tensor>& imspace_storage, const at::optional<at::Tensor>& kspace_storage)
 {
 	auto func = [this, &in, &out, &smaps, &coils, &imspace_storage, &kspace_storage]() {
-		_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt, at::nullopt);
+		if (_senseop) {
+			_senseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt, at::nullopt);
+		}
+		else {
+			_cudasenseop->apply(in, out, smaps, coils, imspace_storage, kspace_storage, at::nullopt, at::nullopt, at::nullopt);
+		}
 	};
 
 	torch_util::future_catcher(func);

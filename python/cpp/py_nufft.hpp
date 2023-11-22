@@ -47,6 +47,7 @@ namespace hasty {
 
 		private:
 			std::unique_ptr<fft::NufftNormal> _nufftop;
+			std::unique_ptr<fft::CUDANufftNormal> _cudanufftop;
 		};
 		
 

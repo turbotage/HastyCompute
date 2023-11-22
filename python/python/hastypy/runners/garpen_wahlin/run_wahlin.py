@@ -60,7 +60,7 @@ def run(settings: RunSettings):
 	weights = weights[...,timeidx,:][...,0,:,:]
 	kdata = kdata[...,timeidx,:][...,0,:,:]
 
-	kdata *= np.cos(2*np.pi*0.1*gating['TIME_E0'])[None, None, :,][...,None]
+	#kdata *= np.cos(2*np.pi*0.1*gating['TIME_E0'])[None, None, :,][...,None]
 
 	#normalize kdata
 	kdata /= 0.5*(torch.mean(torch.real(kdata)) + torch.mean(torch.real(kdata)))
