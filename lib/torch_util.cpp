@@ -157,6 +157,7 @@ at::ScalarType hasty::torch_util::real_type(at::ScalarType complex_type, std::in
 	return real_type;
 }
 
+/*
 void hasty::torch_util::future_catcher(std::future<void>& fut)
 {
 	try {
@@ -198,6 +199,9 @@ void hasty::torch_util::future_catcher(const std::function<void()>& func)
 		throw std::runtime_error("caught something strange: ");
 	}
 }
+*/
+
+
 
 at::Tensor hasty::torch_util::upscale_with_zeropad(const at::Tensor& input, const std::vector<int64_t>& newsize)
 {

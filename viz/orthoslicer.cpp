@@ -118,17 +118,15 @@ void hasty::viz::SlicerRenderer::HandleCursor(RenderInfo& renderInfo)
 void hasty::viz::SlicerRenderer::SliceUpdate(RenderInfo& renderInfo)
 {
 
-	if ((renderInfo.bufferidx != 0) || (renderInfo.bufferidx != 1))
+	if ((renderInfo.bufferidx != 0) && (renderInfo.bufferidx != 1))
 	{
 		auto slice_lambda = [&slicer_ref = slicer, p = renderInfo.preslices]() mutable
 			{
 				return slicer_ref.GetTensorSlice(p, 0, 0, 0).contiguous();
 			};
 
-		auto slice_lambda2 = slice_lambda;
-
 		slice0 = std::async(std::launch::async, slice_lambda);
-		slice1 = std::async(std::launch::async, slice_lambda2);
+		slice1 = std::async(std::launch::async, slice_lambda);
 		return;
 	}
 
@@ -136,7 +134,12 @@ void hasty::viz::SlicerRenderer::SliceUpdate(RenderInfo& renderInfo)
 	auto slice_lambda =	[&slicer_ref = slicer, p = renderInfo.preslices, xpoint = renderInfo.xpoint,
 		ypoint = renderInfo.ypoint, zpoint = renderInfo.zpoint]() mutable
 		{
-			return slicer_ref.GetTensorSlice(p, xpoint, ypoint, zpoint).contiguous();
+			try {
+				return slicer_ref.GetTensorSlice(p, xpoint, ypoint, zpoint).contiguous();
+			}
+			catch (...) {
+				std::cout << "hello";
+			}
 		};
 
 	if (renderInfo.bufferidx == 0) {
@@ -183,7 +186,7 @@ void hasty::viz::SlicerRenderer::Render(RenderInfo& renderInfo)
 			ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | 
 			ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
 
-		static ImPlotFlags plot_flags = ImPlotFlags_NoInputs | ImPlotFlags_CanvasOnly;
+		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText;
 		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), plot_flags)) {
 			ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
 			ImPlot::SetupAxesLimits(0, cols, 0, rows);
