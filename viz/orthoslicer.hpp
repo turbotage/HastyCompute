@@ -11,107 +11,59 @@
 #include <implot.h>
 
 #include "skia.hpp"
+#include "slicer.hpp"
 
 namespace hasty {
 
 	class ThreadPool;
 
 	namespace viz {
+		
+		struct OrthoslicerRenderInfo {
 
-		enum SliceView : int {
-			eAxial,
-			eSagital,
-			eCoronal
-		};
+			std::vector<int64_t> preslices;
 
-		struct Slicer {
+			float xpoint;
+			float ypoint;
+			float zpoint;
 
-			Slicer(SliceView view, at::Tensor& tensor);
+			float newxpoint;
+			float newypoint;
+			float newzpoint;
 
-			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint);
+			float min_scale;
+			float max_scale;
+			float current_min_scale;
+			float current_max_scale;
 
-			SliceView view;
+			ImPlotColormap map;
+			bool plot_cursor_lines;
 
-			at::Tensor& tensor;
+			uint16_t bufferidx;
 
-		};
-
-		struct SlicerRenderer {
-
-			struct RenderInfo {
-
-				std::vector<int64_t> preslices;
-
-				float xpoint;
-				float ypoint;
-				float zpoint;
-
-				float newxpoint;
-				float newypoint;
-				float newzpoint;
-
-				float min_scale;
-				float max_scale;
-				ImPlotColormap map;
-
-				bool plot_cursor_lines;
-
-				uint16_t bufferidx;
-
-				ThreadPool* tpool;
-			};
-
-			SlicerRenderer(Slicer& slicer);
-
-			void HandleAxialCursor(RenderInfo& renderInfo);
-
-			void HandleSagitalCursor(RenderInfo& renderInfo);
-
-			void HandleCoronalCursor(RenderInfo& renderInfo);
-
-			void HandleCursor(RenderInfo& renderInfo);
-
-			void SliceUpdate(RenderInfo& renderInfo);
-
-			void Render(RenderInfo& renderInfo);
-
-			Slicer& slicer;
-			std::future<at::Tensor> slice0;
-			std::future<at::Tensor> slice1;
-
-			std::string slicername;
-			std::string plotname;
-			std::string heatname;
-
-			float scale_min_mult = 1.0f;
-			float scale_max_mult = 1.0f;
+			ThreadPool* tpool;
 		};
 
 		class Orthoslicer {
 		public:
 
-			struct RenderInfo {
-				ThreadPool* tpool;
-				uint16_t bufferidx;
-			};
-
 			Orthoslicer(at::Tensor tensor);
 
-			void Render(const RenderInfo& rinfo);
+			void RenderSlicerViewport();
+
+			void RenderGlobalOptions();
+
+			void Render(const struct VizAppRenderInfo& rinfo);
 
 		private:
-			at::Tensor _slice;
 
 			at::Tensor _tensor;
-			Slicer _axialSlicer;
-			Slicer _sagitalSlicer;
-			Slicer _coronalSlicer;
 
-			SlicerRenderer _axialSlicerRenderer;
-			SlicerRenderer _sagitalSlicerRenderer;
-			SlicerRenderer _coronalSlicerRenderer;
+			std::unique_ptr<Slicer> _axialSlicer;
+			std::unique_ptr<Slicer> _sagitalSlicer;
+			std::unique_ptr<Slicer> _coronalSlicer;
 
-			SlicerRenderer::RenderInfo _renderInfo;
+			OrthoslicerRenderInfo _renderInfo;
 		};
 
 

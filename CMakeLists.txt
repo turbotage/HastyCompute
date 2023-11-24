@@ -260,6 +260,7 @@ if (${HASTY_BUILD_VIZ})
 		"viz/skia.cpp"
 		"viz/vizapp.cpp" 
 		"viz/orthoslicer.cpp"
+		"viz/slicer.cpp"
 
 		"viz/base/VulkanDevice.cpp"
 		"viz/base/VulkanBuffer.cpp"

@@ -1,4 +1,6 @@
 #include "vizapp.hpp"
+#include "orthoslicer.hpp"
+#include "slicer.hpp"
 
 import thread_pool;
 import hasty_util;
@@ -9,28 +11,27 @@ hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
 	_tensor = at::abs(hasty::import_tensor(
-		"D:\\4DRecon\\dat\\dat2\\images_encs_20f_cropped_interpolated.h5",
-		"images"
+		"D:\\4DRecon\\dat\\dat2\\my_full_real_45.h5",
+		"image"
 	)).contiguous();
 
 	_tensor /= _tensor.max();
 
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
 	_tpool = std::make_unique<ThreadPool>(2);
+
+	_renderinfo.tpool = _tpool.get();
+	_renderinfo.bufferidx = 0;
 }
 
 void hasty::viz::VizApp::Render()
 {
 	ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
-	
-	Orthoslicer::RenderInfo renderInfo;
-	renderInfo.tpool = _tpool.get();
-	renderInfo.bufferidx = 0;
 
-	_oslicer->Render(renderInfo);
+	_oslicer->Render(_renderinfo);
 
-	renderInfo.bufferidx = renderInfo.bufferidx == 1 ? 0 : 1;
+	_renderinfo.bufferidx = _renderinfo.bufferidx == 1 ? 0 : 1;
 }
 
 

@@ -89,11 +89,9 @@ namespace hasty {
 			}
 		}
 
-		/*
 		export void future_catcher(std::future<void>& fut);
 
 		export void future_catcher(const std::function<void()>& func);
-		*/
 
 		export at::Tensor upscale_with_zeropad(const at::Tensor& input, const std::vector<int64_t>& newsize);
 

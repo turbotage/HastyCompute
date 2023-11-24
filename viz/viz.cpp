@@ -16,7 +16,6 @@
 import thread_pool;
 
 #include "vizapp.hpp"
-#include "orthoslicer.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
