@@ -1,10 +1,21 @@
 #include "slicer.hpp"
 #include "orthoslicer.hpp"
 
+#include <algorithm>
+
 import thread_pool;
 
-at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint)
+at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& startslice,
+	const std::array<bool, 3>& flip,
+	std::array<int64_t, 3> point)
 {
+	int64_t ndim = tensor.ndimension();
+	for (int i = 0; i < 3; ++i) {
+		if (flip[i]) {
+			point[i] = tensor.size(ndim - 3 + i) - point[i];
+		}
+	}
+
 	using namespace torch::indexing;
 	std::vector<TensorIndex> indices;
 	indices.reserve(startslice.size() + 3);
@@ -12,17 +23,17 @@ at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& starts
 		indices.push_back(s);
 	}
 
-	auto slice = Slice(0, None, 3);
+	auto slice = Slice();
 
 	switch (view) {
 	case eAxial:
-		indices.push_back(slice); indices.push_back(slice); indices.push_back(zpoint);
-		break;
-	case eSagital:
-		indices.push_back(slice); indices.push_back(ypoint); indices.push_back(slice);
+		indices.push_back(slice); indices.push_back(slice); indices.push_back(point[2]);
 		break;
 	case eCoronal:
-		indices.push_back(xpoint); indices.push_back(slice); indices.push_back(slice);
+		indices.push_back(slice); indices.push_back(point[1]); indices.push_back(slice);
+		break;
+	case eSagital:
+		indices.push_back(point[0]); indices.push_back(slice); indices.push_back(slice);
 		break;
 	default:
 		throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
@@ -53,84 +64,95 @@ hasty::viz::Slicer::Slicer(SliceView view, at::Tensor& tensor)
 	default:
 		throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
 	}
-}
 
-
-
-void hasty::viz::Slicer::HandleAxialCursor(OrthoslicerRenderInfo& renderInfo)
-{
-	if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-		ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-		//std::cout << "Hovered  " << "x: " << mousepos.x << " y: " << mousepos.y << std::endl;
-
-		printf("Hovered");
-
-		renderInfo.newxpoint = mousepos.x;
-		renderInfo.newypoint = mousepos.y;
-	}
-
-	if (renderInfo.plot_cursor_lines) {
-		ImPlot::PlotInfLines("##Vertical", &renderInfo.xpoint, 1);
-		ImPlot::PlotInfLines("##Horizontal", &renderInfo.ypoint, 1, ImPlotInfLinesFlags_Horizontal);
-	}
+	scale_minmax_mult = { 1.0, 1.0 };
 
 }
 
-void hasty::viz::Slicer::HandleSagitalCursor(OrthoslicerRenderInfo& renderInfo)
-{
-	if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-		ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-		renderInfo.newxpoint = mousepos.x;
-		renderInfo.newzpoint = mousepos.y;
-	}
-
-	if (renderInfo.plot_cursor_lines) {
-		ImPlot::PlotInfLines("##Vertical", &renderInfo.xpoint, 1);
-		ImPlot::PlotInfLines("##Horizontal", &renderInfo.zpoint, 1, ImPlotInfLinesFlags_Horizontal);
-	}
-
-}
-
-void hasty::viz::Slicer::HandleCoronalCursor(OrthoslicerRenderInfo& renderInfo)
-{
-	if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
-		ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
-		renderInfo.newypoint = mousepos.x;
-		renderInfo.newzpoint = mousepos.y;
-	}
-
-	if (renderInfo.plot_cursor_lines) {
-		ImPlot::PlotInfLines("##Vertical", &renderInfo.ypoint, 1);
-		ImPlot::PlotInfLines("##Horizontal", &renderInfo.zpoint, 1, ImPlotInfLinesFlags_Horizontal);
-	}
-
-}
 
 void hasty::viz::Slicer::HandleCursor(OrthoslicerRenderInfo& renderInfo)
 {
-	switch (view) {
-	case eAxial:
-		HandleAxialCursor(renderInfo);
+	auto& flip = renderInfo.flip;
+	auto& tlen = renderInfo.tensorlen;
+	auto& point = renderInfo.point;
+	auto& nextpoint = renderInfo.nextpoint;
+
+	if (ImPlot::IsPlotHovered() && ImGui::IsKeyPressed(ImGuiKey_MouseLeft)) {
+		ImPlotPoint mousepos = ImPlot::GetPlotMousePos();
+		int64_t mousex = static_cast<int64_t>(mousepos.x);
+		int64_t mousey = static_cast<int64_t>(mousepos.y);
+
+		switch (view) {
+		case eAxial:
+		{
+			int64_t x = mousex;
+			int64_t y = mousey;
+			nextpoint[0] = x;
+			nextpoint[1] = y;
+		}
 		break;
-	case eSagital:
-		HandleSagitalCursor(renderInfo);
+		case eCoronal:
+		{
+			int64_t x = mousex;
+			int64_t z = mousey;
+			nextpoint[0] = x;
+			nextpoint[2] = z;
+		}
 		break;
-	case eCoronal:
-		HandleCoronalCursor(renderInfo);
+		case eSagital:
+		{
+			int64_t y = tlen[1] - mousex;
+			int64_t z = mousey;
+			nextpoint[1] = y;
+			nextpoint[2] = z;
+		}
 		break;
-	default:
-		throw std::runtime_error("Only eAxial, eSagital, eCoronal are allowed");
+		default:
+			throw std::runtime_error("Unsupported view");
+		}
+
+	}
+
+	nextpoint[0] = std::clamp(nextpoint[0], int64_t(0), tlen[0]-1);
+	nextpoint[1] = std::clamp(nextpoint[1], int64_t(0), tlen[1]-1);
+	nextpoint[2] = std::clamp(nextpoint[2], int64_t(0), tlen[2]-1);
+
+	if (renderInfo.plot_cursor_lines) {
+		int64_t xlinepos, ylinepos;
+		
+		switch (view) {
+		case eAxial:
+			xlinepos = point[0];
+			ylinepos = point[1];
+			break;
+		case eCoronal:
+			xlinepos = point[0];
+			ylinepos = point[2];
+			break;
+		case eSagital:
+			xlinepos = tlen[1] - point[1];
+			ylinepos = point[2];
+			break;
+		default:
+			throw std::runtime_error("Unsupported view");
+		}
+		ImPlot::PlotInfLines("##Vertical", &xlinepos, 1);
+		ImPlot::PlotInfLines("##Horizontal", &ylinepos, 1, ImPlotInfLinesFlags_Horizontal);
+	
 	}
 }
 
 void hasty::viz::Slicer::SliceUpdate(OrthoslicerRenderInfo& renderInfo)
 {
+	auto preslices = renderInfo.preslices;
+	auto flip = renderInfo.flip;
+	auto point = renderInfo.point;
 
 	if ((renderInfo.bufferidx != 0) && (renderInfo.bufferidx != 1))
 	{
-		auto slice_lambda = [this, p = renderInfo.preslices]() mutable
+		auto slice_lambda = [this, preslices]() mutable
 		{
-			return GetTensorSlice(p, 0, 0, 0).contiguous();
+				return GetTensorSlice(preslices, { false, false, false },  {0, 0, 0}).contiguous();
 		};
 
 		slice0 = std::async(std::launch::async, slice_lambda);
@@ -138,16 +160,10 @@ void hasty::viz::Slicer::SliceUpdate(OrthoslicerRenderInfo& renderInfo)
 		return;
 	}
 
-	auto slice_lambda = 
-			[this, p = renderInfo.preslices, xpoint = renderInfo.xpoint, 
-			ypoint = renderInfo.ypoint, zpoint = renderInfo.zpoint]() mutable
+	auto slice_lambda = [this, preslices, flip, point]() mutable
 	{
 		try {
-			return GetTensorSlice(p,
-				static_cast<int64_t>(xpoint),
-				static_cast<int64_t>(ypoint),
-				static_cast<int64_t>(zpoint)
-			).contiguous();
+			return GetTensorSlice(preslices, flip, point).contiguous();
 		}
 		catch (...) {
 			std::cout << "hello";
@@ -169,51 +185,60 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 
 	if (ImGui::Begin(slicername.c_str())) {
 
-		auto windowsize = ImGui::GetWindowSize();
-		uint32_t tensor_width = slice.size(0);
-		uint32_t tensor_height = slice.size(1);
+		ImVec2 windowsize;
+		uint32_t tensor_width;
+		uint32_t tensor_height;
+		float window_width;
+		float window_height;
 
-		float window_width = windowsize.x * 0.95f;
-		float window_height = window_width * (tensor_height / tensor_width);
-		if (window_height > windowsize.y * 0.95f) {
-			window_height = windowsize.y * 0.95f;
-			window_width = window_height * (tensor_width / tensor_height);
+		// Get/Set Window Widths and Heights
+		float window_multiplier = 0.95f;
+		{
+			windowsize = ImGui::GetWindowSize();
+			tensor_width = slice.size(0);
+			tensor_height = slice.size(1);
+			window_width = windowsize.x * window_multiplier;
+			window_height = window_width * (tensor_height / tensor_width);
+			float width_offset = 10.0f;
+			float height_offset = 10.0f;
+			if (window_height > windowsize.y * window_multiplier) {
+				window_height = windowsize.y * window_multiplier;
+				window_width = window_height * (tensor_width / tensor_height);
+			}
 		}
-
-		ImGui::SetNextItemWidth(window_width);
-		ImGui::DragFloatRange2("Min Multiplier / Max Multiplier", &scale_min_mult, &scale_max_mult, 0.01f, -10.0f, 10.0f);
 
 		ImPlot::PushColormap(renderInfo.map);
 
-		float minscale = renderInfo.min_scale * scale_min_mult;
-		float maxscale = renderInfo.max_scale * scale_max_mult;
+		float minscale = renderInfo.current_minmax_scale[0] * scale_minmax_mult[0];
+		float maxscale = renderInfo.current_minmax_scale[1] * scale_minmax_mult[1];
 		if (minscale > maxscale)
 			minscale = maxscale - 0.1f;
 
 		int rows = slice.size(0);
 		int cols = slice.size(1);
 
-		static ImPlotAxisFlags axes_flags =
-			ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines |
-			ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
 
 		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText;
 		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), plot_flags)) {
-			ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags | ImPlotAxisFlags_Invert);
+			static ImPlotAxisFlags axes_flags =
+				ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines |
+				ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
+			ImPlot::SetupAxis(ImAxis_Y1, nullptr, axes_flags | ImPlotAxisFlags_Invert);
+			ImPlot::SetupAxis(ImAxis_X1, nullptr, axes_flags | ImPlotAxisFlags_Opposite);
 			ImPlot::SetupAxesLimits(0, cols, 0, rows);
-			static ImPlotHeatmapFlags hm_flags = 0;
+
+			static ImPlotHeatmapFlags hm_flags = ImPlotHeatmapFlags_ColMajor;
 			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(slice.const_data_ptr()), rows, cols,
 				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(cols, rows), hm_flags);
-			HandleCursor(renderInfo);
 
+			HandleCursor(renderInfo);
+			
 			ImPlot::EndPlot();
 		}
-		ImGui::SameLine();
-		ImPlot::ColormapScale("##HeatScale", minscale, maxscale, ImVec2(50, window_height));
-
-		ImGui::SameLine();
-
 		ImPlot::PopColormap();
+
+		ImGui::SetNextItemWidth(window_width * window_multiplier);
+		ImGui::DragFloatRange2("Multipliers", &scale_minmax_mult[0], &scale_minmax_mult[1], 0.01f, -10.0f, 10.0f);
 
 	}
 

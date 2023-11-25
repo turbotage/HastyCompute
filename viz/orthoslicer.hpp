@@ -23,18 +23,13 @@ namespace hasty {
 
 			std::vector<int64_t> preslices;
 
-			float xpoint;
-			float ypoint;
-			float zpoint;
+			std::array<int64_t, 3> tensorlen;
+			std::array<int64_t, 3> point;
+			std::array<int64_t, 3> nextpoint;
+			std::array<bool, 3> flip;
 
-			float newxpoint;
-			float newypoint;
-			float newzpoint;
-
-			float min_scale;
-			float max_scale;
-			float current_min_scale;
-			float current_max_scale;
+			std::array<float, 2> minmax_scale;
+			std::array<float, 2> current_minmax_scale;
 
 			ImPlotColormap map;
 			bool plot_cursor_lines;
@@ -50,6 +45,8 @@ namespace hasty {
 			Orthoslicer(at::Tensor tensor);
 
 			void RenderSlicerViewport();
+
+			void RenderColormapSelector();
 
 			void RenderGlobalOptions();
 

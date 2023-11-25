@@ -393,6 +393,8 @@ int main(int, char**)
 	// Create window with Vulkan context
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example", nullptr, nullptr);
+	glfwMakeContextCurrent(window);
+	glfwSwapInterval(0);
 	if (!glfwVulkanSupported())
 	{
 		printf("GLFW: Vulkan Not Supported\n");
@@ -478,6 +480,12 @@ int main(int, char**)
 	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
 	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
 	//IM_ASSERT(font != nullptr);
+
+	//ImFont* font;
+	io.Fonts->AddFontFromFileTTF("fonts/Cousine-Regular.ttf", 18.0f);
+	io.Fonts->AddFontFromFileTTF("fonts/DroidSans.ttf", 16.0f);
+	io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 16.0f);
+	io.Fonts->Build();
 
 	// Our state
 	bool show_demo_window = true;

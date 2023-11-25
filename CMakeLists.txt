@@ -232,7 +232,7 @@ target_include_directories(HastyPyInterface PUBLIC ${Python3_INCLUDE_DIRS})
 set_target_properties(HastyPyInterface PROPERTIES LINKER_LANGUAGE CXX)
 
 
-set(HASTY_BUILD_PY_TESTS OFF)
+set(HASTY_BUILD_PY_TESTS ON)
 if (${HASTY_BUILD_PY_TESTS})
 	find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
 	# Tests of the Python Interface
@@ -266,10 +266,6 @@ if (${HASTY_BUILD_VIZ})
 		"viz/base/VulkanBuffer.cpp"
 		"viz/base/VulkanTools.cpp"
 	)
-	target_include_directories(HastyViz PUBLIC 
-		${CMAKE_CURRENT_LIST_DIR}/imgui
-		${CMAKE_CURRENT_LIST_DIR}/imgui/backends
-	)
 
 	target_link_libraries(HastyViz PUBLIC HastyComputeLib)
 	target_link_libraries(HastyViz PUBLIC Vulkan::Vulkan)
@@ -286,13 +282,13 @@ if (${HASTY_BUILD_VIZ})
 		POST_BUILD
 		COMMAND
 			${CMAKE_COMMAND} -E copy_directory
-			${CMAKE_SOURCE_DIR}/viz/shaders ${CMAKE_CURRENT_BINARY_DIR}
-		DEPENDS ${CMAKE_CURRENT_BINARY_DIR})
-
-	configure_file (
-		"${PROJECT_SOURCE_DIR}/viz/shaders_path_config.h.in"
-		"${CMAKE_CURRENT_BINARY_DIR}/shaders_path_config.h"
-	)
+			${CMAKE_SOURCE_DIR}/viz/shaders $<TARGET_FILE_DIR:HastyViz>/shaders)
+	add_custom_command(
+		TARGET HastyViz
+		POST_BUILD
+		COMMAND
+			${CMAKE_COMMAND} -E copy_directory
+			${CMAKE_SOURCE_DIR}/viz/fonts $<TARGET_FILE_DIR:HastyViz>/fonts)
 
 endif()
 

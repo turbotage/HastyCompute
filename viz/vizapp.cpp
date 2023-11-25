@@ -17,6 +17,8 @@ hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 
 	_tensor /= _tensor.max();
 
+	std::cout << _tensor.sizes();
+
 	_oslicer = std::make_unique<Orthoslicer>(_tensor);
 	_tpool = std::make_unique<ThreadPool>(2);
 
@@ -26,8 +28,12 @@ hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 
 void hasty::viz::VizApp::Render()
 {
+
 	ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+	//ImGui::ShowStyleEditor();
+	ImGui::ShowMetricsWindow();
 
 	_oslicer->Render(_renderinfo);
 

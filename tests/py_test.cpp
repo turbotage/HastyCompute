@@ -229,7 +229,7 @@ void test_nufft_speed() {
 int main() {
 
 	try {
-		test_normal_svt();
+		test_batched_sense_normal();
 	}
 	catch (c10::Error& e) {
 		std::string err = e.what();

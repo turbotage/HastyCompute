@@ -98,7 +98,7 @@ void hasty::mri::BatchedSense::apply_outer_batch(const at::Tensor& in, at::Tenso
 
 	int n_inner_batches = instore.size(0);
 	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	mri::Sense sense(coord_cu, _nmodes);
+	mri::CUDASense sense(coord_cu, _nmodes);
 
 	at::Tensor weights_cu;
 	if (_weights.size() > 0) {
@@ -249,7 +249,7 @@ void hasty::mri::BatchedSenseAdjoint::apply_outer_batch(const at::Tensor& in, at
 
 	int n_inner_batches = instore.size(0);
 	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	mri::SenseAdjoint sense(coord_cu, _nmodes);
+	mri::CUDASenseAdjoint sense(coord_cu, _nmodes);
 
 	at::Tensor weights_cu;
 	if (_weights.size() > 0) {
@@ -400,7 +400,7 @@ void hasty::mri::BatchedSenseNormal::apply_outer_batch(const at::Tensor& in, at:
 
 	int n_inner_batches = instore.size(0);
 	at::Tensor coord_cu = _coords[outer_batch].to(dctxt.stream.device(), true);
-	mri::SenseNormal sense(coord_cu, _nmodes);
+	mri::CUDASenseNormal sense(coord_cu, _nmodes);
 
 	at::Tensor weights_cu;
 	if (_weights.size() > 0) {

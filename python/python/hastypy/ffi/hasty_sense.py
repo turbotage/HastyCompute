@@ -1,7 +1,7 @@
 import torch
 
 #_dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-_dll_path = "D:/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
+_dll_path = "D:/Documents/GitHub/HastyCompute/out/build/msvc-release-cuda/Release/HastyPyInterface.dll"
 
 
 torch.classes.load_library(_dll_path)

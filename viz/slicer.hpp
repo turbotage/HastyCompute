@@ -21,13 +21,9 @@ namespace hasty {
 
 			Slicer(SliceView view, at::Tensor& tensor);
 
-			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice, int64_t xpoint, int64_t ypoint, int64_t zpoint);
-
-			void HandleAxialCursor(OrthoslicerRenderInfo& renderInfo);
-
-			void HandleSagitalCursor(OrthoslicerRenderInfo& renderInfo);
-
-			void HandleCoronalCursor(OrthoslicerRenderInfo& renderInfo);
+			at::Tensor GetTensorSlice(const std::vector<int64_t>& startslice,
+				const std::array<bool, 3>& flip,
+				std::array<int64_t, 3> point);
 
 			void HandleCursor(OrthoslicerRenderInfo& renderInfo);
 
@@ -45,8 +41,7 @@ namespace hasty {
 			std::string plotname;
 			std::string heatname;
 
-			float scale_min_mult = 1.0f;
-			float scale_max_mult = 1.0f;
+			std::array<float, 2> scale_minmax_mult;
 		};
 
 	}
