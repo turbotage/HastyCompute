@@ -112,6 +112,8 @@ target_sources(HastyComputeLib
 		"lib/mri/batch_sense.ixx"
 		"lib/mri/batch_sense.cpp"
 
+		"lib/mri/flowmri.ixx"
+
 )
 
 target_sources(HastyComputeLib PUBLIC 

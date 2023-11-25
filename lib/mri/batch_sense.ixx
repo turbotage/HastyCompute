@@ -282,14 +282,14 @@ namespace hasty {
 			at::Stream stream;
 		};
 
-		export class SenseAdmmLoader : public op::BatchConjugateGradientLoader<SenseDeviceContext> {
+		export class SenseBatchConjugateGradientLoader : public op::BatchConjugateGradientLoader<SenseDeviceContext> {
 		public:
 
-			SenseAdmmLoader(
-				const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
-				const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
+			SenseBatchConjugateGradientLoader(
+				std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
+				std::vector<at::Tensor> kdata, at::Tensor smaps,
 				std::shared_ptr<op::Admm::Context> ctx,
-				const at::optional<std::vector<at::Tensor>>& preconds = at::nullopt);
+				at::optional<std::vector<at::Tensor>> preconds = at::nullopt);
 
 			op::ConjugateGradientLoadResult load(SenseDeviceContext& dctx, size_t idx) override;
 
@@ -305,6 +305,19 @@ namespace hasty {
 		};
 
 
+		export class BatchSenseAdmmMinimizer : public hasty::op::AdmmMinimizer {
+		public:
+
+			BatchSenseAdmmMinimizer(std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
+				std::vector<at::Tensor> kdata, at::Tensor smaps,
+				std::shared_ptr<op::Admm::Context> ctx,
+				at::optional<std::vector<at::Tensor>> preconds = at::nullopt);
+
+		private:
+			std::unique_ptr<SenseBatchConjugateGradientLoader> 
+
+
+		};
 
 
 	}

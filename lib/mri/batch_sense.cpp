@@ -485,17 +485,19 @@ hasty::mri::OuterManipulator hasty::mri::BatchedSenseNormal::standard_weighted_k
 
 // SENSE LOADER FOR BATCH CG
 
-hasty::mri::SenseAdmmLoader::SenseAdmmLoader(
-	const std::vector<at::Tensor>& coords, const std::vector<int64_t>& nmodes,
-	const std::vector<at::Tensor>& kdata, const at::Tensor& smaps,
+hasty::mri::SenseBatchConjugateGradientLoader::SenseBatchConjugateGradientLoader(
+	std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
+	std::vector<at::Tensor> kdata, at::Tensor smaps,
 	std::shared_ptr<op::Admm::Context> ctx,
-	const at::optional<std::vector<at::Tensor>>& preconds)
-	: _coords(coords), _nmodes(nmodes), _kdata(kdata), _smaps(smaps), _ctx(std::move(ctx)), _preconds(preconds)
+	at::optional<std::vector<at::Tensor>> preconds)
+	: _coords(std::move(coords)), _nmodes(std::move(nmodes)), 
+	_kdata(std::move(kdata)), _smaps(std::move(smaps)), 
+	_ctx(std::move(ctx)), _preconds(std::move(preconds))
 {
 
 }
 
-hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDeviceContext& dctx, size_t idx)
+hasty::op::ConjugateGradientLoadResult hasty::mri::SenseBatchConjugateGradientLoader::load(SenseDeviceContext& dctx, size_t idx)
 {
 	c10::InferenceMode im_guard;
 	c10::cuda::CUDAStreamGuard guard(dctx.stream);
@@ -572,5 +574,12 @@ hasty::op::ConjugateGradientLoadResult hasty::mri::SenseAdmmLoader::load(SenseDe
 		mri::CirculantPreconditionerOp::Create((*_preconds)[idx], true, std::nullopt, false) : nullptr
 	};
 }
+
+
+hasty::mri::BatchSenseAdmmMinimizer::BatchSenseAdmmMinimizer(std::vector<at::Tensor> coords, std::vector<int64_t> nmodes, std::vector<at::Tensor> kdata, at::Tensor smaps, std::shared_ptr<op::Admm::Context> ctx, at::optional<std::vector<at::Tensor>> preconds)
+{
+
+}
+
 
 
