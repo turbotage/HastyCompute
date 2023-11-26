@@ -87,9 +87,9 @@ namespace hasty {
 		class BatchConjugateGradient : public OperatorAlg {
 		public:
 
-			BatchConjugateGradient(const std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>>& loader,
-				const std::shared_ptr<ContextThreadPool<DeviceContext>>& thread_pool)
-				: _cg_loader(loader), _thread_pool(thread_pool)
+			BatchConjugateGradient(std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>> loader,
+				std::shared_ptr<ContextThreadPool<DeviceContext>> thread_pool)
+				: _cg_loader(std::move(loader)), _thread_pool(std::move(thread_pool))
 			{}
 
 			void run(op::Vector& x, int iter = 30, double tol = 0.0)
@@ -120,6 +120,16 @@ namespace hasty {
 					torch_util::future_catcher(futures.front());
 					futures.pop_front();
 				}
+			}
+
+			const std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>>& get_loader() const
+			{
+				return _cg_loader;
+			}
+
+			const std::shared_ptr<ContextThreadPool<DeviceContext>>& get_threadpool() const
+			{
+				return _thread_pool;
 			}
 
 		private:

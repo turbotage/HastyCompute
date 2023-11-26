@@ -308,14 +308,21 @@ namespace hasty {
 		export class BatchSenseAdmmMinimizer : public hasty::op::AdmmMinimizer {
 		public:
 
-			BatchSenseAdmmMinimizer(std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
+			BatchSenseAdmmMinimizer(std::shared_ptr<ContextThreadPool<SenseDeviceContext>> sensethreadpool,
+				std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
 				std::vector<at::Tensor> kdata, at::Tensor smaps,
 				std::shared_ptr<op::Admm::Context> ctx,
 				at::optional<std::vector<at::Tensor>> preconds = at::nullopt);
 
-		private:
-			std::unique_ptr<SenseBatchConjugateGradientLoader> 
+			void set_iters(int iters);
 
+			void set_tol(double tol);
+
+		private:
+
+			int _iters;
+			double _tol;
+			std::unique_ptr<op::BatchConjugateGradient<SenseDeviceContext>> _batchcg;
 
 		};
 

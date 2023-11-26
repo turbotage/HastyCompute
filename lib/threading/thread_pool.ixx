@@ -113,8 +113,9 @@ namespace hasty {
 
 		template<typename V> requires std::ranges::forward_range<V>
 		explicit ContextThreadPool(V& contexts)
-			: _stop(false), _work_length(0)
+			: _stop(false), _work_length(0), _sleep(false)
 		{
+			_sleep_queue.reserve(contexts.size());
 			_threads.reserve(contexts.size());
 			try {
 				for (auto it = contexts.begin(); it != contexts.end(); ++it) {
@@ -167,6 +168,50 @@ namespace hasty {
 			return res;
 		}
 
+		void sleep(std::chrono::milliseconds sleep_interval = std::chrono::milliseconds(1))
+		{
+			if (_wakefuture.valid())
+				throw std::runtime_error("wake future must have been handled before sleep can be called again");
+
+			if (_sleep)
+				throw std::runtime_error("Can't call _sleep on already sleeping threadpool");
+			// Start sleep state
+			_sleep = true;
+
+			auto sleeper_func = [&_sleep, sleep_interval]() {
+				while (_sleep) {
+					std::this_thread::sleep_for(sleep_interval);
+				}
+			};
+
+			for (int i = 0; i < _nthreads; ++i) {
+				_sleep_queue.push_back(enqueue(sleeper_func));
+			}
+		}
+
+		std::shared_future<void> wake() {
+			if (!_sleep)
+				throw std::runtime_error("Don't call wake on ContextThreadPool that isn't sleeping");
+
+			if (_wakefuture.valid())
+				throw std::runtime_error("Don't call wake on ContextThreadPool twice!");
+
+			 _wakefuture = std::async(std::launch::async, [this]() {
+				_sleep = false;
+				for (auto& sleepfut : _sleep_queue) {
+					if (sleepfut.valid()) {
+						sleepfut.get();
+					}
+					else {
+						throw std::runtime_error("sleepfut was not valid in wake() function");
+					}
+				}
+				_sleep_queue.clear();
+			});
+
+			return _wakefuture;
+		}
+
 		int work_length() { return _work_length.load(); }
 
 		int nthreads() const { return _nthreads; }
@@ -199,6 +244,10 @@ namespace hasty {
 		}
 
 	private:
+		std::shared_future<void> _wakefuture;
+		std::atomic<bool> _sleep;
+		std::vector<std::future<void>> _sleep_queue;
+
 		std::queue<std::function<void(T&)>> _work;
 		std::condition_variable _queue_notifier;
 		std::mutex _queue_mutex;
@@ -208,8 +257,6 @@ namespace hasty {
 
 		std::atomic<int> _work_length;
 	};
-
-
 
 
 }
