@@ -6,15 +6,13 @@ export module opalgs;
 
 import <future>;
 
+import thread_pool;
 import torch_util;
 import vec;
 import op;
 
 namespace hasty {
 	namespace op {
-
-		template<typename T>
-		class ContextThreadPool;
 
 		export class OperatorAlg {
 		protected:
@@ -88,7 +86,7 @@ namespace hasty {
 		public:
 
 			BatchConjugateGradient(std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>> loader,
-				std::shared_ptr<ContextThreadPool<DeviceContext>> thread_pool)
+				std::shared_ptr<hasty::ContextThreadPool<DeviceContext>> thread_pool)
 				: _cg_loader(std::move(loader)), _thread_pool(std::move(thread_pool))
 			{}
 
