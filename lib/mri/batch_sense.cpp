@@ -7,6 +7,9 @@ module batch_sense;
 
 import <future>;
 import precond;
+import op;
+import opalgs;
+import thread_pool;
 
 // BATCH SENSE BASE
 
@@ -582,13 +585,10 @@ hasty::mri::BatchSenseAdmmMinimizer::BatchSenseAdmmMinimizer(
 	std::vector<at::Tensor> kdata, at::Tensor smaps, std::shared_ptr<op::Admm::Context> ctx, 
 	at::optional<std::vector<at::Tensor>> preconds)
 {
-	auto senseloader = std::make_shared<SenseBatchConjugateGradientLoader>(
-		coords, nmodes, kdata, smaps, ctx, preconds);
+	std::shared_ptr<op::BatchConjugateGradientLoader<SenseDeviceContext>> senseloader = 
+		std::make_shared<SenseBatchConjugateGradientLoader>(coords, nmodes, kdata, smaps, ctx, preconds);
 	
-	_batchcg = std::make_unique<BatchConjugateGradient<SenseDeviceContext>>(
-		std::move(senseloader), 
-		std::move(sensethreadpool)
-	);
+	_batchcg = std::make_unique<op::BatchConjugateGradient<SenseDeviceContext>>(senseloader, sensethreadpool);
 
 	_iters = 10;
 	_tol = 0.0;
