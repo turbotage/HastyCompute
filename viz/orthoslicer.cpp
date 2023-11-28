@@ -206,6 +206,8 @@ void hasty::viz::Orthoslicer::RenderPreslicer()
 					ImVec4(0.0, 1.0, 0.0, 0.5), ImPlotDragToolFlags_NoInputs);
 
 				*/
+				ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
 			}
 
 			ImPlot::EndPlot();
