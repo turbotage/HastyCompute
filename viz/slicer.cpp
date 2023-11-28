@@ -5,7 +5,7 @@
 
 import thread_pool;
 
-at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& startslice,
+at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& preslice,
 	const std::array<bool, 3>& flip,
 	std::array<int64_t, 3> point)
 {
@@ -18,8 +18,8 @@ at::Tensor hasty::viz::Slicer::GetTensorSlice(const std::vector<int64_t>& starts
 
 	using namespace torch::indexing;
 	std::vector<TensorIndex> indices;
-	indices.reserve(startslice.size() + 3);
-	for (auto s : startslice) {
+	indices.reserve(preslice.size() + 3);
+	for (auto s : preslice) {
 		indices.push_back(s);
 	}
 
@@ -85,26 +85,26 @@ void hasty::viz::Slicer::HandleCursor(OrthoslicerRenderInfo& renderInfo)
 		switch (view) {
 		case eAxial:
 		{
-			int64_t x = mousex;
-			int64_t y = mousey;
-			nextpoint[0] = x;
-			nextpoint[1] = y;
+			nextpoint[0] = tlen[0] - mousey;
+			nextpoint[1] = mousex;
+			nextpoint[0] = std::clamp(nextpoint[0], int64_t(0), tlen[0]-1);
+			nextpoint[1] = std::clamp(nextpoint[1], int64_t(0), tlen[1]-1);
 		}
 		break;
 		case eCoronal:
 		{
-			int64_t x = mousex;
-			int64_t z = mousey;
-			nextpoint[0] = x;
-			nextpoint[2] = z;
+			nextpoint[0] = tlen[0] - mousey;
+			nextpoint[2] = mousex;
+			nextpoint[0] = std::clamp(nextpoint[0], int64_t(0), tlen[0]-1);
+			nextpoint[2] = std::clamp(nextpoint[2], int64_t(0), tlen[2]-1);
 		}
 		break;
 		case eSagital:
 		{
-			int64_t y = tlen[1] - mousex;
-			int64_t z = mousey;
-			nextpoint[1] = y;
-			nextpoint[2] = z;
+			nextpoint[1] = tlen[1] - mousey;
+			nextpoint[2] = mousex;
+			nextpoint[1] = std::clamp(nextpoint[1], int64_t(0), tlen[1]-1);
+			nextpoint[2] = std::clamp(nextpoint[2], int64_t(0), tlen[2]-1);
 		}
 		break;
 		default:
@@ -113,32 +113,30 @@ void hasty::viz::Slicer::HandleCursor(OrthoslicerRenderInfo& renderInfo)
 
 	}
 
-	nextpoint[0] = std::clamp(nextpoint[0], int64_t(0), tlen[0]-1);
-	nextpoint[1] = std::clamp(nextpoint[1], int64_t(0), tlen[1]-1);
-	nextpoint[2] = std::clamp(nextpoint[2], int64_t(0), tlen[2]-1);
-
 	if (renderInfo.plot_cursor_lines) {
 		int64_t xlinepos, ylinepos;
 		
 		switch (view) {
 		case eAxial:
-			xlinepos = point[0];
-			ylinepos = point[1];
+			xlinepos = point[1];
+			ylinepos = tlen[0] - point[0];
 			break;
 		case eCoronal:
-			xlinepos = point[0];
-			ylinepos = point[2];
+			xlinepos = point[2];
+			ylinepos = tlen[0] - point[0];
 			break;
 		case eSagital:
-			xlinepos = tlen[1] - point[1];
-			ylinepos = point[2];
+			xlinepos = point[2];
+			ylinepos = tlen[1] - point[1];
 			break;
 		default:
 			throw std::runtime_error("Unsupported view");
 		}
+
+		ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(1.0, 0.0, 0.0, 0.5));
 		ImPlot::PlotInfLines("##Vertical", &xlinepos, 1);
 		ImPlot::PlotInfLines("##Horizontal", &ylinepos, 1, ImPlotInfLinesFlags_Horizontal);
-	
+		ImPlot::PopStyleColor();
 	}
 }
 
@@ -218,16 +216,18 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 		int cols = slice.size(1);
 
 
-		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText;
+		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
 		if (ImPlot::BeginPlot(plotname.c_str(), ImVec2(window_width, window_height), plot_flags)) {
 			static ImPlotAxisFlags axes_flags =
 				ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines |
 				ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
-			ImPlot::SetupAxis(ImAxis_Y1, nullptr, axes_flags | ImPlotAxisFlags_Invert);
-			ImPlot::SetupAxis(ImAxis_X1, nullptr, axes_flags | ImPlotAxisFlags_Opposite);
+			ImPlot::SetupAxis(ImAxis_X1, nullptr, axes_flags);
+			ImPlot::SetupAxis(ImAxis_Y1, nullptr, axes_flags);
+			ImPlot::SetupAxisTicks(ImAxis_X1, nullptr, 0, nullptr, false);
+			ImPlot::SetupAxisTicks(ImAxis_Y1, nullptr, 0, nullptr, false);
 			ImPlot::SetupAxesLimits(0, cols, 0, rows);
 
-			static ImPlotHeatmapFlags hm_flags = ImPlotHeatmapFlags_ColMajor;
+			static ImPlotHeatmapFlags hm_flags = 0; //ImPlotHeatmapFlags_ColMajor;
 			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(slice.const_data_ptr()), rows, cols,
 				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(cols, rows), hm_flags);
 

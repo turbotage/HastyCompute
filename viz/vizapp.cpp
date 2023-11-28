@@ -32,6 +32,8 @@ void hasty::viz::VizApp::Render()
 	ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+	ImPlot::ShowDemoWindow();
+
 	//ImGui::ShowStyleEditor();
 	ImGui::ShowMetricsWindow();
 

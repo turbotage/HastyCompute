@@ -166,7 +166,7 @@ namespace hasty {
 				std::mutex ctxmut;
 			};
 
-			Admm(const std::shared_ptr<AdmmMinimizer>& xmin, const std::shared_ptr<AdmmMinimizer>& zmin);
+			Admm(std::shared_ptr<AdmmMinimizer> xmin, std::shared_ptr<AdmmMinimizer> zmin);
 
 			void run(Admm::Context& ctx);
 

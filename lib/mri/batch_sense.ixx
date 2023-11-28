@@ -397,7 +397,6 @@ namespace hasty {
 			}
 
 
-
 		private:
 			std::vector<at::Tensor> _coords;
 			std::vector<int64_t> _nmodes;
@@ -420,28 +419,28 @@ namespace hasty {
 				std::shared_ptr<op::Admm::Context> ctx,
 				at::optional<std::vector<at::Tensor>> preconds = at::nullopt)
 			{
-				auto senseloader =
-					std::make_shared<SenseBatchConjugateGradientLoader<SDeviceContext>>(coords, nmodes, kdata, smaps, ctx, preconds);
+				auto senseloader = std::make_shared<SenseBatchConjugateGradientLoader<SDeviceContext>>(
+					std::move(coords), std::move(nmodes), std::move(kdata), std::move(smaps), std::move(ctx), std::move(preconds));
 
-				_batchcg = std::make_unique<op::BatchConjugateGradient<SenseDeviceContext>>(senseloader, sensethreadpool);
-
-				//_batchcg = new op::BatchConjugateGradient<SDeviceContext>(senseloader, sensethreadpool);
+				_batchcg = std::make_unique<op::BatchConjugateGradient<SenseDeviceContext>>(
+					std::move(senseloader), std::move(sensethreadpool));
 
 				_iters = 10;
 				_tol = 0.0;
 			}
 
-			void set_iters(int iters);
+			void set_iters(int iters) { _iters = iters; }
 
-			void set_tol(double tol);
+			void set_tol(double tol) { _tol = tol; }
+
+			void solve(op::Admm::Context& ctx) override {
+				_batchcg->run(ctx.x, _iters, _tol);
+			}
 
 		private:
-
-
 			std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> _batchcg;
 			int _iters;
 			double _tol;
-
 		};
 
 

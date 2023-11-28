@@ -95,10 +95,8 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 	}
 }
 
-
-
-hasty::op::Admm::Admm(const std::shared_ptr<AdmmMinimizer>& xmin, const std::shared_ptr<AdmmMinimizer>& zmin)
-	: _xmin(xmin), _zmin(zmin)
+hasty::op::Admm::Admm(std::shared_ptr<AdmmMinimizer> xmin, std::shared_ptr<AdmmMinimizer> zmin)
+	: _xmin(std::move(xmin)), _zmin(std::move(zmin))
 {
 }
 

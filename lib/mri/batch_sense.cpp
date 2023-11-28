@@ -485,39 +485,3 @@ hasty::mri::OuterManipulator hasty::mri::BatchedSenseNormal::standard_weighted_k
 		});
 }
 
-
-// SENSE LOADER FOR BATCH CG
-
-
-/*
-hasty::mri::BatchSenseAdmmMinimizer::BatchSenseAdmmMinimizer(
-	std::shared_ptr<ContextThreadPool<SenseDeviceContext>> sensethreadpool,
-	std::vector<at::Tensor> coords, std::vector<int64_t> nmodes, 
-	std::vector<at::Tensor> kdata, at::Tensor smaps, std::shared_ptr<op::Admm::Context> ctx, 
-	at::optional<std::vector<at::Tensor>> preconds)
-{
-	std::shared_ptr<op::BatchConjugateGradientLoader<SenseDeviceContext>> senseloader = 
-		std::make_shared<SenseBatchConjugateGradientLoader>(coords, nmodes, kdata, smaps, ctx, preconds);
-	
-	_batchcg = std::make_unique<op::BatchConjugateGradient<SenseDeviceContext>>(senseloader, sensethreadpool);
-
-	_iters = 10;
-	_tol = 0.0;
-}
-*/
-
-void hasty::mri::BatchSenseAdmmMinimizer::set_iters(int iters)
-{
-	_iters = iters;
-}
-
-void hasty::mri::BatchSenseAdmmMinimizer::set_tol(double tol)
-{
-	_tol = tol;
-}
-
-void hasty::op::AdmmMinimizer::solve(Admm::Context& ctx) 
-{
-	_batchcg->run(ctx.x, _iters, _tol);
-}
-

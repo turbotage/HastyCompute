@@ -50,6 +50,8 @@ namespace hasty {
 
 			void RenderGlobalOptions();
 
+			void RenderPreslicer();
+
 			void Render(const struct VizAppRenderInfo& rinfo);
 
 		private:
