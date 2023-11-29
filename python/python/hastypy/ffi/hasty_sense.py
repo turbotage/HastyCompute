@@ -1,11 +1,9 @@
 import torch
 
-#_dll_path = "D:/Documents/GitHub/HastyCompute/out/install/x64-release-cuda/bin/HastyPyInterface.dll"
-_dll_path = "D:/Documents/GitHub/HastyCompute/out/build/msvc-release-cuda/Release/HastyPyInterface.dll"
+import hastypy.ffi.hasty_ffi as hasty_ffi
 
-
-torch.classes.load_library(_dll_path)
-#torch.ops.load_library(_dll_path) # only necessary for docstrings
+torch.classes.load_library(hasty_ffi.get_ffi_libfile())
+torch.ops.load_library(hasty_ffi.get_ffi_libfile()) # only necessary for docstrings
 
 _hasty_sense_mod = torch.classes.HastySense
 _hasty_batched_sense_mod = torch.classes.HastyBatchedSense

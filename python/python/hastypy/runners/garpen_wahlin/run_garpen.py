@@ -91,7 +91,7 @@ def run(settings: RunSettings):
 
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=30, callback=plot_callback)
+	image = full_recon.run(image, iter=6, callback=plot_callback)
 
 	#pu.image_nd(image.numpy())
 
@@ -123,32 +123,10 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	gc.collect()
 	torch.cuda.empty_cache()
 
-	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=3, random=False, 
+	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=4, random=False, 
 			nblocks=0, thresh=5e-6, soft=True)
 
-	precond_pdhg = False
-	precond_weights = False
-	if precond_pdhg:
-		preconds = []
-		print('Preconditioning matrices...')
-		for i in range(len(coord_vec)):
-			print("\r", end="")
-			print('Coil: ', i, '/', len(coord_vec), end="")
-			P = precond.kspace_precond(smaps, coord_vec[i])
-			P /= torch.mean(torch.abs(P))
-
-			preconds.append(P.to(device='cpu', non_blocking=False))
-		print(' Done.')
-
-		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-	elif precond_weights:
-		preconds = []
-		for i in range(len(coord_vec)):
-			preconds.append(weights_vec[i].repeat(smaps.shape[0],1).unsqueeze(0))
-
-		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='PDHG', sigma=Vector(preconds))
-	else:
-		framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='GD')
+	framed_recon = FivePointLLR(smaps, coord_vec, kdata_vec, svt_opts, solver='GD')
 
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.view((settings.nframes,5) + settings.im_size).numpy())
@@ -161,7 +139,7 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 if __name__ == '__main__':
 
 	base_path = 'D:/4Drecon/Garpen/Ena/'
-	resol = 160 
+	resol = 256
 	file_ending = '_' + str(resol)
 
 	with torch.inference_mode():
@@ -176,7 +154,7 @@ if __name__ == '__main__':
 		postfovkmuls = (1.0,1.0,1.0)
 
 		settings = RunSettings(im_size, crop_factors, prefovkmuls, postfovkmuls, shift
-			).set_nframes(20
+			).set_nframes(15
 			).set_smaps_filepath(base_path + 'SenseMaps.h5'
 			).set_rawdata_filepath(base_path + 'MRI_Raw.h5')
 
