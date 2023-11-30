@@ -77,6 +77,10 @@ namespace hasty {
 
 		};
 
+		export class NewNormal3DBlocksSVT : public BlocksSVTBase {
+
+		};
+
 	}
 }
 

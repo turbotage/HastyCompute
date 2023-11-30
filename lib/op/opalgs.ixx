@@ -179,7 +179,11 @@ namespace hasty {
 		export class AdmmMinimizer : public OperatorAlg {
 		public:
 
-			virtual void solve(Admm::Context& ctx);
+			virtual void solve(Admm::Context& ctx) = 0;
+
+			virtual void set_iters(int64_t iters) = 0;
+
+			virtual void set_tol(double tol) = 0;
 
 		private:
 

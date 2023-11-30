@@ -1,5 +1,7 @@
 module;
 
+#include "../deps/jitify/jitify.hpp"
+
 export module hasty;
 
 import <memory>;
