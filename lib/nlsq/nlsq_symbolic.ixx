@@ -54,15 +54,15 @@ namespace hasty {
 				return std::hash<std::string>{}(_expr);
 			}
 
-			std::pair<vecp<std::string, uptr<expr::Expression>>, uptr<expr::Expression>> get_funcexprs()
+			std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>, uptr<expr::Expression>> get_funcexprs()
 			{
-				std::pair<vecp<std::string, uptr<expr::Expression>>,vec<uptr<expr::Expression>>> cse_exprs =
+				std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>,vec<uptr<expr::Expression>>> cse_exprs =
 					expr::Expression::cse({ _expr });
 				uptr<expr::Expression> func = std::move(cse_exprs.second[0]);
 				return std::make_pair(std::move(cse_exprs.first), std::move(func));
 			}
 
-			std::pair<vecp<std::string, uptr<expr::Expression>>, vec<uptr<expr::Expression>>> get_first_derivatives()
+			std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>, vec<uptr<expr::Expression>>> get_first_derivatives()
 			{
 				std::vector<std::string> vars = util::vec_concat(_pars, _consts);
 
@@ -73,13 +73,13 @@ namespace hasty {
 					derivatives.push_back(expr.diff(par)->str(std::nullopt));
 				}
 
-				std::pair<vecp<std::string, uptr<expr::Expression>>, vec<uptr<expr::Expression>>> ret = 
+				std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>, vec<uptr<expr::Expression>>> ret = 
 					expr::Expression::cse(derivatives);
 
 				return ret;
 			}
 
-			std::pair<vecp<std::string, uptr<expr::Expression>>, vec<uptr<expr::Expression>>> get_second_derivatives()
+			std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>, vec<uptr<expr::Expression>>> get_second_derivatives()
 			{
 				std::vector<std::string> vars = util::vec_concat(_pars, _consts);
 
@@ -95,7 +95,7 @@ namespace hasty {
 					}
 				}
 
-				std::pair<vecp<std::string, uptr<expr::Expression>>, vec<uptr<expr::Expression>>> ret =
+				std::pair<vec<std::pair<std::string, uptr<expr::Expression>>>, vec<uptr<expr::Expression>>> ret =
 					expr::Expression::cse(derivatives);
 
 				return ret;

@@ -43,40 +43,40 @@ namespace hasty {
 			/*
 			is required to point to an AdjointableOp if this is AdjtointableOp
 			*/
-			virtual std::shared_ptr<Operator> to_device(at::Stream stream) const = 0;
+			virtual sptr<Operator> to_device(at::Stream stream) const = 0;
 
 			/*
 			template<OpConcept Op>
-			std::shared_ptr<Op> downcast() const;
+			sptr<Op> downcast() const;
 			*/
 
 			template<OpConcept Op1, OpConcept Op2>
 			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-			friend std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class AddOp> add(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-			friend std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class AdjointableAddOp> add(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<OpConcept Op1, OpConcept Op2>
 			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-			friend std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class SubOp> sub(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-			friend std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class AdjointableSubOp> sub(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<OpConcept Op1, OpConcept Op2>
 			requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-			friend std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class MulOp> mul(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-			friend std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs);
+			friend sptr<class AdjointableMulOp> mul(sptr<Op1> lhs, sptr<Op2> rhs);
 
 			template<OpConcept Op>
 			requires NotAdjointableOpConcept<Op>
-			friend std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
+			friend sptr<class ScaleOp> mul(const at::Tensor& lhs, sptr<Op> rhs);
 
 			template<AdjointableOpConcept Op>
-			friend std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs);
+			friend sptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, sptr<Op> rhs);
 
 
 		protected:
@@ -99,7 +99,7 @@ namespace hasty {
 		export class AdjointableOp : public Operator {
 		public:
 
-			virtual std::shared_ptr<AdjointableOp> adjoint() const = 0;
+			virtual sptr<AdjointableOp> adjoint() const = 0;
 
 		protected:
 
@@ -111,39 +111,39 @@ namespace hasty {
 		export class DefaultAdjointableOp : public AdjointableOp {
 		public:
 
-			static std::unique_ptr<DefaultAdjointableOp> Create(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
+			static uptr<DefaultAdjointableOp> Create(sptr<Operator> op, sptr<Operator> oph);
 
 			Vector apply(const Vector& in) const override;
 
-			std::shared_ptr<AdjointableOp> adjoint() const override;
+			sptr<AdjointableOp> adjoint() const override;
 
-			std::shared_ptr<Operator> to_device(at::Stream stream) const override;
+			sptr<Operator> to_device(at::Stream stream) const override;
 
 		protected:
 
-			DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph);
+			DefaultAdjointableOp(sptr<Operator> op, sptr<Operator> oph);
 
 		private:
-			std::shared_ptr<Operator> _op;
-			std::shared_ptr<Operator> _oph;
+			sptr<Operator> _op;
+			sptr<Operator> _oph;
 		};
 
 		export template<typename RetOp, typename InpOp>
 		requires OpConcept<InpOp>&& std::derived_from<RetOp, InpOp>
-		std::shared_ptr<RetOp> downcast(std::shared_ptr<InpOp> inop)
+		sptr<RetOp> downcast(sptr<InpOp> inop)
 		{
 			return std::dynamic_pointer_cast<RetOp>(std::move(inop));
 		}
 
 		export template<typename RetOp, typename InpOp>
 		requires std::derived_from<InpOp, RetOp>&& OpConcept<RetOp>
-		std::shared_ptr<RetOp> upcast(std::shared_ptr<InpOp> inop)
+		sptr<RetOp> upcast(sptr<InpOp> inop)
 		{
 			return std::static_pointer_cast<RetOp>(std::move(inop));
 		}
 
 		export template<OpConcept RetOp, OpConcept InpOp>
-		std::shared_ptr<RetOp> staticcast(std::shared_ptr<InpOp> inop)
+		sptr<RetOp> staticcast(sptr<InpOp> inop)
 		{
 			return std::static_pointer_cast<RetOp>(std::move(inop));
 		}
@@ -152,14 +152,14 @@ namespace hasty {
 		// ADD
 		export template<OpConcept Op1, OpConcept Op2>
 		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-		std::shared_ptr<class AddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class AddOp> add(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return AddOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// ADD ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-		std::shared_ptr<class AdjointableAddOp> add(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class AdjointableAddOp> add(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return AdjointableAddOp::Create(std::move(lhs), std::move(rhs));
 		}
@@ -167,14 +167,14 @@ namespace hasty {
 		// SUB
 		export template<OpConcept Op1, OpConcept Op2>
 		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-		std::shared_ptr<class SubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class SubOp> sub(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return SubOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// SUB ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-		std::shared_ptr<class AdjointableSubOp> sub(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class AdjointableSubOp> sub(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return AdjointableSubOp::Create(std::move(lhs), std::move(rhs));
 		}
@@ -182,14 +182,14 @@ namespace hasty {
 		// MUL
 		export template<OpConcept Op1, OpConcept Op2>
 		requires NotAdjointableOpConcept<Op1> || NotAdjointableOpConcept<Op2>
-		std::shared_ptr<class MulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class MulOp> mul(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return MulOp::Create(std::move(lhs), std::move(rhs));
 		}
 
 		// MUL ADJ
 		export template<AdjointableOpConcept Op1, AdjointableOpConcept Op2>
-		std::shared_ptr<class AdjointableMulOp> mul(std::shared_ptr<Op1> lhs, std::shared_ptr<Op2> rhs)
+		sptr<class AdjointableMulOp> mul(sptr<Op1> lhs, sptr<Op2> rhs)
 		{
 			return AdjointableMulOp::Create(std::move(lhs), std::move(rhs));
 		}
@@ -197,14 +197,14 @@ namespace hasty {
 		// SCALE MUL
 		export template<OpConcept Op>
 		requires NotAdjointableOpConcept<Op>
-		std::shared_ptr<class ScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
+		sptr<class ScaleOp> mul(const at::Tensor& lhs, sptr<Op> rhs)
 		{
 			return ScaleOp::Create(lhs, std::move(rhs));
 		}
 
 		// SCALE MUL ADJ
 		export template<AdjointableOpConcept Op>
-		std::shared_ptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, std::shared_ptr<Op> rhs)
+		sptr<class AdjointableScaleOp> mul(const at::Tensor& lhs, sptr<Op> rhs)
 		{
 			return AdjointableScaleOp::Create(lhs, std::move(rhs));
 		}

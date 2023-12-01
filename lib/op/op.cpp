@@ -82,16 +82,16 @@ hasty::op::AdjointableOp::AdjointableOp(bool should_inplace_apply)
 
 // DEFAULT ADJOINTABLE OP
 
-std::unique_ptr<hasty::op::DefaultAdjointableOp> hasty::op::DefaultAdjointableOp::Create(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
+hasty::uptr<hasty::op::DefaultAdjointableOp> hasty::op::DefaultAdjointableOp::Create(sptr<Operator> op, sptr<Operator> oph)
 {
 	struct creator : public DefaultAdjointableOp {
-		creator(std::shared_ptr<Operator> a, std::shared_ptr<Operator> b)
+		creator(sptr<Operator> a, sptr<Operator> b)
 			: DefaultAdjointableOp(std::move(a), std::move(b)) {}
 	};
 	return std::make_unique<creator>(std::move(op), std::move(oph));
 }
 
-hasty::op::DefaultAdjointableOp::DefaultAdjointableOp(std::shared_ptr<Operator> op, std::shared_ptr<Operator> oph)
+hasty::op::DefaultAdjointableOp::DefaultAdjointableOp(sptr<Operator> op, sptr<Operator> oph)
 	: _op(std::move(op)), _oph(std::move(oph))
 {
 }
@@ -101,12 +101,12 @@ hasty::op::Vector hasty::op::DefaultAdjointableOp::apply(const Vector& in) const
 	return _oph->apply(in);
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::DefaultAdjointableOp::adjoint() const
+hasty::sptr<hasty::op::AdjointableOp> hasty::op::DefaultAdjointableOp::adjoint() const
 {
 	return DefaultAdjointableOp::Create(_oph, _op);
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::DefaultAdjointableOp::to_device(at::Stream stream) const
+hasty::sptr<hasty::op::Operator> hasty::op::DefaultAdjointableOp::to_device(at::Stream stream) const
 {
 	return DefaultAdjointableOp::Create(std::move(_oph->to_device(stream)), std::move(_op->to_device(stream)));
 }

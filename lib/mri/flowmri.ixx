@@ -6,6 +6,7 @@ export module flowmri;
 
 import opalgs;
 import thread_pool;
+import device;
 
 namespace hasty {
 	namespace mri {
@@ -18,17 +19,24 @@ namespace hasty {
 		}
 		*/
 
-		export class FiveEncNuclearNormAdmmMinimizer : public hasty::op::AdmmMinimizer {
+		export template<hasty::DeviceContextConcept DContext>
+		class FiveEncNuclearNormAdmmMinimizer : public hasty::op::AdmmMinimizer {
 		public:
 
-			FiveEncNuclearNormAdmmMinimizer(std::unique_ptr<ContextThreadPool<at::Stream>> threadpool)
+			FiveEncNuclearNormAdmmMinimizer(
+				std::shared_ptr<ContextThreadPool<DContext>> threadpool
+			)
 				: _threadpool(std::move(threadpool))
-			{
+			{}
+
+			void solve(op::Admm::Context& ctx) override {
 
 			}
 
+
+
 		private:
-			std::unique_ptr<ContextThreadPool<at::Stream>> _threadpool;
+			std::shared_ptr<ContextThreadPool<DContext>> _threadpool;
 		};
 
 

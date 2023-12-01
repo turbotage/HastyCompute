@@ -66,7 +66,7 @@ int {{funcid}}(const {{fp_type}}* mat, int offset)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{ "fp_type", dtype_to_string(_dtype)},
 					{ "funcid", dfid()}
@@ -114,7 +114,7 @@ void {{funcid}}({{fp_type}}* mat, int ii, int jj)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{ "fp_type", dtype_to_string(_dtype)},
 					{ "funcid", dfid()}
@@ -162,7 +162,7 @@ void {{funcid}}({{fp_type}}* mat, int ii, int jj)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{ "fp_type", dtype_to_string(_dtype)},
 					{ "funcid", dfid()}
@@ -217,7 +217,7 @@ void {{funcid}}({{fp_type}}* mat, int* perm)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()},
@@ -269,7 +269,7 @@ void {{funcid}}(const {{fp_type}}* vec, const int* perm, {{fp_type}}* ovec)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}
@@ -312,7 +312,7 @@ void {{funcid}}(const {{fp_type}}* vec, const int* perm, {{fp_type}}* ovec)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}

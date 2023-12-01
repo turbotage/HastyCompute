@@ -36,20 +36,20 @@ namespace hasty {
 		export class ConjugateGradient : public OperatorAlg {
 		public:
 
-			ConjugateGradient(std::shared_ptr<op::Operator> A, std::shared_ptr<op::Vector> b, std::shared_ptr<op::Operator> P);
+			ConjugateGradient(sptr<op::Operator> A, sptr<op::Vector> b, sptr<op::Operator> P);
 
 			void run(op::Vector& x, int iter = 30, double tol = 0.0);
 
 		private:
-			std::shared_ptr<op::Operator> _A;
-			std::shared_ptr<op::Vector> _b;
-			std::shared_ptr<op::Operator> _P;
+			sptr<op::Operator> _A;
+			sptr<op::Vector> _b;
+			sptr<op::Operator> _P;
 		};
 
 		export struct ConjugateGradientLoadResult {
-			std::shared_ptr<op::Operator> A;
+			sptr<op::Operator> A;
 			op::Vector b;
-			std::shared_ptr<Operator> P;
+			sptr<Operator> P;
 		};
 
 		export template<typename DeviceContext>
@@ -85,8 +85,8 @@ namespace hasty {
 		class BatchConjugateGradient : public OperatorAlg {
 		public:
 
-			BatchConjugateGradient(std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>> loader,
-				std::shared_ptr<hasty::ContextThreadPool<DeviceContext>> thread_pool)
+			BatchConjugateGradient(sptr<BatchConjugateGradientLoader<DeviceContext>> loader,
+				sptr<hasty::ContextThreadPool<DeviceContext>> thread_pool)
 				: _cg_loader(std::move(loader)), _thread_pool(std::move(thread_pool))
 			{}
 
@@ -120,19 +120,19 @@ namespace hasty {
 				}
 			}
 
-			const std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>>& get_loader() const
+			const sptr<BatchConjugateGradientLoader<DeviceContext>>& get_loader() const
 			{
 				return _cg_loader;
 			}
 
-			const std::shared_ptr<ContextThreadPool<DeviceContext>>& get_threadpool() const
+			const sptr<ContextThreadPool<DeviceContext>>& get_threadpool() const
 			{
 				return _thread_pool;
 			}
 
 		private:
-			std::shared_ptr<BatchConjugateGradientLoader<DeviceContext>> _cg_loader;
-			std::shared_ptr<ContextThreadPool<DeviceContext>> _thread_pool;
+			sptr<BatchConjugateGradientLoader<DeviceContext>> _cg_loader;
+			sptr<ContextThreadPool<DeviceContext>> _thread_pool;
 		};
 
 		class AdmmMinimizer;
@@ -142,16 +142,16 @@ namespace hasty {
 
 			struct Context {
 				// Ax + Bz = c
-				std::shared_ptr<op::AdjointableOp> A;
-				std::shared_ptr<op::AdjointableOp> B;
+				sptr<op::AdjointableOp> A;
+				sptr<op::AdjointableOp> B;
 				std::optional<op::Vector> c; // offset
 
 				op::Vector x; // x
 				op::Vector z; // z
 				op::Vector u; // scaled dual variable
 
-				std::shared_ptr<op::AdjointableOp> AHA;
-				std::shared_ptr<op::AdjointableOp> BHB;
+				sptr<op::AdjointableOp> AHA;
+				sptr<op::AdjointableOp> BHB;
 
 				double rho;
 
@@ -166,14 +166,14 @@ namespace hasty {
 				std::mutex ctxmut;
 			};
 
-			Admm(std::shared_ptr<AdmmMinimizer> xmin, std::shared_ptr<AdmmMinimizer> zmin);
+			Admm(sptr<AdmmMinimizer> xmin, sptr<AdmmMinimizer> zmin);
 
 			void run(Admm::Context& ctx);
 
 		private:
-			std::shared_ptr<Context> _ctx;
-			std::shared_ptr<AdmmMinimizer> _xmin;
-			std::shared_ptr<AdmmMinimizer> _zmin;
+			sptr<Context> _ctx;
+			sptr<AdmmMinimizer> _xmin;
+			sptr<AdmmMinimizer> _zmin;
 		};
 
 		export class AdmmMinimizer : public OperatorAlg {

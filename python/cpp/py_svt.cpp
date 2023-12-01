@@ -45,7 +45,7 @@ void hasty::ffi::Random3DBlocksSVT::apply(at::Tensor in, int64_t nblocks, const 
 
 
 hasty::ffi::Normal3DBlocksSVT::Normal3DBlocksSVT(const at::optional<at::ArrayRef<at::Stream>>& streams)
-	: _nbsvt(std::make_unique<hasty::svt::Normal3DBlocksSVT>(get_batch_contexts(get_streams(streams))))
+	: _nbsvt(std::make_unique<hasty::svt::OldNormal3DBlocksSVT>(get_batch_contexts(get_streams(streams))))
 {
 }
 

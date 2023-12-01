@@ -8,6 +8,7 @@ export module batch_sense;
 import <optional>;
 import <functional>;
 
+import device;
 import torch_util;
 import sense;
 import thread_pool;
@@ -279,10 +280,9 @@ namespace hasty {
 
 
 
-		export class SenseDeviceContext {
+		export class SenseDeviceContext : public hasty::DeviceContext {
 		public:
 			virtual const at::Tensor& smaps() const = 0;
-			virtual const at::Stream& stream() const = 0;
 		};
 
 		export template<typename T>
@@ -427,6 +427,8 @@ namespace hasty {
 			void set_iters(int iters) override { _iters = iters; }
 
 			void set_tol(double tol) override { _tol = tol; }
+
+			std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> get_bcg() { return std::move(_batchcg); }
 
 		private:
 			std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> _batchcg;

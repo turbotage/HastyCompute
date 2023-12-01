@@ -1857,7 +1857,7 @@ const std::string& Expression::get_expression() const
 	return m_Expression;
 }
 
-std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> hasty::expr::Expression::cse(const vec<std::string>& exprs)
+std::pair<vec<std::pair<std::string, uptr<Expression>>>, vec<uptr<Expression>>> hasty::expr::Expression::cse(const vec<std::string>& exprs)
 {
 	SymEngine::vec_pair sym_subexprs;
 	SymEngine::vec_basic sym_reduced;
@@ -1870,7 +1870,7 @@ std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> hasty::exp
 
 	SymEngine::cse(sym_subexprs, sym_reduced, sym_exprs);
 
-	vecp<std::string, uptr<Expression>> subexprs;
+	vec<std::pair<std::string, uptr<Expression>>> subexprs;
 
 	// subexprs
 	for (auto& sym_subexpr : sym_subexprs) {

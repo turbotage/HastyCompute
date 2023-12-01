@@ -48,7 +48,7 @@ namespace hasty {
 		return ret;
 	}
 
-	export std::string code_replacer(const std::string& code, const vecp<std::string, std::string>& replace_dict)
+	export std::string code_replacer(const std::string& code, const vec<std::pair<std::string, std::string>>& replace_dict)
 	{
 		std::string ret = code;
 

@@ -4,7 +4,7 @@ module;
 
 module mriop;
 
-std::unique_ptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, 
+hasty::uptr<hasty::op::SenseOp> hasty::op::SenseOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, const at::optional<fft::NufftOptions>& opts)
 {
 	struct creator : public SenseOp {
@@ -58,7 +58,7 @@ hasty::op::Vector hasty::op::SenseOp::apply(const Vector& in) const
 	return Vector(newchilds);
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
+hasty::sptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
 {
 	auto newops = _opts;
 	newops.type = fft::NufftType::eType2;
@@ -66,14 +66,14 @@ std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseOp::adjoint() const
 	return SenseHOp::Create(_coords, _nmodes, _smaps, _coils, true, newops);
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::SenseOp::to_device(at::Stream stream) const
+hasty::sptr<hasty::op::Operator> hasty::op::SenseOp::to_device(at::Stream stream) const
 {
 	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
 }
 
 // SENSE ADJOINT
 
-std::unique_ptr<hasty::op::SenseHOp> hasty::op::SenseHOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+hasty::uptr<hasty::op::SenseHOp> hasty::op::SenseHOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 	const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate,
 	const at::optional<fft::NufftOptions>& opts)
 {
@@ -129,21 +129,21 @@ hasty::op::Vector hasty::op::SenseHOp::apply(const Vector& in) const
 	return Vector(newchilds);
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseHOp::adjoint() const
+hasty::sptr<hasty::op::AdjointableOp> hasty::op::SenseHOp::adjoint() const
 {
 	auto newops = _opts;
 	newops.type = fft::NufftType::eType2;
 	return SenseOp::Create(_coords, _nmodes, _smaps, _coils, newops);
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::SenseHOp::to_device(at::Stream stream) const
+hasty::sptr<hasty::op::Operator> hasty::op::SenseHOp::to_device(at::Stream stream) const
 {
 	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
 }
 
 // SENSE NORMAL OP
 
-std::unique_ptr<hasty::op::SenseNOp> hasty::op::SenseNOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps,
+hasty::uptr<hasty::op::SenseNOp> hasty::op::SenseNOp::Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes, const at::Tensor& smaps,
 	const std::vector<int64_t>& coils, const at::optional<fft::NufftOptions>& forward_opts, const at::optional<fft::NufftOptions>& backward_opts)
 {
 	struct creator : public SenseNOp {
@@ -187,7 +187,7 @@ hasty::op::SenseNOp::SenseNHolder::SenseNHolder(const at::Tensor& coords, const 
 		_cpusense = std::make_unique<mri::SenseNormal>(_coords, _nmodes, _forward_opts, _backward_opts);
 }
 
-hasty::op::SenseNOp::SenseNOp(std::shared_ptr<SenseNHolder> shoulder)
+hasty::op::SenseNOp::SenseNOp(sptr<SenseNHolder> shoulder)
 	: _senseholder(std::move(shoulder))
 {
 }
@@ -265,16 +265,16 @@ hasty::op::Vector hasty::op::SenseNOp::apply_backward(const Vector& in) const
 	return Vector(newchilds);
 }
 
-std::shared_ptr<hasty::op::AdjointableOp> hasty::op::SenseNOp::adjoint() const
+hasty::sptr<hasty::op::AdjointableOp> hasty::op::SenseNOp::adjoint() const
 {
 	struct creator : public SenseNOp { 
-		creator(std::shared_ptr<SenseNHolder> _sh)
+		creator(sptr<SenseNHolder> _sh)
 			: SenseNOp(std::move(_sh)) {}
 	};
 	return std::make_shared<creator>(_senseholder);
 }
 
-std::shared_ptr<hasty::op::Operator> hasty::op::SenseNOp::to_device(at::Stream stream) const
+hasty::sptr<hasty::op::Operator> hasty::op::SenseNOp::to_device(at::Stream stream) const
 {
 	throw std::runtime_error("Sense operations may only be constructed on one device and never moved");
 }

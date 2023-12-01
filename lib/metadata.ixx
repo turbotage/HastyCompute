@@ -39,7 +39,7 @@ namespace hasty {
 
 	private:
 
-		umap<std::string, sptr<Metadata>> _contents;
+		std::unordered_map<std::string, sptr<Metadata>> _contents;
 
 	};
 

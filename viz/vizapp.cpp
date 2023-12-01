@@ -10,17 +10,19 @@ import hdf5;
 hasty::viz::VizApp::VizApp(SkiaContext& skiactx)
 	: _skiactx(skiactx)
 {
-	/*
+	
 	_tensor = at::abs(hasty::import_tensor(
 		"D:\\4DRecon\\dat\\dat2\\my_full_real_45.h5",
 		"image"
 	)).contiguous();
-	*/
+	
 
+	/*
 	_tensor = at::abs(hasty::import_tensor(
 		"D:\\4DRecon\\Wahlin\\BrutalAndning\\my_full_real_170.h5",
 		"image"
 	)).contiguous();
+	*/
 
 	_tensor /= _tensor.max();
 

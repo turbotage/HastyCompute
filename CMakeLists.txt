@@ -46,6 +46,7 @@ target_sources(HastyComputeLib
 		"lib/torch_util.ixx"
 		"lib/torch_util.cpp"
 
+		"lib/device.ixx"
 		"lib/hasty.ixx"
 		"lib/hasty_compute.ixx"
 		"lib/hasty_util.ixx"

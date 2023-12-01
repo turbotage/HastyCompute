@@ -484,7 +484,7 @@ namespace hasty {
 
 			const std::string& get_expression() const;
 
-			static std::pair<vecp<std::string, uptr<Expression>>, vec<uptr<Expression>>> cse(const vec<std::string>& exprs);
+			static std::pair<vec<std::pair<std::string, uptr<Expression>>>, vec<uptr<Expression>>> cse(const vec<std::string>& exprs);
 
 		private:
 			friend class ExpressionWalker;

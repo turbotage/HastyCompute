@@ -32,10 +32,10 @@ namespace hasty {
 		using f64 = double;
 
 		template<typename T>
-		using vec = std::vector<T>;
+		using opt = std::optional<T>;
 
-		template<typename T, typename U>
-		using vecp = std::vector<std::pair<T, U>>;
+		template<typename T>
+		using vec = std::vector<T>;
 
 		template<typename T>
 		using sptr = std::shared_ptr<T>;
@@ -43,58 +43,24 @@ namespace hasty {
 		template<typename T>
 		using uptr = std::unique_ptr<T>;
 
-		template<typename T, typename U>
-		using umap = std::unordered_map<T, U>;
-
-	}
-
-	export {
-
-		template<typename T>
-		class raw_ptr {
-		public:
-
-			raw_ptr() { m_Ptr = nullptr; }
-			raw_ptr(T& in) { m_Ptr = &in; }
-			raw_ptr(const raw_ptr&) = delete;
-
-			raw_ptr& operator=(const raw_ptr&) = delete;
-
-			raw_ptr(raw_ptr&& other) {
-				m_Ptr = other.m_Ptr;
-				other.m_Ptr = nullptr;
-			}
-			void operator=(raw_ptr&& other) {
-				m_Ptr = other.m_Ptr;
-				other.m_Ptr = nullptr;
-			}
-
-			bool is_null() {
-				return m_Ptr == nullptr;
-			}
-
-			T* get() { return m_Ptr; }
-
-			T* operator->() { return m_Ptr; }
-
-			T* operator->() const { return m_Ptr; }
-
-			T& operator*() { return *m_Ptr; }
-
-		private:
-			T* m_Ptr;
-		};
-
-		// Used to signal output, functions with these parameters will fill the variable which the
-		// reference points to
-		template<typename T>
-		using out_ref = T&;
-
 		template<typename T>
 		using refw = std::reference_wrapper<T>;
 
 		template<typename T>
 		using crefw = std::reference_wrapper<const T>;
+
+		template<typename T>
+		using optref = std::optional<refw<T>>;
+
+		template<typename T>
+		using opt_uptr = std::optional<std::unique_ptr<T>>;
+
+		template<typename T>
+		using opt_sptr = std::optional<std::shared_ptr<T>>;
+
+	}
+
+	export {
 
 		class multiple_inheritable_shared_from_this : public std::enable_shared_from_this<multiple_inheritable_shared_from_this> {
 		public:
@@ -123,27 +89,6 @@ namespace hasty {
 			}
 
 		};
-
-
-		// Used to signal output, functions with these parameters will fill the variable which the
-		// reference points to if tc::OptOutRef isn't std::nullopt
-		template<typename T>
-		using opt_out_ref = std::optional<refw<T>>;
-
-		template<typename T, typename U>
-		using opt_out_pair_ref = std::optional<std::pair<refw<T>, refw<U>>>;
-
-		template<typename T>
-		using opt_ref = std::optional<refw<T>>;
-
-		template<typename T, typename U>
-		using opt_pair_ref = std::optional<std::pair<refw<T>, refw<U>>>;
-
-		template<typename T>
-		using opt_u_ptr = std::optional<std::unique_ptr<T>>;
-
-		template<typename T>
-		using opt_s_ptr = std::optional<std::shared_ptr<T>>;
 
 		template <typename T>
 		struct reversion_wrapper { T& iterable; };

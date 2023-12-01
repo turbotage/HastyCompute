@@ -99,7 +99,7 @@ void {{funcid}}({{fp_type}}* mat)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}
@@ -156,7 +156,7 @@ void {{funcid}}({{fp_type}}* mat, int N)
 			}
 
 			std::string kcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"dfuncid", dfid()},
@@ -213,7 +213,7 @@ void {{funcid}}({{fp_type}}* mat)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}
@@ -269,7 +269,7 @@ void {{funcid}}({{fp_type}}* mat, int N)
 			}
 
 			std::string kcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"dfuncid", dfid()},
@@ -319,7 +319,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}
@@ -367,7 +367,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()}
@@ -416,7 +416,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()},
@@ -498,7 +498,7 @@ void {{funcid}}({{fp_type}}* mat, const {{fp_type}}* rhs, {{fp_type}}* sol)
 			}
 
 			std::string dcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"fp_type", dtype_to_string(_dtype)},
 					{"funcid", dfid()},
@@ -565,7 +565,7 @@ void {{funcid}}(const {{fp_type}}* mat, const {{fp_type}}* rhs, const char* step
 			}
 
 			std::string kcode() const override {
-				vecp<std::string, std::string> rep_dict = {
+				vec<std::pair<std::string, std::string>> rep_dict = {
 					{"ndim", std::to_string(_ndim)},
 					{"nmat", std::to_string(_ndim * (_ndim + 1) / 2)},
 					{"fp_type", dtype_to_string(_dtype)},

@@ -345,12 +345,13 @@ void hasty::svt::Random3DBlocksSVT::block_svt_step(DeviceContext& dctxt, at::Ten
 
 
 
-hasty::svt::Normal3DBlocksSVT::Normal3DBlocksSVT(const std::vector<DeviceContext>& contexts)
+hasty::svt::OldNormal3DBlocksSVT::OldNormal3DBlocksSVT(const std::vector<DeviceContext>& contexts)
 	: BlocksSVTBase(contexts)
 {
+
 }
 
-void hasty::svt::Normal3DBlocksSVT::apply(at::Tensor in, const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape, 
+void hasty::svt::OldNormal3DBlocksSVT::apply(at::Tensor in, const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape,
 	int64_t block_iter, double thresh, bool soft)
 {
 	c10::InferenceMode inference_guard;
@@ -444,9 +445,10 @@ void hasty::svt::Normal3DBlocksSVT::apply(at::Tensor in, const std::array<int64_
 		torch_util::future_catcher(futures.front());
 		futures.pop_front();
 	}
+
 }
 
-void hasty::svt::Normal3DBlocksSVT::block_svt_step(DeviceContext& dctxt, at::Tensor& in, const Block<3>& block, double thresh, bool soft)
+void hasty::svt::OldNormal3DBlocksSVT::block_svt_step(DeviceContext& dctxt, at::Tensor& in, const Block<3>& block, double thresh, bool soft)
 {
 	c10::InferenceMode inference_guard;
 

@@ -43,7 +43,7 @@ at::Tensor hasty::op::PowerIteration::run(const op::Operator& A, op::Vector& v, 
 	return max_eig;
 }
 
-hasty::op::ConjugateGradient::ConjugateGradient(std::shared_ptr<op::Operator> A, std::shared_ptr<op::Vector> b, std::shared_ptr<op::Operator> P)
+hasty::op::ConjugateGradient::ConjugateGradient(sptr<op::Operator> A, sptr<op::Vector> b, sptr<op::Operator> P)
 	: _A(std::move(A)), _b(std::move(b)), _P(std::move(P))
 {}
 
@@ -95,7 +95,7 @@ void hasty::op::ConjugateGradient::run(op::Vector& x, int iter, double tol)
 	}
 }
 
-hasty::op::Admm::Admm(std::shared_ptr<AdmmMinimizer> xmin, std::shared_ptr<AdmmMinimizer> zmin)
+hasty::op::Admm::Admm(sptr<AdmmMinimizer> xmin, sptr<AdmmMinimizer> zmin)
 	: _xmin(std::move(xmin)), _zmin(std::move(zmin))
 {
 }

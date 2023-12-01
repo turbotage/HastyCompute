@@ -15,15 +15,15 @@ namespace hasty {
 		export class SenseOp : public AdjointableOp {
 		public:
 
-			static std::unique_ptr<SenseOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static uptr<SenseOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
 
-			std::shared_ptr<AdjointableOp> adjoint() const;
+			sptr<AdjointableOp> adjoint() const;
 
-			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			sptr<Operator> to_device(at::Stream stream) const;
 
 		protected:
 
@@ -39,22 +39,22 @@ namespace hasty {
 			at::Tensor _smaps;
 			std::vector<int64_t> _coils;
 
-			std::unique_ptr<mri::Sense> _cpusense;
-			std::unique_ptr<mri::CUDASense> _cudasense;
+			uptr<mri::Sense> _cpusense;
+			uptr<mri::CUDASense> _cudasense;
 		};
 
 		export class SenseHOp : public AdjointableOp {
 		public:
 
-			static std::unique_ptr<SenseHOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static uptr<SenseHOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils, bool accumulate = false,
 				const at::optional<fft::NufftOptions>& opts = at::nullopt);
 
 			Vector apply(const Vector& in) const;
 
-			std::shared_ptr<AdjointableOp> adjoint() const;
+			sptr<AdjointableOp> adjoint() const;
 
-			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			sptr<Operator> to_device(at::Stream stream) const;
 
 		protected:
 			
@@ -72,14 +72,14 @@ namespace hasty {
 			at::Tensor _smaps;
 			std::vector<int64_t> _coils;
 
-			std::unique_ptr<mri::SenseAdjoint> _cpusense;
-			std::unique_ptr<mri::CUDASenseAdjoint> _cudasense;
+			uptr<mri::SenseAdjoint> _cpusense;
+			uptr<mri::CUDASenseAdjoint> _cudasense;
 		};
 
 		export class SenseNOp : public AdjointableOp {
 		public:
 
-			static std::unique_ptr<SenseNOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
+			static uptr<SenseNOp> Create(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
 				const at::Tensor& smaps, const std::vector<int64_t>& coils,
 				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
 				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
@@ -90,9 +90,9 @@ namespace hasty {
 
 			Vector apply_backward(const Vector& in) const;
 
-			std::shared_ptr<AdjointableOp> adjoint() const;
+			sptr<AdjointableOp> adjoint() const;
 
-			std::shared_ptr<Operator> to_device(at::Stream stream) const;
+			sptr<Operator> to_device(at::Stream stream) const;
 
 		protected:
 
@@ -111,8 +111,8 @@ namespace hasty {
 				at::Tensor _smaps;
 				std::vector<int64_t> _coils;
 
-				std::unique_ptr<mri::SenseNormal> _cpusense;
-				std::unique_ptr<mri::CUDASenseNormal> _cudasense;
+				uptr<mri::SenseNormal> _cpusense;
+				uptr<mri::CUDASenseNormal> _cudasense;
 			};
 
 			SenseNOp(const at::Tensor& coords, const std::vector<int64_t>& nmodes,
@@ -120,11 +120,11 @@ namespace hasty {
 				const at::optional<fft::NufftOptions>& forward_opts = at::nullopt,
 				const at::optional<fft::NufftOptions>& backward_opts = at::nullopt);
 
-			SenseNOp(std::shared_ptr<SenseNHolder> shoulder);
+			SenseNOp(sptr<SenseNHolder> shoulder);
 
 		private:
 
-			std::shared_ptr<SenseNHolder> _senseholder;
+			sptr<SenseNHolder> _senseholder;
 		};
 
 

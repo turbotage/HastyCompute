@@ -201,6 +201,18 @@ hasty::op::Vector hasty::op::Vector::clone() const
 	return Vector(std::move(newchildren));
 }
 
+hasty::op::Vector hasty::op::Vector::neg() const
+{
+	if (_children.empty()) {
+		return _tensor.neg();
+	}
+	std::vector<Vector> newchildren;
+	newchildren.reserve(_children.size());
+	for (auto& child : _children) {
+		newchildren.emplace_back(child.neg());
+	}
+	return Vector(std::move(newchildren));
+}
 
 hasty::op::Vector& hasty::op::Vector::operator+=(const Vector& rhs)
 {

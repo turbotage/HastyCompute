@@ -7,6 +7,8 @@ namespace hasty {
 	namespace svt {
 		class Random3DBlocksSVT;
 		class Normal3DBlocksSVT;
+
+		class OldNormal3DBlocksSVT;
 	}
 
 	namespace ffi {
@@ -31,7 +33,7 @@ namespace hasty {
 				int64_t block_iter, double thresh, bool soft);
 
 		private:
-			std::unique_ptr<hasty::svt::Normal3DBlocksSVT> _nbsvt;
+			std::unique_ptr<hasty::svt::OldNormal3DBlocksSVT> _nbsvt;
 		};
 
 	}

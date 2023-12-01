@@ -76,6 +76,8 @@ namespace hasty {
 
 			Vector clone() const;
 
+			Vector neg() const;
+
 			Vector& operator+=(const Vector& rhs);
 			friend Vector operator+(const Vector& lhs, const Vector& rhs);
 
