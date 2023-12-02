@@ -36,6 +36,10 @@ namespace hasty {
 
 			uint16_t bufferidx;
 
+			ImPlotRect axial_rect;
+			ImPlotRect coronal_rect;
+			ImPlotRect sagital_rect;
+
 			ThreadPool* tpool;
 		};
 

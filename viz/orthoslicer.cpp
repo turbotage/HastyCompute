@@ -29,6 +29,11 @@ hasty::viz::Orthoslicer::Orthoslicer(at::Tensor tensor)
 	_renderInfo.bufferidx = -1;
 	_renderInfo.tpool = nullptr;
 
+	auto mintensorlen = *std::min_element(_renderInfo.tensorlen.begin(), _renderInfo.tensorlen.end());
+	_renderInfo.axial_rect = ImPlotRect(0, mintensorlen / 8, 0, mintensorlen / 8);
+	_renderInfo.coronal_rect = ImPlotRect(0, mintensorlen / 8, 0, mintensorlen / 8);
+	_renderInfo.sagital_rect = ImPlotRect(0, mintensorlen / 8, 0, mintensorlen / 8);
+
 	_axialSlicer->SliceUpdate(_renderInfo);
 	_sagitalSlicer->SliceUpdate(_renderInfo);
 	_coronalSlicer->SliceUpdate(_renderInfo);
@@ -195,19 +200,6 @@ void hasty::viz::Orthoslicer::RenderPreslicer()
 				int64_t mousey = rows - static_cast<int64_t>(mousepos.y);
 
 				_renderInfo.preslices = { std::clamp(mousey, int64_t(0), rows - 1), std::clamp(mousex, int64_t(0), cols-1) };
-			
-				/*
-				double rect[4];
-				rect[0] = _renderInfo.preslices[0];
-				rect[1] = _renderInfo.preslices[1];
-				rect[2] = windowsize.x / cols;
-				rect[3] = windowsize.y / rows;
-				ImPlot::DragRect(ImGui::GetID("##PreslicerRect"), &rect[0], &rect[1], &rect[2], &rect[3],
-					ImVec4(0.0, 1.0, 0.0, 0.5), ImPlotDragToolFlags_NoInputs);
-
-				*/
-				ImDrawList* draw_list = ImGui::GetForegroundDrawList();
-
 			}
 
 			ImPlot::EndPlot();

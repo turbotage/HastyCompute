@@ -138,6 +138,32 @@ void hasty::viz::Slicer::HandleCursor(OrthoslicerRenderInfo& renderInfo)
 		ImPlot::PlotInfLines("##Horizontal", &ylinepos, 1, ImPlotInfLinesFlags_Horizontal);
 		ImPlot::PopStyleColor();
 	}
+
+	if (true) {
+
+		switch (view) {
+		case eAxial:
+		{
+			auto& rect = renderInfo.axial_rect;
+			ImPlot::DragRect(ImGui::GetID("AxialDragRect"), &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max, 
+				ImVec4(1, 0, 1, 1), 0);
+		} break;
+		case eCoronal:
+		{
+			auto& rect = renderInfo.coronal_rect;
+			ImPlot::DragRect(ImGui::GetID("CoronalDragRect"), &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max,
+				ImVec4(1, 0, 1, 1), 0);
+		}break;
+		case eSagital:
+		{
+			auto& rect = renderInfo.sagital_rect;
+			ImPlot::DragRect(ImGui::GetID("SagitalDragRect"), &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max,
+				ImVec4(1, 0, 1, 1), 0);
+		}break;
+		}
+	}
+
+
 }
 
 void hasty::viz::Slicer::SliceUpdate(OrthoslicerRenderInfo& renderInfo)
@@ -241,8 +267,58 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 		ImGui::DragFloatRange2("Multipliers", &scale_minmax_mult[0], &scale_minmax_mult[1], 0.01f, -10.0f, 10.0f);
 
 	}
-
 	ImGui::End();
+
+	/*
+	if (ImGui::Begin((slicername + "Zoom").c_str())) {
+		ImVec2 windowsize;
+		uint32_t tensor_width;
+		uint32_t tensor_height;
+		float window_width;
+		float window_height;
+
+		// Get/Set Window Widths and Heights
+		float window_multiplier = 0.95f;
+		{
+			windowsize = ImGui::GetWindowSize();
+			tensor_width = slice.size(0);
+			tensor_height = slice.size(1);
+			window_width = windowsize.x * window_multiplier;
+			window_height = window_width * (tensor_height / tensor_width);
+			float width_offset = 10.0f;
+			float height_offset = 10.0f;
+			if (window_height > windowsize.y * window_multiplier) {
+				window_height = windowsize.y * window_multiplier;
+				window_width = window_height * (tensor_width / tensor_height);
+			}
+		}
+
+		at::Tensor zoom_slice;
+
+		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+		if (ImPlot::BeginPlot((plotname + "Zoom").c_str(), ImVec2(window_width, window_height), plot_flags)) {
+			static ImPlotAxisFlags axes_flags =
+				ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines |
+				ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoLabel;
+			ImPlot::SetupAxis(ImAxis_X1, nullptr, axes_flags);
+			ImPlot::SetupAxis(ImAxis_Y1, nullptr, axes_flags);
+			ImPlot::SetupAxisTicks(ImAxis_X1, nullptr, 0, nullptr, false);
+			ImPlot::SetupAxisTicks(ImAxis_Y1, nullptr, 0, nullptr, false);
+			ImPlot::SetupAxesLimits(0, cols, 0, rows);
+
+			static ImPlotHeatmapFlags hm_flags = 0; //ImPlotHeatmapFlags_ColMajor;
+			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(slice.const_data_ptr()), rows, cols,
+				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(cols, rows), hm_flags);
+
+			HandleCursor(renderInfo);
+
+			ImPlot::EndPlot();
+		}
+		ImPlot::PopColormap();
+
+	}
+	ImGui::End();
+	*/
 
 	SliceUpdate(renderInfo);
 }
