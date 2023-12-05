@@ -110,7 +110,7 @@ class FivePointLLR:
 			perm = np.random.permutation(len(self.coord_vec))[:(len(self.coord_vec) // 8)]
 			for p in perm:
 				maxeigop = BatchedSenseNormal([self.coord_vec[p]], self.smaps, None, [self.weights_vec[p]] if self.weights_vec is not None else None)
-				maxeig = MaxEig(maxeigop, torch.complex64, max_iter=5).run().to(torch.float32).item()
+				maxeig = MaxEig(maxeigop, torch.complex64, max_iter=8).run().to(torch.float32).item()
 				print("\r Frame/Enc: ", p, " MaxEig: ", maxeig, end="")
 				if maxeig > self.max_eig:
 					self.max_eig = maxeig
@@ -183,7 +183,7 @@ class FivePointLLR:
 
 	def run(self, image, iter=50, callback=None, accelerate=True):
 
-		image = self.togradshape(Vector(image.zero_()))
+		image = self.togradshape(Vector(image))
 
 		if self.solver == 'GD':
 			gd = GradientDescent(self.sensenormalop, image, self.svtprox, self.stepsize, accelerate=accelerate, max_iter=iter)

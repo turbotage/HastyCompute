@@ -146,10 +146,12 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 	# Smoothing transient for smaps
 	weights[:,idx] *= torch.exp(torch.square(decay_factor*(coord_length[idx] - kspace_length) / kspace_length).neg())
 
+	torch.cuda.synchronize()
 	na = NufftAdjointT(coord, im_size)
 
 	for c in range(ncoil):
 		kd = kdata[:,c,:] * weights
+
 		coil_images[c,...] = na.apply(kd).nan_to_num(0.0, 0.0, 0.0)
 
 	pu.image_nd(coil_images.cpu().numpy())

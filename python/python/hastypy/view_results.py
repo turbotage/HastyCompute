@@ -1,31 +1,54 @@
 
 import numpy as np
-import h5py
+import matplotlib.pyplot as plt
 
-import hastypy.util.plot_utility as pu
-import hastypy.util.image_creation as ic
+def view_over_time():
+	thresh = "0.0006"
+	#extra = "_no_weights"
+	extra = ""
 
-import torchkbnufft as tkbn
+	from_zero = np.load(f"D:/4DRecon/results/from_zero_{thresh}{extra}.npy")
+	from_mean = np.load(f"D:/4DRecon/results/from_mean_{thresh}{extra}.npy")
+	from_difference = np.load(f"D:/4DRecon/results/from_difference_{thresh}{extra}.npy")
 
-img = np.array([0])
-with h5py.File('D:\\4DRecon\\dat\\dat2\\images_mvel_15f_cropped_interpolated.h5', "r") as f:
-	img = f['images'][()]
+	plt.figure()
+	plt.plot(from_zero, 'r-*')
+	plt.plot(from_mean, 'g-*')
+	plt.plot(from_difference, 'b-*')
+	plt.legend(['from_zero', 'from_mean', 'from_differenc'])
+	plt.show()
 
-#img_full = np.array([0])
-#with h5py.File('D:\\4DRecon\\dat\\dat2\\my_full_reconstructed_weighted.h5', "r") as f:#
-#	img_full = f['images'][()].squeeze(1)
-#	#img_full = f['images'][()]
+	plt.figure()
+	plt.plot(np.log(from_zero), 'r-*')
+	plt.plot(np.log(from_mean), 'g-*')
+	plt.plot(np.log(from_difference), 'b-*')
+	plt.legend(['from_zero', 'from_mean', 'from_differenc'])
+	plt.show()
 
-#img_mean = np.mean(img, axis=0)
+	print('Herre')
 
-pu.image_nd(img)
+def view_over_thresh():
+	#threshes = [5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6, 5e-7]
+	#threshes = [1e-7, 5e-8, 1e-8]
+	#threshes = [5e-9, 1e-9, 5e-10]
+	threshes = [5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6, 5e-7, 1e-7, 5e-8, 1e-8, 5e-9, 1e-9, 5e-10, 1e-10, 5e-11, 1e-11]
+	from_zeros = []
+	from_means = []
+	from_diffs = []
 
-mvel = np.sqrt(img[:,1,...]**2 + img[:,2,...]**2 + img[:,3,...]**2)
+	for thresh in threshes:
+		from_zeros.append(np.load(f"D:/4DRecon/results/from_zero_{thresh}.npy")[-1])
+		from_means.append(np.load(f"D:/4DRecon/results/from_mean_{thresh}.npy")[-1])
+		from_diffs.append(np.load(f"D:/4DRecon/results/from_difference_{thresh}.npy")[-1])
 
-pu.image_nd(mvel)
+	#x = np.log(np.array(threshes))
+	x = np.array(threshes)
 
-#pu.image_4d(np.abs(img_full))
+	plt.figure()
+	#plt.plot(x, np.array(from_zeros), 'r-*')
+	plt.plot(x, np.array(from_means), 'g-*')
+	plt.plot(x, np.array(from_diffs), 'b-*')
+	#plt.legend(['from_zero', 'from_mean', 'from_differenc'])
+	plt.show()
 
-#pu.image_4d(np.abs(img_mean))
-
-
+view_over_thresh()

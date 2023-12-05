@@ -255,7 +255,7 @@ class FivePointLoader:
 				with h5py.File(filepath_true_images) as f:
 					true_images = torch.tensor(f['images'][()])
 
-			return coords, kdatas, smaps, true_images
+			return coords, kdatas, None, smaps, true_images
 
 	@staticmethod
 	def load_as_full(coords, kdatas, weights=None):

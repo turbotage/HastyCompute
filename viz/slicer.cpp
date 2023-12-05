@@ -215,12 +215,15 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 		float window_width;
 		float window_height;
 
+		int rows = slice.size(0);
+		int cols = slice.size(1);
+
 		// Get/Set Window Widths and Heights
 		float window_multiplier = 0.95f;
 		{
 			windowsize = ImGui::GetWindowSize();
-			tensor_width = slice.size(0);
-			tensor_height = slice.size(1);
+			tensor_width = rows;
+			tensor_height = cols;
 			window_width = windowsize.x * window_multiplier;
 			window_height = window_width * (tensor_height / tensor_width);
 			float width_offset = 10.0f;
@@ -237,9 +240,6 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 		float maxscale = renderInfo.current_minmax_scale[1] * scale_minmax_mult[1];
 		if (minscale > maxscale)
 			minscale = maxscale - 0.1f;
-
-		int rows = slice.size(0);
-		int cols = slice.size(1);
 
 
 		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
@@ -269,8 +269,46 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 	}
 	ImGui::End();
 
-	/*
+	
 	if (ImGui::Begin((slicername + "Zoom").c_str())) {
+
+		using namespace at::indexing;
+
+		int64_t x0, x1;
+		int64_t y0, y1;
+		switch (view) {
+		case eAxial:
+		{
+			x0 = renderInfo.axial_rect.X.Min; x1 = renderInfo.axial_rect.X.Max;
+			y0 = slice.size(1) - renderInfo.axial_rect.Y.Max; y1 = slice.size(1) - renderInfo.axial_rect.Y.Min;
+		}break;
+		case eCoronal:
+		{
+			x0 = renderInfo.coronal_rect.X.Min; x1 = renderInfo.coronal_rect.X.Max;
+			y0 = slice.size(1) - renderInfo.coronal_rect.Y.Max; y1 = slice.size(1) - renderInfo.coronal_rect.Y.Min;
+		}break;
+		case eSagital:
+		{
+			x0 = renderInfo.sagital_rect.X.Min; x1 = renderInfo.sagital_rect.X.Max;
+			y0 = slice.size(1) - renderInfo.sagital_rect.Y.Max; y1 = slice.size(1) - renderInfo.sagital_rect.Y.Min;
+		}break;
+		}
+
+		x0 = std::clamp(x0, int64_t(0), slice.size(1)); x1 = std::clamp(x1, int64_t(0), slice.size(1));
+		y0 = std::clamp(y0, int64_t(0), slice.size(0)); y1 = std::clamp(y1, int64_t(0), slice.size(0));
+
+		at::Tensor zoom_slice = slice.index({ Slice(y0, y1), Slice(x0, x1) }).contiguous();
+
+		int64_t rows = zoom_slice.size(0);
+		int64_t cols = zoom_slice.size(1);
+
+		ImPlot::PushColormap(renderInfo.map);
+
+		float minscale = renderInfo.current_minmax_scale[0] * scale_minmax_mult[0];
+		float maxscale = renderInfo.current_minmax_scale[1] * scale_minmax_mult[1];
+		if (minscale > maxscale)
+			minscale = maxscale - 0.1f;
+
 		ImVec2 windowsize;
 		uint32_t tensor_width;
 		uint32_t tensor_height;
@@ -281,8 +319,8 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 		float window_multiplier = 0.95f;
 		{
 			windowsize = ImGui::GetWindowSize();
-			tensor_width = slice.size(0);
-			tensor_height = slice.size(1);
+			tensor_width = rows;
+			tensor_height = cols;
 			window_width = windowsize.x * window_multiplier;
 			window_height = window_width * (tensor_height / tensor_width);
 			float width_offset = 10.0f;
@@ -292,8 +330,6 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 				window_width = window_height * (tensor_width / tensor_height);
 			}
 		}
-
-		at::Tensor zoom_slice;
 
 		static ImPlotFlags plot_flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
 		if (ImPlot::BeginPlot((plotname + "Zoom").c_str(), ImVec2(window_width, window_height), plot_flags)) {
@@ -307,8 +343,8 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 			ImPlot::SetupAxesLimits(0, cols, 0, rows);
 
 			static ImPlotHeatmapFlags hm_flags = 0; //ImPlotHeatmapFlags_ColMajor;
-			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(slice.const_data_ptr()), rows, cols,
-				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(cols, rows), hm_flags);
+			ImPlot::PlotHeatmap(heatname.c_str(), static_cast<const float*>(zoom_slice.const_data_ptr()), rows, cols,
+				minscale, maxscale, nullptr, ImPlotPoint(0, 0), ImPlotPoint(rows, cols), hm_flags);
 
 			HandleCursor(renderInfo);
 
@@ -318,9 +354,11 @@ void hasty::viz::Slicer::Render(OrthoslicerRenderInfo& renderInfo)
 
 	}
 	ImGui::End();
-	*/
+	
 
 	SliceUpdate(renderInfo);
 }
+
+
 
 

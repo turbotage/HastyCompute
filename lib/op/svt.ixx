@@ -249,16 +249,21 @@ namespace hasty {
 		public:
 
 			Normal3DBlocksSVTProxOp(sptr<ContextThreadPool<DContext>> threadpool, 
-				
-				double base_alpha = 1.0)
-				: op::ProximalOperator(base_alpha)
+				const std::array<int64_t, 3>& block_strides, const std::array<int64_t. 3>& block_shape,
+				double thresh, bool soft)
+				: op::ProximalOperator(thresh), _block_strides(block_strides), _block_shape(block_shape), 
+				_thresh(thresh), _soft(soft) {}
+
+			Vector _apply(const Vector& input, double alpha) const override
 			{
 
 			}
 
-
 		private:
-			
+			std::array<int64_t, 3> _block_strides;
+			std::array<int64_t, 3> _block_shape;
+			double _thresh;
+			bool _soft;
 		};
 
 

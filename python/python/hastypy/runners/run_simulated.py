@@ -1,6 +1,7 @@
 import torch
 import h5py
 import math
+import numpy as np
 
 import gc
 
@@ -66,9 +67,6 @@ class Data:
 		self.smaps = smaps
 		self.true_images = true_images
 
-	
-
-
 
 def run_full(settings, data):
 
@@ -91,7 +89,7 @@ def run_full(settings, data):
 
 
 
-def run_from_difference(settings: RunSettings, data: Data, img_full):
+def run_from_difference(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh):
 	cudev = torch.device('cuda:0')
 	smaps_cu = data.smaps.to(cudev)
 	coils = [i for i in range(data.smaps.shape[0])]
@@ -114,13 +112,12 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 	mean_images = mean_images.view((settings.nframes*5,1) + settings.im_size)
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
-			nblocks=0, thresh=0.001, soft=True)
+			nblocks=0, thresh=thresh, soft=True)
 
 	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
 	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
 
 	if settings.solver == 'GD':
-		use_weights = False
 		if use_weights:
 			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
 		else:
@@ -141,27 +138,22 @@ def run_from_difference(settings: RunSettings, data: Data, img_full):
 
 	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
 
-	images = framed_recon.run(images, iter=45, callback=err_callback)
-
-	#pu.image_nd(images.numpy())
-	#images += mean_images.view((settings.nframes,5) + data.smaps.shape[1:])
-	#return images
+	images = framed_recon.run(images, iter=maxiter, callback=err_callback)
 
 	return relerrs
 
-def run_from_mean(settings: RunSettings, data: Data, img_full):
+def run_from_mean(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh):
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
-			nblocks=0, thresh=0.001, soft=True)
+			nblocks=0, thresh=thresh, soft=True)
 
 	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
 	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
 
 	if settings.solver == 'GD':
-		use_weights = False
 		if use_weights:
 			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
 		else:
@@ -185,26 +177,25 @@ def run_from_mean(settings: RunSettings, data: Data, img_full):
 		for enc in range(5):
 			images[frame,enc,...] = img_full[enc,0,...]
 
-	images = framed_recon.run(images, iter=45, callback=err_callback)
+	images = framed_recon.run(images, iter=maxiter, callback=err_callback)
 
 	#pu.image_nd(images.numpy())
 	#return images
 
 	return relerrs
 
-def run_from_zero(settings: RunSettings, data: Data):
+def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thresh):
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
-			nblocks=0, thresh=0.001, soft=True)
+			nblocks=0, thresh=thresh, soft=True)
 
 	print('Kdata points per frame: ', data.coord_vec[0].shape[1])
 	print('Kdata points kdata per pixel: ', data.coord_vec[0].shape[1] / math.prod(data.smaps.shape[1:]))
 
 	if settings.solver == 'GD':
-		use_weights = False
 		if use_weights:
 			framed_recon = FivePointLLR(data.smaps, data.coord_vec, data.kdata_vec, svt_opts, data.weights_vec, solver='GD')
 		else:
@@ -224,14 +215,15 @@ def run_from_zero(settings: RunSettings, data: Data):
 
 	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
 
-	images = framed_recon.run(images, iter=45, callback=err_callback)
+	images = framed_recon.run(images, iter=maxiter, callback=err_callback)
 
 	#pu.image_nd(images.numpy())
 	#return images
 
 	return relerrs
 
-if __name__ == '__main__':
+
+def megarunner(thresh, maxiter):
 	with torch.inference_mode():
 		settings = RunSettings(solver='GD',
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp_cropped.h5'
@@ -244,19 +236,69 @@ if __name__ == '__main__':
 		settings.im_size = data.smaps.shape[1:]
 		settings.set_nframes(len(data.coord_vec) // 5)
 
-		calc_full = True
+		calc_full = False
 		if calc_full:
 			img_full = run_full(settings, data)
 			with h5py.File('D:/4DRecon/dat/dat2/simulated_full_img.h5', 'w') as f:
 				f.create_dataset('img_full', data=img_full)
+
+			weights_vec = []
+			for i in range(len(data.coord_vec)):
+				dcfw = dcf.pipe_menon_dcf(
+					(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * data.coord_vec[i] / torch.pi,
+					settings.im_size,
+					max_iter=30					  
+					)
+
+				weights_vec.append(dcfw / torch.mean(dcfw))
+
+			with h5py.File('D:/4DRecon/dat/dat2/simulated_framed_weights.h5', 'w') as f:
+				for i in range(len(data.coord_vec)):
+					f.create_dataset(f"weights_{i}", data=np.array(weights_vec[i]))
+		
+			data.weights_vec = weights_vec
+
 		else:
 			with h5py.File('D:/4DRecon/dat/dat2/simulated_full_img.h5', 'r') as f:
-				img_full = f['img_full'][()]
+				img_full = torch.tensor(f['img_full'][()])
+
+			weights_vec = []
+			with h5py.File('D:/4DRecon/dat/dat2/simulated_framed_weights.h5', 'r') as f:
+				for i in range(len(data.coord_vec)):
+					weights_vec.append(torch.tensor(f[f"weights_{i}"][()]))
+
+			data.weights_vec = weights_vec
+		
+		use_weights=True
+
+		if use_weights:
+			for i in range(len(data.weights_vec)):
+				#data.weights_vec[i] = torch.sqrt(data.weights_vec[i] + 1e-5)
+				data.weights_vec[i] = (data.weights_vec[i] + 1e-6) ** (0.8)
+
+		zero_err = run_from_zero(settings, data, maxiter, use_weights, thresh)
+		mean_err = run_from_mean(settings, data, img_full, maxiter, use_weights, thresh)
+		difference_err = run_from_difference(settings, data, img_full, maxiter, use_weights, thresh)
+
+		np.save(f"D:/4DRecon/results/from_zero_{thresh}.npy", np.array(zero_err))
+		np.save(f"D:/4DRecon/results/from_mean_{thresh}.npy", np.array(mean_err))
+		np.save(f"D:/4DRecon/results/from_difference_{thresh}.npy", np.array(difference_err))
+
+if __name__ == '__main__':
+
+	threshes = [1e-3, 8e-4, 3e-4]
+	#threshes = [5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6, 5e-7]
+	#threshes = [1e-7, 5e-8, 1e-8]
+	#threshes = [5e-9, 1e-9, 5e-10]
+	#threshes = [1e-10, 5e-11, 1e-11]
+	for thresh in threshes:
+		megarunner(thresh, 50)
+
+	
+
+		
 
 
-		difference_err = run_from_difference(settings, data, img_full)
-		mean_err = run_from_mean(settings, data, img_full)
-		zero_err = run_from_zero(settings, data)
 
 		
 
