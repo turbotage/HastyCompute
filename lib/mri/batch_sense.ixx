@@ -338,7 +338,6 @@ namespace hasty {
 
 				std::shared_ptr<op::AdjointableOp> AH;
 				std::shared_ptr<op::AdjointableOp> A;
-				std::shared_ptr<op::AdjointableOp> B;
 
 				op::Vector z;
 				op::Vector u;
@@ -354,11 +353,6 @@ namespace hasty {
 						throw std::runtime_error("SenseAdmmLoader requires A to be AdjointableVStackedOp");
 					A = op::downcast<op::AdjointableOp>(localA->get_slice_ptr(idx)->to_device(dctx.stream));
 					AH = A->adjoint();
-
-					auto localB = op::downcast<op::AdjointableVStackedOp>(_ctx->B);
-					if (!localB)
-						throw std::runtime_error("SenseAdmmLoader requires B to be AdjointableVStackedOp");
-					B = op::downcast<op::AdjointableOp>(localB->get_slice_ptr(idx)->to_device(dctx.stream));
 
 					if (_ctx->AHA != nullptr) {
 						auto localAHA = op::downcast<op::AdjointableVStackedOp>(_ctx->AHA);
@@ -385,9 +379,9 @@ namespace hasty {
 				CGop = op::staticcast<op::AdjointableOp>(op::add(std::move(SHS), std::move(AHA)));
 
 				if (c.has_value())
-					CGvec = _ctx->rho * AH->apply(*c - B->apply(z) - u);
+					CGvec = (0.5 * _ctx->rho) * AH->apply(*c - z - u);
 				else
-					CGvec = (0.5 * _ctx->rho) * AH->apply(B->apply(z) - u);
+					CGvec = (0.5 * _ctx->rho) * AH->apply(z - u);
 
 				CGvec += SHS->apply_backward(op::Vector(kdata));
 

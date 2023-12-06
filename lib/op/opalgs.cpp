@@ -105,7 +105,7 @@ void hasty::op::Admm::run(Admm::Context& ctx)
 	for (int i = 0; i < ctx.admm_iter; ++i) {
 		_xmin->solve(ctx);
 		_zmin->solve(ctx);
-		ctx.u = ctx.A->apply(ctx.x) + ctx.B->apply(ctx.z) - ctx.z;
+		ctx.u = ctx.A->apply(ctx.x) + ctx.z - ctx.z;
 	}
 
 }

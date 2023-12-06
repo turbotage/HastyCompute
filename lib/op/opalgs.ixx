@@ -143,7 +143,6 @@ namespace hasty {
 			struct Context {
 				// Ax + Bz = c
 				sptr<op::AdjointableOp> A;
-				sptr<op::AdjointableOp> B;
 				std::optional<op::Vector> c; // offset
 
 				op::Vector x; // x
@@ -151,7 +150,6 @@ namespace hasty {
 				op::Vector u; // scaled dual variable
 
 				sptr<op::AdjointableOp> AHA;
-				sptr<op::AdjointableOp> BHB;
 
 				double rho;
 

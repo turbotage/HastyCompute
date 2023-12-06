@@ -17,6 +17,7 @@ import torch_util;
 import thread_pool;
 import device;
 import proxop;
+import vec;
 
 namespace hasty {
 
@@ -249,17 +250,20 @@ namespace hasty {
 		public:
 
 			Normal3DBlocksSVTProxOp(sptr<ContextThreadPool<DContext>> threadpool, 
-				const std::array<int64_t, 3>& block_strides, const std::array<int64_t. 3>& block_shape,
-				double thresh, bool soft)
-				: op::ProximalOperator(thresh), _block_strides(block_strides), _block_shape(block_shape), 
-				_thresh(thresh), _soft(soft) {}
+				const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape, bool soft)
+				: _svtop(std::move(threadpool)), _block_strides(block_strides), _block_shape(block_shape), _soft(soft) {}
 
-			Vector _apply(const Vector& input, double alpha) const override
+			op::Vector _apply(const op::Vector& input, double alpha) const override
 			{
+				if (input.has_children()) {
+					throw std::runtime_error("Can't use Normal3DBlocksSVTProxOp on a vector with children");
+				}
 
+				return _svtop.apply(input.tensor(), alpha);
 			}
 
 		private:
+			Normal3DBlocksSVT<DContext> _svtop;
 			std::array<int64_t, 3> _block_strides;
 			std::array<int64_t, 3> _block_shape;
 			double _thresh;
