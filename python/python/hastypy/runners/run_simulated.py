@@ -223,7 +223,7 @@ def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thres
 	return relerrs
 
 
-def megarunner(thresh, maxiter):
+def megarunner(thresh, maxiter, noise):
 	with torch.inference_mode():
 		settings = RunSettings(solver='GD',
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp_cropped.h5'

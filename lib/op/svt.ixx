@@ -249,9 +249,17 @@ namespace hasty {
 		class Normal3DBlocksSVTProxOp : public op::ProximalOperator {
 		public:
 
-			Normal3DBlocksSVTProxOp(sptr<ContextThreadPool<DContext>> threadpool, 
+
+			uptr<Normal3DBlocksSVTProxOp<DContext>> Create(sptr<ContextThreadPool<DContext>> threadpool,
 				const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape, bool soft)
-				: _svtop(std::move(threadpool)), _block_strides(block_strides), _block_shape(block_shape), _soft(soft) {}
+			{
+				struct creator : public Normal3DBlocksSVTProxOp<DContext> {
+					creator(sptr<ContextThreadPool<DContext>> a,
+						const std::array<int64_t, 3>& b, const std::array<int64_t, 3>& c, bool d)
+						: Normal3DBlocksSVTProxOp(std::move(a), b, c, d) {}
+				};
+				return std::make_unique<creator>(std::move(threadpool), block_strides, block_shape, soft);
+			}
 
 			op::Vector _apply(const op::Vector& input, double alpha) const override
 			{
@@ -261,6 +269,12 @@ namespace hasty {
 
 				return _svtop.apply(input.tensor(), alpha);
 			}
+
+		protected:
+			
+			Normal3DBlocksSVTProxOp(sptr<ContextThreadPool<DContext>> threadpool, 
+				const std::array<int64_t, 3>& block_strides, const std::array<int64_t, 3>& block_shape, bool soft)
+				: _svtop(std::move(threadpool)), _block_strides(block_strides), _block_shape(block_shape), _soft(soft) {}
 
 		private:
 			Normal3DBlocksSVT<DContext> _svtop;
