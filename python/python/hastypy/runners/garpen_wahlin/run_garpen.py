@@ -11,9 +11,11 @@ import hastypy.base.opalg as opalg
 from hastypy.base.recon import FivePointLLR
 import hastypy.base.load_and_gate as lag
 from hastypy.base.load_and_gate import FivePointLoader
+from hastypy.base.coil_compress import CoilCompress
 
 import hastypy.util.plot_utility as pu
 
+import hastypy.opt.cuda.sigpy.dcf as dcf
 from hastypy.base.recon import FivePointFULL
 from hastypy.base.proximal import SVTOptions
 from hastypy.base.svt import extract_mean_block
@@ -46,16 +48,22 @@ class RunSettings:
 
 
 def run(settings: RunSettings):
-	#smaps = FivePointLoader.load_smaps(settings.smaps_filepath, settings.im_size)
-	#smaps = torch.permute(smaps, (0,3,2,1))
-
-	#pu.image_nd(smaps.numpy())
 
 	coords, kdata, weights, gating = FivePointLoader.load_raw(settings.rawdata_filepath)
-	#normalize kdata
-	kdata /= 0.5*(torch.mean(torch.real(kdata)) + torch.mean(torch.real(kdata)))
+	nsamp_per_spoke = coords.shape[-1]
+	nspokes = coords.shape[-2]
+
+	#normalize kdata and remove mean
+	kdata /= torch.max(torch.mean(torch.real(kdata)),torch.mean(torch.real(kdata)))
+	kdata -= torch.mean(kdata[0,...])
 
 	coord_vec, kdata_vec, weights_vec = FivePointLoader.load_as_full(coords, kdata, weights)
+	del kdata
+	gc.collect()
+
+
+	kdata_vec = CoilCompress.coil_compress(kdata_vec, 32, 0.2)
+	kdata = FivePointLoader.full_to_spokes(kdata_vec, 32, nspokes, nsamp_per_spoke)
 
 	coord_vec, kdata_vec, weights_vec = lag.crop_kspace(coord_vec, kdata_vec, weights_vec, settings.im_size, 
 		crop_factors=settings.crop_factors, prefovkmuls=settings.prefovkmuls, postfovkmuls=settings.postfovkmuls)
@@ -70,9 +78,21 @@ def run(settings: RunSettings):
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
 
+	weights_vec = []
+	for i in range(len(coord_vec)):
+		dcfw = dcf.pipe_menon_dcf(
+			(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * coord_vec[i] / torch.pi,
+			settings.im_size,
+			max_iter=30					  
+			)
+		print(f"dcf: {i}")
+
+		weights_vec.append(((dcfw / torch.mean(dcfw)) + 1e-6).unsqueeze(0))
+
+
 	# My smaps
 	print('Estimating coil sensitivities...')
-	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, sense_size=(16,16,16), decay_factor=1.0)
+	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, kernel_size=(5,5,5))
 	smaps /= torch.mean(torch.abs(smaps))
 	pu.image_nd(smaps.numpy())
 	print('Done estimating coil sensitivities')
@@ -91,7 +111,7 @@ def run(settings: RunSettings):
 
 	torch.cuda.empty_cache()
 
-	image = full_recon.run(image, iter=6, callback=plot_callback)
+	image = full_recon.run(image, iter=6, callback=None)
 
 	#pu.image_nd(image.numpy())
 
@@ -119,6 +139,16 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 			kdata_vec[frame*5 + enc] -= kdata
 	del smaps_cu
 
+	weights_vec = []
+	for i in range(len(coord_vec)):
+		dcfw = dcf.pipe_menon_dcf(
+			(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * coord_vec[i] / torch.pi,
+			settings.im_size,
+			max_iter=30					  
+			)
+		print(f"dcf: {i}")
+
+		weights_vec.append(torch.sqrt((dcfw / torch.mean(dcfw)) + 1e-5))
 
 	gc.collect()
 	torch.cuda.empty_cache()
@@ -131,7 +161,13 @@ def run_framed(settings: RunSettings, smaps, fullimage, rawdata, rescale):
 	def plot_callback(image: Vector, iter):
 		pu.image_nd(image.tensor.view((settings.nframes,5) + settings.im_size).numpy())
 
-	images = framed_recon.run(torch.zeros((settings.nframes,5) + settings.im_size, dtype=torch.complex64), iter=100, callback=None)
+	images = torch.empty((settings.nframes,5) + settings.im_size, dtype=torch.complex64)
+
+	for i in range(settings.nframes):
+		for j in range(5):
+			images[i,j,...] = fullimage[j, 0,...]
+
+	images = framed_recon.run(images, iter=20, callback=None)
 
 	return images
 
@@ -145,10 +181,7 @@ if __name__ == '__main__':
 	with torch.inference_mode():
 		im_size = (resol,resol,resol)
 		shift = (0.5*(resol / 10.0), 0.0, 0.0)
-		#shift = (0.0, 0.0, 0.0)
 
-		#im_size = (256,256,256)
-		#shift = (-2*25.6, 0.0, 0.0)
 		crop_factors = (1.0,1.0,1.0)
 		prefovkmuls = (1.0,1.0,1.0)
 		postfovkmuls = (1.0,1.0,1.0)

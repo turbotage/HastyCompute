@@ -3,6 +3,7 @@ import numpy as np
 import scipy as sp
 from scipy.ndimage import zoom
 import scipy.signal as spsig
+import gc
 
 import h5py
 
@@ -191,7 +192,10 @@ class FivePointLoader:
 								else:
 									break
 							kdata_vec.append(torch.stack(kdata_enc, axis=0))
+							gc.collect()
 						kdatas = torch.stack(kdata_vec, axis=0)
+						del kdata_vec
+						gc.collect()
 						ret += (kdatas,)
 						print('Done.')
 
@@ -212,7 +216,7 @@ class FivePointLoader:
 					
 					gating = {}
 					for gatename in gating_names:
-						gating[gatename] = gatingset[gatename][()]
+						gating[gatename] = torch.tensor(gatingset[gatename][()])
 
 					ret += (gating,)
 					print('Done.')
@@ -246,6 +250,8 @@ class FivePointLoader:
 							for j in range(5):
 								ijstr = str(i)+'_e'+str(j)
 								kdatas.append(torch.tensor(f['kdatas_f'+ijstr][()]))
+
+				gc.collect()
 				
 			if load_smaps:
 				with h5py.File(filepath_smaps) as f:
@@ -287,6 +293,14 @@ class FivePointLoader:
 			return ret
 
 	@staticmethod
+	def full_to_spokes(kdata_vec, ncoils, nspokes, samp_per_spoke):
+		kdata_vec_temp = [kdata.reshape(ncoils, 1, nspokes, samp_per_spoke) for kdata in kdata_vec]
+		ret = torch.stack(kdata_vec_temp, axis=0).contiguous()
+		del kdata_vec_temp
+		gc.collect()
+		return ret
+
+	@staticmethod
 	def gate_ecg_method(coord, kdata, weights, gating, nframes):
 		with torch.inference_mode():
 			mean = torch.mean(gating)
@@ -323,7 +337,7 @@ class FivePointLoader:
 			# First Frame
 			if True:
 				idx = gating < len_start
-				add_idx_spokes(idx)
+				add_idx_spokes(idx.squeeze())
 
 			# Mid Frames
 			for i in range(1,nframes):
@@ -332,7 +346,7 @@ class FivePointLoader:
 				len_start = new_len_start
 				gates.append(len_start)
 
-				add_idx_spokes(idx)
+				add_idx_spokes(idx.squeeze())
 
 			# Last Frame
 			#if True:
