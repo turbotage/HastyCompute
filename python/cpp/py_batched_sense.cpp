@@ -166,6 +166,8 @@ void hasty::ffi::BatchedSenseNormal::apply(const at::Tensor& in, at::Tensor out,
 }
 
 
+
+
 TORCH_LIBRARY(HastyBatchedSense, hbs) {
 
 	hbs.class_<hasty::ffi::BatchedSense>("BatchedSense")

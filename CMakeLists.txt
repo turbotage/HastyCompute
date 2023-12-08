@@ -220,6 +220,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(pybind11)
 
 add_library(HastyPyInterface SHARED 
+	"python/cpp/py_flowmri.cpp"
 	"python/cpp/py_batched_sense.cpp"
 	"python/cpp/py_interface.cpp"
 	"python/cpp/py_sense.cpp"

@@ -33,12 +33,18 @@ namespace hasty {
 			{}
 
 			void solve(op::Admm::Context& ctx) override {
-				return _svtop->apply(ctx.c - ctx.u - ctx.A->apply(ctx.x));
+				if (ctx.c.has_value())
+					return _svtop->apply(*ctx.c - ctx.u - ctx.A->apply(ctx.x));
+				else
+					_svtop->apply(ctx.u.neg() - ctx.A->apply(ctx.x));
 			}
 
 		private:
 			std::unique_ptr<svt::Normal3DBlocksSVTProxOp<DContext>> _svtop;
 		};
+
+
+		
 
 
 	}

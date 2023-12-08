@@ -78,8 +78,11 @@ def run(settings: RunSettings):
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
 
-	weights_vec = []
+	#weights_vec = []
 	for i in range(len(coord_vec)):
+		if i == 0:
+			break
+
 		dcfw = dcf.pipe_menon_dcf(
 			(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * coord_vec[i] / torch.pi,
 			settings.im_size,
@@ -87,7 +90,7 @@ def run(settings: RunSettings):
 			)
 		print(f"dcf: {i}")
 
-		weights_vec.append(((dcfw / torch.mean(dcfw)) + 1e-6).unsqueeze(0))
+		weights_vec.append(((dcfw / torch.mean(dcfw))).unsqueeze(0))
 
 
 	# My smaps

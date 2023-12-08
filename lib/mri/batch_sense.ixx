@@ -301,10 +301,10 @@ namespace hasty {
 
 		export template<typename SDeviceContext>
 		requires SenseDeviceContextConcept<SDeviceContext>
-		class SenseBatchConjugateGradientLoader : public op::BatchConjugateGradientLoader<SDeviceContext> {
+		class BatchedSenseAdmmConjugateGradientLoader : public op::BatchedConjugateGradientLoader<SDeviceContext> {
 		public:
 
-			SenseBatchConjugateGradientLoader(
+			BatchedSenseAdmmConjugateGradientLoader(
 				std::vector<at::Tensor> coords, std::vector<int64_t> nmodes,
 				std::vector<at::Tensor> kdata, at::Tensor smaps,
 				std::shared_ptr<op::Admm::Context> ctx,
@@ -404,10 +404,10 @@ namespace hasty {
 
 		
 		export template<SenseDeviceContextConcept SDeviceContext>
-		class BatchSenseAdmmMinimizer : public hasty::op::AdmmMinimizer {
+		class BatchedSenseAdmmConjugateGradientMinimizer : public hasty::op::AdmmMinimizer {
 		public:
 
-			BatchSenseAdmmMinimizer(std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> bcg)
+			BatchedSenseAdmmConjugateGradientMinimizer(std::unique_ptr<op::BatchedConjugateGradient<SDeviceContext>> bcg)
 				: _batchcg(std::move(bcg))
 			{
 				_iters = 10;
@@ -422,10 +422,10 @@ namespace hasty {
 
 			void set_tol(double tol) override { _tol = tol; }
 
-			std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> get_bcg() { return std::move(_batchcg); }
+			std::unique_ptr<op::BatchedConjugateGradient<SDeviceContext>> get_bcg() { return std::move(_batchcg); }
 
 		private:
-			std::unique_ptr<op::BatchConjugateGradient<SDeviceContext>> _batchcg;
+			std::unique_ptr<op::BatchedConjugateGradient<SDeviceContext>> _batchcg;
 			int _iters;
 			double _tol;
 		};

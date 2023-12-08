@@ -126,49 +126,55 @@ class SenseEstimation:
 def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int], 
 		kernel_size: tuple[int] = (24,24,24)):
 
-	with torch.inference_mode():
-		ndim = len(im_size)
-		ncoil = kdata.shape[1]
+	ndim = len(im_size)
+	ncoil = kdata.shape[1]
 
-		#smaps = torch.zeros((ncoil,) + im_size, dtype=kdata_vec[0].dtype, device=torch.device('cuda:0'))
-		coil_images = torch.zeros((ncoil,) + im_size, dtype=kdata.dtype, device=torch.device('cuda:0'))
-		coord = coord.to(torch.device('cuda:0'), non_blocking=False)
-		weights = weights.to(torch.device('cuda:0'), non_blocking=False)
-		kdata = kdata.to(torch.device('cuda:0'), non_blocking=False)
+	torch.cuda.empty_cache()
 
+	#smaps = torch.zeros((ncoil,) + im_size, dtype=kdata_vec[0].dtype, device=torch.device('cuda:0'))
+	coil_images = torch.zeros((ncoil,) + im_size, dtype=kdata.dtype, device=torch.device('cuda:0'))
+	coordcu = coord.to(torch.device('cuda:0'), non_blocking=False)
+	weightscu = weights.to(torch.device('cuda:0'), non_blocking=False)
+	kdatacu = kdata.to(torch.device('cuda:0'), non_blocking=False)
+
+	torch.cuda.synchronize()
+
+	kernel = torch.ones(kernel_size, dtype=torch.float32, device=torch.device('cuda:0'))
+	conv = torch.nn.Conv3d(in_channels=1, out_channels=1, kernel_size=kernel_size, padding='same', bias=False)
+	conv.weights = kernel
+	conv = conv.to(torch.device('cuda:0'))
+
+	torch.cuda.synchronize()
+	na = NufftAdjointT(coordcu, im_size)
+	na.apply(torch.zeros_like(kdatacu[:,0,:]))
+	torch.cuda.synchronize()
+
+	for c in range(ncoil):
+		kd = kdatacu[:,c,:] * weightscu
 		torch.cuda.synchronize()
-		coord_length = torch.sum(torch.square(coord), dim=0).sqrt()
-
-
-		kernel = torch.ones(kernel_size, dtype=torch.complex64, device=torch.device('cuda:0'))
-		conv = torch.nn.Conv3d(in_channels=1, out_channels=1, kernel_size=kernel_size, padding='same', bias=False)
-		conv.weights = kernel
-		conv.weights.to(torch.device('cuda:0'))
-
+		coil_images[c,...] = na.apply(kd)
 		torch.cuda.synchronize()
-		na = NufftAdjointT(coord, im_size)
+		if torch.logical_not(torch.isfinite(coil_images[c,...])).any():
+			raise RuntimeError('coil image contained non finite value')
+		
+		# Apply smoothing filter
+		#tempc = coil_images[c,...].unsqueeze(0)
+		#coil_images[c,...] = conv(torch.real(tempc)) + 1j*conv(torch.imag(tempc)).squeeze(0).contiguous()
 
-		for c in range(ncoil):
-			kd = kdata[:,c,:] * weights
-			torch.cuda.synchronize()
-			coil_images[c,...] = na.apply(kd)
-			if torch.logical_not(torch.isfinite(coil_images[c,...])).any():
-				raise RuntimeError('coil image contained non finite value')
-			
-			# Apply smoothing filter
-			coil_images[c,...] = conv(coil_images[c,...].unsqueeze(0)).squeeze(0).contiguous()
+	del conv
+	del kernel
 
 
+	coil_images = coil_images.cpu()
+	gc.collect()
+	torch.cuda.empty_cache()
 
-		pu.image_nd(coil_images.cpu().numpy())
-		gc.collect()
-		torch.cuda.empty_cache()
+	pu.image_nd(coil_images.numpy())
 
-		coil_images = coil_images.cpu()
-		sos = torch.sqrt(torch.sum(torch.square(torch.abs(coil_images)), dim=0)).unsqueeze(0)
-		sos += torch.max(sos)*1e-5
+	sos = torch.sqrt(torch.sum(torch.square(torch.abs(coil_images)), dim=0)).unsqueeze(0)
+	sos += torch.max(sos)*1e-5
 
-		return sos, coil_images, coil_images / sos
+	return sos, coil_images, coil_images / sos
 	
 
 

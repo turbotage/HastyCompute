@@ -10,6 +10,10 @@ namespace hasty {
 		class BatchedSenseAdjoint;
 		class BatchedSenseNormal;
 	}
+	namespace op {
+		class Admm;
+	}
+
 
 
 	namespace ffi {

@@ -53,7 +53,7 @@ namespace hasty {
 		};
 
 		export template<typename DeviceContext>
-		class BatchConjugateGradientLoader {
+		class BatchedConjugateGradientLoader {
 		public:
 
 			virtual ConjugateGradientLoadResult load(DeviceContext& dctx, size_t idx) = 0;
@@ -61,14 +61,14 @@ namespace hasty {
 		};
 
 		export template<typename DeviceContext>
-		class DefaultBatchConjugateGradientLoader : public BatchConjugateGradientLoader<DeviceContext> {
+		class DefaultBatchedConjugateGradientLoader : public BatchedConjugateGradientLoader<DeviceContext> {
 		public:
 
-			DefaultBatchConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
+			DefaultBatchedConjugateGradientLoader(const std::vector<ConjugateGradientLoadResult>& lrs)
 				: _load_results(lrs)
 			{}
 
-			DefaultBatchConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
+			DefaultBatchedConjugateGradientLoader(const ConjugateGradientLoadResult& lr)
 				: _load_results({ lr })
 			{}
 
@@ -82,10 +82,10 @@ namespace hasty {
 		};
 
 		export template<typename DeviceContext>
-		class BatchConjugateGradient : public OperatorAlg {
+		class BatchedConjugateGradient : public OperatorAlg {
 		public:
 
-			BatchConjugateGradient(sptr<BatchConjugateGradientLoader<DeviceContext>> loader,
+			BatchedConjugateGradient(sptr<BatchedConjugateGradientLoader<DeviceContext>> loader,
 				sptr<hasty::ContextThreadPool<DeviceContext>> thread_pool)
 				: _cg_loader(std::move(loader)), _thread_pool(std::move(thread_pool))
 			{}
@@ -120,7 +120,7 @@ namespace hasty {
 				}
 			}
 
-			const sptr<BatchConjugateGradientLoader<DeviceContext>>& get_loader() const
+			const sptr<BatchedConjugateGradientLoader<DeviceContext>>& get_loader() const
 			{
 				return _cg_loader;
 			}
@@ -131,7 +131,7 @@ namespace hasty {
 			}
 
 		private:
-			sptr<BatchConjugateGradientLoader<DeviceContext>> _cg_loader;
+			sptr<BatchedConjugateGradientLoader<DeviceContext>> _cg_loader;
 			sptr<ContextThreadPool<DeviceContext>> _thread_pool;
 		};
 
