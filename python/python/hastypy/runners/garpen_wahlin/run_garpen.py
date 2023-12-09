@@ -53,17 +53,25 @@ def run(settings: RunSettings):
 	nsamp_per_spoke = coords.shape[-1]
 	nspokes = coords.shape[-2]
 
-	#normalize kdata and remove mean
+	#normalize kdata
 	kdata /= torch.max(torch.mean(torch.real(kdata)),torch.mean(torch.real(kdata)))
-	kdata -= torch.mean(kdata[0,...])
+	#kdata -= torch.mean(kdata[0,...])
 
 	coord_vec, kdata_vec, weights_vec = FivePointLoader.load_as_full(coords, kdata, weights)
 	del kdata
 	gc.collect()
 
+	coil_compress = False
+	if coil_compress:
+		kdata_vec = CoilCompress.coil_compress(kdata_vec, 32, 0.2)
+		kdata = FivePointLoader.full_to_spokes(kdata_vec, 32, nspokes, nsamp_per_spoke)
 
-	kdata_vec = CoilCompress.coil_compress(kdata_vec, 32, 0.2)
-	kdata = FivePointLoader.full_to_spokes(kdata_vec, 32, nspokes, nsamp_per_spoke)
+		#normalize kdata
+		normalizer = torch.max(torch.mean(torch.real(kdata)),torch.mean(torch.real(kdata)))
+		kdata /= normalizer
+		for i in range(5):
+			kdata_vec[i] /= normalizer
+
 
 	coord_vec, kdata_vec, weights_vec = lag.crop_kspace(coord_vec, kdata_vec, weights_vec, settings.im_size, 
 		crop_factors=settings.crop_factors, prefovkmuls=settings.prefovkmuls, postfovkmuls=settings.postfovkmuls)
@@ -78,24 +86,28 @@ def run(settings: RunSettings):
 		kdata_vec = lag.translate(coord_vec, kdata_vec, settings.shift)
 		print('Done.')
 
-	#weights_vec = []
+	weights_vec = []
 	for i in range(len(coord_vec)):
-		if i == 0:
-			break
+		#if i == 0:
+		#	break
 
 		dcfw = dcf.pipe_menon_dcf(
 			(torch.tensor(settings.im_size) // 2).unsqueeze(-1) * coord_vec[i] / torch.pi,
 			settings.im_size,
-			max_iter=30					  
+			max_iter=50					  
 			)
-		print(f"dcf: {i}")
+		#print(f"dcf: {i}")
 
-		weights_vec.append(((dcfw / torch.mean(dcfw))).unsqueeze(0))
+		weights_vec.append((dcfw).unsqueeze(0))
+
+		if i == 0:
+			break
 
 
 	# My smaps
 	print('Estimating coil sensitivities...')
-	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, kernel_size=(5,5,5))
+	_, _, smaps = coil_est.low_res_sensemaps(coord_vec[0], kdata_vec[0], weights_vec[0], im_size, 
+				tukey_param=(0.95, 0.95, 0.95), exponent=3)
 	smaps /= torch.mean(torch.abs(smaps))
 	pu.image_nd(smaps.numpy())
 	print('Done estimating coil sensitivities')

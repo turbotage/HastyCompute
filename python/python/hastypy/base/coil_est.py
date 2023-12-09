@@ -15,6 +15,8 @@ from hastypy.base.sense import SenseAdjointT, SenseNormalT
 from hastypy.ffi.hasty_interface import FunctionLambda
 from hastypy.base.torch_opalg import TorchConjugateGradient
 
+from scipy.signal import tukey
+
 import hastypy.util.plot_utility as pu
 
 import scipy
@@ -124,7 +126,7 @@ class SenseEstimation:
 			
 			
 def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.Tensor, im_size: tuple[int], 
-		kernel_size: tuple[int] = (24,24,24)):
+		tukey_param=(0.95, 0.95, 0.95), exponent=3):
 
 	ndim = len(im_size)
 	ncoil = kdata.shape[1]
@@ -139,10 +141,15 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 
 	torch.cuda.synchronize()
 
-	kernel = torch.ones(kernel_size, dtype=torch.float32, device=torch.device('cuda:0'))
-	conv = torch.nn.Conv3d(in_channels=1, out_channels=1, kernel_size=kernel_size, padding='same', bias=False)
-	conv.weights = kernel
-	conv = conv.to(torch.device('cuda:0'))
+	t1 = tukey(im_size[0], tukey_param[0])
+	t2 = tukey(im_size[1], tukey_param[1])
+	t3 = tukey(im_size[2], tukey_param[2])
+	window_prod = torch.cartesian_prod(torch.tensor(t1), torch.tensor(t2), torch.tensor(t3))
+	window = (window_prod[:,0] * window_prod[:,1] * window_prod[:,2]).reshape(im_size)
+	del window_prod, t1, t2, t3
+	gc.collect()
+	window **= exponent
+	window = window.to(torch.device('cuda:0'), non_blocking=False)
 
 	torch.cuda.synchronize()
 	na = NufftAdjointT(coordcu, im_size)
@@ -150,19 +157,18 @@ def low_res_sensemaps(coord: torch.Tensor, kdata: torch.Tensor, weights: torch.T
 	torch.cuda.synchronize()
 
 	for c in range(ncoil):
-		kd = kdatacu[:,c,:] * weightscu
+		
+		kd = (kdatacu[:,c,:] * weightscu / coord.shape[1]).contiguous()
 		torch.cuda.synchronize()
-		coil_images[c,...] = na.apply(kd)
+		coil_images[c,...] = na.apply(kd) * coord.shape[1]
 		torch.cuda.synchronize()
 		if torch.logical_not(torch.isfinite(coil_images[c,...])).any():
 			raise RuntimeError('coil image contained non finite value')
 		
-		# Apply smoothing filter
-		#tempc = coil_images[c,...].unsqueeze(0)
-		#coil_images[c,...] = conv(torch.real(tempc)) + 1j*conv(torch.imag(tempc)).squeeze(0).contiguous()
-
-	del conv
-	del kernel
+		# Apply smoothing
+		ci = torch.fft.ifftshift(torch.fft.fftn(torch.fft.ifftshift(coil_images[c,...])))
+		ci *= window
+		coil_images[c,...] = torch.fft.fftshift(torch.fft.ifftn(torch.fft.ifftshift(ci)))
 
 
 	coil_images = coil_images.cpu()

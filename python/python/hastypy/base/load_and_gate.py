@@ -468,7 +468,6 @@ def crop_kspace(coords, kdatas, weights, im_size, crop_factors=(1.0,1.0,1.0), pr
 		else:
 			raise NotImplementedError("Not implemented")
 		
-
 def translate(coord_vec, kdata_vec, translation):
 	with torch.inference_mode():
 		cudev = torch.device('cuda:0')
