@@ -286,13 +286,9 @@ def megarunner(thresh, maxiter, noise):
 
 if __name__ == '__main__':
 
-	threshes = [1e-3, 8e-4, 3e-4]
-	#threshes = [5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6, 5e-7]
-	#threshes = [1e-7, 5e-8, 1e-8]
-	#threshes = [5e-9, 1e-9, 5e-10]
-	#threshes = [1e-10, 5e-11, 1e-11]
+	threshes = [2e-3, 4e-3, 8e-3]
 	for thresh in threshes:
-		megarunner(thresh, 50)
+		megarunner(thresh, 50, 0)
 
 	
 
