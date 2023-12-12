@@ -41,7 +41,7 @@ hasty::fft::Nufft::Nufft(const at::Tensor& coords, const std::vector<int64_t>& n
 	}
 
 	if (_ndim + 1 != _nmodes.size()) {
-		throw std::runtime_error("coords.size(0) must match number of nmodes given");
+		throw std::runtime_error("_ndim + 1 must match number of nmodes given");
 	}
 
 	for (int i = 0; i < _ndim; ++i) {
@@ -424,7 +424,7 @@ hasty::fft::CUDANufft::CUDANufft(const at::Tensor& coords, const std::vector<int
 	}
 
 	if (_ndim + 1 != _nmodes.size()) {
-		throw std::runtime_error("coords.size(0) must match number of nmodes given");
+		throw std::runtime_error("_ndim + 1 must match number of nmodes given");
 	}
 
 	for (int i = 0; i < _ndim; ++i) {
