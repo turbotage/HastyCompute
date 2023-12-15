@@ -28,7 +28,7 @@ import hastypy.base.torch_precond as precond
 import hastypy.base.enc_to_vel as etv
 
 import hastypy.opt.cuda.sigpy.dcf as dcf
-
+import hastypy.util.image_creation as ic
 
 class RunSettings:
 	def __init__(self, im_size=None, crop_factors=None, prefovkmuls=None, postfovkmuls=None, shift=None, solver='GD'):
@@ -89,7 +89,7 @@ def run_full(settings, data):
 
 
 
-def run_from_difference(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh):
+def run_from_difference(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh, error_mask):
 	cudev = torch.device('cuda:0')
 	smaps_cu = data.smaps.to(cudev)
 	coils = [i for i in range(data.smaps.shape[0])]
@@ -142,7 +142,7 @@ def run_from_difference(settings: RunSettings, data: Data, img_full, maxiter, us
 
 	return relerrs
 
-def run_from_mean(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh):
+def run_from_mean(settings: RunSettings, data: Data, img_full, maxiter, use_weights, thresh, error_mask):
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
@@ -184,10 +184,12 @@ def run_from_mean(settings: RunSettings, data: Data, img_full, maxiter, use_weig
 
 	return relerrs
 
-def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thresh):
+def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thresh, error_mask):
 	true_images = Vector(data.true_images.view((settings.nframes*5,1)+data.smaps.shape[1:]))
 	true_images /= opalg.mean(true_images)
 	true_images_norm = opalg.norm(true_images)
+	true_angles = opalg.angle(true_images)
+	true_angles_norm = opalg.norm(true_angles)
 
 	svt_opts = SVTOptions(block_shapes=[16,16,16], block_strides=[16,16,16], block_iter=6, random=False, 
 			nblocks=0, thresh=thresh, soft=True)
@@ -207,11 +209,18 @@ def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thres
 		raise RuntimeError('Unsupported solver type')
 
 	relerrs = []
+	relerrs_angles = []
+	mask_vels = []
 	def err_callback(image: Vector, iter):
 		image /= opalg.mean(image)
 		relerr = opalg.norm(image - true_images) / true_images_norm
+		relerr_angle = opalg.norm(opalg.angle(image) - true_angles) / true_angles_norm
+		
 		relerrs.append(relerr)
-		print('RelErr: ', relerr)
+		relerrs_angles.append(relerr_angle)
+		mask_vels.append(image[...,error_mask[0], error_mask[1], error_mask[1]])
+		#mask_vels.append()
+		print(f"RelErr: {relerr} , RelErrAngles: {relerr_angle}")
 
 	images = torch.zeros((settings.nframes, 5) + settings.im_size, dtype=torch.complex64)
 
@@ -220,10 +229,10 @@ def run_from_zero(settings: RunSettings, data: Data, maxiter, use_weights, thres
 	#pu.image_nd(images.numpy())
 	#return images
 
-	return relerrs
+	return relerrs, relerrs_angles, mask_vels
 
 
-def megarunner(thresh, maxiter, noise):
+def megarunner(thresh, maxiter, noise, type, maskidxs):
 	with torch.inference_mode():
 		settings = RunSettings(solver='GD',
 			).set_smaps_filepath('D:/4DRecon/dat/dat2/SenseMapsCpp_cropped.h5'
@@ -257,7 +266,6 @@ def megarunner(thresh, maxiter, noise):
 					f.create_dataset(f"weights_{i}", data=np.array(weights_vec[i]))
 		
 			data.weights_vec = weights_vec
-
 		else:
 			with h5py.File('D:/4DRecon/dat/dat2/simulated_full_img.h5', 'r') as f:
 				img_full = torch.tensor(f['img_full'][()])
@@ -276,19 +284,71 @@ def megarunner(thresh, maxiter, noise):
 				#data.weights_vec[i] = torch.sqrt(data.weights_vec[i] + 1e-5)
 				data.weights_vec[i] = (data.weights_vec[i] + 1e-6) ** (0.8)
 
-		zero_err = run_from_zero(settings, data, maxiter, use_weights, thresh)
-		mean_err = run_from_mean(settings, data, img_full, maxiter, use_weights, thresh)
-		difference_err = run_from_difference(settings, data, img_full, maxiter, use_weights, thresh)
+		if type == 'from_zero':
+			errors = run_from_zero(settings, data, maxiter, use_weights, thresh, maskidxs)
+			np.save(f"D:/4DRecon/results/from_zero_{thresh}.npy", np.array(errors, dtype=np.object_), allow_pickle=True)
+		elif type == 'from_mean':
+			errors = run_from_mean(settings, data, img_full, maxiter, use_weights, thresh, maskidxs)
+			np.save(f"D:/4DRecon/results/from_mean_{thresh}.npy", np.array(errors, dtype=np.object_), allow_pickle=True)
+		elif type == 'from_diff':
+			errors = run_from_difference(settings, data, img_full, maxiter, use_weights, thresh, maskidxs)
+			np.save(f"D:/4DRecon/results/from_diff_{thresh}.npy", np.array(errors, dtype=np.object_), allow_pickle=True)
 
-		np.save(f"D:/4DRecon/results/from_zero_{thresh}.npy", np.array(zero_err))
-		np.save(f"D:/4DRecon/results/from_mean_{thresh}.npy", np.array(mean_err))
-		np.save(f"D:/4DRecon/results/from_difference_{thresh}.npy", np.array(difference_err))
 
 if __name__ == '__main__':
 
-	threshes = [2e-3, 4e-3, 8e-3]
+	#threshes = [2e-3, 4e-3, 8e-3]
+	#threshes = [1e-3, 1.2e-3, 1.5e-3]
+	threshes = [9e-3, 1e-2, 5e-2]
+
+	iter = 50
+
+	create_vessel_mask = True
+	if create_vessel_mask:
+		with h5py.File("D://4DRecon//dat//dat2//images_mvel_20f_cropped_interpolated.h5") as f:
+			mvel_images = torch.tensor(f['images'][()])
+			cd = ic.get_CD(mvel_images.numpy())[10,...]
+			img = cd
+			img /= np.max(img)
+
+			vel_mask = [
+				[38,38,39,39,38,37,38,38,38,37,36,37,37,37,38],
+				[11,12,11,12,10,11,12,11,10,11,11,11,10,12,11],
+				[63,63,63,63,63,63,62,62,62,62,61,61,61,61,61]
+			]
+
+			#img[38,11,63] = 1.5
+			#img[38,12,63] = 1.5
+			#img[39,11,63] = 1.5
+			#img[39,12,63] = 1.5
+			#img[38,10,63] = 1.5
+			#img[37,11,63] = 1.5
+			#img[38,12,62] = 1.5
+			#img[38,11,62] = 1.5
+			#img[38,10,62] = 1.5
+			#img[37,11,62] = 1.5
+			#img[36,11,61] = 1.5
+			#img[37,11,61] = 1.5
+			#img[37,10,61] = 1.5
+			#img[37,12,61] = 1.5
+			#img[38,11,61] = 1.5
+			
+
+
+			print('hello')
+	else:
+		vel_mask = [
+			[38,38,39,39,38,37,38,38,38,37,36,37,37,37,38],
+			[11,12,11,12,10,11,12,11,10,11,11,11,10,12,11],
+			[63,63,63,63,63,63,62,62,62,62,61,61,61,61,61]
+		]
+	
+
 	for thresh in threshes:
-		megarunner(thresh, 50, 0)
+		try:
+			megarunner(thresh, iter, 0, "from_zero", vel_mask)
+		except:
+			continue
 
 	
 

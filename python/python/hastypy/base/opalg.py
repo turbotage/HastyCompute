@@ -509,6 +509,14 @@ def abs(a: Vector):
 			ret.append(abs(a.children[i]))
 		return Vector(ret)
 
+def angle(a: Vector):
+	if a.istensor():
+		return Vector(torch.angle(a.tensor))
+	else:
+		ret = []
+		for i in range(len(a.children)):
+			ret.append(angle(a.children[i]))
+		return Vector(ret)
 
 
 class Operator:
