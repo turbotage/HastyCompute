@@ -1,0 +1,22 @@
+CompileFlags:
+  Add:
+    - "-std=c++23"
+    - "-Wno-unknown-warning-option"
+  Remove:
+    - "-fmodules-ts"
+    - "-fcoroutines-ts"
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    Remove: "*"
+
+Index:
+  Background: Build
+  StandardLibrary: No
+
+InlayHints:
+  Enabled: No
+  ParameterNames: Yes
+  DeducedTypes: Yes

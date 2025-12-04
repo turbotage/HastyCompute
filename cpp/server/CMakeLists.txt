@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 4.2.0 FATAL_ERROR)
 
 project(HastyServer VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find the pre-built HastyCompute library
 if (NOT TARGET HastyCompute)
     find_package(HastyCompute REQUIRED)

@@ -1,6 +1,6 @@
 module;
 
-#include "pch.hpp"
+//#include "pch.hpp"
 
 export module util:span;
 
@@ -13,7 +13,7 @@ import torch_wrapper;
 namespace hasty {
 
 
-export template<std::integral T, size_t N>
+export template<std::integral T, std::size_t N>
 struct arbspan {
 
 	//nullspan
@@ -45,7 +45,7 @@ struct arbspan {
 
 	std::array<T, N> to_arr() {
 		std::array<T, N> arr;
-		for (size_t i = 0; i < N; i++) {
+		for (i32 i = 0; i < N; i++) {
 			arr[i] = _data[i];
 		}
 		return arr;
@@ -54,20 +54,20 @@ struct arbspan {
 	arbspan(std::nullopt_t)
 		: _data(nullptr) {}
 
-	const T& operator[](size_t index) const {
+	const T& operator[](std::size_t index) const {
 		if (index >= N) {
 			throw std::out_of_range("Index out of range");
 		}
 		return _data[index];
 	}
 
-	template<size_t I>
+	template<std::size_t I>
 	requires (I < N)
 	const T& get() {
 		return _data[I];
 	}
 
-	constexpr size_t size() const { return N; }
+	constexpr std::size_t size() const { return N; }
 
 	bool has_value() const {
 		return _data != nullptr;
@@ -77,7 +77,7 @@ private:
 	const T* _data;
 };
 
-export template<std::integral I, size_t R>
+export template<std::integral I, std::size_t R>
 constexpr std::string span_to_str(arbspan<I,R> arr, bool as_tuple = true) {
 	std::string retstr = as_tuple ? "(" : "[";
 	
@@ -91,7 +91,7 @@ constexpr std::string span_to_str(arbspan<I,R> arr, bool as_tuple = true) {
 	return retstr;
 }
 
-export template<size_t N>
+export template<std::size_t N>
 struct span {
 
 	//nullspan
@@ -136,7 +136,7 @@ struct span {
 
 	std::array<i64, N> to_arr() {
 		std::array<i64, N> arr;
-		for (size_t i = 0; i < N; i++) {
+		for (i32 i = 0; i < N; i++) {
 			arr[i] = _data[i];
 		}
 		return arr;
@@ -145,33 +145,33 @@ struct span {
 	span(std::nullopt_t)
 		: _data(nullptr) {}
 
-	const i64& operator[](size_t index) const {
+	const i64& operator[](std::size_t index) const {
 		if (index >= N) {
 			throw std::out_of_range("Index out of range");
 		}
 		return _data[index];
 	}
 
-	template<size_t I>
+	template<std::size_t I>
 	requires (I < N)
 	const i64& get() const {
 		return _data[I];
 	}
 
-	constexpr size_t size() const { return N; }
+	constexpr std::size_t size() const { return N; }
 
 	bool has_value() const {
 		return _data != nullptr;
 	}
 
-	template<size_t R1, size_t R2>
+	template<std::size_t R1, std::size_t R2>
 	friend std::array<i64,R1+R2> operator+(const span<R1>& s1, const span<R2>& s2);
 
 private:
 	const i64* _data;
 };
 
-export template<size_t R1, size_t R2>
+export template<std::size_t R1, std::size_t R2>
 std::array<i64,R1+R2> operator+(const span<R1>& s1, const span<R2>& s2) {
 	std::array<i64,R1+R2> ret;
 	for_sequence<R1>([&](auto i) {
@@ -185,7 +185,7 @@ std::array<i64,R1+R2> operator+(const span<R1>& s1, const span<R2>& s2) {
 
 export using nullspan = span<0>;
 
-export template<size_t R>
+export template<std::size_t R>
 constexpr std::string span_to_str(span<R> arr, bool as_tuple = true) {
 	std::string retstr = as_tuple ? "(" : "[";
 	
@@ -204,7 +204,7 @@ export template <class T>
 struct darbspan {
     darbspan() : _data(nullptr), _size(0) {}
 
-    darbspan(const T* data, size_t size)
+    darbspan(const T* data, std::size_t size)
         : _data(data), _size(size) {}
 
     darbspan(hat::ArrayRef<T> arr)
@@ -219,17 +219,17 @@ struct darbspan {
     darbspan(std::nullopt_t)
         : _data(nullptr), _size(0) {}
 
-    const T& operator[](size_t i) const {
+    const T& operator[](std::size_t i) const {
         if (i >= _size)
             throw std::out_of_range("darbspan out of range");
         return _data[i];
     }
 
-    const T& get(size_t i) const {
+    const T& get(std::size_t i) const {
         return (*this)[i];
     }
 
-    size_t size() const { return _size; }
+    std::size_t size() const { return _size; }
     bool has_value() const { return _data != nullptr; }
 
     hat::ArrayRef<T> to_arr_ref() const {
@@ -242,13 +242,13 @@ struct darbspan {
 
 private:
     const T* _data;
-    size_t _size;
+    std::size_t _size;
 };
 
 export struct dspan {
     dspan() : _data(nullptr), _size(0) {}
 
-    dspan(const i64* data, size_t size)
+    dspan(const i64* data, std::size_t size)
         : _data(data), _size(size) {}
 
     dspan(hat::ArrayRef<i64> arr)
@@ -263,15 +263,15 @@ export struct dspan {
     dspan(std::nullopt_t)
         : _data(nullptr), _size(0) {}
 
-    const i64& operator[](size_t i) const {
+    const i64& operator[](std::size_t i) const {
         if (i >= _size)
             throw std::out_of_range("dspan out of range");
         return _data[i];
     }
 
-    const i64& get(size_t i) const { return (*this)[i]; }
+    const i64& get(std::size_t i) const { return (*this)[i]; }
 
-    size_t size() const { return _size; }
+    std::size_t size() const { return _size; }
     bool has_value() const { return _data != nullptr; }
 
     inline hat::ArrayRef<i64> to_arr_ref() const {
@@ -284,7 +284,7 @@ export struct dspan {
 
 private:
     const i64* _data;
-    size_t _size;
+    std::size_t _size;
 };
 
 

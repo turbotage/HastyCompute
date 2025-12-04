@@ -6,80 +6,9 @@ import std;
 import util;
 import torch_wrapper;
 
+export import :background;
+
 namespace hasty {
-
-
-export enum struct device_idx : i16 {
-    CPU = -1,
-    CUDA0 = 0,
-    CUDA1 = 1,
-    CUDA2 = 2,
-    CUDA3 = 3,
-    CUDA4 = 4,
-    CUDA5 = 5,
-    CUDA6 = 6,
-    CUDA7 = 7,
-    CUDA8 = 8,
-    CUDA9 = 9,
-    CUDA10 = 10,
-    CUDA11 = 11,
-    CUDA12 = 12,
-    CUDA13 = 13,
-    CUDA14 = 14,
-    CUDA15 = 15
-};
-
-export enum struct device_type : i16 {
-    CPU = 0,
-    CUDA = 1
-};
-
-export struct device {
-    device_type type;
-    device_idx index;
-
-    device(device_type t, device_idx i = device_idx::CPU)
-        : type(t), index(i) 
-    {
-        if (type == device_type::CPU && index != device_idx::CPU) {
-            throw std::invalid_argument("CPU device must have index CPU");
-        }
-    }
-
-    inline std::string str() const {
-        if (type == device_type::CPU) {
-            return "cpu";
-        } else {
-            return "cuda:" + std::to_string(static_cast<i16>(index));
-        }
-    }
-
-    inline hat::Device torch_device() const {
-        if (type == device_type::CPU) {
-            return hat::Device(hat::DeviceType::CPU);
-        } else {
-            return hat::Device(hat::DeviceType::CUDA, hat::DeviceIndex(index));
-        }
-    }
-
-    inline hat::DeviceType torch_device_type() const {
-        if (type == device_type::CPU) {
-            return hat::DeviceType::CPU;
-        } else {
-            return hat::DeviceType::CUDA;
-        }
-    }
-
-    inline hat::DeviceIndex torch_device_index() const {
-        if (type == device_type::CPU) {
-            return hat::DeviceIndex(-1);
-        } else {
-            return hat::DeviceIndex(index);
-        }
-    }
-
-};
-
 
 export class tensor {
 public:
@@ -155,6 +84,20 @@ public:
         return _base.view(sizes.to_arr_ref());
     }
 
+    tensor view(scalar_type dtype) const {
+        return tensor(_base.view(to_torch(dtype)));
+    }
+
+    tensor to(scalar_type dtype, bool non_blocking=false, bool copy = false, opt<memory_format> memformat = nullopt) const {
+        return tensor(
+            _base.to(
+                to_torch(dtype), non_blocking, copy, 
+                std::bit_cast<opt<hat::MemoryFormat>>(memformat)
+            )
+        );
+    }
+
+    
 
 private:
     hat::Tensor _base;

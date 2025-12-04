@@ -7,6 +7,8 @@ set(CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN "/opt/gcc-15")
 
 project(HastyTest VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_executable(HastyTest "src/main.cpp")
 
 target_compile_features(HastyTest 

@@ -4,9 +4,10 @@ cmake_minimum_required(VERSION 4.2.0 FATAL_ERROR)
 
 project(HastyCompute VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 
-message("Hello ${pybind11_DIR}")
+#message("Hello ${pybind11_DIR}")
 # Add the unsupported compiler flag explicitly
 add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>)
 
@@ -53,7 +54,9 @@ include(FetchContent)
 target_sources(HastyCompute
     PRIVATE 
         FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
+			"src/tensor/tensor_background.cppm"
             "src/tensor/tensor.cppm"
+			"src/util/util_alias.cppm"
             "src/util/util_meta.cppm"
             "src/util/util_span.cppm"
             "src/util/util_typing.cppm"

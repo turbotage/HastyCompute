@@ -1,6 +1,6 @@
 module;
 
-#include "pch.hpp"
+//#include "pch.hpp"
 
 export module util:meta;
 
@@ -43,7 +43,7 @@ constexpr void for_each_type(F&& f) {
 export template<typename... Args>
 struct tuple_traits {
 	using tuple = std::tuple<Args...>;
-	static constexpr size_t Size = sizeof...(Args);
+	static constexpr std::size_t Size = sizeof...(Args);
 
 	template <std::size_t N>
 	using nth = typename std::tuple_element<N, tuple>::type;
@@ -54,7 +54,7 @@ struct tuple_traits {
 export template<typename... Args>
 struct tuple_traits<std::tuple<Args...>> {
 	using tuple = std::tuple<Args...>;
-	static constexpr size_t Size = sizeof...(Args);
+	static constexpr std::size_t Size = sizeof...(Args);
 
 	template <std::size_t N>
 	using nth = typename std::tuple_element<N, tuple>::type;
@@ -66,13 +66,13 @@ struct tuple_traits<std::tuple<Args...>> {
 export template<>
 struct tuple_traits<> {
 	using tuple = std::tuple<>;
-	static constexpr size_t Size = 0;
+	static constexpr std::size_t Size = 0;
 };
 
 export template<>
 struct tuple_traits<std::tuple<>> {
 	using tuple = std::tuple<>;
-	static constexpr size_t Size = 0;
+	static constexpr std::size_t Size = 0;
 };
 
 export template<typename T>

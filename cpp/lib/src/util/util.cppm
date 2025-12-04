@@ -2,6 +2,7 @@ module;
 
 export module util;
 
+export import :alias;
 export import :meta;
 export import :span;
 export import :typing;

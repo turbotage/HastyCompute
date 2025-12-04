@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 4.2.0)
 
 project(HastyComputeRoot VERSION 0.1)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(ExternalProject)
 
 # Parse which targets to build (defaults to all)
@@ -73,3 +75,24 @@ if (HASTY_BUILD_SERVER)
 		DEPENDS HastyCompute
 	)
 endif()
+
+
+# Merge compile_commands.json from all subprojects
+set(MERGE_DEPS "")
+if(HASTY_BUILD_LIB)
+    list(APPEND MERGE_DEPS HastyCompute)
+endif()
+if(HASTY_BUILD_TEST)
+    list(APPEND MERGE_DEPS HastyTest)
+endif()
+if(HASTY_BUILD_SERVER)
+    list(APPEND MERGE_DEPS HastyServer)
+endif()
+
+add_custom_target(merge_compile_commands ALL
+    COMMAND ${CMAKE_COMMAND} -E echo "Merging compile_commands.json..."
+    COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/merge_compile_commands.py
+        ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${MERGE_DEPS}
+    COMMENT "Merging compile_commands.json from subprojects"
+)
