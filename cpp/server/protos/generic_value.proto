@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package hastycu;
+
+service GenericValueService {
+	rpc PushGenericValue(stream GenericValue) returns (GenericValueAck);
+}
+
+message GenericValue {
+	bytes data = 1;
+}
+
+message GenericValueAck {
+	string unique_id = 1;
+}

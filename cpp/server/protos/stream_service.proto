@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package hastycu;
+
+enum StreamOperationType {
+	GENERIC_VALUE_PUSH = 0;
+	GENERIC_VALUE_FETCH = 1;
+	// Add more types as needed
+}
+
+message StreamInitRequest {
+	StreamOperationType operation_type = 1;
+	string metadata = 2; // JSON or other metadata
+}
+
+message StreamInitResponse {
+	string stream_id = 1;
+}
+
+message StreamChunk {
+	string stream_id = 1;
+	int64 chunk_index = 2;
+	int32 flags = 3; // bitmask: e.g. 1=first, 2=last
+	bytes data = 4;
+}
+
+message StreamChunkAck {
+	bool success = 1;
+	string message = 2;
+}
+
+service StreamService {
+	rpc InitStream(StreamInitRequest) returns (StreamInitResponse);
+	rpc SendChunk(StreamChunk) returns (StreamChunkAck);
+	// Optionally: rpc FetchChunk(StreamChunk) returns (StreamChunkAck);
+}

@@ -1,0 +1,54 @@
+{
+    "version": 10,
+    "cmakeMinimumRequired": {
+        "major": 4,
+        "minor": 2,
+        "patch": 0
+    },
+    "include": ["../../CommonPresets.json"],
+    "configurePresets": [
+        {
+            "name": "MainConfigClang-Linux",
+            "inherits": ["CommonClangSettings"],
+            "binaryDir": "${sourceDir}/../../out/build/lib-${presetName}",
+            "environment": {
+                "LIBTORCH_PATH": "$env{MY_INSTALL_PATH}/LibTorch",
+                "HIGHFIVE_PATH": "$env{MY_INSTALL_PATH}/HighFive",
+                "CUDA_ROOT": "/usr/local/cuda-13.0",
+                "VCPKG_ROOT": "/home/turbotage/Documents/GitHub/vcpkg",
+                "CUDAHOSTCXX": "/usr/bin/clang++-18",
+                "CONDA_ENV_PATH": "/home/turbotage/miniconda3/envs/py313c++pkgs",
+                "CONDA_SITE_PKG_PATH": "$env{CONDA_ENV_PATH}/lib/python3.13/site-packages"
+            },
+            "cacheVariables": {
+                "CMAKE_CUDA_ARCHITECTURES": "89",
+                "CMAKE_CUDA_HOST_COMPILER": "/usr/bin/clang++-22",
+                "CMAKE_CUDA_COMPILER": "$env{CUDA_ROOT}/bin/nvcc",
+                "CMAKE_CUDA_FLAGS": "-allow-unsupported-compiler",
+                "CUDAToolkit_ROOT": "$env{CUDA_ROOT}/bin/",
+                "pybind11_DIR": "$env{CONDA_SITE_PKG_PATH}/pybind11/share/cmake/pybind11",
+                "CMAKE_PREFIX_PATH": {
+                    "type": "FILEPATH",
+                    "value": "$env{LIBTORCH_PATH};$env{HIGHFIVE_PATH}"
+                }
+            }
+        },
+        {
+            "name": "HastyComputeLib-ClangRelWithDebInfo-Linux",
+            "displayName": "HastyComputeLib-ClangRelWithDebInfo-Linux",
+            "inherits": ["MainConfigClang-Linux"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "HastyComputeLib-ClangDebug-Linux",
+            "displayName": "HastyComputeLib-ClangDebug-Linux",
+            "inherits": ["MainConfigClang-Linux"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+
+    ]
+}
