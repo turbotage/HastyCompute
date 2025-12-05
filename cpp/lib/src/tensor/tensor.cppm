@@ -97,6 +97,22 @@ public:
         );
     }
 
+    tensor to(device dev, bool non_blocking=false, bool copy = false, opt<memory_format> memformat = nullopt) const {
+        return tensor(
+            _base.to(
+                dev.torch_device(), non_blocking, copy, 
+                std::bit_cast<opt<hat::MemoryFormat>>(memformat)
+            )
+        );
+    }
+
+    tensor to(const tensor_options& options, bool non_blocking=false, bool copy = false) const {
+        return tensor(
+            _base.to(
+                options.to_torch(), non_blocking, copy
+            )
+        );
+    }
     
 
 private:
