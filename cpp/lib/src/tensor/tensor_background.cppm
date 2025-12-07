@@ -9,59 +9,60 @@ import torch_wrapper;
 namespace hasty {
 
 // <================== DEVICE INDEX ==================> //
-using device_idx = i8;
+using DeviceIndex = i8;
 
 namespace device_alias {
-    inline constexpr device_idx CPU = -1;
-    inline constexpr device_idx CUDA0 = 0;
-    inline constexpr device_idx CUDA1 = 1;
-    inline constexpr device_idx CUDA2 = 2;
-    inline constexpr device_idx CUDA3 = 3;
-    inline constexpr device_idx CUDA4 = 4;
-    inline constexpr device_idx CUDA5 = 5;
-    inline constexpr device_idx CUDA6 = 6;
-    inline constexpr device_idx CUDA7 = 7;
-    inline constexpr device_idx CUDA8 = 8;
-    inline constexpr device_idx CUDA9 = 9;
-    inline constexpr device_idx CUDA10 = 10;
-    inline constexpr device_idx CUDA11 = 11;
-    inline constexpr device_idx CUDA12 = 12;
-    inline constexpr device_idx CUDA13 = 13;
-    inline constexpr device_idx CUDA14 = 14;
-    inline constexpr device_idx CUDA15 = 15;
+    inline constexpr DeviceIndex CPU = -1;
+    inline constexpr DeviceIndex CUDA0 = 0;
+    inline constexpr DeviceIndex CUDA1 = 1;
+    inline constexpr DeviceIndex CUDA2 = 2;
+    inline constexpr DeviceIndex CUDA3 = 3;
+    inline constexpr DeviceIndex CUDA4 = 4;
+    inline constexpr DeviceIndex CUDA5 = 5;
+    inline constexpr DeviceIndex CUDA6 = 6;
+    inline constexpr DeviceIndex CUDA7 = 7;
+    inline constexpr DeviceIndex CUDA8 = 8;
+    inline constexpr DeviceIndex CUDA9 = 9;
+    inline constexpr DeviceIndex CUDA10 = 10;
+    inline constexpr DeviceIndex CUDA11 = 11;
+    inline constexpr DeviceIndex CUDA12 = 12;
+    inline constexpr DeviceIndex CUDA13 = 13;
+    inline constexpr DeviceIndex CUDA14 = 14;
+    inline constexpr DeviceIndex CUDA15 = 15;
 }
 
-static_assert(std::is_same_v<device_idx, hat::DeviceIndex>,
-    "Underlying types of device_idx and hat::DeviceIndex must match"
+static_assert(std::is_same_v<DeviceIndex, hat::DeviceIndex>,
+    "Underlying types of DeviceIndex and hat::DeviceIndex must match"
 );
 
-export inline constexpr device_idx from_torch(hat::DeviceIndex index) {
-    return static_cast<device_idx>(index);
+export inline constexpr DeviceIndex from_torch(hat::DeviceIndex index) {
+    return static_cast<DeviceIndex>(index);
 }
-export inline constexpr hat::DeviceIndex to_torch(device_idx index) {
+export inline constexpr hat::DeviceIndex to_torch(DeviceIndex index) {
     return static_cast<hat::DeviceIndex>(index);
 }
 
+
 // <================== DEVICE TYPE ==================> //
-export enum struct device_type : i8 {
+export enum struct eDeviceType : i8 {
     CPU     = std::to_underlying(hat::DeviceType::CPU),
     CUDA    = std::to_underlying(hat::DeviceType::CUDA)
 };
 static_assert(std::is_same_v<
-    std::underlying_type_t<device_type>,
+    std::underlying_type_t<eDeviceType>,
     std::underlying_type_t<hat::DeviceType>>,
     "Underlying types of device_type and hat::DeviceType must match"
 );
 
-export inline constexpr device_type from_torch(hat::DeviceType dtype) {
-    return static_cast<device_type>(dtype);
+export inline constexpr eDeviceType from_torch(hat::DeviceType dtype) {
+    return static_cast<eDeviceType>(dtype);
 }
-export inline constexpr hat::DeviceType to_torch(device_type dtype) {
+export inline constexpr hat::DeviceType to_torch(eDeviceType dtype) {
     return static_cast<hat::DeviceType>(dtype);
 }
 
 // <================== SCALAR TYPE ==================> //
-export enum struct scalar_type : i8 {
+export enum struct eScalarType : i8 {
     Byte            = std::to_underlying(hat::ScalarType::Byte),
     Char            = std::to_underlying(hat::ScalarType::Char),
     Short           = std::to_underlying(hat::ScalarType::Short),
@@ -77,58 +78,58 @@ export enum struct scalar_type : i8 {
     BFloat16        = std::to_underlying(hat::ScalarType::BFloat16)
 };
 static_assert(std::is_same_v<
-    std::underlying_type_t<scalar_type>,
+    std::underlying_type_t<eScalarType>,
     std::underlying_type_t<hat::ScalarType>>,
     "Underlying types of scalar_type and hat::ScalarType must match"
 );
 
-export inline constexpr scalar_type from_torch(hat::ScalarType dtype) {
-    return static_cast<scalar_type>(dtype);
+export inline constexpr eScalarType from_torch(hat::ScalarType dtype) {
+    return static_cast<eScalarType>(dtype);
 }
 
-export inline constexpr hat::ScalarType to_torch(scalar_type dtype) {
+export inline constexpr hat::ScalarType to_torch(eScalarType dtype) {
     return static_cast<hat::ScalarType>(dtype);
 }
 
 export namespace scalar_alias {
-    inline constexpr scalar_type u8 = scalar_type::Byte;
-    inline constexpr scalar_type i8 = scalar_type::Char;
-    inline constexpr scalar_type i16 = scalar_type::Short;
-    inline constexpr scalar_type i32 = scalar_type::Int;
-    inline constexpr scalar_type i64 = scalar_type::Long;
-    inline constexpr scalar_type f16 = scalar_type::Half;
-    inline constexpr scalar_type f32 = scalar_type::Float;
-    inline constexpr scalar_type f64 = scalar_type::Double;
-    inline constexpr scalar_type c16 = scalar_type::ComplexHalf;
-    inline constexpr scalar_type c32 = scalar_type::ComplexFloat;
-    inline constexpr scalar_type c64 = scalar_type::ComplexDouble;
-    inline constexpr scalar_type b8 = scalar_type::Bool;
-    inline constexpr scalar_type bf16 = scalar_type::BFloat16;
+    inline constexpr eScalarType u8 = eScalarType::Byte;
+    inline constexpr eScalarType i8 = eScalarType::Char;
+    inline constexpr eScalarType i16 = eScalarType::Short;
+    inline constexpr eScalarType i32 = eScalarType::Int;
+    inline constexpr eScalarType i64 = eScalarType::Long;
+    inline constexpr eScalarType f16 = eScalarType::Half;
+    inline constexpr eScalarType f32 = eScalarType::Float;
+    inline constexpr eScalarType f64 = eScalarType::Double;
+    inline constexpr eScalarType c16 = eScalarType::ComplexHalf;
+    inline constexpr eScalarType c32 = eScalarType::ComplexFloat;
+    inline constexpr eScalarType c64 = eScalarType::ComplexDouble;
+    inline constexpr eScalarType b8 = eScalarType::Bool;
+    inline constexpr eScalarType bf16 = eScalarType::BFloat16;
 }
 
 // <================== MEMORY FORMAT ==================> //
-export enum struct memory_format : i8 {
+export enum struct eMemoryFormat : i8 {
     Contiguous      = std::to_underlying(hat::MemoryFormat::Contiguous),
     Preserve        = std::to_underlying(hat::MemoryFormat::Preserve),
     ChannelsLast    = std::to_underlying(hat::MemoryFormat::ChannelsLast),
     ChannelsLast3d  = std::to_underlying(hat::MemoryFormat::ChannelsLast3d)
 };
 static_assert(std::is_same_v<
-    std::underlying_type_t<memory_format>,
+    std::underlying_type_t<eMemoryFormat>,
     std::underlying_type_t<hat::MemoryFormat>>,
     "Underlying types of memory_format and hat::MemoryFormat must match"
 );
 
-export inline constexpr memory_format from_torch(hat::MemoryFormat fmt) {
-    return static_cast<memory_format>(fmt);
+export inline constexpr eMemoryFormat from_torch(hat::MemoryFormat fmt) {
+    return static_cast<eMemoryFormat>(fmt);
 }
 
-export inline constexpr hat::MemoryFormat to_torch(memory_format fmt) {
+export inline constexpr hat::MemoryFormat to_torch(eMemoryFormat fmt) {
     return static_cast<hat::MemoryFormat>(fmt);
 }
 
 // <================== LAYOUT ==================> //
-export enum struct layout : i8 {
+export enum struct eLayout : i8 {
     Strided     = std::to_underlying(hat::Layout::Strided),
     Sparse      = std::to_underlying(hat::Layout::Sparse),
     SparseCsr   = std::to_underlying(hat::Layout::SparseCsr),
@@ -139,38 +140,41 @@ export enum struct layout : i8 {
     Jagged      = std::to_underlying(hat::Layout::Jagged)
 };
 static_assert(std::is_same_v<
-    std::underlying_type_t<layout>,
+    std::underlying_type_t<eLayout>,
     std::underlying_type_t<hat::Layout>>,
     "Underlying types of layout and hat::Layout must match"
 );
 
-export inline constexpr layout from_torch(hat::Layout layout) {
-    return static_cast<layout>(layout);
+export inline constexpr eLayout from_torch(hat::Layout layout) {
+    return static_cast<eLayout>(layout);
 }
 
-export inline constexpr hat::Layout to_torch(layout layout) {
+export inline constexpr hat::Layout to_torch(eLayout layout) {
     return static_cast<hat::Layout>(layout);
 }
 
 // <================== DEVICE ==================> //
-export struct device {
-    device_type type;
-    device_idx index;
+export struct Device {
+    eDeviceType type;
+    DeviceIndex index;
 
-    device(device_type t, device_idx i = device_alias::CPU)
+    Device()
+        : type(eDeviceType::CPU), index(device_alias::CPU) {}
+
+    Device(eDeviceType t, DeviceIndex i = device_alias::CPU)
         : type(t), index(i) 
     {
-        if (type == device_type::CPU && index != device_alias::CPU) {
+        if (type == eDeviceType::CPU && index != device_alias::CPU) {
             throw std::invalid_argument("CPU device must have index CPU");
         }
     }
 
-    device(hat::Device d)
+    Device(hat::Device d)
         : type(from_torch(d.type())), index(from_torch(d.index()))
     {}
 
     inline std::string str() const {
-        if (type == device_type::CPU) {
+        if (type == eDeviceType::CPU) {
             return "cpu";
         } else {
             return "cuda:" + std::to_string(static_cast<i16>(index));
@@ -178,7 +182,7 @@ export struct device {
     }
 
     inline hat::Device torch_device() const {
-        if (type == device_type::CPU) {
+        if (type == eDeviceType::CPU) {
             return hat::Device(hat::DeviceType::CPU);
         } else {
             return hat::Device(hat::DeviceType::CUDA, hat::DeviceIndex(index));
@@ -186,7 +190,7 @@ export struct device {
     }
 
     inline hat::DeviceType torch_device_type() const {
-        if (type == device_type::CPU) {
+        if (type == eDeviceType::CPU) {
             return hat::DeviceType::CPU;
         } else {
             return hat::DeviceType::CUDA;
@@ -194,7 +198,7 @@ export struct device {
     }
 
     inline hat::DeviceIndex torch_device_index() const {
-        if (type == device_type::CPU) {
+        if (type == eDeviceType::CPU) {
             return hat::DeviceIndex(-1);
         } else {
             return hat::DeviceIndex(index);
@@ -203,100 +207,208 @@ export struct device {
 
 };
 
+static_assert(sizeof(Device) == 2,
+    "Size of Device should be 2 bytes"
+);
+
 // <================== TENSOR OPTIONS ==================> //
-export struct tensor_options {
-    opt<device> dev;
-    opt<scalar_type> dtype;
-    opt<layout> layout;
-    opt<memory_format> memformat;
-    bool requires_grad = false;
-    bool pinned_memory = false;
+export struct TensorOptions {
+private:
+    Device                  m_dev;
+    eScalarType             m_dtype;
+    eLayout                 m_layout;
+    eMemoryFormat           m_memformat;
 
-    tensor_options() = default;
+    bool m_has_device : 1     = false;
+    bool m_has_dtype  : 1     = false;
+    bool m_has_layout : 1     = false;
+    bool m_has_memformat : 1  = false;
+    bool m_requires_grad : 1  = false;
+    bool m_pinned_memory : 1  = false;
 
-    tensor_options(device dev) : dev(dev) {}
-    tensor_options(scalar_type dtype) : dtype(dtype) {}
-    tensor_options(layout layout) : layout(layout) {}
-    tensor_options(memory_format memformat) : memformat(memformat) {}
+public:
 
-    [[nodiscard]] inline tensor_options device(opt<device> d) const noexcept {
-        tensor_options r = *this;
-        r.dev = d;
+    TensorOptions() = default;
+
+    TensorOptions(Device dev) : m_dev(dev), m_has_device(true) {}
+    TensorOptions(eScalarType dtype) : m_dtype(dtype), m_has_dtype(true) {}
+    TensorOptions(eLayout layout) : m_layout(layout), m_has_layout(true) {}
+    TensorOptions(eMemoryFormat memformat) : m_memformat(memformat), m_has_memformat(true) {}
+
+    TensorOptions(Device dev, eScalarType dtype)
+        : m_dev(dev), m_dtype(dtype), m_has_device(true), m_has_dtype(true) {}
+
+    [[nodiscard]] inline TensorOptions device(Device d) const noexcept {
+        TensorOptions r = *this;
+        r.m_dev = d;
+        r.m_has_device = true;
         return r;
     }
 
-    inline tensor_options& device_(opt<device> d) noexcept {
-        dev = d;
-        return *this;
-    }
-
-    [[nodiscard]] inline tensor_options dtype(opt<scalar_type> dt) const noexcept {
-        tensor_options r = *this;
-        r.dtype = dt;
+    [[nodiscard]] inline TensorOptions device(Opt<Device> d) noexcept {
+        TensorOptions r = *this;
+        if (d) {
+            r.m_dev = *d;
+            r.m_has_device = true;
+        } else {
+            r.m_has_device = false;
+        }
         return r;
     }
 
-    inline tensor_options& dtype_(opt<scalar_type> dt) noexcept {
-        dtype = dt;
+    inline TensorOptions& device_(Device d) noexcept {
+        m_dev = d;
+        m_has_device = true;
         return *this;
     }
 
-    [[nodiscard]] inline tensor_options layout(opt<layout> l) const noexcept {
-        tensor_options r = *this;
-        r.layout = l;
+    inline TensorOptions& device_(Opt<Device> d) noexcept {
+        if (d) {
+            m_dev = *d;
+            m_has_device = true;
+        } else {
+            m_has_device = false;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] inline TensorOptions dtype(eScalarType dt) const noexcept {
+        TensorOptions r = *this;
+        r.m_dtype = dt;
+        r.m_has_dtype = true;
         return r;
     }
 
-    inline tensor_options& layout_(opt<layout> l) noexcept {
-        layout = l;
-        return *this;
-    }
-
-    [[nodiscard]] inline tensor_options memory_format(
-        opt<memory_format> mf) const noexcept {
-        tensor_options r = *this;
-        r.memformat = mf;
+    [[nodiscard]] inline TensorOptions dtype(Opt<eScalarType> dt) noexcept {
+        TensorOptions r = *this;
+        if (dt) {
+            r.m_dtype = *dt;
+            r.m_has_dtype = true;
+        } else {
+            r.m_has_dtype = false;
+        }
         return r;
     }
 
-    inline tensor_options& memory_format_(opt<memory_format> mf) noexcept {
-        memformat = mf;
+    inline TensorOptions& dtype_(eScalarType dt) noexcept {
+        m_dtype = dt;
+        m_has_dtype = true;
         return *this;
     }
 
-    inline const opt<device>& get_device() const noexcept { return dev; }
-    inline const opt<scalar_type>& get_dtype() const noexcept { return dtype; }
-    inline const opt<layout>& get_layout() const noexcept { return layout; }
-    inline const opt<memory_format>& get_memory_format() const noexcept { return memformat; }
-    inline bool get_requires_grad() const noexcept { return requires_grad; }
-    inline bool get_pinned_memory() const noexcept { return pinned_memory; }
+    inline TensorOptions& dtype_(Opt<eScalarType> dt) noexcept {
+        if (dt) {
+            m_dtype = *dt;
+            m_has_dtype = true;
+        } else {
+            m_has_dtype = false;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] inline TensorOptions layout(eLayout l) const noexcept {
+        TensorOptions r = *this;
+        r.m_layout = l;
+        r.m_has_layout = true;
+        return r;
+    }
+
+    [[nodiscard]] inline TensorOptions layout(Opt<eLayout> l) noexcept {
+        TensorOptions r = *this;
+        if (l) {
+            r.m_layout = *l;
+            r.m_has_layout = true;
+        } else {
+            r.m_has_layout = false;
+        }
+        return r;
+    }
+
+    inline TensorOptions& layout_(eLayout l) noexcept {
+        m_layout = l;
+        m_has_layout = true;
+        return *this;
+    }
+
+    inline TensorOptions& layout_(Opt<eLayout> l) noexcept {
+        if (l) {
+            m_layout = *l;
+            m_has_layout = true;
+        } else {
+            m_has_layout = false;
+        }
+        return *this;
+    }
+
+    [[nodiscard]] inline TensorOptions memory_format(eMemoryFormat mf) const noexcept {
+        TensorOptions r = *this;
+        r.m_memformat = mf;
+        r.m_has_memformat = true;
+        return r;
+    }
+
+    [[nodiscard]] inline TensorOptions memory_format(Opt<eMemoryFormat> mf) noexcept {
+        TensorOptions r = *this;
+        if (mf) {
+            r.m_memformat = *mf;
+            r.m_has_memformat = true;
+        } else {
+            r.m_has_memformat = false;
+        }
+        return r;
+    }
+
+    inline TensorOptions& memory_format_(eMemoryFormat mf) noexcept {
+        m_memformat = mf;
+        m_has_memformat = true;
+        return *this;
+    }
+
+    inline TensorOptions& memory_format_(Opt<eMemoryFormat> mf) noexcept {
+        if (mf) {
+            m_memformat = *mf;
+            m_has_memformat = true;
+        } else {
+            m_has_memformat = false;
+        }
+        return *this;
+    }
+
+    inline const Opt<Device>& get_device() const noexcept { return m_dev; }
+    inline const Opt<eScalarType>& get_dtype() const noexcept { return m_dtype; }
+    inline const Opt<eLayout>& get_layout() const noexcept { return m_layout; }
+    inline const Opt<eMemoryFormat>& get_memory_format() const noexcept { return m_memformat; }
+    inline bool get_requires_grad() const noexcept { return m_requires_grad; }
+    inline bool get_pinned_memory() const noexcept { return m_pinned_memory; }
 
     hat::TensorOptions to_torch() const {
         hat::TensorOptions opts;
 
-        if (dev) opts = opts.device(dev->torch_device());
-        if (dtype) opts = opts.dtype(to_torch(*dtype));
-        if (layout) opts = opts.layout(to_torch(*layout));
-        if (memformat) opts = opts.memory_format(to_torch(*memformat));
+        if (m_has_device) opts = opts.device(m_dev.torch_device());
+        if (m_has_dtype) opts = opts.dtype(::hasty::to_torch(m_dtype));
+        if (m_has_layout) opts = opts.layout(::hasty::to_torch(m_layout));
+        if (m_has_memformat) opts = opts.memory_format(::hasty::to_torch(m_memformat));
 
-        opts = opts.requires_grad(requires_grad);
-        opts = opts.pinned_memory(pinned_memory);
+        opts = opts.requires_grad(m_requires_grad);
+        opts = opts.pinned_memory(m_pinned_memory);
 
         return opts;
     }
 
-    tensor_options merge_in(const tensor_options& other) const {
-        tensor_options r = *this;
+    TensorOptions merge_in(const TensorOptions& other) const {
+        TensorOptions r = *this;
 
-        if (other.dev) r.dev = other.dev;
-        if (other.dtype) r.dtype = other.dtype;
-        if (other.layout) r.layout = other.layout;
-        if (other.memformat) r.memformat = other.memformat;
+        if (other.m_has_device) r.m_dev = other.m_dev;
+        if (other.m_has_dtype) r.m_dtype = other.m_dtype;
+        if (other.m_has_layout) r.m_layout = other.m_layout;
+        if (other.m_has_memformat) r.m_memformat = other.m_memformat;
 
-        r.requires_grad = other.requires_grad;
-        r.pinned_memory = other.pinned_memory;
+        r.m_requires_grad = other.m_requires_grad;
+        r.m_pinned_memory = other.m_pinned_memory;
 
         return r;
     }
 
 };
+
+}

@@ -54,6 +54,7 @@ include(FetchContent)
 target_sources(HastyCompute
     PRIVATE 
         FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
+			"src/tensor/scalar.cppm"
 			"src/tensor/tensor_background.cppm"
             "src/tensor/tensor.cppm"
 			"src/util/util_alias.cppm"

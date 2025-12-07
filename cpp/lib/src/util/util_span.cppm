@@ -13,280 +13,80 @@ import torch_wrapper;
 namespace hasty {
 
 
-export template<std::integral T, std::size_t N>
-struct arbspan {
-
-	//nullspan
-	arbspan() : _data(nullptr) {};
-
-	arbspan(T const (&list)[N]) 
-		: _data(list) {}
-
-	arbspan(const T* listptr)
-		: _data(listptr) {}
-
-	arbspan(hat::ArrayRef<T> arr)
-		: _data(arr.data())
-	{
-		assert(arr.size() == N);
-	}
-
-	arbspan(const std::array<T, N>& arr)
-		: _data(arr.data())
-	{}
-
-	/*
-	span(std::span<const T, N> span) 
-		: _data(span.data()) {}
-	*/
-	hat::ArrayRef<T> to_arr_ref() {
-		return hat::ArrayRef<T>(_data, N);
-	}
-
-	std::array<T, N> to_arr() {
-		std::array<T, N> arr;
-		for (i32 i = 0; i < N; i++) {
-			arr[i] = _data[i];
-		}
-		return arr;
-	}
-
-	arbspan(std::nullopt_t)
-		: _data(nullptr) {}
-
-	const T& operator[](std::size_t index) const {
-		if (index >= N) {
-			throw std::out_of_range("Index out of range");
-		}
-		return _data[index];
-	}
-
-	template<std::size_t I>
-	requires (I < N)
-	const T& get() {
-		return _data[I];
-	}
-
-	constexpr std::size_t size() const { return N; }
-
-	bool has_value() const {
-		return _data != nullptr;
-	}
-
+export template<typename T>
+class ArrayRef {
 private:
-	const T* _data;
+	const T* m_data;
+	std::size_t m_size;
+public:
+
+	constexpr ArrayRef() noexcept : m_data(nullptr), m_size(0) {}
+
+	constexpr ArrayRef(const T* data, std::size_t size) noexcept
+		: m_data(data), m_size(size) {}
+
+	template<typename Allocator>
+	constexpr ArrayRef(const std::vector<T, Allocator>& vec) noexcept
+		: m_data(vec.data()), m_size(vec.size()) {}
+
+	template<std::size_t N>
+	constexpr ArrayRef(const std::array<T, N>& arr) noexcept
+		: m_data(arr.data()), m_size(N) {}
+
+	template<std::size_t N>
+	constexpr ArrayRef(const T (&arr)[N]) noexcept
+		: m_data(arr), m_size(N) {}
+
+	template<typename It>
+	constexpr ArrayRef(It begin, It end) noexcept
+		: m_data(std::addressof(*begin)), m_size(static_cast<std::size_t>(std::distance(begin, end))) {}
+
+	constexpr ArrayRef(const hat::ArrayRef<T>& other) noexcept
+		: m_data(other.data()), m_size(other.size()) {}
+
+	constexpr inline const T* data() const noexcept { return m_data; }
+	constexpr inline std::size_t size() const noexcept { return m_size; }
+	constexpr inline bool empty() const noexcept { return m_size == 0; }
+
+	constexpr inline const T& operator[](std::size_t index) const noexcept {
+		return m_data[index];
+	}
+	constexpr inline const T& front() const noexcept {
+		return m_data[0];
+	}
+	constexpr inline const T& back() const noexcept {
+		return m_data[m_size - 1];
+	}
+
+	constexpr inline const T* begin() const noexcept { return m_data; }
+	constexpr inline const T* end() const noexcept { return m_data + m_size; }
+	constexpr inline const T* cbegin() const noexcept { return m_data; }
+	constexpr inline const T* cend() const noexcept { return m_data + m_size; }
+
+	constexpr ArrayRef<T> slice(std::size_t start, std::size_t length) const noexcept {
+		return ArrayRef<T>(m_data + start, length);
+	}
+	constexpr ArrayRef<T> slice(std::size_t start) const noexcept {
+		return ArrayRef<T>(m_data + start, m_size - start);
+	}
+
+	friend constexpr bool operator==(const ArrayRef<T>& lhs, const ArrayRef<T>& rhs) noexcept {
+		return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin());
+	}
+	friend constexpr bool operator!=(const ArrayRef<T>& lhs, const ArrayRef<T>& rhs) noexcept {
+		return !(lhs == rhs);
+	}
+
+	hat::ArrayRef<T> to_torch() const noexcept {
+		return hat::ArrayRef<T>(m_data, m_size);
+	}
+
 };
 
-export template<std::integral I, std::size_t R>
-constexpr std::string span_to_str(arbspan<I,R> arr, bool as_tuple = true) {
-	std::string retstr = as_tuple ? "(" : "[";
-	
-	for_sequence<R>([&](auto i) {
-		retstr += std::to_string(arr.template get<i>());
-		if constexpr(i < R - 1) {
-			retstr += ",";
-		}
-	});
-	retstr += as_tuple ? ")" : "]";
-	return retstr;
-}
+export template<typename It>
+ArrayRef(It, It) -> ArrayRef<typename std::iterator_traits<It>::value_type>;
 
-export template<std::size_t N>
-struct span {
-
-	//nullspan
-	span() : _data(nullptr) {};
-
-	span(i64 const (&list)[N]) 
-		: _data(list) {}
-
-	span(const i64* listptr)
-		: _data(listptr) {}
-
-	span(hat::ArrayRef<i64> arr)
-		: _data(arr.data())
-	{}
-
-	span(const std::array<i64, N>& arr)
-		: _data(arr.data())
-	{}
-
-	span(const std::array<i64, N>& arr, i32 offset)
-		: _data(arr.data() + offset)
-	{}
-
-	std::array<i64,N> operator*(i64 m) const {
-		std::array<i64, N> arr;
-		for_sequence<N>([&](auto i) {
-			arr[i] = _data[i] * m;
-		});
-		return arr;
-	}
-
-	hat::ArrayRef<i64> to_arr_ref() {
-		return hat::ArrayRef<i64>(_data, N);
-	}
-
-	hat::OptionalArrayRef<i64> to_opt_arr_ref() {
-		if (N == 0) {
-			return std::nullopt;
-		}
-		return hat::ArrayRef<i64>(_data, N);
-	}
-
-	std::array<i64, N> to_arr() {
-		std::array<i64, N> arr;
-		for (i32 i = 0; i < N; i++) {
-			arr[i] = _data[i];
-		}
-		return arr;
-	}
-
-	span(std::nullopt_t)
-		: _data(nullptr) {}
-
-	const i64& operator[](std::size_t index) const {
-		if (index >= N) {
-			throw std::out_of_range("Index out of range");
-		}
-		return _data[index];
-	}
-
-	template<std::size_t I>
-	requires (I < N)
-	const i64& get() const {
-		return _data[I];
-	}
-
-	constexpr std::size_t size() const { return N; }
-
-	bool has_value() const {
-		return _data != nullptr;
-	}
-
-	template<std::size_t R1, std::size_t R2>
-	friend std::array<i64,R1+R2> operator+(const span<R1>& s1, const span<R2>& s2);
-
-private:
-	const i64* _data;
-};
-
-export template<std::size_t R1, std::size_t R2>
-std::array<i64,R1+R2> operator+(const span<R1>& s1, const span<R2>& s2) {
-	std::array<i64,R1+R2> ret;
-	for_sequence<R1>([&](auto i) {
-		ret[i] = s1.template get<i>();
-	});
-	for_sequence<R2>([&](auto i) {
-		ret[i+R1] = s2.template get<i>();
-	});
-	return ret;
-}
-
-export using nullspan = span<0>;
-
-export template<std::size_t R>
-constexpr std::string span_to_str(span<R> arr, bool as_tuple = true) {
-	std::string retstr = as_tuple ? "(" : "[";
-	
-	for_sequence<R>([&](auto i) {
-		retstr += std::to_string(arr.template get<i>());
-		if constexpr(i < R - 1) {
-			retstr += ",";
-		}
-	});
-
-	retstr += as_tuple ? ")" : "]";
-	return retstr;
-}
-
-export template <class T>
-struct darbspan {
-    darbspan() : _data(nullptr), _size(0) {}
-
-    darbspan(const T* data, std::size_t size)
-        : _data(data), _size(size) {}
-
-    darbspan(hat::ArrayRef<T> arr)
-        : _data(arr.data()), _size(arr.size()) {}
-
-    darbspan(const std::vector<T>& v)
-        : _data(v.data()), _size(v.size()) {}
-
-    darbspan(const std::span<const T> s)
-        : _data(s.data()), _size(s.size()) {}
-
-    darbspan(std::nullopt_t)
-        : _data(nullptr), _size(0) {}
-
-    const T& operator[](std::size_t i) const {
-        if (i >= _size)
-            throw std::out_of_range("darbspan out of range");
-        return _data[i];
-    }
-
-    const T& get(std::size_t i) const {
-        return (*this)[i];
-    }
-
-    std::size_t size() const { return _size; }
-    bool has_value() const { return _data != nullptr; }
-
-    hat::ArrayRef<T> to_arr_ref() const {
-        return hat::ArrayRef<T>(_data, _size);
-    }
-
-    std::vector<T> to_vec() const {
-        return std::vector<T>(_data, _data + _size);
-    }
-
-private:
-    const T* _data;
-    std::size_t _size;
-};
-
-export struct dspan {
-    dspan() : _data(nullptr), _size(0) {}
-
-    dspan(const i64* data, std::size_t size)
-        : _data(data), _size(size) {}
-
-    dspan(hat::ArrayRef<i64> arr)
-        : _data(arr.data()), _size(arr.size()) {}
-
-    dspan(const std::vector<i64>& v)
-        : _data(v.data()), _size(v.size()) {}
-
-    dspan(std::span<const i64> s)
-        : _data(s.data()), _size(s.size()) {}
-
-    dspan(std::nullopt_t)
-        : _data(nullptr), _size(0) {}
-
-    const i64& operator[](std::size_t i) const {
-        if (i >= _size)
-            throw std::out_of_range("dspan out of range");
-        return _data[i];
-    }
-
-    const i64& get(std::size_t i) const { return (*this)[i]; }
-
-    std::size_t size() const { return _size; }
-    bool has_value() const { return _data != nullptr; }
-
-    inline hat::ArrayRef<i64> to_arr_ref() const {
-        return hat::ArrayRef<i64>(_data, _size);
-    }
-
-    std::vector<i64> to_vec() const {
-        return std::vector<i64>(_data, _data + _size);
-    }
-
-private:
-    const i64* _data;
-    std::size_t _size;
-};
-
+export using IntArrayRef = ArrayRef<i64>;
 
 
 }

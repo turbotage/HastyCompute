@@ -62,6 +62,7 @@ export namespace hat {
     using at::OptionalArrayRef;
     using at::InferenceMode;
     using at::MemoryFormat;
+    using at::Layout;
 
     using at::empty;
     using at::zeros;

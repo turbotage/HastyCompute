@@ -41,37 +41,37 @@ constexpr void for_each_type(F&& f) {
 }
 
 export template<typename... Args>
-struct tuple_traits {
-	using tuple = std::tuple<Args...>;
+struct TupleTraits {
+	using Tuple = std::tuple<Args...>;
 	static constexpr std::size_t Size = sizeof...(Args);
 
 	template <std::size_t N>
-	using nth = typename std::tuple_element<N, tuple>::type;
-	using first = nth<0>;
-	using last = nth<Size - 1>;
+	using Nth = typename std::tuple_element<N, Tuple>::type;
+	using first = Nth<0>;
+	using last = Nth<Size - 1>;
 };
 
 export template<typename... Args>
-struct tuple_traits<std::tuple<Args...>> {
-	using tuple = std::tuple<Args...>;
+struct TupleTraits<std::tuple<Args...>> {
+	using Tuple = std::tuple<Args...>;
 	static constexpr std::size_t Size = sizeof...(Args);
 
 	template <std::size_t N>
-	using nth = typename std::tuple_element<N, tuple>::type;
+	using Nth = typename std::tuple_element<N, Tuple>::type;
 
-	using first = nth<0>;
-	using last = nth<Size - 1>;
+	using first = Nth<0>;
+	using last = Nth<Size - 1>;
 };
 
 export template<>
-struct tuple_traits<> {
-	using tuple = std::tuple<>;
+struct TupleTraits<> {
+	using Tuple = std::tuple<>;
 	static constexpr std::size_t Size = 0;
 };
 
 export template<>
-struct tuple_traits<std::tuple<>> {
-	using tuple = std::tuple<>;
+struct TupleTraits<std::tuple<>> {
+	using Tuple = std::tuple<>;
 	static constexpr std::size_t Size = 0;
 };
 
@@ -89,6 +89,9 @@ concept is_volatile = std::is_volatile_v<T>;
 
 export template<typename T>
 concept is_pure_type = !is_pointer<T> && !is_reference<T> && !is_const<T> && !is_volatile<T>;
+
+export template<typename T, typename K>
+concept is_type_restrict = std::same_as<std::remove_cvref_t<T>, K>;
 
 
 }
