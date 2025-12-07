@@ -1,6 +1,6 @@
 module;
 
-export module tensor:scalar;
+export module tensor_mod:scalar;
 
 import std;
 import util;

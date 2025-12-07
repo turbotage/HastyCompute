@@ -1,13 +1,14 @@
 module;
 
-export module tensor;
+export module tensor_mod:tensor;
 
 import std;
 import util;
 import torch_wrapper;
 
-export import :background;
-export import :scalar;
+import :background;
+import :scalar;
+
 
 namespace hasty {
 
@@ -82,12 +83,14 @@ public:
 
     inline Tensor view(ArrayRef<i64> sizes) const { return _base.view(sizes.to_torch()); }
 
-    inline Tensor view(eScalarType dtype) const { return Tensor(_base.view(to_torch(dtype))); }
+    inline Tensor view(eScalarType dtype) const { return Tensor(_base.view(scalartype::to_torch(dtype))); }
+
+    inline Tensor view_as(const Tensor& other) const { return Tensor(_base.view_as(other._base)); }
 
     inline Tensor to(eScalarType dtype, bool non_blocking=false, bool copy = false, Opt<eMemoryFormat> memformat = nullopt) const {
         return Tensor(
             _base.to(
-                to_torch(dtype), non_blocking, copy, 
+                scalartype::to_torch(dtype), non_blocking, copy, 
                 std::bit_cast<Opt<hat::MemoryFormat>>(memformat)
             )
         );
@@ -239,10 +242,11 @@ public:
 
 
 
-
+    hat::Tensor to_torch() const { return _base; }
 
 private:
     hat::Tensor _base;
 };
+ 
 
 }

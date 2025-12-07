@@ -1,6 +1,6 @@
 module;
 
-export module tensor:background;
+export module tensor_mod:background;
 
 import std;
 import util;
@@ -35,12 +35,15 @@ static_assert(std::is_same_v<DeviceIndex, hat::DeviceIndex>,
     "Underlying types of DeviceIndex and hat::DeviceIndex must match"
 );
 
-export inline constexpr DeviceIndex from_torch(hat::DeviceIndex index) {
-    return static_cast<DeviceIndex>(index);
+namespace deviceidx {
+    export inline constexpr DeviceIndex from_torch(hat::DeviceIndex index) {
+        return static_cast<DeviceIndex>(index);
+    }
+    export inline constexpr hat::DeviceIndex to_torch(DeviceIndex index) {
+        return static_cast<hat::DeviceIndex>(index);
+    }
 }
-export inline constexpr hat::DeviceIndex to_torch(DeviceIndex index) {
-    return static_cast<hat::DeviceIndex>(index);
-}
+
 
 
 // <================== DEVICE TYPE ==================> //
@@ -54,12 +57,15 @@ static_assert(std::is_same_v<
     "Underlying types of device_type and hat::DeviceType must match"
 );
 
-export inline constexpr eDeviceType from_torch(hat::DeviceType dtype) {
-    return static_cast<eDeviceType>(dtype);
+namespace devicetype {
+    export inline constexpr eDeviceType from_torch(hat::DeviceType dtype) {
+        return static_cast<eDeviceType>(dtype);
+    }
+    export inline constexpr hat::DeviceType to_torch(eDeviceType dtype) {
+        return static_cast<hat::DeviceType>(dtype);
+    }
 }
-export inline constexpr hat::DeviceType to_torch(eDeviceType dtype) {
-    return static_cast<hat::DeviceType>(dtype);
-}
+
 
 // <================== SCALAR TYPE ==================> //
 export enum struct eScalarType : i8 {
@@ -77,19 +83,6 @@ export enum struct eScalarType : i8 {
     Bool            = std::to_underlying(hat::ScalarType::Bool),
     BFloat16        = std::to_underlying(hat::ScalarType::BFloat16)
 };
-static_assert(std::is_same_v<
-    std::underlying_type_t<eScalarType>,
-    std::underlying_type_t<hat::ScalarType>>,
-    "Underlying types of scalar_type and hat::ScalarType must match"
-);
-
-export inline constexpr eScalarType from_torch(hat::ScalarType dtype) {
-    return static_cast<eScalarType>(dtype);
-}
-
-export inline constexpr hat::ScalarType to_torch(eScalarType dtype) {
-    return static_cast<hat::ScalarType>(dtype);
-}
 
 export namespace scalar_alias {
     inline constexpr eScalarType u8 = eScalarType::Byte;
@@ -107,6 +100,22 @@ export namespace scalar_alias {
     inline constexpr eScalarType bf16 = eScalarType::BFloat16;
 }
 
+static_assert(std::is_same_v<
+    std::underlying_type_t<eScalarType>,
+    std::underlying_type_t<hat::ScalarType>>,
+    "Underlying types of scalar_type and hat::ScalarType must match"
+);
+
+namespace scalartype {
+    export inline constexpr eScalarType from_torch(hat::ScalarType dtype) {
+        return static_cast<eScalarType>(dtype);
+    }
+    
+    export inline constexpr hat::ScalarType to_torch(eScalarType dtype) {
+        return static_cast<hat::ScalarType>(dtype);
+    }
+}
+
 // <================== MEMORY FORMAT ==================> //
 export enum struct eMemoryFormat : i8 {
     Contiguous      = std::to_underlying(hat::MemoryFormat::Contiguous),
@@ -120,13 +129,16 @@ static_assert(std::is_same_v<
     "Underlying types of memory_format and hat::MemoryFormat must match"
 );
 
-export inline constexpr eMemoryFormat from_torch(hat::MemoryFormat fmt) {
-    return static_cast<eMemoryFormat>(fmt);
+namespace memformat {
+    export inline constexpr eMemoryFormat from_torch(hat::MemoryFormat fmt) {
+        return static_cast<eMemoryFormat>(fmt);
+    }
+    
+    export inline constexpr hat::MemoryFormat to_torch(eMemoryFormat fmt) {
+        return static_cast<hat::MemoryFormat>(fmt);
+    }
 }
 
-export inline constexpr hat::MemoryFormat to_torch(eMemoryFormat fmt) {
-    return static_cast<hat::MemoryFormat>(fmt);
-}
 
 // <================== LAYOUT ==================> //
 export enum struct eLayout : i8 {
@@ -145,12 +157,14 @@ static_assert(std::is_same_v<
     "Underlying types of layout and hat::Layout must match"
 );
 
-export inline constexpr eLayout from_torch(hat::Layout layout) {
-    return static_cast<eLayout>(layout);
-}
-
-export inline constexpr hat::Layout to_torch(eLayout layout) {
-    return static_cast<hat::Layout>(layout);
+namespace layout {
+    export inline constexpr eLayout from_torch(hat::Layout layout) {
+        return static_cast<eLayout>(layout);
+    }
+    
+    export inline constexpr hat::Layout to_torch(eLayout layout) {
+        return static_cast<hat::Layout>(layout);
+    }
 }
 
 // <================== DEVICE ==================> //
@@ -170,7 +184,7 @@ export struct Device {
     }
 
     Device(hat::Device d)
-        : type(from_torch(d.type())), index(from_torch(d.index()))
+        : type(devicetype::from_torch(d.type())), index(deviceidx::from_torch(d.index()))
     {}
 
     inline std::string str() const {
@@ -385,9 +399,9 @@ public:
         hat::TensorOptions opts;
 
         if (m_has_device) opts = opts.device(m_dev.torch_device());
-        if (m_has_dtype) opts = opts.dtype(::hasty::to_torch(m_dtype));
-        if (m_has_layout) opts = opts.layout(::hasty::to_torch(m_layout));
-        if (m_has_memformat) opts = opts.memory_format(::hasty::to_torch(m_memformat));
+        if (m_has_dtype) opts = opts.dtype(scalartype::to_torch(m_dtype));
+        if (m_has_layout) opts = opts.layout(layout::to_torch(m_layout));
+        if (m_has_memformat) opts = opts.memory_format(memformat::to_torch(m_memformat));
 
         opts = opts.requires_grad(m_requires_grad);
         opts = opts.pinned_memory(m_pinned_memory);
@@ -410,5 +424,105 @@ public:
     }
 
 };
+
+// <================== TENSOR INDEXING ==================> //
+
+export enum class eTensorIndexType {
+    None = std::to_underlying(hat::indexing::TensorIndexType::None),
+    Ellipsis = std::to_underlying(hat::indexing::TensorIndexType::Ellipsis),
+    Boolean = std::to_underlying(hat::indexing::TensorIndexType::Boolean),
+    Slice = std::to_underlying(hat::indexing::TensorIndexType::Slice),
+    Tensor = std::to_underlying(hat::indexing::TensorIndexType::Tensor)
+};
+
+export using NoneIndexType = nullopt_t;
+export constexpr NoneIndexType None = nullopt;
+
+struct EllipsisIndexType final {
+    EllipsisIndexType() = default;
+};
+export constexpr EllipsisIndexType Ellipsis = EllipsisIndexType();
+
+export struct Slice final {
+private:
+    hat::indexing::Slice m_torch_slice;
+public:
+
+    Slice(const hat::indexing::Slice& torch_slice)
+        : m_torch_slice(torch_slice) {}
+
+    Slice(
+        Opt<i64> start_index = nullopt,
+        Opt<i64> stop_index = nullopt,
+        Opt<i64> step_index = nullopt)
+    {
+        Opt<hc10::SymInt> torch_start = nullopt;
+        Opt<hc10::SymInt> torch_stop = nullopt;
+        Opt<hc10::SymInt> torch_step = nullopt;
+
+        if (start_index) {
+            torch_start = hc10::SymInt(*start_index);
+        }
+        if (stop_index) {
+            torch_stop = hc10::SymInt(*stop_index);
+        }
+        if (step_index) {
+            torch_step = hc10::SymInt(*step_index);
+        }
+
+        m_torch_slice = hat::indexing::Slice(
+            torch_start,
+            torch_stop,
+            torch_step
+        );
+    }
+
+    inline Opt<i64> start() const { return m_torch_slice.start().expect_int(); }
+    inline Opt<i64> stop() const { return m_torch_slice.stop().expect_int(); }
+    inline Opt<i64> step() const { return m_torch_slice.step().expect_int(); }
+
+    inline hat::indexing::Slice to_torch() const {
+        return m_torch_slice;
+    }
+
+};
+
+export using SliceIndexType = Slice;
+
+export class Tensor;
+
+export struct TensorIndex final {
+private:
+    hat::indexing::TensorIndex m_torch_index;
+public:
+
+    TensorIndex(NoneIndexType) : m_torch_index(hat::indexing::None) {}
+    TensorIndex(EllipsisIndexType) : m_torch_index(hat::indexing::Ellipsis) {}
+    TensorIndex(const char* sv) : m_torch_index(sv) {}
+    TensorIndex(const std::string& sv) : m_torch_index(sv.c_str()) {}
+    TensorIndex(i64 integer) : m_torch_index(integer) {}
+    TensorIndex(i32 integer) : m_torch_index(integer) {}
+    TensorIndex(bool boolean) : m_torch_index(boolean) {}
+
+    TensorIndex(const Slice& slice) : m_torch_index(slice.to_torch()) {}
+    TensorIndex(const Tensor& tensor);
+
+    inline bool is_none() const { return m_torch_index.is_none(); }
+    inline bool is_ellipsis() const { return m_torch_index.is_ellipsis(); }
+    inline bool is_integer() const { return m_torch_index.is_integer(); }
+    inline i64 integer() const { return m_torch_index.integer().expect_int(); }
+    inline bool is_boolean() const { return m_torch_index.is_boolean(); }
+    inline bool boolean() const { return m_torch_index.boolean(); }
+    inline bool is_slice() const { return m_torch_index.is_slice(); }
+    inline Slice slice() const { return Slice(m_torch_index.slice()); }
+    inline bool is_tensor() const { return m_torch_index.is_tensor(); }
+    Tensor tensor() const;
+};
+
+export using TensorIndexType = TensorIndex;
+
+
+
+
 
 }

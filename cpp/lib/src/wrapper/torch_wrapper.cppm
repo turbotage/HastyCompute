@@ -87,6 +87,7 @@ export namespace hat {
 
     namespace indexing {
         using at::indexing::TensorIndex;
+        using at::indexing::TensorIndexType;
         inline constexpr auto None = at::indexing::None;
         using at::indexing::Ellipsis;
         using at::indexing::Slice;
