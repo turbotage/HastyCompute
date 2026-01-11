@@ -3,16 +3,15 @@
     "cmakeMinimumRequired": {
         "major": 4,
         "minor": 2,
-        "patch": 0
+        "patch": 1
     },
+    "include": [
+    ],
     "configurePresets": [
         {
             "name": "MainConfigClang",
             "hidden": true,
-            "environment": {
-            },
-            "cacheVariables": {
-            }
+            "inherits": []
         },
         {
             "name": "BaseDebug",

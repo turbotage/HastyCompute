@@ -3,7 +3,7 @@
     "cmakeMinimumRequired": {
         "major": 4,
         "minor": 2,
-        "patch": 0
+        "patch": 1
     },
     "include": ["../../CommonPresets.json"],
     "configurePresets": [

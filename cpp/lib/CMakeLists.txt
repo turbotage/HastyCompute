@@ -233,10 +233,17 @@ target_include_directories(HastyCompute
 ################ INSTALL ####################
 include(GNUInstallDirs)
 
+message(STATUS "HASTY_DATA_FOLDER: ${HASTY_DATA_FOLDER}")
+if (NOT DEFINED HASTY_DATA_FOLDER OR HASTY_DATA_FOLDER STREQUAL "")
+	message(STATUS "HASTY_DATA_FOLDER not set, using default path.")
+	# This default path assumes both HastyCompute and HastyData are cloned in the same parent directory
+	set(HASTY_DATA_FOLDER ${CMAKE_SOURCE_DIR}"../../../HastyData")
+endif()
+
 # Copy models folder to build directory (for Debug/Release builds)
 add_custom_command(TARGET HastyCompute POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
-		${CMAKE_SOURCE_DIR}/../../data/models
+		${HASTY_DATA_FOLDER}/models
 		${CMAKE_BINARY_DIR}/data/models
 	COMMENT "Copying wavelet models to build directory"
 )
@@ -263,7 +270,7 @@ install(EXPORT HastyComputeTargets
 install(FILES "${NVRTC_PATH}" "${CUDART_PATH}" DESTINATION lib)
 
 # Install models folder at top level
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/models
+install(DIRECTORY ${HASTY_DATA_FOLDER}/models
 	DESTINATION .
 	FILES_MATCHING PATTERN "*.pt"
 	PATTERN "*.gitkeep" EXCLUDE

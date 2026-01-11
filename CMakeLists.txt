@@ -96,3 +96,27 @@ add_custom_target(merge_compile_commands ALL
     DEPENDS ${MERGE_DEPS}
     COMMENT "Merging compile_commands.json from subprojects"
 )
+
+# Clean only CMake cache files from all subprojects (preserves built artifacts and dependencies)
+add_custom_target(clean-cache
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E echo "CMake cache cleaned from all subprojects"
+    COMMENT "Cleaning CMake cache files recursively"
+)
+
+# Nuclear option: removes all build artifacts including fetched dependencies
+add_custom_target(deep-clean-all
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/lib-build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/test-build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/server-build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/install
+    COMMAND ${CMAKE_COMMAND} -E echo "Deep clean complete - all subprojects and dependencies removed"
+    COMMENT "Removing all build directories and dependencies"
+)
