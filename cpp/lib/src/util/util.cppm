@@ -5,6 +5,7 @@ export module util;
 export import :alias;
 export import :meta;
 export import :span;
+export import :str;
 export import :typing;
 
 namespace hasty {

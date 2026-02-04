@@ -42,6 +42,27 @@ public:
     inline Tensor& operator^=(const Tensor& other) { return bitwise_xor_(other); }
     inline Tensor& operator^=(const Scalar& other) { return bitwise_xor_(other); }
 
+    // LibTorch extensions
+
+    inline std::pair<eDeviceType, i32> get_device_info() const {
+        auto& device = this->device();
+        return {device.type, device.has_index() ? device.index() : -1};
+    }
+
+    std::string metadata_string() const {
+        std::string device_str = device().str();
+        std::string dtype_str = scalar_type_to_string(scalar_type());
+        std::string shape_str = "shape=(";
+        for (int i = 0; i < _base.dim(); ++i) {
+            if (i > 0) shape_str += ",";
+            shape_str += std::to_string(_base.size(i));
+        }
+        shape_str += ")";
+        return "Tensor[dtype=" + dtype_str + ",device=" + device_str + "," + shape_str + "]";
+    }
+
+    // LibTorch wrappers
+
 
     inline Tensor contiguous() const { return Tensor(_base.contiguous()); }
 
@@ -66,6 +87,15 @@ public:
 
     inline const void* const_data_ptr() const { return _base.const_data_ptr(); }
 
+    inline Device device() const { return Device(_base.device()); }
+
+    inline eScalarType scalar_type() const {
+        return scalartype::from_torch(_base.scalar_type());
+    }
+
+    inline eScalarType dtype() const {
+        return scalartype::from_torch(_base.scalar_type());
+    }
 
     inline i64 size(i32 dim) const { return _base.size(dim); }
 

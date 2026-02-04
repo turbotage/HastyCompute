@@ -61,6 +61,7 @@ target_sources(HastyCompute
 			"src/util/util_alias.cppm"
             "src/util/util_meta.cppm"
             "src/util/util_span.cppm"
+			"src/util/util_str.cppm"
             "src/util/util_typing.cppm"
             "src/util/util.cppm"
             "src/wrapper/torch_wrapper.cppm"

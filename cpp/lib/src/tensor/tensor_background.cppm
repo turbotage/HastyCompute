@@ -100,6 +100,25 @@ export namespace scalar_alias {
     inline constexpr eScalarType bf16 = eScalarType::BFloat16;
 }
 
+std::string scalar_type_to_string(eScalarType dtype) {
+    switch (dtype) {
+        case scalar_alias::u8: return "u8";
+        case scalar_alias::i8: return "i8";
+        case scalar_alias::i16: return "i16";
+        case scalar_alias::i32: return "i32";
+        case scalar_alias::i64: return "i64";
+        case scalar_alias::f16: return "f16";
+        case scalar_alias::f32: return "f32";
+        case scalar_alias::f64: return "f64";
+        case scalar_alias::c16: return "c16";
+        case scalar_alias::c32: return "c32";
+        case scalar_alias::c64: return "c64";
+        case scalar_alias::b8: return "b8";
+        case scalar_alias::bf16: return "bf16";
+        default: return "unknown";
+    }
+}
+
 static_assert(std::is_same_v<
     std::underlying_type_t<eScalarType>,
     std::underlying_type_t<hat::ScalarType>>,
@@ -193,6 +212,10 @@ export struct Device {
         } else {
             return "cuda:" + std::to_string(static_cast<i16>(index));
         }
+    }
+
+    inline bool has_index() const {
+        return index != device_alias::CPU;
     }
 
     inline hat::Device torch_device() const {
