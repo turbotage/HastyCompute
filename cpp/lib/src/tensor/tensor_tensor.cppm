@@ -45,8 +45,8 @@ public:
     // LibTorch extensions
 
     inline std::pair<eDeviceType, i32> get_device_info() const {
-        auto& device = this->device();
-        return {device.type, device.has_index() ? device.index() : -1};
+        const auto& device = this->device();
+        return {device.type, device.has_index() ? device.index : -1};
     }
 
     std::string metadata_string() const {

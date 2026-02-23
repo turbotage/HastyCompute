@@ -27,6 +27,30 @@ constexpr V for_sequence(F f, const V& t) {
 	return tcopy;
 }
 
+template <typename T, typename = void>
+struct has_strong_value : std::false_type{};
+
+template <typename T>
+struct has_strong_value<T, decltype((void)T::strong_value, void())> : std::true_type {};
+
+struct strong_typedef_base {};
+
+template<typename T>
+concept is_strong_type = std::is_base_of_v<strong_typedef_base, T> && has_strong_value<T>::value;
+
+export template<typename T, typename U>
+struct strong_typedef : public strong_typedef_base {
+
+	strong_typedef() = default;
+
+	T strong_value;
+};
+
+export template<typename T>
+struct empty_strong_typedef : public strong_typedef_base {
+	empty_strong_typedef() = default;
+};
+
 template<typename T>
 struct type_tag { using type = T; };
 
@@ -92,6 +116,9 @@ concept is_pure_type = !is_pointer<T> && !is_reference<T> && !is_const<T> && !is
 
 export template<typename T, typename K>
 concept is_type_restrict = std::same_as<std::remove_cvref_t<T>, K>;
+
+export template<std::size_t T>
+concept is_dim3 = (T == 1) || (T == 2) || (T == 3);
 
 
 }

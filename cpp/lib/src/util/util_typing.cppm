@@ -5,7 +5,7 @@ module;
 export module util:typing;
 
 import std;
-
+import :meta;
 // Uggly additions for the float types until stdfloat is in for clang compiler
 
 namespace hasty {
@@ -143,6 +143,46 @@ concept is_tensor_type =
                         std::is_same_v<T,c32>  ||
                         std::is_same_v<T,c64>  ||
                         std::is_same_v<T,c128>;
+
+export template<typename T>
+concept is_fp_tensor_type = 
+                        std::is_same_v<T,f16>  ||
+                        std::is_same_v<T,bf16> ||
+                        std::is_same_v<T,f32>  ||
+                        std::is_same_v<T,f64>  ||
+                        std::is_same_v<T,c32>  ||
+                        std::is_same_v<T,c64>  ||
+                        std::is_same_v<T,c128>;
+
+export template<typename T>
+concept is_complex_fp_tensor_type = 
+                        std::is_same_v<T,c32>  ||
+                        std::is_same_v<T,c64>  ||
+                        std::is_same_v<T,c128>;
+
+export template<typename T>
+concept is_real_fp_tensor_type = 
+                        std::is_same_v<T,f16>  ||
+                        std::is_same_v<T,bf16> ||
+                        std::is_same_v<T,f32>  ||
+                        std::is_same_v<T,f64>;
+
+export template<typename T>
+concept is_integral_tensor_type =
+                        std::is_same_v<T,i8>   ||
+                        std::is_same_v<T,i16>  ||
+                        std::is_same_v<T,i32>  ||
+                        std::is_same_v<T,i64>  ||
+                        std::is_same_v<T,u8>   ||
+                        std::is_same_v<T,u16>  ||
+                        std::is_same_v<T,u32>  ||
+                        std::is_same_v<T,u64>;
+
+export using cuda_t = empty_strong_typedef<struct cuda_>;
+export using cpu_t  = empty_strong_typedef<struct cpu_>;
+
+export template<typename T>
+concept is_device = std::is_same_v<T, cuda_t> || std::is_same_v<T, cpu_t>;
 
 
 
