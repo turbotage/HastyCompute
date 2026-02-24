@@ -2,7 +2,7 @@ module;
 
 //#include "pch.hpp"
 
-export module util:span;
+export module util_mod:span;
 
 import std;
 import :meta;

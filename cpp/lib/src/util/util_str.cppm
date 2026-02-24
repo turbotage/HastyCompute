@@ -1,6 +1,6 @@
 module;
 
-export module util:str;
+export module util_mod:str;
 
 import std;
 

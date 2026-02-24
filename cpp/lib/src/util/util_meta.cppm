@@ -2,7 +2,7 @@ module;
 
 //#include "pch.hpp"
 
-export module util:meta;
+export module util_mod:meta;
 
 import std;
 

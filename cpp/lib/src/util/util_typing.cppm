@@ -2,7 +2,7 @@ module;
 
 #include "pch.hpp"
 
-export module util:typing;
+export module util_mod:typing;
 
 import std;
 import :meta;

@@ -3,7 +3,7 @@ module;
 export module tensor_mod:scalar;
 
 import std;
-import util;
+import util_mod;
 
 import :background;
 

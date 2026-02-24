@@ -56,15 +56,19 @@ target_sources(HastyCompute
         FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
+			"src/tensor/tensor_concepts.cppm"
+			"src/tensor/tensor_mod.cppm"
 			"src/tensor/tensor_scalar.cppm"
             "src/tensor/tensor_tensor.cppm"
 			"src/util/util_alias.cppm"
+			"src/util/util_containers.cppm"
             "src/util/util_meta.cppm"
+            "src/util/util_mod.cppm"
             "src/util/util_span.cppm"
 			"src/util/util_str.cppm"
             "src/util/util_typing.cppm"
-            "src/util/util.cppm"
             "src/wrapper/torch_wrapper.cppm"
+			"src/wrapper/vkfft.cppm"
 )
 
 # LIB INTERFACE CPP SOURCES
@@ -88,6 +92,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(battery-embed)
 
+b_embed(HastyCompute "src/fft/kernels/toeplitz_load_1D.cu")
 b_embed(HastyCompute "src/fft/kernels/toeplitz_load_2D.cu")
 b_embed(HastyCompute "src/fft/kernels/toeplitz_load_3D.cu")
 

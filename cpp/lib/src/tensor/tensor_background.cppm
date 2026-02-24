@@ -3,15 +3,15 @@ module;
 export module tensor_mod:background;
 
 import std;
-import util;
+import util_mod;
 import torch_wrapper;
 
 namespace hasty {
 
 // <================== DEVICE INDEX ==================> //
-using DeviceIndex = i8;
+export using DeviceIndex = i8;
 
-namespace device_alias {
+export namespace device_alias {
     inline constexpr DeviceIndex CPU = -1;
     inline constexpr DeviceIndex CUDA0 = 0;
     inline constexpr DeviceIndex CUDA1 = 1;
@@ -29,6 +29,7 @@ namespace device_alias {
     inline constexpr DeviceIndex CUDA13 = 13;
     inline constexpr DeviceIndex CUDA14 = 14;
     inline constexpr DeviceIndex CUDA15 = 15;
+    inline constexpr DeviceIndex MAX_CUDA_DEVICES = 16;
 }
 
 static_assert(std::is_same_v<DeviceIndex, hat::DeviceIndex>,

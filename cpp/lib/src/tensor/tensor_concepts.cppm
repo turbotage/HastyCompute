@@ -10,7 +10,7 @@ namespace hasty {
 
 export template<typename T, int Depth = 0>
 struct is_tensor_container_impl {
-    static constexpr bool value = std::is_save_v<T,hasty::Tensor>;
+    static constexpr bool value = std::is_same_v<T,hasty::Tensor>;
 };
 
 // Specialization for std::vector

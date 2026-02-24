@@ -1,8 +1,9 @@
 module;
 
-export module util;
+export module util_mod;
 
 export import :alias;
+export import :containers;
 export import :meta;
 export import :span;
 export import :str;

@@ -3,7 +3,7 @@ module;
 export module tensor_mod:tensor;
 
 import std;
-import util;
+import util_mod;
 import torch_wrapper;
 
 import :background;
@@ -143,9 +143,11 @@ public:
         );
     }
     
-
-
-
+    inline Tensor select(i64 dim, i64 index) const { return Tensor(_base.select(dim, index)); }
+    inline Tensor select_scatter(const Tensor& src, i64 dim, i64 index) const { return Tensor(_base.select_scatter(src._base, dim, index)); }
+    inline Tensor index_select(i64 dim, const Tensor& index) const { return Tensor(_base.index_select(dim, index._base)); }
+    inline Tensor masked_select(const Tensor& mask) const { return Tensor(_base.masked_select(mask._base)); }
+    
     inline Tensor& fill_(const Scalar& value) const {
         _base.fill_(value.to_torch());
         return const_cast<Tensor&>(*this);
