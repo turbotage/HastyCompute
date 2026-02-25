@@ -6,7 +6,7 @@ import std;
 
 namespace hasty {
 
-struct TabbedWriter {
+export struct TabbedWriter {
     std::string m_buffer;
     std::int32_t m_tab_level;
 
@@ -36,6 +36,10 @@ struct TabbedWriter {
     void write_line(const std::string& line) {
         m_buffer.append(std::string(m_tab_level * 4, '\t'));
         m_buffer.append(line);
+        m_buffer.append("\n");
+    }
+
+    void write_line() {
         m_buffer.append("\n");
     }
 

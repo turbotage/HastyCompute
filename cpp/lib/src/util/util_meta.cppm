@@ -120,5 +120,14 @@ concept is_type_restrict = std::same_as<std::remove_cvref_t<T>, K>;
 export template<std::size_t T>
 concept is_dim3 = (T == 1) || (T == 2) || (T == 3);
 
+template <class T, template <class...> class Template>
+struct is_specialization : std::false_type {};
+
+template <template <class...> class Template, class... Args>
+struct is_specialization<Template<Args...>, Template> : std::true_type {};
+
+export template <class T, template <class...> class Template>
+constexpr bool is_specialization_v = is_specialization<T, Template>::value;
+
 
 }

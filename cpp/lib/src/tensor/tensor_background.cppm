@@ -120,6 +120,33 @@ std::string scalar_type_to_string(eScalarType dtype) {
     }
 }
 
+i64 scalar_type_size(eScalarType dtype) {
+    switch (dtype) {
+        case scalar_alias::u8:
+        case scalar_alias::i8:
+        case scalar_alias::b8:
+            return 1;
+        case scalar_alias::i16:
+        case scalar_alias::f16:
+        case scalar_alias::bf16:
+            return 2;
+        case scalar_alias::i32:
+        case scalar_alias::f32:
+            return 4;
+        case scalar_alias::i64:
+        case scalar_alias::f64:
+            return 8;
+        case scalar_alias::c16:
+            return 4; // complex half is 4 bytes (2 for real, 2 for imag)
+        case scalar_alias::c32:
+            return 8; // complex float is 8 bytes (4 for real, 4 for imag)
+        case scalar_alias::c64:
+            return 16; // complex double is 16 bytes (8 for real, 8 for imag)
+        default:
+            throw std::invalid_argument("Unknown scalar type");
+    }
+}
+
 static_assert(std::is_same_v<
     std::underlying_type_t<eScalarType>,
     std::underlying_type_t<hat::ScalarType>>,

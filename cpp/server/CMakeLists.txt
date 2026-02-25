@@ -8,7 +8,7 @@ if (NOT TARGET HastyCompute)
     find_package(HastyCompute REQUIRED)
 endif()
 
-add_executable(HastyServer "src/server.cpp")
+add_library(HastyServer "src/server.cpp")
 
 target_compile_features(HastyServer
     PRIVATE cxx_std_23

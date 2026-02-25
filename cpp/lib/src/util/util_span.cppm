@@ -81,6 +81,15 @@ public:
 		return hat::ArrayRef<T>(m_data, m_size);
 	}
 
+	std::string str() const {
+		std::string s;
+		for (std::size_t i = 0; i < m_size; ++i) {
+			if (i > 0) s += ",";
+			s += std::to_string(m_data[i]);
+		}
+		return s;
+	}
+
 };
 
 export template<typename It>

@@ -52,14 +52,17 @@ include(FetchContent)
 
 # LIBRARY CPP MODULE SOURCES
 target_sources(HastyCompute
-    PRIVATE 
+    PRIVATE
         FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
+			"interface/interface_types/generic_value.cppm"
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
 			"src/tensor/tensor_concepts.cppm"
 			"src/tensor/tensor_mod.cppm"
 			"src/tensor/tensor_scalar.cppm"
             "src/tensor/tensor_tensor.cppm"
+			"src/threading/thread_stream.cppm"
+			"src/threading/threading.cppm"
 			"src/util/util_alias.cppm"
 			"src/util/util_containers.cppm"
             "src/util/util_meta.cppm"
@@ -79,9 +82,10 @@ target_sources(HastyCompute
 
 # LIB INTERFACE CPP MODULE SOURCES
 target_sources(HastyCompute
-    PUBLIC 
+    PUBLIC
         FILE_SET cxx_modules_public TYPE CXX_MODULES FILES
             "interface/interface.cppm"
+            "interface/viz.cppm"
 )
 
 set(DB_PRODUCTION_MODE ON)

@@ -17,6 +17,9 @@ public:
 
     Tensor(hat::Tensor base) : _base(std::move(base)) {}
 
+    Tensor(const Tensor& other) : _base(other._base) {}
+    Tensor(Tensor&& other) noexcept : _base(std::move(other._base)) {}
+
     Tensor& operator=(const Tensor& other) & noexcept { _base = other._base; return *this; }
     Tensor& operator=(Tensor&& other) & noexcept { _base = std::move(other._base); return *this; }
     Tensor& operator=(const Scalar& other) && { return fill_(other); }
