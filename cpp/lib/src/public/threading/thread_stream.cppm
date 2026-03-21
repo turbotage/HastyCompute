@@ -8,7 +8,6 @@ import std;
 import util_mod;
 
 namespace hasty {
-namespace threading {
 
 export class threadsafe_stream {
 public:
@@ -91,7 +90,7 @@ public:
         }
     }
 
-    std::pair<std::vector<u8>,u8> read_max_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout) {
+    std::pair<std::vector<u8>,u8> read_max_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
         if (nbytes <= 0) {
             throw std::runtime_error("nbytes must be positive");
         }
@@ -114,7 +113,7 @@ public:
         throw std::runtime_error("Timeout while waiting for chunk");
     }
 
-    std::pair<std::vector<u8>,u8> read_exact_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout_per_chunk) {
+    std::pair<std::vector<u8>,u8> read_exact_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout_per_chunk = std::chrono::seconds(10)) {
         if (nbytes <= 0) {
             throw std::runtime_error("nbytes must be positive");
         }
@@ -203,5 +202,5 @@ private:
     bool _finished = false;
 };
 
-}
+
 }

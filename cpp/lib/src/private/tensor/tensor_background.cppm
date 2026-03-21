@@ -101,7 +101,7 @@ export namespace scalar_alias {
     inline constexpr eScalarType bf16 = eScalarType::BFloat16;
 }
 
-std::string scalar_type_to_string(eScalarType dtype) {
+export std::string scalar_type_to_string(eScalarType dtype) {
     switch (dtype) {
         case scalar_alias::u8: return "u8";
         case scalar_alias::i8: return "i8";
@@ -120,7 +120,7 @@ std::string scalar_type_to_string(eScalarType dtype) {
     }
 }
 
-i64 scalar_type_size(eScalarType dtype) {
+export i64 scalar_type_size(eScalarType dtype) {
     switch (dtype) {
         case scalar_alias::u8:
         case scalar_alias::i8:
@@ -310,7 +310,7 @@ public:
         return r;
     }
 
-    [[nodiscard]] inline TensorOptions device(Opt<Device> d) noexcept {
+    [[nodiscard]] inline TensorOptions device(Opt<Device> d) const noexcept {
         TensorOptions r = *this;
         if (d) {
             r.m_dev = *d;
@@ -344,7 +344,7 @@ public:
         return r;
     }
 
-    [[nodiscard]] inline TensorOptions dtype(Opt<eScalarType> dt) noexcept {
+    [[nodiscard]] inline TensorOptions dtype(Opt<eScalarType> dt) const noexcept {
         TensorOptions r = *this;
         if (dt) {
             r.m_dtype = *dt;
@@ -378,7 +378,7 @@ public:
         return r;
     }
 
-    [[nodiscard]] inline TensorOptions layout(Opt<eLayout> l) noexcept {
+    [[nodiscard]] inline TensorOptions layout(Opt<eLayout> l) const noexcept {
         TensorOptions r = *this;
         if (l) {
             r.m_layout = *l;
@@ -412,7 +412,7 @@ public:
         return r;
     }
 
-    [[nodiscard]] inline TensorOptions memory_format(Opt<eMemoryFormat> mf) noexcept {
+    [[nodiscard]] inline TensorOptions memory_format(Opt<eMemoryFormat> mf) const noexcept {
         TensorOptions r = *this;
         if (mf) {
             r.m_memformat = *mf;

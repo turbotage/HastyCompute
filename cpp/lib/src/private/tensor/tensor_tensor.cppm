@@ -47,6 +47,23 @@ public:
 
     // LibTorch extensions
 
+    inline static Tensor from_blob(void* data, ArrayRef<i64> sizes, eScalarType dtype, Device device) {
+        return Tensor(hat::from_blob(data, sizes.to_torch(), TensorOptions(device).dtype(dtype).to_torch()));
+    }
+
+    inline static Tensor from_vector(std::vector<u8>&& data, ArrayRef<i64> sizes, eScalarType dtype, Device device) {
+        auto options = TensorOptions(device).dtype(dtype).to_torch();
+        void* data_ptr = data.data();
+
+        auto shared_ptr_vec = std::make_shared<std::vector<u8>>(std::move(data));
+
+        auto deleter = [vec = std::move(shared_ptr_vec)](void* ptr) mutable {};
+
+        auto tensor = hat::from_blob(data_ptr, sizes.to_torch(), deleter, options);
+
+        return Tensor(tensor);
+    }
+
     inline std::pair<eDeviceType, i32> get_device_info() const {
         const auto& device = this->device();
         return {device.type, device.has_index() ? device.index : -1};
@@ -65,7 +82,6 @@ public:
     }
 
     // LibTorch wrappers
-
 
     inline Tensor contiguous() const { return Tensor(_base.contiguous()); }
 

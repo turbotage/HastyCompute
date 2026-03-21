@@ -2,6 +2,8 @@ export module viz;
 
 import std;
 
+
+
 namespace hasty::viz {
 
 // ---------------------------------------------------------------------------
@@ -14,7 +16,7 @@ namespace hasty::viz {
 export struct PlotRequest {
     std::string command;    // "line" | "scatter" | "heatmap"
     std::string title;
-    std::string json_data;  // JSON payload, ready to forward to the frontend
+    StreamedGenericValue data; // Pre-serialised JSON string containing the plot data
 };
 
 // ---------------------------------------------------------------------------

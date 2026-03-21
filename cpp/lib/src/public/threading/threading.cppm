@@ -9,7 +9,6 @@ import std;
 import util_mod;
 
 namespace hasty {
-namespace threading {
 
 export class storage {
 private:
@@ -391,5 +390,5 @@ private:
 	vset<std::string> _good_to_have_names;
 };
 
-}
+
 }

@@ -103,7 +103,6 @@ export namespace hat {
         using at::cuda::device_count;
     }
 
-
 }
 
 export namespace htorch {
