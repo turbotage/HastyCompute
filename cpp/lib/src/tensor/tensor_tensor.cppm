@@ -120,6 +120,8 @@ public:
 
     inline ArrayRef<i64> sizes() const { return ArrayRef<i64>(_base.sizes()); }
 
+    inline i64 ndimension() const { return _base.ndimension(); }
+
     inline ArrayRef<i64> strides() const { return ArrayRef<i64>(_base.strides()); }
 
     inline bool is_contiguous() const { return _base.is_contiguous(); }

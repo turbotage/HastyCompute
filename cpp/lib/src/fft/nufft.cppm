@@ -7,12 +7,13 @@ module;
 export module fft_mod:nufft;
 
 import util_mod;
-import tensor_mod:tensor;
+import tensor_mod;
 
 namespace hasty {
 namespace fft {
 
-template<is_device D, is_real_fp_tensor_type T, is_dim3 N>
+template<is_device D, is_real_fp_tensor_type T, std::size_t N>
+requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 void verify_coords(const Tensor& coords)
 {
     if constexpr(std::is_same_v<D, cpu_t>) {
@@ -76,22 +77,22 @@ export using NONUNIFORM_TO_NONUNIFORM = NTN;
 
 
 export template<typename T>
-concept is_nufft_type = std::is_same_v<T, nufft::NTU> || std::is_same_v<T, nufft::UTN> || std::is_same_v<T, nufft::NTN>;
+concept is_nufft_type = std::is_same_v<T, fft::NTU> || std::is_same_v<T, fft::UTN> || std::is_same_v<T, fft::NTN>;
 
 i32 nufft_type_to_int(is_nufft_type auto t) {
-    if constexpr (std::is_same_v<decltype(t), nufft::NTU>) {
+    if constexpr (std::is_same_v<decltype(t), fft::NTU>) {
         return 1;
-    } else if constexpr (std::is_same_v<decltype(t), nufft::UTN>) {
+    } else if constexpr (std::is_same_v<decltype(t), fft::UTN>) {
         return 2;
-    } else if constexpr (std::is_same_v<decltype(t), nufft::NTN>) {
+    } else if constexpr (std::is_same_v<decltype(t), fft::NTN>) {
         return 3;
     } else {
         static_assert(always_false<decltype(t)>::value, "Invalid nufft type");
     }
 }
 
-export template<is_device D, is_real_fp_tensor_type T, is_dim3 N, is_nufft_type NT>
-requires std::is_same_v<T, f32> || std::is_same_v<T, f64>
+export template<is_device D, is_real_fp_tensor_type T, std::size_t N, is_nufft_type NT>
+requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan {};
 
 export template<is_device D, is_real_fp_tensor_type T,is_nufft_type NT>
@@ -148,7 +149,7 @@ struct NufftOptions<cuda_t, T, NT> {
         DEFAULT
     };
     
-    eNufftSign sign = std::is_same_v<NT, nufft::NTU> ? eNufftSign::DEFAULT_NTU : eNufftSign::DEFAULT_UTN;
+    eNufftSign sign = std::is_same_v<NT, fft::NTU> ? eNufftSign::DEFAULT_NTU : eNufftSign::DEFAULT_UTN;
     i32 ntransf = 1;
     double tol = std::is_same_v<T, f32> ? 1e-6 : 1e-15;
 
@@ -162,8 +163,8 @@ struct NufftOptions<cuda_t, T, NT> {
 
 };
 
-export template<is_fp_real_tensor_type T, is_dim3 N, is_nufft_type NT>
-requires std::is_same_v<T, f32> || std::is_same_v<T, f64>
+export template<is_fp_real_tensor_type T, std::size_t N, is_nufft_type NT>
+requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan<cuda_t, T, N, NT> {
 
     NufftPlan(
@@ -239,7 +240,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
             );
         } else if constexpr(std::is_same_v<T, f64>) {
             cufinufft_makeplan(
-                std::is_same_v<NT, nufft::NTU> ? 1 : (std::is_same_v<NT, nufft::UTN> ? 2 : 3),
+                std::is_same_v<NT, fft::NTU> ? 1 : (std::is_same_v<NT, fft::UTN> ? 2 : 3),
                 N,
                 m_nmodes.data(),
                 static_cast<int>(m_options.sign),
@@ -262,7 +263,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
     }
 
     void setpts(const Tensor& coords)
-    requires(!std::is_same_v<NT, nufft::NTN>)
+    requires(!std::is_same_v<NT, fft::NTN>)
     {
         verify_coords<cpu_t, T, N>(coords);
         m_coords = coords;
@@ -295,7 +296,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
     }
 
     void setpts(const Tensor& coords_in, const Tensor& coords_out)
-    requires(std::is_same_v<NT, nufft::NTN>)
+    requires(std::is_same_v<NT, fft::NTN>)
     {
         verify_coords<cpu_t, T, N>(coords_in);
         verify_coords<cpu_t, T, N>(coords_out);
@@ -337,21 +338,21 @@ struct NufftPlan<cuda_t, T, N, NT> {
             throw std::runtime_error("Output tensor must be contiguous");
 
         // Number of elements must match specification in plan stage
-        if constexpr(std::is_same_v<NT, nufft::NTU>) {
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
             if (input.numel() != m_options.ntransf * m_coords.sizes()[1]) {
                 throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
             }
             if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
                 throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
             }
-        } else if constexpr(std::is_same_v<NT, nufft::UTN>) {
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
                 throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
             }
             if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
                 throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
             }
-        } else if constexpr(std::is_same_v<NT, nufft::NTN>) {
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
             if (input.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
                 throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
             }
@@ -361,19 +362,19 @@ struct NufftPlan<cuda_t, T, N, NT> {
         }
 
         // Execute the plan
-        if constexpr(std::is_same_v<NT, nufft::NTU>) {
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(m_plan.plan, input.template mutable_data_ptr<cuFloatComplex>(), output.template mutable_data_ptr<cuFloatComplex>());
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(m_plan.plan, input.template mutable_data_ptr<cuDoubleComplex>(), output.template mutable_data_ptr<cuDoubleComplex>());
             }
-        } else if constexpr(std::is_same_v<NT, nufft::UTN>) {
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(m_plan.plan, output.template mutable_data_ptr<cuFloatComplex>(), input.template mutable_data_ptr<cuFloatComplex>());
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(m_plan.plan, output.template mutable_data_ptr<cuDoubleComplex>(), input.template mutable_data_ptr<cuDoubleComplex>());
             }
-        } else if constexpr(std::is_same_v<NT, nufft::NTN>) {
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(m_plan.plan, input.template mutable_data_ptr<cuFloatComplex>(), output.template mutable_data_ptr<cuFloatComplex>());
             } else if constexpr(std::is_same_v<T, f64>) {
@@ -386,7 +387,7 @@ private:
     finufft_plan_t<cpu_t, T> m_plan;
     cufinufft_opts m_opts;
 
-    std::conditional_t<std::is_same_v<NT, nufft::NTN>, std::pair<Tensor,Tensor>, Tensor> m_coords;
+    std::conditional_t<std::is_same_v<NT, fft::NTN>, std::pair<Tensor,Tensor>, Tensor> m_coords;
     
     std::array<i64, N> m_nmodes;
     NufftOptions<cuda_t, T, NT> m_options;
@@ -420,7 +421,7 @@ struct NufftOptions<cpu_t, T, NT> {
         DEFAULT
     };
 
-    eNufftSign sign = std::is_same_v<NT, nufft::NTU> ? eNufftSign::DEFAULT_NTU : eNufftSign::DEFAULT_UTN;
+    eNufftSign sign = std::is_same_v<NT, fft::NTU> ? eNufftSign::DEFAULT_NTU : eNufftSign::DEFAULT_UTN;
     i32 ntransf = 1;
     double tol = std::is_same_v<T, f32> ? 1e-6 : 1e-15;
 
@@ -430,8 +431,8 @@ struct NufftOptions<cpu_t, T, NT> {
     Opt<double> upsampling_factor = std::nullopt; // If nullopt, will use finufft default
 };
 
-export template<is_real_fp_tensor_type T, is_dim3 N, is_nufft_type NT>
-requires std::is_same_v<T, f32> || std::is_same_v<T, f64>
+export template<is_real_fp_tensor_type T, std::size_t N, is_nufft_type NT>
+requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan<cpu_t, T, N, NT> {
 
     NufftPlan(
@@ -494,7 +495,7 @@ struct NufftPlan<cpu_t, T, N, NT> {
             );
         } else if constexpr(std::is_same_v<T, f64>) {
             finufft_makeplan(
-                std::is_same_v<NT, nufft::NTU> ? 1 : (std::is_same_v<NT, nufft::UTN> ? 2 : 3),
+                std::is_same_v<NT, fft::NTU> ? 1 : (std::is_same_v<NT, fft::UTN> ? 2 : 3),
                 N,
                 m_nmodes.data(),
                 static_cast<int>(m_options.sign),
@@ -511,7 +512,7 @@ private:
     finufft_plan_t<cpu_t, T> m_plan;
     finufft_opts m_opts;
 
-    std::conditional_t<std::is_same_v<NT, nufft::NTN>, std::pair<Tensor,Tensor>, Tensor> m_coords;
+    std::conditional_t<std::is_same_v<NT, fft::NTN>, std::pair<Tensor,Tensor>, Tensor> m_coords;
     
     std::array<i64, N> m_nmodes;
     NufftOptions<cpu_t, T, NT> m_options;

@@ -13,8 +13,9 @@ module;
 
 export module fft:toeplitz;
 
+import std;
 import util_mod;
-import tensor_mod:tensor;
+import tensor_mod;
 import nvrtc;
 import vkfft;
 
@@ -39,20 +40,81 @@ inline void CUDA_PRINT_LAST_ERROR() {
 
 namespace hasty {
 namespace fft {
-		
-// If the following enums are changed, 
-// also change the corresponding kernel code in 
-// lib/fft/kernels/toeplitz_load_2D.cu and lib/fft/kernels/toeplitz_load_3D.cu
-export enum class ToeplitzMultType {
-    NONE=0,
-    MULT=1,
-    MULT_CONJ=2
-};
 
-export enum class ToeplitzAccumulateType {
-    NONE=0,
-    ACCUMULATE=1
-};
+    // If the following enums are changed, 
+    // also change the corresponding kernel code in 
+    // lib/fft/kernels/toeplitz_load_2D.cu and lib/fft/kernels/toeplitz_load_3D.cu
+    export enum class ToeplitzMultType {
+        NONE=0,
+        MULT=1,
+        MULT_CONJ=2
+    };
+
+    export enum class ToeplitzAccumulateType {
+        NONE=0,
+        ACCUMULATE=1
+    };
+
+}
+}
+
+
+namespace hasty {
+namespace fft {
+
+void transform_toeplitz_kernel_1D(Tensor& kernel, bool clear_vkfft_plan);
+void transform_toeplitz_kernel_2D(Tensor& kernel, bool clear_vkfft_plan);
+void transform_toeplitz_kernel_3D(Tensor& kernel, bool clear_vkfft_plan);
+
+void toeplitz_multiplication_1D(
+    const Tensor& 				    input,
+    Tensor& 				        output,
+    const Tensor& 				    kernel,
+    OptRefW<Tensor> 			    scratch,
+    OptCRefW<Tensor> 			    mult1,
+    OptCRefW<Tensor> 			    mult2,
+    ToeplitzMultType 			    input_output_mult_type,
+    ToeplitzMultType 			    input_mult1_type,
+    ToeplitzMultType 			    output_mult1_type,
+    ToeplitzMultType 			    input_mult2_type,
+    ToeplitzMultType 			    output_mult2_type,
+    ToeplitzAccumulateType          accumulate_type
+);
+void toeplitz_multiplication_2D(
+    const Tensor& 				    input,
+    Tensor& 				        output,
+    const Tensor& 				    kernel,
+    OptRefW<Tensor> 			    scratch,
+    OptCRefW<Tensor> 			    mult1,
+    OptCRefW<Tensor> 			    mult2,
+    ToeplitzMultType 			    input_output_mult_type,
+    ToeplitzMultType 			    input_mult1_type,
+    ToeplitzMultType 			    output_mult1_type,
+    ToeplitzMultType 			    input_mult2_type,
+    ToeplitzMultType 			    output_mult2_type,
+    ToeplitzAccumulateType          accumulate_type
+);
+void toeplitz_multiplication_3D(
+    const Tensor& 				    input,
+    Tensor& 				        output,
+    const Tensor& 				    kernel,
+    OptRefW<Tensor> 			    scratch,
+    OptCRefW<Tensor> 			    mult1,
+    OptCRefW<Tensor> 			    mult2,
+    ToeplitzMultType 			    input_output_mult_type,
+    ToeplitzMultType 			    input_mult1_type,
+    ToeplitzMultType 			    output_mult1_type,
+    ToeplitzMultType 			    input_mult2_type,
+    ToeplitzMultType 			    output_mult2_type,
+    ToeplitzAccumulateType          accumulate_type
+);
+
+}
+}
+
+
+namespace hasty {
+namespace fft {
 
 export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = false)
 {
@@ -62,12 +124,12 @@ export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = fa
     if (kernel.scalar_type() != eScalarType::ComplexFloat) {
         throw std::runtime_error("Kernel tensor must be of type complex float");
     }
-    if (kernel.ndim() == 1) {
-        transform_toeplitz_kernel(kernel.get_tensor<cuda_t, c64_t, 1>(), clear_vkfft_plan);
-    } else if (kernel.ndim() == 2) {
-        transform_toeplitz_kernel(kernel.get_tensor<cuda_t, c64_t, 2>(), clear_vkfft_plan);
-    } else if (kernel.ndim() == 3) {
-        transform_toeplitz_kernel(kernel.get_tensor<cuda_t, c64_t, 3>(), clear_vkfft_plan);
+    if (kernel.ndimension() == 1) {
+        transform_toeplitz_kernel_1D(kernel, clear_vkfft_plan);
+    } else if (kernel.ndimension() == 2) {
+        transform_toeplitz_kernel_2D(kernel, clear_vkfft_plan);
+    } else if (kernel.ndimension() == 3) {
+        transform_toeplitz_kernel_3D(kernel, clear_vkfft_plan);
     } else {
         throw std::runtime_error("Kernel tensor must be 1D, 2D or 3D");
     }
@@ -88,18 +150,18 @@ export void toeplitz_multiplication(
     ToeplitzAccumulateType      accumulate_type
 )
 {
-    if (kernel.ndim() == 1) {
-        if (input.ndim() != 2)
+    if (kernel.ndimension() == 1) {
+        if (input.ndimension() != 2)
             throw std::runtime_error("Input must be 2D for 1D kernel");
-        if (output.ndim() != 2)
+        if (output.ndimension() != 2)
             throw std::runtime_error("Output must be 2D for 1D kernel");
         toeplitz_multiplication_1D(
-            input.get_tensor(),
-            output.get_tensor(),
-            kernel.get_tensor(),
-            scratch.has_value() ? std::make_optional(std::ref((*scratch).get().get_tensor())) : std::nullopt,
-            mult1.has_value()   ? std::make_optional(std::cref((*mult1).get().get_tensor()))  : std::nullopt,
-            mult2.has_value()   ? std::make_optional(std::cref((*mult2).get().get_tensor()))  : std::nullopt,
+            input,
+            output,
+            kernel,
+            scratch,
+            mult1,
+            mult2,
             input_output_mult_type,
             input_mult1_type,
             output_mult1_type,
@@ -108,18 +170,18 @@ export void toeplitz_multiplication(
             accumulate_type
         );
     }
-    else if (kernel.ndim() == 2) {
-        if (input.ndim() != 3)
+    else if (kernel.ndimension() == 2) {
+        if (input.ndimension() != 3)
             throw std::runtime_error("Input must be 3D for 2D kernel");
-        if (output.ndim() != 3)
+        if (output.ndimension() != 3)
             throw std::runtime_error("Output must be 3D for 2D kernel");
         toeplitz_multiplication_2D(
-            input.get_tensor(),
-            output.get_tensor(),
-            kernel.get_tensor(),
-            scratch.has_value() ? std::make_optional(std::ref((*scratch).get().get_tensor())) : std::nullopt,
-            mult1.has_value() ? std::make_optional(std::cref((*mult1).get().get_tensor())) : std::nullopt,
-            mult2.has_value() ? std::make_optional(std::cref((*mult2).get().get_tensor())) : std::nullopt,
+            input,
+            output,
+            kernel,
+            scratch,
+            mult1,
+            mult2,
             input_output_mult_type,
             input_mult1_type,
             output_mult1_type,
@@ -128,18 +190,18 @@ export void toeplitz_multiplication(
             accumulate_type
         );
     }
-    else if (kernel.ndim() == 3) {
-        if (input.ndim() != 4)
+    else if (kernel.ndimension() == 3) {
+        if (input.ndimension() != 4)
             throw std::runtime_error("Input must be 4D for 3D kernel");
-        if (output.ndim() != 4)
+        if (output.ndimension() != 4)
             throw std::runtime_error("Output must be 4D for 3D kernel");
         toeplitz_multiplication_3D(
-            input.get_tensor(),
-            output.get_tensor(),
-            kernel.get_tensor(),
-            scratch.has_value() ? std::make_optional(std::ref((*scratch).get().get_tensor())) : std::nullopt,
-            mult1.has_value() ? std::make_optional(std::cref((*mult1).get().get_tensor())) : std::nullopt,
-            mult2.has_value() ? std::make_optional(std::cref((*mult2).get().get_tensor())) : std::nullopt,
+            input,
+            output,
+            kernel,
+            scratch,
+            mult1,
+            mult2,
             input_output_mult_type,
             input_mult1_type,
             output_mult1_type,
@@ -149,14 +211,14 @@ export void toeplitz_multiplication(
         );
     }
     else {
-        throw std::runtime_error("Kernel must be 2D or 3D");
+        throw std::runtime_error("Kernel must be 1D, 2D or 3D");
     }
 }
 
 }
 }
 
-// Implementation
+// VkFFT calling and NVRTC kernel calling implementations
 namespace hasty {
 namespace fft {
 
@@ -178,7 +240,7 @@ void launch_toeplitz_load_1D(
     int device_idx,
     int threads_per_block = 256)
 {
-    static std::array<hasty::nvrtc::NVRTC_ModFunc, (size_t)device_idx::MAX_CUDA_DEVICES> nvrtc_modules = {};
+    static std::array<hasty::nvrtc::NVRTC_ModFunc, (std::size_t)device_alias::MAX_CUDA_DEVICES> nvrtc_modules = {};
     static const char* toeplitz_load_1D_code = b::embed<"src/fft/kernels/toeplitz_load_1D.cu">().data();
 
     if (!nvrtc_modules[device_idx].module) {
@@ -234,7 +296,7 @@ void launch_toeplitz_load_2D(
     int device_idx,
     int threads_per_block = 256)
 {
-    static std::array<hasty::nvrtc::NVRTC_ModFunc, (size_t)device_idx::MAX_CUDA_DEVICES> nvrtc_modules = {};
+    static std::array<hasty::nvrtc::NVRTC_ModFunc, (std::size_t)device_alias::MAX_CUDA_DEVICES> nvrtc_modules = {};
 
     static const char* toeplitz_load_2D_code = b::embed<"src/fft/kernels/toeplitz_load_2D.cu">().data();
 
@@ -299,7 +361,7 @@ void launch_toeplitz_load_3D(
     int device_idx,
     int threads_per_block = 256)
 {
-    static std::array<hasty::nvrtc::NVRTC_ModFunc, (size_t)device_idx::MAX_CUDA_DEVICES> nvrtc_modules = {};
+    static std::array<hasty::nvrtc::NVRTC_ModFunc, (std::size_t)device_alias::MAX_CUDA_DEVICES> nvrtc_modules = {};
 
     static const char* toeplitz_load_3D_code = b::embed<"src/fft/kernels/toeplitz_load_3D.cu">().data();
 
@@ -347,18 +409,18 @@ void launch_toeplitz_load_3D(
 }
 
 void perform_toeplitz_multiplication_cuda_1D(
-    const hat::Tensor&      input,
-    hat::Tensor             output,
-    const hat::Tensor&      kernel,
-    optrefw<hat::Tensor>    scratch,
-    optcrefw<hat::Tensor>   mult1,
-    optcrefw<hat::Tensor>   mult2,
-    int input_output_mult_type = (int)ToeplitzMultType::NONE,
-    int input_mult1_type       = (int)ToeplitzMultType::MULT,
-    int output_mult1_type      = (int)ToeplitzMultType::MULT_CONJ,
-    int input_mult2_type       = (int)ToeplitzMultType::MULT,
-    int output_mult2_type      = (int)ToeplitzMultType::MULT_CONJ,
-    int accumulate_type        = (int)ToeplitzAccumulateType::NONE
+    const Tensor&                   input,
+    Tensor                          output,
+    const Tensor&                   kernel,
+    OptRefW<Tensor>                 scratch,
+    OptCRefW<Tensor>                mult1,
+    OptCRefW<Tensor>                mult2,
+    int input_output_mult_type =    (int)ToeplitzMultType::NONE,
+    int input_mult1_type       =    (int)ToeplitzMultType::MULT,
+    int output_mult1_type      =    (int)ToeplitzMultType::MULT_CONJ,
+    int input_mult2_type       =    (int)ToeplitzMultType::MULT,
+    int output_mult2_type      =    (int)ToeplitzMultType::MULT_CONJ,
+    int accumulate_type        =    (int)ToeplitzAccumulateType::NONE
 )
 {
     auto device    = input.device();
@@ -368,14 +430,15 @@ void perform_toeplitz_multiplication_cuda_1D(
     int  device_idx = device.index();
     bool accumulate = (accumulate_type != (int)ToeplitzAccumulateType::NONE);
 
-    const cuFloatComplex* in_ptr     = reinterpret_cast<const cuFloatComplex*>(input.data_ptr<hc10::complex<float>>());
-    cuFloatComplex*       out_ptr    = reinterpret_cast<cuFloatComplex*>(output.data_ptr<hc10::complex<float>>());
-    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.data_ptr<hc10::complex<float>>());
+    //const cuFloatComplex* in_ptr     = reinterpret_cast<const cuFloatComplex*>(input.data_ptr<hc10::complex<float>>());
+    //cuFloatComplex*       out_ptr    = reinterpret_cast<cuFloatComplex*>(output.data_ptr<hc10::complex<float>>());
+    //const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.data_ptr<hc10::complex<float>>());
+
+
 
     cuFloatComplex* scratch_ptr;
-    hat::Tensor scratchmem;
+    Tensor scratchmem;
     if (scratch.has_value()) {
-        const hat::Tensor& scr = (*scratch).get();
         torch_check(scr.is_cuda(),                                  "scratch must be a CUDA tensor");
         torch_check(scr.scalar_type() == hat::kComplexFloat,        "scratch dtype must be complex float");
         torch_check(scr.sizes().equals({ 2 * NX }),                 "scratch must have shape (2*NX)");
@@ -445,18 +508,18 @@ void perform_toeplitz_multiplication_cuda_1D(
 }
 
 void perform_toeplitz_multiplication_cuda_2D(
-    const hat::Tensor& 				input,
-    hat::Tensor 					output,
-    const hat::Tensor& 				kernel,
-    optrefw<hat::Tensor> 			scratch,
-    optcrefw<hat::Tensor> 			mult1,
-    optcrefw<hat::Tensor> 			mult2,
-    int input_output_mult_type = 	(int)ToeplitzMultType::NONE,
-    int input_mult1_type = 			(int)ToeplitzMultType::MULT,
-    int output_mult1_type = 		(int)ToeplitzMultType::MULT_CONJ,
-    int input_mult2_type = 			(int)ToeplitzMultType::MULT,
-    int output_mult2_type = 		(int)ToeplitzMultType::MULT_CONJ,
-    int accumulate_type = 			(int)ToeplitzAccumulateType::NONE
+    const Tensor& 				    input,
+    Tensor 					        output,
+    const Tensor& 				    kernel,
+    OptRefW<Tensor> 			    scratch,
+    OptCRefW<Tensor> 			    mult1,
+    OptCRefW<Tensor> 			    mult2,
+    int input_output_mult_type  = 	(int)ToeplitzMultType::NONE,
+    int input_mult1_type        = 	(int)ToeplitzMultType::MULT,
+    int output_mult1_type       = 	(int)ToeplitzMultType::MULT_CONJ,
+    int input_mult2_type        = 	(int)ToeplitzMultType::MULT,
+    int output_mult2_type       = 	(int)ToeplitzMultType::MULT_CONJ,
+    int accumulate_type         = 	(int)ToeplitzAccumulateType::NONE
 )
 {
     auto device = input.device();
@@ -578,18 +641,18 @@ void perform_toeplitz_multiplication_cuda_2D(
 }
 
 void perform_toeplitz_multiplication_cuda_3D(
-    const hat::Tensor& 				input,
-    hat::Tensor 					output,
-    const hat::Tensor& 				kernel,
-    optrefw<hat::Tensor> 			scratch,
-    optcrefw<hat::Tensor> 			mult1,
-    optcrefw<hat::Tensor> 			mult2,
-    int input_output_mult_type = 	(int)ToeplitzMultType::NONE,
-    int input_mult1_type = 			(int)ToeplitzMultType::MULT,
-    int output_mult1_type = 		(int)ToeplitzMultType::MULT_CONJ,
-    int input_mult2_type = 			(int)ToeplitzMultType::MULT,
-    int output_mult2_type = 		(int)ToeplitzMultType::MULT_CONJ,
-    int accumulate_type = 			(int)ToeplitzAccumulateType::NONE
+    const Tensor& 				    input,
+    Tensor 					        output,
+    const Tensor& 				    kernel,
+    OptRefW<Tensor> 			    scratch,
+    OptCRefW<Tensor> 			    mult1,
+    OptCRefW<Tensor> 			    mult2,
+    int input_output_mult_type  = 	(int)ToeplitzMultType::NONE,
+    int input_mult1_type        = 	(int)ToeplitzMultType::MULT,
+    int output_mult1_type       = 	(int)ToeplitzMultType::MULT_CONJ,
+    int input_mult2_type        = 	(int)ToeplitzMultType::MULT,
+    int output_mult2_type       = 	(int)ToeplitzMultType::MULT_CONJ,
+    int accumulate_type         = 	(int)ToeplitzAccumulateType::NONE
 )
 {
     auto device = input.device();
@@ -718,11 +781,12 @@ void perform_toeplitz_multiplication_cuda_3D(
 }
 }
 
-// Interface
+
+// TOEPLITZ KERNEL TRANSFORMATIONS
 namespace hasty {
 namespace fft {
 
-void transform_toeplitz_kernel_1D(hat::Tensor& ker, bool clear_vkfft_plan)
+void transform_toeplitz_kernel_1D(Tensor& ker, bool clear_vkfft_plan)
 {
     int NX = ker.size(0);
     torch_check(NX > 1, "kernel dimension must be positive");
@@ -766,7 +830,7 @@ void transform_toeplitz_kernel_1D(hat::Tensor& ker, bool clear_vkfft_plan)
         global_vkfft_cache[device.index()].erase(key);
 }
 
-void transform_toeplitz_kernel_2D(hat::Tensor& ker, bool clear_vkfft_plan) 
+void transform_toeplitz_kernel_2D(Tensor& ker, bool clear_vkfft_plan) 
 {   
     int NX = ker.size(1);
     int NY = ker.size(0);
@@ -814,7 +878,7 @@ void transform_toeplitz_kernel_2D(hat::Tensor& ker, bool clear_vkfft_plan)
 
 }
 
-void transform_toeplitz_kernel_3D(hat::Tensor& ker, bool clear_vkfft_plan) 
+void transform_toeplitz_kernel_3D(Tensor& ker, bool clear_vkfft_plan) 
 {
     int NX = ker.size(2);
     int NY = ker.size(1);
@@ -863,13 +927,21 @@ void transform_toeplitz_kernel_3D(hat::Tensor& ker, bool clear_vkfft_plan)
     }
 }
 
+}
+}
+
+
+// MULTIPLICATION IMPLEMENTATION
+namespace hasty {
+namespace fft {
+
 void toeplitz_multiplication_1D(
-    const hat::Tensor&      inp,
-    hat::Tensor&            out,
-    const hat::Tensor&      ker,
-    OptRefW<hat::Tensor>    scr,
-    OptCRefW<hat::Tensor>   m1,
-    OptCRefW<hat::Tensor>   m2,
+    const Tensor&      inp,
+    Tensor&            out,
+    const Tensor&      ker,
+    OptRefW<Tensor>    scr,
+    OptCRefW<Tensor>   m1,
+    OptCRefW<Tensor>   m2,
     ToeplitzMultType        input_output_mult_type,
     ToeplitzMultType        input_mult1_type,
     ToeplitzMultType        output_mult1_type,
@@ -902,12 +974,12 @@ void toeplitz_multiplication_1D(
 }
 
 void toeplitz_multiplication_2D(
-    const hat::Tensor&                  inp,
-    hat::Tensor&                        out,
-    const hat::Tensor&                  ker,
-    OptRefW<hat::Tensor>                scr,
-    OptCRefW<hat::Tensor>               m1,
-    OptCRefW<hat::Tensor>               m2,
+    const Tensor&                  inp,
+    Tensor&                        out,
+    const Tensor&                  ker,
+    OptRefW<Tensor>                scr,
+    OptCRefW<Tensor>               m1,
+    OptCRefW<Tensor>               m2,
     ToeplitzMultType                    input_output_mult_type,
     ToeplitzMultType                    input_mult1_type,
     ToeplitzMultType                    output_mult1_type,
@@ -945,12 +1017,12 @@ void toeplitz_multiplication_2D(
 }
 
 void toeplitz_multiplication_3D(
-    const hat::Tensor&                  inp,
-    hat::Tensor&                        out,
-    const hat::Tensor&                  ker,
-    OptRefW<hat::Tensor>                scr,
-    OptCRefW<hat::Tensor>               m1,
-    OptCRefW<hat::Tensor>               m2,
+    const Tensor&                  inp,
+    Tensor&                        out,
+    const Tensor&                  ker,
+    OptRefW<Tensor>                scr,
+    OptCRefW<Tensor>               m1,
+    OptCRefW<Tensor>               m2,
     ToeplitzMultType                    input_output_mult_type,
     ToeplitzMultType                    input_mult1_type,
     ToeplitzMultType                    output_mult1_type,

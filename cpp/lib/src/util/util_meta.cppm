@@ -129,5 +129,7 @@ struct is_specialization<Template<Args...>, Template> : std::true_type {};
 export template <class T, template <class...> class Template>
 constexpr bool is_specialization_v = is_specialization<T, Template>::value;
 
+export template<class... T>
+constexpr bool always_false = false;
 
 }

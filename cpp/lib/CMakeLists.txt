@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 4.2.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 4.3.0 FATAL_ERROR)
 
-set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b" CACHE STRING "" FORCE)
+#set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b" CACHE STRING "" FORCE)
 
 project(HastyCompute VERSION 0.1 LANGUAGES CXX)
 
@@ -45,16 +45,19 @@ include(cmake/CPM.cmake)
 include(FetchContent)
 
 # LIBRARY CPP SOURCES
-#target_sources(HastyCuCompute
-#	PRIVATE
-#		""
-#)
+target_sources(HastyCompute
+	PRIVATE
+		"src/wrapper/vkfft.cpp"
+)
 
 # LIBRARY CPP MODULE SOURCES
 target_sources(HastyCompute
-    PRIVATE
-        FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
-			"interface/interface_types/generic_value.cppm"
+    PUBLIC
+        FILE_SET cxx_modules_public TYPE CXX_MODULES FILES
+			"src/fft/nufft.cppm"
+			"src/fft/toeplitz.cppm"
+			"src/generic_value/generic_value.cppm"
+			"src/nvrtc/nvrtc.cppm"
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
 			"src/tensor/tensor_concepts.cppm"
@@ -72,6 +75,9 @@ target_sources(HastyCompute
             "src/util/util_typing.cppm"
             "src/wrapper/torch_wrapper.cppm"
 			"src/wrapper/vkfft.cppm"
+			"src/viz/viz.cppm"
+			"src/wrapper/torch_wrapper.cppm"
+			"src/wrapper/vkfft.cppm"
 )
 
 # LIB INTERFACE CPP SOURCES
@@ -81,12 +87,15 @@ target_sources(HastyCompute
 #)
 
 # LIB INTERFACE CPP MODULE SOURCES
-target_sources(HastyCompute
-    PUBLIC
-        FILE_SET cxx_modules_public TYPE CXX_MODULES FILES
-            "interface/interface.cppm"
-            "interface/viz.cppm"
-)
+#target_sources(HastyCompute
+#    PUBLIC
+#        FILE_SET cxx_modules_private TYPE CXX_MODULES FILES
+#			"public/threading/thread_stream.cppm"
+#			"public/threading/threading.cppm"
+#			""
+#            "interface/public/interface.cppm"
+#            "interface/viz.cppm"
+#)
 
 set(DB_PRODUCTION_MODE ON)
 FetchContent_Declare(
@@ -142,7 +151,7 @@ set(FINUFFT_USE_DUCC0 ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
   finufft
   GIT_REPOSITORY https://github.com/flatironinstitute/finufft.git
-  GIT_TAG        master #v2.4.1
+  GIT_TAG        v2.5.0 #master #v2.4.1
 )
 
 FetchContent_MakeAvailable(finufft)
