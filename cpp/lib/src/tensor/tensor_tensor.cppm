@@ -299,6 +299,17 @@ public:
 
 private:
     hat::Tensor _base;
+
+
+    friend Tensor empty(ArrayRef<i64> sizes, TensorOptions options);
+    friend Tensor empty_like(const Tensor& other);
+    friend Tensor zeros(ArrayRef<i64> sizes, TensorOptions options);
+    friend Tensor zeros_like(const Tensor& other);
+    friend Tensor ones(ArrayRef<i64> sizes, TensorOptions options);
+    friend Tensor ones_like(const Tensor& other);
+    friend Tensor rand(ArrayRef<i64> sizes, TensorOptions options);
+    friend Tensor rand_like(const Tensor& other);
+
 };
  
 

@@ -90,6 +90,18 @@ public:
 		return s;
 	}
 
+	bool equals(const ArrayRef<T>& other) const noexcept {
+		if (m_size != other.m_size) {
+			return false;
+		}
+		for (std::size_t i = 0; i < m_size; ++i) {
+			if (m_data[i] != other.m_data[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 };
 
 export template<typename It>

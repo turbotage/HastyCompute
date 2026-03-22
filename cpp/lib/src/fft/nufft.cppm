@@ -2,10 +2,12 @@ module;
 
 #include <finufft.h>
 #include <cufinufft.h>
+#include <cuda_runtime.h>
 
 
 export module fft_mod:nufft;
 
+import std;
 import util_mod;
 import tensor_mod;
 
@@ -87,7 +89,7 @@ i32 nufft_type_to_int(is_nufft_type auto t) {
     } else if constexpr (std::is_same_v<decltype(t), fft::NTN>) {
         return 3;
     } else {
-        static_assert(always_false<decltype(t)>::value, "Invalid nufft type");
+        static_assert(always_false<decltype(t)>, "Invalid nufft type");
     }
 }
 
@@ -163,7 +165,7 @@ struct NufftOptions<cuda_t, T, NT> {
 
 };
 
-export template<is_fp_real_tensor_type T, std::size_t N, is_nufft_type NT>
+export template<is_real_fp_tensor_type T, std::size_t N, is_nufft_type NT>
 requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan<cuda_t, T, N, NT> {
 
@@ -175,24 +177,24 @@ struct NufftPlan<cuda_t, T, N, NT> {
         cufinufft_default_opts(&m_opts);
 
         switch (m_options.method) {
-        case eNufftMethodCUDA::GM_SORT:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::GM_SORT:
             m_opts.gpu_method = 1;
             m_opts.gpu_sort = 1;
             break;
-        case eNufftMethodCUDA::GM_NOT_SORT:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::GM_NOT_SORT:
             m_opts.gpu_method = 1;
             m_opts.gpu_sort = 0;
             break;
-        case eNufftMethodCUDA::SM:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::SM:
             m_opts.gpu_method = 2;
             break;
-        case eNufftMethodCUDA::OD:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::OD:
             m_opts.gpu_method = 3;
             break;
-        case eNufftMethodCUDA::BLOCK_GATHER:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::BLOCK_GATHER:
             m_opts.gpu_method = 4;
             break;
-        case eNufftMethodCUDA::DEFAULT:
+        case NufftOptions<cuda_t, T, NT>::eNufftMethod::DEFAULT:
             break;
         default:
             throw std::runtime_error("Invalid CUDA method");
@@ -201,13 +203,13 @@ struct NufftPlan<cuda_t, T, N, NT> {
         if (std::holds_alternative<NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
             switch (std::get<NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
             case NufftOptions<cuda_t, T, NT>::eUppsamplingFactor::UPSAMP_2_0:
-                m_opts.gpu_upsampfac = 2.0;
+                m_opts.upsampfac = 2.0;
                 break;
             case NufftOptions<cuda_t, T, NT>::eUppsamplingFactor::UPSAMP_1_25:
-                m_opts.gpu_upsampfac = 1.25;
+                m_opts.upsampfac = 1.25;
                 break;
             case NufftOptions<cuda_t, T, NT>::eUppsamplingFactor::UPSAMP_1_0:
-                m_opts.gpu_upsampfac = 1.0;
+                m_opts.upsampfac = 1.0;
                 if (m_options.spread_interp_method != NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::SPREAD_INTERP_ONLY) {
                     throw std::runtime_error("Only spread/interp method supported with upsampling factor 1.0");
                 }
@@ -223,8 +225,29 @@ struct NufftPlan<cuda_t, T, N, NT> {
             if (upfac <= 1.0) {
                 throw std::runtime_error("Upsampling factor must be greater than 1.0");
             }
-            m_opts.gpu_upsampfac = upfac;
+            m_opts.upsampfac = upfac;
             m_opts.gpu_kerevalmeth = 0; // Must use direct kernel eval for custom upsampling factors
+        }
+
+        if (m_options.spread_interp_method != NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::DEFAULT) {
+            switch (m_options.spread_interp_method) {
+            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::NUFFT:
+                m_opts.gpu_spreadinterponly = 0;
+                break;
+            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::SPREAD_ONLY:
+                m_opts.gpu_spreadinterponly = 1;
+                break;
+            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::INTERP_ONLY:
+                m_opts.gpu_spreadinterponly = 1;
+                break;
+            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::SPREAD_INTERP_ONLY:
+                m_opts.gpu_spreadinterponly = 1;
+                break;
+            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::DEFAULT:
+                break;
+            default:
+                throw std::runtime_error("Invalid spread/interp method");
+            }
         }
 
         if constexpr(std::is_same_v<T, f32>) {
@@ -364,21 +387,45 @@ struct NufftPlan<cuda_t, T, N, NT> {
         // Execute the plan
         if constexpr(std::is_same_v<NT, fft::NTU>) {
             if constexpr(std::is_same_v<T, f32>) {
-                cufinufftf_execute(m_plan.plan, input.template mutable_data_ptr<cuFloatComplex>(), output.template mutable_data_ptr<cuFloatComplex>());
+                cufinufftf_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>())
+                );
             } else if constexpr(std::is_same_v<T, f64>) {
-                cufinufft_execute(m_plan.plan, input.template mutable_data_ptr<cuDoubleComplex>(), output.template mutable_data_ptr<cuDoubleComplex>());
+                cufinufft_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>())
+                );
             }
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if constexpr(std::is_same_v<T, f32>) {
-                cufinufftf_execute(m_plan.plan, output.template mutable_data_ptr<cuFloatComplex>(), input.template mutable_data_ptr<cuFloatComplex>());
+                cufinufftf_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>())
+                );
             } else if constexpr(std::is_same_v<T, f64>) {
-                cufinufft_execute(m_plan.plan, output.template mutable_data_ptr<cuDoubleComplex>(), input.template mutable_data_ptr<cuDoubleComplex>());
+                cufinufft_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>())
+                );
             }
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
             if constexpr(std::is_same_v<T, f32>) {
-                cufinufftf_execute(m_plan.plan, input.template mutable_data_ptr<cuFloatComplex>(), output.template mutable_data_ptr<cuFloatComplex>());
+                cufinufftf_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>())
+                );
             } else if constexpr(std::is_same_v<T, f64>) {
-                cufinufft_execute(m_plan.plan, input.template mutable_data_ptr<cuDoubleComplex>(), output.template mutable_data_ptr<cuDoubleComplex>());
+                cufinufft_execute(
+                    m_plan.plan, 
+                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>()), 
+                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>())
+                );
             }
         }
     }
@@ -458,10 +505,10 @@ struct NufftPlan<cpu_t, T, N, NT> {
         if (m_options.spread_interp_method != NufftOptions<cpu_t, T, NT>::eSpreadInterpMethod::DEFAULT) {
             switch (m_options.spread_interp_method) {
             case NufftOptions<cpu_t, T, NT>::eSpreadInterpMethod::NUFFT:
-                m_opts.spread_interp_method = 0;
+                m_opts.spreadinterponly = 0;
                 break;
             case NufftOptions<cpu_t, T, NT>::eSpreadInterpMethod::SPREAD_INTERP_ONLY:
-                m_opts.spread_interp_method = 1;
+                m_opts.spreadinterponly = 1;
                 break;
             default:
                 throw std::runtime_error("Invalid spread/interp method");

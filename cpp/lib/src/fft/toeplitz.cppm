@@ -426,45 +426,44 @@ void perform_toeplitz_multiplication_cuda_1D(
     auto device    = input.device();
     int  nbatch    = input.size(0);
     int  NX        = input.size(1);
-    torch_check(NX > 1, "input dimension must be positive");
-    int  device_idx = device.index();
+    if (NX <= 1) throw std::runtime_error("input dimension must be positive");
+    int  device_idx = static_cast<int>(device.index);
     bool accumulate = (accumulate_type != (int)ToeplitzAccumulateType::NONE);
 
-    //const cuFloatComplex* in_ptr     = reinterpret_cast<const cuFloatComplex*>(input.data_ptr<hc10::complex<float>>());
-    //cuFloatComplex*       out_ptr    = reinterpret_cast<cuFloatComplex*>(output.data_ptr<hc10::complex<float>>());
-    //const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.data_ptr<hc10::complex<float>>());
-
-
+    const cuFloatComplex* in_ptr     = reinterpret_cast<const cuFloatComplex*>(input.const_data_ptr<c64>());
+    cuFloatComplex*       out_ptr    = reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>());
+    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.const_data_ptr<c64>());
 
     cuFloatComplex* scratch_ptr;
-    Tensor scratchmem;
+    Opt<Tensor> scratchmem;
     if (scratch.has_value()) {
-        torch_check(scr.is_cuda(),                                  "scratch must be a CUDA tensor");
-        torch_check(scr.scalar_type() == hat::kComplexFloat,        "scratch dtype must be complex float");
-        torch_check(scr.sizes().equals({ 2 * NX }),                 "scratch must have shape (2*NX)");
-        torch_check(scr.device() == device,                         "scratch must be on the same device");
-        torch_check(scr.is_contiguous(),                            "scratch must be contiguous");
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.data_ptr<hc10::complex<float>>());
+        Tensor& scr = (*scratch).get();
+        if (scr.device().type != eDeviceType::CUDA) throw std::runtime_error("scratch must be a CUDA tensor");
+        if (scr.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("scratch dtype must be complex float");
+        if (scr.ndimension() != 1 || scr.size(0) != 2 * NX) throw std::runtime_error("scratch must have shape (2*NX)");
+        if (scr.device().type != device.type || scr.device().index != device.index) throw std::runtime_error("scratch must be on the same device");
+        if (!scr.is_contiguous()) throw std::runtime_error("scratch must be contiguous");
+        scratch_ptr = scr.mutable_data_ptr<cuFloatComplex>();
     } else {
-        scratchmem  = hat::empty({ 2 * NX }, input.options());
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem.data_ptr<hc10::complex<float>>());
+        scratchmem  = hasty::empty({ 2 * NX }, TensorOptions(input.device()).dtype(input.scalar_type()));
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem->mutable_data_ptr<c64>());
     }
 
     const cuFloatComplex* mult1_ptr = nullptr;
     if (mult1.has_value()) {
-        const hat::Tensor& m1 = (*mult1).get();
-        torch_check(m1.is_cuda() && m1.scalar_type() == hat::kComplexFloat, "mult1 type error");
-        torch_check(m1.sizes().equals({ NX }), "mult1 must have shape (NX)");
-        torch_check(m1.device() == device && m1.is_contiguous(), "mult1 device/contiguity error");
-        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.data_ptr<hc10::complex<float>>());
+        const Tensor& m1 = (*mult1).get();
+        if (m1.device().type != eDeviceType::CUDA || m1.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult1 type error");
+        if (m1.ndimension() != 1 || m1.size(0) != NX) throw std::runtime_error("mult1 must have shape (NX)");
+        if (m1.device().type != device.type || m1.device().index != device.index || !m1.is_contiguous()) throw std::runtime_error("mult1 device/contiguity error");
+        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.const_data_ptr<c64>());
     }
     const cuFloatComplex* mult2_ptr = nullptr;
     if (mult2.has_value()) {
-        const hat::Tensor& m2 = (*mult2).get();
-        torch_check(m2.is_cuda() && m2.scalar_type() == hat::kComplexFloat, "mult2 type error");
-        torch_check(m2.sizes().equals({ NX }), "mult2 must have shape (NX)");
-        torch_check(m2.device() == device && m2.is_contiguous(), "mult2 device/contiguity error");
-        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.data_ptr<hc10::complex<float>>());
+        const Tensor& m2 = (*mult2).get();
+        if (m2.device().type != eDeviceType::CUDA || m2.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult2 type error");
+        if (m2.ndimension() != 1 || m2.size(0) != NX) throw std::runtime_error("mult2 must have shape (NX)");
+        if (m2.device().type != device.type || m2.device().index != device.index || !m2.is_contiguous()) throw std::runtime_error("mult2 device/contiguity error");
+        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.const_data_ptr<c64>());
     }
 
     // Prime: load batch 0 into scratch (batch_out=-1 skips writing output)
@@ -524,51 +523,51 @@ void perform_toeplitz_multiplication_cuda_2D(
 {
     auto device = input.device();
     int nbatch = input.size(0);
-    int dim = input.dim();
+    int dim = input.ndimension();
     int NX = input.size(dim - 1);
     int NY = input.size(dim - 2);
-    torch_check(NY > 1 && NX > 1, "input dimensions must be positive");
-    int device_idx = device.index();
+    if (NY <= 1 || NX <= 1) throw std::runtime_error("input dimensions must be positive");
+    int device_idx = static_cast<int>(device.index);
     bool accumulate = (accumulate_type != (int)ToeplitzAccumulateType::NONE);
 
-    const cuFloatComplex* in_ptr = reinterpret_cast<const cuFloatComplex*>(input.data_ptr<hc10::complex<float>>());
-    cuFloatComplex* out_ptr = reinterpret_cast<cuFloatComplex*>(output.data_ptr<hc10::complex<float>>());
-    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.data_ptr<hc10::complex<float>>());
+    const cuFloatComplex* in_ptr = reinterpret_cast<const cuFloatComplex*>(input.const_data_ptr<c64>());
+    cuFloatComplex* out_ptr = reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>());
+    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.const_data_ptr<c64>());
 
     cuFloatComplex* scratch_ptr;
-    hat::Tensor scratchmem;
+    Opt<Tensor> scratchmem;
     if (scratch.has_value()) {
-        const hat::Tensor& scr = (*scratch).get();
-        torch_check(scr.is_cuda(), "scratch was not a CUDA tensor");
-        torch_check(scr.scalar_type() == hat::kComplexFloat, "scratch dtype must be complex float");
-        torch_check(scr.sizes().equals({ 2 * NY, 2 * NX }), "scratch must have shape (2*NY, 2*NX)");
-        torch_check(scr.device() == device, "scratch must be on the same device as input and output");
-        torch_check(scr.is_contiguous(), "scratch must be contiguous");
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.data_ptr<hc10::complex<float>>());
+        Tensor& scr = (*scratch).get();
+        if (scr.device().type != eDeviceType::CUDA) throw std::runtime_error("scratch was not a CUDA tensor");
+        if (scr.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("scratch dtype must be complex float");
+        if (!scr.sizes().equals({ 2 * NY, 2 * NX })) throw std::runtime_error("scratch must have shape (2*NY, 2*NX)");
+        if (scr.device().type != device.type || scr.device().index != device.index) throw std::runtime_error("scratch must be on the same device as input and output");
+        if (!scr.is_contiguous()) throw std::runtime_error("scratch must be contiguous");
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.mutable_data_ptr<c64>());
     } else {
-        scratchmem = hat::empty({ 2 * NY, 2 * NX }, input.options());
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem.data_ptr<hc10::complex<float>>());
+        scratchmem = hasty::empty({ 2 * NY, 2 * NX }, TensorOptions(input.device()).dtype(input.scalar_type()));
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem->mutable_data_ptr<c64>());
     }
 
     const cuFloatComplex* mult1_ptr = nullptr;
     if (mult1.has_value()) {
-        const hat::Tensor& m1 = (*mult1).get();
-        torch_check(m1.is_cuda(), "mult1 was not a CUDA tensor");
-        torch_check(m1.scalar_type() == hat::kComplexFloat, "mult1 dtype must be complex float");
-        torch_check(m1.sizes().equals({ NY, NX }), "mult1 must have shape (NY, NX)");
-        torch_check(m1.device() == device, "mult1 must be on the same device as input and output");
-        torch_check(m1.is_contiguous(), "mult1 must be contiguous");
-        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.data_ptr<hc10::complex<float>>());
+        const Tensor& m1 = (*mult1).get();
+        if (m1.device().type != eDeviceType::CUDA) throw std::runtime_error("mult1 was not a CUDA tensor");
+        if (m1.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult1 dtype must be complex float");
+        if (!m1.sizes().equals({ NY, NX })) throw std::runtime_error("mult1 must have shape (NY, NX)");
+        if (m1.device().type != device.type || m1.device().index != device.index) throw std::runtime_error("mult1 must be on the same device as input and output");
+        if (!m1.is_contiguous()) throw std::runtime_error("mult1 must be contiguous");
+        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.const_data_ptr<c64>());
     }
     const cuFloatComplex* mult2_ptr = nullptr;
     if (mult2.has_value()) {
-        const hat::Tensor& m2 = (*mult2).get();
-        torch_check(m2.is_cuda(), "mult2 was not a CUDA tensor");
-        torch_check(m2.scalar_type() == hat::kComplexFloat, "mult2 dtype must be complex float");
-        torch_check(m2.sizes().equals({ NY, NX }), "mult2 must have shape (NY, NX)");
-        torch_check(m2.device() == device, "mult2 must be on the same device as input and output");
-        torch_check(m2.is_contiguous(), "mult2 must be contiguous");
-        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.data_ptr<hc10::complex<float>>());
+        const Tensor& m2 = (*mult2).get();
+        if (m2.device().type != eDeviceType::CUDA) throw std::runtime_error("mult2 was not a CUDA tensor");
+        if (m2.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult2 dtype must be complex float");
+        if (!m2.sizes().equals({ NY, NX })) throw std::runtime_error("mult2 must have shape (NY, NX)");
+        if (m2.device().type != device.type || m2.device().index != device.index) throw std::runtime_error("mult2 must be on the same device as input and output");
+        if (!m2.is_contiguous()) throw std::runtime_error("mult2 must be contiguous");
+        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.const_data_ptr<c64>());
     }
 
     launch_toeplitz_load_2D(
@@ -657,52 +656,52 @@ void perform_toeplitz_multiplication_cuda_3D(
 {
     auto device = input.device();
     int nbatch = input.size(0);
-    int dim = input.dim();
+    int dim = input.ndimension();
     int NX = input.size(dim - 1);
     int NY = input.size(dim - 2);
     int NZ = input.size(dim - 3);
-    torch_check(NZ > 1 && NY > 1 && NX > 1, "input dimensions must be positive");
-    int device_idx = device.index();
+    if (NZ <= 1 || NY <= 1 || NX <= 1) throw std::runtime_error("input dimensions must be positive");
+    int device_idx = static_cast<int>(device.index);
     bool accumulate = (accumulate_type != (int)ToeplitzAccumulateType::NONE);
 
-    const cuFloatComplex* in_ptr = reinterpret_cast<const cuFloatComplex*>(input.data_ptr<hc10::complex<float>>());
-    cuFloatComplex* out_ptr = reinterpret_cast<cuFloatComplex*>(output.data_ptr<hc10::complex<float>>());
-    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.data_ptr<hc10::complex<float>>());
+    const cuFloatComplex* in_ptr = reinterpret_cast<const cuFloatComplex*>(input.const_data_ptr<c64>());
+    cuFloatComplex* out_ptr = reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>());
+    const cuFloatComplex* kernel_ptr = reinterpret_cast<const cuFloatComplex*>(kernel.const_data_ptr<c64>());
 
     cuFloatComplex* scratch_ptr;
-    hat::Tensor scratchmem;
+    Opt<Tensor> scratchmem;
     if (scratch.has_value()) {
-        const hat::Tensor& scr = (*scratch).get();
-        torch_check(scr.is_cuda(), "scratch was not a CUDA tensor");
-        torch_check(scr.scalar_type() == hat::kComplexFloat, "scratch dtype must be complex float");
-        torch_check(scr.sizes().equals({ 2 * NZ, 2 * NY, 2 * NX }), "scratch must have shape (2*NZ, 2*NY, 2*NX)");
-        torch_check(scr.device() == device, "scratch must be on the same device as input and output");
-        torch_check(scr.is_contiguous(), "scratch must be contiguous");
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.data_ptr<hc10::complex<float>>());
+        Tensor& scr = (*scratch).get();
+        if (scr.device().type != eDeviceType::CUDA) throw std::runtime_error("scratch was not a CUDA tensor");
+        if (scr.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("scratch dtype must be complex float");
+        if (!scr.sizes().equals({ 2*NZ, 2*NY, 2*NX })) throw std::runtime_error("scratch must have shape (2*NZ, 2*NY, 2*NX)");
+        if (scr.device().type != device.type || scr.device().index != device.index) throw std::runtime_error("scratch must be on the same device as input and output");
+        if (!scr.is_contiguous()) throw std::runtime_error("scratch must be contiguous");
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.mutable_data_ptr<c64>());
     } else {
-        scratchmem = hat::empty({ 2 * NZ, 2 * NY, 2 * NX }, input.options());
-        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem.data_ptr<hc10::complex<float>>());
+        scratchmem = hasty::empty({ 2 * NZ, 2 * NY, 2 * NX }, TensorOptions(input.device()).dtype(input.scalar_type()));
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem->mutable_data_ptr<c64>());
     }
 
     const cuFloatComplex* mult1_ptr = nullptr;
     if (mult1.has_value()) {
-        const hat::Tensor& m1 = (*mult1).get();
-        torch_check(m1.is_cuda(), "mult1 was not a CUDA tensor");
-        torch_check(m1.scalar_type() == hat::kComplexFloat, "mult1 dtype must be complex float");
-        torch_check(m1.sizes().equals({ NZ, NY, NX }), "mult1 must have shape (NZ, NY, NX)");
-        torch_check(m1.device() == device, "mult1 must be on the same device as input and output");
-        torch_check(m1.is_contiguous(), "mult1 must be contiguous");
-        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.data_ptr<hc10::complex<float>>());
+        const Tensor& m1 = (*mult1).get();
+        if (m1.device().type != eDeviceType::CUDA) throw std::runtime_error("mult1 was not a CUDA tensor");
+        if (m1.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult1 dtype must be complex float");
+        if (!m1.sizes().equals({ NZ, NY, NX })) throw std::runtime_error("mult1 must have shape (NZ, NY, NX)");
+        if (m1.device().type != device.type || m1.device().index != device.index) throw std::runtime_error("mult1 must be on the same device as input and output");
+        if (!m1.is_contiguous()) throw std::runtime_error("mult1 must be contiguous");
+        mult1_ptr = reinterpret_cast<const cuFloatComplex*>(m1.const_data_ptr<c64>());
     }
     const cuFloatComplex* mult2_ptr = nullptr;
     if (mult2.has_value()) {
-        const hat::Tensor& m2 = (*mult2).get();
-        torch_check(m2.is_cuda(), "mult2 was not a CUDA tensor");
-        torch_check(m2.scalar_type() == hat::kComplexFloat, "mult2 dtype must be complex float");
-        torch_check(m2.sizes().equals({ NZ, NY, NX }), "mult2 must have shape (NZ, NY, NX)");
-        torch_check(m2.device() == device, "mult2 must be on the same device as input and output");
-        torch_check(m2.is_contiguous(), "mult2 must be contiguous");
-        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.data_ptr<hc10::complex<float>>());
+        const Tensor& m2 = (*mult2).get();
+        if (m2.device().type != eDeviceType::CUDA) throw std::runtime_error("mult2 was not a CUDA tensor");
+        if (m2.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("mult2 dtype must be complex float");
+        if (!m2.sizes().equals({ NZ, NY, NX })) throw std::runtime_error("mult2 must have shape (NZ, NY, NX)");
+        if (m2.device().type != device.type || m2.device().index != device.index) throw std::runtime_error("mult2 must be on the same device as input and output");
+        if (!m2.is_contiguous()) throw std::runtime_error("mult2 must be contiguous");
+        mult2_ptr = reinterpret_cast<const cuFloatComplex*>(m2.const_data_ptr<c64>());
     }
 
     launch_toeplitz_load_3D(
@@ -789,17 +788,17 @@ namespace fft {
 void transform_toeplitz_kernel_1D(Tensor& ker, bool clear_vkfft_plan)
 {
     int NX = ker.size(0);
-    torch_check(NX > 1, "kernel dimension must be positive");
+    if (NX <= 1) throw std::runtime_error("kernel dimension must be positive");
     auto device = ker.device();
 
-    VkFFT_Cache::VkFFT_Key key(device.index());
+    VkFFT_Cache::VkFFT_Key key(static_cast<int>(device.index));
     key.size[0]          = NX;
     key.FFTdim           = 1;
     key.kernelConvolution = 1;
 
     {
-        hat::cuda::CUDAGuard device_guard(ker.device());
-        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.data_ptr<hc10::complex<float>>());
+        cuda::CUDAGuard device_guard(device);
+        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.mutable_data_ptr<c64>());
 
         {
             cufftHandle plan;
@@ -809,10 +808,10 @@ void transform_toeplitz_kernel_1D(Tensor& ker, bool clear_vkfft_plan)
             CUFFT_CHECK(cufftDestroy(plan));
         }
 
-        hat::Tensor scratch = hat::empty_like(ker);
-        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.data_ptr<hc10::complex<float>>());
+        Tensor scratch = hasty::empty_like(ker);
+        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.mutable_data_ptr<c64>());
 
-        VkFFTApplication& app = global_vkfft_cache[device.index()].get_or_create(key);
+        VkFFTApplication& app = global_vkfft_cache[static_cast<int>(device.index)].get_or_create(key);
         VkFFTLaunchParams launchParams = {};
         static void* buffer_ptrs[1];
         buffer_ptrs[0] = scratch_ptr;
@@ -827,25 +826,25 @@ void transform_toeplitz_kernel_1D(Tensor& ker, bool clear_vkfft_plan)
     }
 
     if (clear_vkfft_plan)
-        global_vkfft_cache[device.index()].erase(key);
+        global_vkfft_cache[static_cast<int>(device.index)].erase(key);
 }
 
 void transform_toeplitz_kernel_2D(Tensor& ker, bool clear_vkfft_plan) 
 {   
     int NX = ker.size(1);
     int NY = ker.size(0);
-    torch_check(NY > 1 && NX > 1, "kernel dimensions must be positive");
+    if (NY <= 1 || NX <= 1) throw std::runtime_error("kernel dimensions must be positive");
     auto device = ker.device();
 
-    VkFFT_Cache::VkFFT_Key key(device.index());
+    VkFFT_Cache::VkFFT_Key key(static_cast<int>(device.index));
     key.size[0] = NX;
     key.size[1] = NY;
     key.FFTdim = 2;
     key.kernelConvolution = 1;
-    
+
     {
-        hat::cuda::CUDAGuard device_guard(ker.device());
-        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.data_ptr<hc10::complex<float>>());
+        cuda::CUDAGuard device_guard(device);
+        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.mutable_data_ptr<c64>());
         {
             cufftHandle plan;
             CUFFT_CHECK(cufftPlan2d(&plan, NY, NX, CUFFT_C2C));
@@ -854,10 +853,10 @@ void transform_toeplitz_kernel_2D(Tensor& ker, bool clear_vkfft_plan)
             CUFFT_CHECK(cufftDestroy(plan));
         }
 
-        hat::Tensor scratch = hat::empty_like(ker);
-        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.data_ptr<hc10::complex<float>>());
+        Tensor scratch = hasty::empty_like(ker);
+        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.mutable_data_ptr<c64>());
 
-        VkFFTApplication& app = global_vkfft_cache[device.index()].get_or_create(key);
+        VkFFTApplication& app = global_vkfft_cache[static_cast<int>(device.index)].get_or_create(key);
         VkFFTLaunchParams launchParams = {};
         static void* buffer_ptrs[1];
         buffer_ptrs[0] = scratch_ptr;
@@ -873,7 +872,7 @@ void transform_toeplitz_kernel_2D(Tensor& ker, bool clear_vkfft_plan)
     }
 
     if (clear_vkfft_plan) {
-        global_vkfft_cache[device.index()].erase(key);
+        global_vkfft_cache[static_cast<int>(device.index)].erase(key);
     }
 
 }
@@ -883,19 +882,19 @@ void transform_toeplitz_kernel_3D(Tensor& ker, bool clear_vkfft_plan)
     int NX = ker.size(2);
     int NY = ker.size(1);
     int NZ = ker.size(0);
-    torch_check(NZ > 1 && NY > 1 && NX > 1, "kernel dimensions must be positive");
+    if (NZ <= 1 || NY <= 1 || NX <= 1) throw std::runtime_error("kernel dimensions must be positive");
     auto device = ker.device();
 
-    VkFFT_Cache::VkFFT_Key key(device.index());
+    VkFFT_Cache::VkFFT_Key key(static_cast<int>(device.index));
     key.size[0] = NX;
     key.size[1] = NY;
     key.size[2] = NZ;
     key.FFTdim = 3;
     key.kernelConvolution = 1;
-    
+
     {
-        hat::cuda::CUDAGuard device_guard(ker.device());
-        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.data_ptr<hc10::complex<float>>());
+        cuda::CUDAGuard device_guard(device);
+        cuFloatComplex* ker_ptr = reinterpret_cast<cuFloatComplex*>(ker.mutable_data_ptr<c64>());
         {
             cufftHandle plan;
             CUFFT_CHECK(cufftPlan3d(&plan, NZ, NY, NX, CUFFT_C2C));
@@ -904,10 +903,10 @@ void transform_toeplitz_kernel_3D(Tensor& ker, bool clear_vkfft_plan)
             CUFFT_CHECK(cufftDestroy(plan));
         }
 
-        hat::Tensor scratch = hat::empty_like(ker);
-        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.data_ptr<hc10::complex<float>>());
+        Tensor scratch = hasty::empty_like(ker);
+        cuFloatComplex* scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratch.mutable_data_ptr<c64>());
 
-        VkFFTApplication& app = global_vkfft_cache[device.index()].get_or_create(key);
+        VkFFTApplication& app = global_vkfft_cache[static_cast<int>(device.index)].get_or_create(key);
         VkFFTLaunchParams launchParams = {};
         static void* buffer_ptrs[1];
         buffer_ptrs[0] = scratch_ptr;
@@ -923,7 +922,7 @@ void transform_toeplitz_kernel_3D(Tensor& ker, bool clear_vkfft_plan)
     }
 
     if (clear_vkfft_plan) {
-        global_vkfft_cache[device.index()].erase(key);
+        global_vkfft_cache[static_cast<int>(device.index)].erase(key);
     }
 }
 
@@ -950,16 +949,16 @@ void toeplitz_multiplication_1D(
     ToeplitzAccumulateType  accumulate_type
 )
 {
-    torch_check(inp.scalar_type() == hat::kComplexFloat, "input dtype must be complex float");
-    torch_check(out.scalar_type() == hat::kComplexFloat, "output dtype must be complex float");
-    torch_check(ker.scalar_type() == hat::kComplexFloat, "kernel dtype must be complex float");
+    if (inp.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("input dtype must be complex float");
+    if (out.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("output dtype must be complex float");
+    if (ker.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("kernel dtype must be complex float");
 
     int NX = inp.size(1);
     auto device = inp.device();
-    torch_check(inp.sizes().equals(out.sizes()),  "input and output must have the same size");
-    torch_check(device == out.device(),           "input and output must be on the same device");
-    torch_check(device == ker.device(),           "input and kernel must be on the same device");
-    torch_check(ker.sizes().equals({ 2 * NX }),   "kernel must have shape (2*NX)");
+    if (!inp.sizes().equals(out.sizes())) throw std::runtime_error("input and output must have the same size");
+    if (device.type != out.device().type || device.index != out.device().index) throw std::runtime_error("input and output must be on the same device");
+    if (device.type != ker.device().type || device.index != ker.device().index) throw std::runtime_error("input and kernel must be on the same device");
+    if (!ker.sizes().equals({ 2 * NX })) throw std::runtime_error("kernel must have shape (2*NX)");
 
     perform_toeplitz_multiplication_cuda_1D(
         inp, out, ker,
@@ -988,17 +987,17 @@ void toeplitz_multiplication_2D(
     ToeplitzAccumulateType              accumulate_type
 )
 {
-    torch_check(inp.scalar_type() == hat::kComplexFloat, "input dtype must be complex float");
-    torch_check(out.scalar_type() == hat::kComplexFloat, "output dtype must be complex float");
-    torch_check(ker.scalar_type() == hat::kComplexFloat, "kernel dtype must be complex float");
+    if (inp.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("input dtype must be complex float");
+    if (out.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("output dtype must be complex float");
+    if (ker.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("kernel dtype must be complex float");
 
     int NX = inp.size(2);
     int NY = inp.size(1);
     auto device = inp.device();
-    torch_check(inp.sizes().equals(out.sizes()), "input and output must have the same size");
-    torch_check(device == out.device(), "input and output must be on the same device");
-    torch_check(device == ker.device(), "input and kernel must be on the same device");
-    torch_check(ker.sizes().equals({ 2 * NY, 2 * NX }), "scratch must have shape (2*NY, 2*NX)");
+    if (!inp.sizes().equals(out.sizes())) throw std::runtime_error("input and output must have the same size");
+    if (device.type != out.device().type || device.index != out.device().index) throw std::runtime_error("input and output must be on the same device");
+    if (device.type != ker.device().type || device.index != ker.device().index) throw std::runtime_error("input and kernel must be on the same device");
+    if (!ker.sizes().equals({ 2 * NY, 2 * NX })) throw std::runtime_error("scratch must have shape (2*NY, 2*NX)");
 
     perform_toeplitz_multiplication_cuda_2D(
         inp,
@@ -1031,18 +1030,18 @@ void toeplitz_multiplication_3D(
     ToeplitzAccumulateType              accumulate_type
 ) 
 {
-    torch_check(inp.scalar_type() == hat::kComplexFloat, "input dtype must be complex float");
-    torch_check(out.scalar_type() == hat::kComplexFloat, "output dtype must be complex float");
-    torch_check(ker.scalar_type() == hat::kComplexFloat, "kernel dtype must be complex float");
+    if (inp.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("input dtype must be complex float");
+    if (out.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("output dtype must be complex float");
+    if (ker.scalar_type() != eScalarType::ComplexFloat) throw std::runtime_error("kernel dtype must be complex float");
 
     int NX = inp.size(3);
     int NY = inp.size(2);
     int NZ = inp.size(1);
     auto device = inp.device();
-    torch_check(inp.sizes().equals(out.sizes()), "input and output must have the same size");
-    torch_check(device == out.device(), "input and output must be on the same device");
-    torch_check(device == ker.device(), "input and kernel must be on the same device");
-    torch_check(ker.sizes().equals({ 2 * NZ, 2 * NY, 2 * NX }), "scratch must have shape (2*NZ, 2*NY, 2*NX)");
+    if (!inp.sizes().equals(out.sizes())) throw std::runtime_error("input and output must have the same size");
+    if (device.type != out.device().type || device.index != out.device().index) throw std::runtime_error("input and output must be on the same device");
+    if (device.type != ker.device().type || device.index != ker.device().index) throw std::runtime_error("input and kernel must be on the same device");
+    if (!ker.sizes().equals({ 2 * NZ, 2 * NY, 2 * NX })) throw std::runtime_error("scratch must have shape (2*NZ, 2*NY, 2*NX)");
 
     perform_toeplitz_multiplication_cuda_3D(
         inp,

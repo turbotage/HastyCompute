@@ -101,6 +101,9 @@ export namespace hat {
 
         using at::cuda::getDefaultCUDAStream;
         using at::cuda::device_count;
+
+        using at::cuda::CUDAStream;
+        using at::cuda::CUDAStreamGuard;
     }
 
 }

@@ -61,6 +61,7 @@ target_sources(HastyCompute
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
 			"src/tensor/tensor_concepts.cppm"
+			"src/tensor/tensor_external.cppm"
 			"src/tensor/tensor_mod.cppm"
 			"src/tensor/tensor_scalar.cppm"
             "src/tensor/tensor_tensor.cppm"

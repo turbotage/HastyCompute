@@ -1,5 +1,7 @@
 module;
 
+#include <cuda_runtime.h>
+
 export module tensor_mod:background;
 
 import std;
@@ -572,6 +574,75 @@ public:
 
 export using TensorIndexType = TensorIndex;
 
+
+// <================== CUDA GUARD ==================> //
+export namespace cuda {
+
+    struct CUDAGuard {
+        CUDAGuard(Device device)
+            : m_guard(device.torch_device()) {}
+
+        CUDAGuard(const CUDAGuard&)            = delete;
+        CUDAGuard& operator=(const CUDAGuard&) = delete;
+
+    private:
+        hat::cuda::CUDAGuard m_guard;
+    };
+
+    struct CUDAStream {
+        CUDAStream(Device device)
+            : m_stream(hat::cuda::getDefaultCUDAStream(device.torch_device_index())) {}
+
+        CUDAStream(const CUDAStream&)            = delete;
+        CUDAStream& operator=(const CUDAStream&) = delete;
+
+        inline hat::cuda::CUDAStream get_torch() const {
+            return m_stream;
+        }
+
+        cudaStream_t stream() const {
+            return m_stream.stream();
+        }
+    private:
+        hat::cuda::CUDAStream m_stream;
+    };
+
+    struct CUDAStreamGuard {
+        CUDAStreamGuard(const CUDAStream& stream)
+            : m_guard(stream.get_torch()) {}
+
+        CUDAStreamGuard(const CUDAStreamGuard&)            = delete;
+        CUDAStreamGuard& operator=(const CUDAStreamGuard&) = delete;
+
+    private:
+        hat::cuda::CUDAStreamGuard m_guard;
+    };
+
+}
+
+
+// <================== GRAD / INFERENCE GUARDS ==================> //
+
+export struct NoGradGuard {
+    NoGradGuard() = default;
+
+    NoGradGuard(const NoGradGuard&)            = delete;
+    NoGradGuard& operator=(const NoGradGuard&) = delete;
+
+private:
+    htorch::NoGradGuard m_guard;
+};
+
+export struct InferenceMode {
+    InferenceMode(bool enabled = true)
+        : m_guard(enabled) {}
+
+    InferenceMode(const InferenceMode&)            = delete;
+    InferenceMode& operator=(const InferenceMode&) = delete;
+
+private:
+    hat::InferenceMode m_guard;
+};
 
 
 
