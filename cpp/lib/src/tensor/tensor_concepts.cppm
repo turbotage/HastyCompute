@@ -1,6 +1,6 @@
 module;
 
-export module tensor_mod:concepts;
+export module hasty_tensor_mod:concepts;
 
 import std;
 

@@ -1,6 +1,6 @@
 module;
 
-export module util_mod;
+export module hasty_util_mod;
 
 export import :alias;
 export import :containers;

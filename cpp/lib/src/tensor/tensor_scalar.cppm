@@ -1,9 +1,9 @@
 module;
 
-export module tensor_mod:scalar;
+export module hasty_tensor_mod:scalar;
 
 import std;
-import util_mod;
+import hasty_util_mod;
 
 import :background;
 

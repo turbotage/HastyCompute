@@ -1,8 +1,8 @@
 module;
 
-#include "pch.hpp"
+#include <pch.hpp>
 
-module vkfft;
+module hasty_vkfft_mod;
 
 namespace hasty {
     namespace fft {

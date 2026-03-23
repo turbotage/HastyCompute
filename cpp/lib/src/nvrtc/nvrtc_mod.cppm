@@ -1,11 +1,10 @@
 module;
 
-#include "pch.hpp"
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvrtc.h>
 
-export module nvrtc;
+export module hasty_nvrtc_mod;
 
 import std;
 

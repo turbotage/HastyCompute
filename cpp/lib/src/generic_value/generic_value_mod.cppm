@@ -1,11 +1,11 @@
 module;
 
-export module generic_value;
+export module hasty_generic_value_mod;
 
 import std;
-import util_mod;
-import tensor_mod;
-import thread_stream;
+import hasty_util_mod;
+import hasty_tensor_mod;
+import hasty_threading_mod;
 
 namespace hasty {
 
@@ -88,7 +88,7 @@ public:
         return m_type == eType::DICT;
     }
 
-    const std::unordered_map<std::string, GenericValue>& as_dict() const {
+    inline const std::unordered_map<std::string, GenericValue>& as_dict() const {
         return std::get<std::unordered_map<std::string, GenericValue>>(m_data);
     }
 
@@ -109,6 +109,48 @@ public:
 
     const std::string& as_string() const {
         return std::get<std::string>(m_data);
+    }
+
+    const GenericValue& operator[](const std::string& key) const {
+        if (!is_dict()) {
+            throw std::runtime_error("Not a dict");
+        }
+        const auto& dict = as_dict();
+        auto it = dict.find(key);
+        if (it == dict.end()) {
+            throw std::runtime_error("Key not found: " + key);
+        }
+        return it->second;
+    }
+
+    GenericValue& operator[](const std::string& key) {
+        if (!is_dict()) {
+            throw std::runtime_error("Not a dict");
+        }
+        auto& dict = std::get<std::unordered_map<std::string, GenericValue>>(m_data);
+        return dict[key]; // Will default-construct if key doesn't exist
+    }
+    
+    const GenericValue& operator[](std::size_t index) const {
+        if (!is_vector() && !is_tuple()) {
+            throw std::runtime_error("Not a vector or tuple");
+        }
+        const auto& vector = as_vector();
+        if (index >= vector.size()) {
+            throw std::runtime_error("Index out of bounds");
+        }
+        return vector[index];
+    }
+
+    GenericValue& operator[](std::size_t index) {
+        if (!is_vector() && !is_tuple()) {
+            throw std::runtime_error("Not a vector or tuple");
+        }
+        auto& vector = std::get<std::vector<GenericValue>>(m_data);
+        if (index >= vector.size()) {
+            throw std::runtime_error("Index out of bounds");
+        }
+        return vector[index];
     }
 
     template<std::size_t N>

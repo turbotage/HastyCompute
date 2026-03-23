@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.2.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 4.3.0 FATAL_ERROR)
 
 #set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
 
@@ -21,6 +21,7 @@ set_target_properties(HastyServer PROPERTIES
     CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
     CXX_SCAN_FOR_MODULES ON
+    CXX_MODULE_STD ON
 )
 
 include(FetchContent)

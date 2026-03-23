@@ -1,6 +1,6 @@
 module;
 
-export module tensor_mod:background_impl;
+export module hasty_tensor_mod:background_impl;
 
 import :background;
 import :tensor;

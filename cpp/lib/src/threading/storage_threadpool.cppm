@@ -1,12 +1,12 @@
 module;
 
-#include "pch.hpp"
+#include <pch.hpp>
 
-export module threading;
+export module hasty_threading_mod:storage_threadpool;
 
 //import pch;
 import std;
-import util_mod;
+import hasty_util_mod;
 
 namespace hasty {
 

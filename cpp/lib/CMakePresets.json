@@ -27,6 +27,7 @@
                 "CMAKE_CUDA_FLAGS": "-allow-unsupported-compiler",
                 "CUDAToolkit_ROOT": "$env{CUDA_ROOT}/bin/",
                 "pybind11_DIR": "$env{CONDA_SITE_PKG_PATH}/pybind11/share/cmake/pybind11",
+                "Python3_ROOT_DIR": "$env{CONDA_ENV_PATH}",
                 "CMAKE_PREFIX_PATH": {
                     "type": "FILEPATH",
                     "value": "$env{LIBTORCH_PATH};$env{HIGHFIVE_PATH}"

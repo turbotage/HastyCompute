@@ -1,10 +1,10 @@
 module;
 
-export module tensor_mod:tensor;
+export module hasty_tensor_mod:tensor;
 
 import std;
-import util_mod;
-import torch_wrapper;
+import hasty_util_mod;
+import hasty_torch_wrapper;
 
 import :background;
 import :scalar;
@@ -69,6 +69,8 @@ public:
         return {device.type, device.has_index() ? device.index : -1};
     }
 
+    std::string toString() const { return _base.toString(); }
+
     std::string metadata_string() const {
         std::string device_str = device().str();
         std::string dtype_str = scalar_type_to_string(scalar_type());
@@ -79,6 +81,17 @@ public:
         }
         shape_str += ")";
         return "Tensor[dtype=" + dtype_str + ",device=" + device_str + "," + shape_str + "]";
+    }
+
+    std::string statistics_string() const {
+        std::string ret = metadata_string();
+        ret += "\n\t min=" + std::to_string(_base.min().item<double>());
+        ret += "\n\t max=" + std::to_string(_base.max().item<double>());
+        ret += "\n\t mean=" + std::to_string(_base.mean().item<double>());
+        ret += "\n\t std=" + std::to_string(_base.std().item<double>());
+        ret += "\n\t median=" + std::to_string(_base.median().item<double>());
+        ret += "\n\t";
+        return ret;
     }
 
     // LibTorch wrappers

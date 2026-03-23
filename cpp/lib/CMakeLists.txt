@@ -54,10 +54,11 @@ target_sources(HastyCompute
 target_sources(HastyCompute
     PUBLIC
         FILE_SET cxx_modules_public TYPE CXX_MODULES FILES
+			"src/fft/fft_mod.cppm"
 			"src/fft/nufft.cppm"
 			"src/fft/toeplitz.cppm"
-			"src/generic_value/generic_value.cppm"
-			"src/nvrtc/nvrtc.cppm"
+			"src/generic_value/generic_value_mod.cppm"
+			"src/nvrtc/nvrtc_mod.cppm"
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
 			"src/tensor/tensor_concepts.cppm"
@@ -66,7 +67,8 @@ target_sources(HastyCompute
 			"src/tensor/tensor_scalar.cppm"
             "src/tensor/tensor_tensor.cppm"
 			"src/threading/thread_stream.cppm"
-			"src/threading/threading.cppm"
+			"src/threading/storage_threadpool.cppm"
+			"src/threading/threading_mod.cppm"
 			"src/util/util_alias.cppm"
 			"src/util/util_containers.cppm"
             "src/util/util_meta.cppm"
@@ -74,11 +76,9 @@ target_sources(HastyCompute
             "src/util/util_span.cppm"
 			"src/util/util_str.cppm"
             "src/util/util_typing.cppm"
-            "src/wrapper/torch_wrapper.cppm"
-			"src/wrapper/vkfft.cppm"
-			"src/viz/viz.cppm"
-			"src/wrapper/torch_wrapper.cppm"
-			"src/wrapper/vkfft.cppm"
+			"src/viz/viz_mod.cppm"
+			"src/wrapper/torch_wrapper_mod.cppm"
+			"src/wrapper/vkfft_mod.cppm"
 )
 
 # LIB INTERFACE CPP SOURCES
@@ -120,6 +120,7 @@ find_package(CUDAToolkit REQUIRED)
 target_include_directories(HastyCompute
 	PRIVATE
 		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/external/vkFFT>
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
 target_compile_definitions(HastyCompute PRIVATE VKFFT_BACKEND=1)
@@ -152,7 +153,7 @@ set(FINUFFT_USE_DUCC0 ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
   finufft
   GIT_REPOSITORY https://github.com/flatironinstitute/finufft.git
-  GIT_TAG        v2.5.0 #master #v2.4.1
+  GIT_TAG        v2.5.0 #master #v2.5.0
 )
 
 FetchContent_MakeAvailable(finufft)
@@ -218,6 +219,7 @@ set(HastyCompute_INCLUDE_DIRS
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/interface/include>
     $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/HastyCompute>
 )
 
 # Don't add external dependencies to PUBLIC includes - keep them PRIVATE
@@ -229,7 +231,7 @@ target_include_directories(HastyCompute
         ${pybind11_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
         ${CUDA_INCLUDE_DIRS}
-        ${Python_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
 )
 
 set(MODULE_CACHE_RELATIVE_PATH "module_cache")
@@ -299,6 +301,13 @@ install(DIRECTORY ${HASTY_DATA_FOLDER}/models
 # Install the include files
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 	DESTINATION include/HastyCompute
+)
+
+# Install dependency headers needed by installed module files
+install(DIRECTORY ${finufft_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/vkFFT/
+	DESTINATION include/HastyCompute
+	FILES_MATCHING PATTERN "*.h"
 )
 
 # Install the CMake package configuration file

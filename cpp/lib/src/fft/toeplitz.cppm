@@ -1,7 +1,5 @@
 module;
 
-#include <pch.hpp>
-
 #include <battery/embed.hpp>
 #include <cuda_runtime.h>
 #include <cufft.h>
@@ -9,15 +7,15 @@ module;
 #include <nvrtc.h>
 #include <cuda.h>
 #define VKFFT_BACKEND 1
-#include "vkFFT.h"
+#include <vkFFT.h>
 
-export module fft:toeplitz;
+export module hasty_fft_mod:toeplitz;
 
 import std;
-import util_mod;
-import tensor_mod;
-import nvrtc;
-import vkfft;
+import hasty_util_mod;
+import hasty_tensor_mod;
+import hasty_nvrtc_mod;
+import hasty_vkfft_mod;
 
 inline void CUDA_CHECK(cudaError_t err) {
 	if (err != cudaSuccess) {
@@ -443,7 +441,7 @@ void perform_toeplitz_multiplication_cuda_1D(
         if (scr.ndimension() != 1 || scr.size(0) != 2 * NX) throw std::runtime_error("scratch must have shape (2*NX)");
         if (scr.device().type != device.type || scr.device().index != device.index) throw std::runtime_error("scratch must be on the same device");
         if (!scr.is_contiguous()) throw std::runtime_error("scratch must be contiguous");
-        scratch_ptr = scr.mutable_data_ptr<cuFloatComplex>();
+        scratch_ptr = reinterpret_cast<cuFloatComplex*>(scr.mutable_data_ptr<c64>());
     } else {
         scratchmem  = hasty::empty({ 2 * NX }, TensorOptions(input.device()).dtype(input.scalar_type()));
         scratch_ptr = reinterpret_cast<cuFloatComplex*>(scratchmem->mutable_data_ptr<c64>());

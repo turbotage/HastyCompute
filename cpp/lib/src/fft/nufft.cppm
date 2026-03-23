@@ -5,11 +5,11 @@ module;
 #include <cuda_runtime.h>
 
 
-export module fft_mod:nufft;
+export module hasty_fft_mod:nufft;
 
 import std;
-import util_mod;
-import tensor_mod;
+import hasty_util_mod;
+import hasty_tensor_mod;
 
 namespace hasty {
 namespace fft {
@@ -161,7 +161,7 @@ struct NufftOptions<cuda_t, T, NT> {
     eNufftMethod method = eNufftMethod::DEFAULT;
     eKernelEvalMethod kernel_eval_method = eKernelEvalMethod::DEFAULT;
     std::variant<eUppsamplingFactor, double> upsampling_factor = eUppsamplingFactor::DEFAULT;
-    cudaStream_t stream = cudaDefaultStream;
+    cudaStream_t stream = nullptr;
 
 };
 
@@ -389,42 +389,42 @@ struct NufftPlan<cuda_t, T, N, NT> {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>())
+                    (cuFloatComplex*)input.const_data_ptr<c64>(), 
+                    (cuFloatComplex*)output.const_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>())
+                    (cuDoubleComplex*)input.const_data_ptr<c64>(), 
+                    (cuDoubleComplex*)output.const_data_ptr<c64>()
                 );
             }
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>())
+                    (cuFloatComplex*)output.const_data_ptr<c64>(), 
+                    (cuFloatComplex*)input.const_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>())
+                    (cuDoubleComplex*)output.const_data_ptr<c64>(), 
+                    (cuDoubleComplex*)input.const_data_ptr<c64>()
                 );
             }
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuFloatComplex*>(input.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuFloatComplex*>(output.mutable_data_ptr<c64>())
+                    (cuFloatComplex*)input.const_data_ptr<c64>(), 
+                    (cuFloatComplex*)output.const_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
-                    reinterpret_cast<cuDoubleComplex*>(input.mutable_data_ptr<c64>()), 
-                    reinterpret_cast<cuDoubleComplex*>(output.mutable_data_ptr<c64>())
+                    (cuDoubleComplex*)input.const_data_ptr<c64>(), 
+                    (cuDoubleComplex*)output.const_data_ptr<c64>()
                 );
             }
         }

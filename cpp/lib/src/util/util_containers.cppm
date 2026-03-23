@@ -2,7 +2,7 @@ module;
 
 #include "pch.hpp"
 
-export module util_mod:containers;
+export module hasty_util_mod:containers;
 
 import std;
 

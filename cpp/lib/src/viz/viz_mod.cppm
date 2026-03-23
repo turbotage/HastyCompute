@@ -1,7 +1,7 @@
 export module viz;
 
 import std;
-import thread_stream;
+import hasty_threading_mod;
 
 
 namespace hasty::viz {
@@ -16,7 +16,7 @@ namespace hasty::viz {
 export struct PlotRequest {
     std::string command;    // "line" | "scatter" | "heatmap"
     std::string title;
-    threadsafe_stream data; // Pre-serialised JSON string containing the plot data
+    hasty::threadsafe_stream data; // Pre-serialised JSON string containing the plot data
 };
 
 // ---------------------------------------------------------------------------

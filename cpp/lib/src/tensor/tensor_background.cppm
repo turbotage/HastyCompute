@@ -2,11 +2,11 @@ module;
 
 #include <cuda_runtime.h>
 
-export module tensor_mod:background;
+export module hasty_tensor_mod:background;
 
 import std;
-import util_mod;
-import torch_wrapper;
+import hasty_util_mod;
+import hasty_torch_wrapper;
 
 namespace hasty {
 

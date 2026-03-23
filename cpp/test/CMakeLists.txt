@@ -26,3 +26,5 @@ find_package(HastyCompute REQUIRED)
 target_link_libraries(HastyTest PRIVATE
 	HastyCompute::HastyCompute
 )
+
+install(TARGETS HastyTest RUNTIME DESTINATION bin)

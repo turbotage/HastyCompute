@@ -1,13 +1,13 @@
 module;
 
-#include "pch.hpp"
-#include "vkFFT.h"
+#include <pch.hpp>
+#include <vkFFT.h>
 
-export module vkfft;
+export module hasty_vkfft_mod;
 
 import std;
-import util_mod;
-import tensor_mod;
+import hasty_util_mod;
+import hasty_tensor_mod;
 
 namespace hasty {
 	namespace fft {

@@ -1,8 +1,8 @@
 module;
 
-#include "pch.hpp"
+#include <pch.hpp>
 
-export module util_mod:typing;
+export module hasty_util_mod:typing;
 
 import std;
 import :meta;

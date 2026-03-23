@@ -2,12 +2,12 @@ module;
 
 //#include "pch.hpp"
 
-export module util_mod:span;
+export module hasty_util_mod:span;
 
 import std;
 import :meta;
 import :typing;
-import torch_wrapper;
+import hasty_torch_wrapper;
 
 
 namespace hasty {
@@ -43,6 +43,9 @@ public:
 
 	constexpr ArrayRef(const hat::ArrayRef<T>& other) noexcept
 		: m_data(other.data()), m_size(other.size()) {}
+
+	constexpr ArrayRef(std::initializer_list<T> il) noexcept
+    : m_data(il.begin()), m_size(il.size()) {}
 
 	constexpr inline const T* data() const noexcept { return m_data; }
 	constexpr inline std::size_t size() const noexcept { return m_size; }

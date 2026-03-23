@@ -31,7 +31,7 @@ namespace c10 {
     }
 }
 
-export module torch_wrapper;
+export module hasty_torch_wrapper;
 
 
 //export using at::Tensor;
