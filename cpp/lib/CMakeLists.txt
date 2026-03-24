@@ -178,6 +178,19 @@ set_target_properties(fmt PROPERTIES EXPORT_EXCLUDE TRUE)
 
 
 
+FetchContent_Declare(
+	plotlypp
+	GIT_REPOSITORY https://github.com/jimmyorourke/plotlypp.git
+	GIT_TAG main
+)
+FetchContent_MakeAvailable(plotlypp)
+
+target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:plotlypp::plotlypp>)
+
+
+
+
+
 find_package(Torch REQUIRED)
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:${TORCH_LIBRARIES}>)
 
@@ -202,8 +215,6 @@ target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:pybind11::module>)
 
 set_target_properties(HastyCompute PROPERTIES
 		 INTERPROCEDURAL_OPTIMIZATION ON
-		 CXX_VISIBILITY_PRESET "hidden"
-		 VISIBILITY_INLINES_HIDDEN ON
 	 )
 
 target_compile_definitions(HastyCompute PUBLIC _GLIBCXX_USE_CXX11_ABI=1)
@@ -213,7 +224,7 @@ target_compile_definitions(HastyCompute PUBLIC _GLIBCXX_USE_CXX11_ABI=1)
 set_target_properties(HastyCompute PROPERTIES INSTALL_RPATH "$ORIGIN")
 
 
-#install(FILES cpp/corelib/interface/include/interface.hpp DESTINATION include/HastyCompute)
+#install(FILES cpp/corelib/interface/include/interface.hpp DESTINATION include/HastyComputes)
 
 set(HastyCompute_INCLUDE_DIRS
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -272,8 +283,8 @@ add_custom_command(TARGET HastyCompute POST_BUILD
 
 install(TARGETS HastyCompute EXPORT HastyComputeTargets
     RUNTIME_DEPENDENCIES
-        #PRE_EXCLUDE_REGEXES ".*libstdc\+\+.*" ".*libgcc.*" ".*libc.so.*" ".*libc\+\+.*"
-        #POST_EXCLUDE_REGEXES ".*libstdc\+\+.*" ".*libgcc.*" ".*libc.so.*" ".*libc\+\+.*"
+        PRE_EXCLUDE_REGEXES  ".*libstdc\\+\\+.*" ".*libgcc.*" ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
+        POST_EXCLUDE_REGEXES ".*libstdc\\+\\+.*" ".*libgcc.*" ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin

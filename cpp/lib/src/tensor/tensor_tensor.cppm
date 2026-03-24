@@ -1,5 +1,7 @@
 module;
 
+#include <cuComplex.h>
+
 export module hasty_tensor_mod:tensor;
 
 import std;
@@ -103,11 +105,11 @@ public:
     template<typename T>
     inline T item() const { return _base.item<T>(); }
 
-    inline void* mutable_data_ptr() { return _base.mutable_data_ptr(); }
+    inline void* mutable_data_ptr() const { return _base.mutable_data_ptr(); }
 
     template<is_pure_type T>
     requires (is_tensor_type<T>)
-    inline T* mutable_data_ptr() {
+    inline T* mutable_data_ptr() const {
         return _base.mutable_data_ptr<T>();
     }
 
@@ -118,6 +120,50 @@ public:
     }
 
     inline const void* const_data_ptr() const { return _base.const_data_ptr(); }
+
+    template<is_pure_type T>
+    const T* cast_const_data_ptr() const {
+        if constexpr(is_tensor_type<T>) {
+            return reinterpret_cast<const T*>(_base.const_data_ptr());
+        }
+        else if constexpr(std::is_same_v<T, cuFloatComplex>) {
+            if (scalar_type() != eScalarType::ComplexFloat) {
+                throw std::runtime_error("Tensor scalar type is not ComplexFloat");
+            }
+            return reinterpret_cast<const T*>(_base.const_data_ptr());
+        }
+        else if constexpr(std::is_same_v<T, cuDoubleComplex>) {
+            if (scalar_type() != eScalarType::ComplexDouble) {
+                throw std::runtime_error("Tensor scalar type is not ComplexDouble");
+            }
+            return reinterpret_cast<const T*>(_base.const_data_ptr());
+        }
+        else {
+            static_assert(always_false<T>, "Unsupported type for cast_const_data_ptr");
+        }
+    }
+
+    template<is_pure_type T>
+    T* cast_data_ptr() const {
+        if constexpr(is_tensor_type<T>) {
+            return reinterpret_cast<T*>(_base.mutable_data_ptr());
+        }
+        else if constexpr(std::is_same_v<T, cuFloatComplex>) {
+            if (scalar_type() != eScalarType::ComplexFloat) {
+                throw std::runtime_error("Tensor scalar type is not ComplexFloat");
+            }
+            return reinterpret_cast<T*>(_base.mutable_data_ptr());
+        }
+        else if constexpr(std::is_same_v<T, cuDoubleComplex>) {
+            if (scalar_type() != eScalarType::ComplexDouble) {
+                throw std::runtime_error("Tensor scalar type is not ComplexDouble");
+            }
+            return reinterpret_cast<T*>(_base.mutable_data_ptr());
+        }
+        else {
+            static_assert(always_false<T>, "Unsupported type for cast_const_data_ptr");
+        }
+    }
 
     inline Device device() const { return Device(_base.device()); }
 

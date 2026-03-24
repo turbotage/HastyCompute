@@ -7,6 +7,9 @@ import hasty_util_mod;
 import hasty_tensor_mod;
 import hasty_threading_mod;
 
+constexpr hasty::i64 SERIALIZE_CHUNK_SIZE = 2 * 1024 * 1024;
+constexpr hasty::i64 DESERIALIZE_CHUNK_SIZE = 32 * 1024 * 1024;
+
 namespace hasty {
 
 export class GenericValue {
@@ -358,18 +361,22 @@ private:
         }
 
         // Then write the raw tensor data
-        const u8* data_ptr = tensor.template const_data_ptr<u8>();
+        const u8* data_ptr = tensor.cast_const_data_ptr<u8>();
         i64 bytes_per_element = scalar_type_size(tensor.scalar_type());
         i64 total_bytes = header.total_elements * bytes_per_element;
 
-        // We will write the data in chunks of at most 4MB
-        const i64 chunk_size = 4 * 1024 * 1024;
         i64 bytes_written = 0;
         while (bytes_written < total_bytes) {
-            i64 bytes_to_write = std::min(chunk_size, total_bytes - bytes_written);
+            i64 bytes_to_write = std::min(SERIALIZE_CHUNK_SIZE, total_bytes - bytes_written);
             std::vector<u8> chunk(data_ptr + bytes_written, data_ptr + bytes_written + bytes_to_write);
             stream.write(std::move(chunk));
             bytes_written += bytes_to_write;
+
+            while(stream.pending_chunks() > 20) {
+                // If the stream has more than 10 pending chunks, 
+                // wait a bit before writing more to avoid excessive memory usage
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
         }
     }
 
@@ -511,7 +518,7 @@ private:
         data_bytes.reserve(total_bytes);
         i64 bytes_read = 0;
         while (bytes_read < total_bytes) {
-            std::vector<u8> chunk = stream.read_max_nbytes(std::min(static_cast<i64>(4 * 1024 * 1024), total_bytes - bytes_read)).first;
+            std::vector<u8> chunk = stream.read_max_nbytes_blocking(std::min(static_cast<i64>(DESERIALIZE_CHUNK_SIZE), total_bytes - bytes_read)).first;
             if (chunk.empty()) {
                 throw std::runtime_error("Failed to read tensor data");
             }

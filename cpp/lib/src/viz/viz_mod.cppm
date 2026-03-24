@@ -1,72 +1,56 @@
-export module viz;
+module;
+
+#include <plotlypp/figure.hpp>
+#include <plotlypp/trace.hpp>
+#include <plotlypp/traces/bar.hpp>
+#include <plotlypp/traces/pie.hpp>
+#include <plotlypp/traces/scatter.hpp>
+
+export module hasty_viz_mod;
 
 import std;
 import hasty_threading_mod;
 
 
-namespace hasty::viz {
+namespace hasty {
+namespace viz {
 
-// ---------------------------------------------------------------------------
-// PlotRequest
-// Holds a single plot command and its data as a pre-serialised JSON string.
-// Using std-only types keeps this module dependency-free so that consumers
-// (e.g. HastyServer) do not need to pull in tensor / LibTorch headers.
-// ---------------------------------------------------------------------------
+export plotlypp::Figure example_plot() 
+{
+    std::array<float, 4> x_data = {1.0f, 2.0f, 3.0f, 4.0f};
+    std::span x(x_data);
 
-export struct PlotRequest {
-    std::string command;    // "line" | "scatter" | "heatmap"
-    std::string title;
-    hasty::threadsafe_stream data; // Pre-serialised JSON string containing the plot data
-};
+    auto scatter = plotlypp::Scatter()
+                        .x(x)
+                        .y(std::vector{10,15,13,17})
+                        .mode({plotlypp::Scatter::Mode::Markers})
+                        .marker(
+                            plotlypp::Scatter::Marker()
+                                .color("rgb(82,64,219)")
+                                .size(12)
+                        )
+                        .name("Markers");
 
-// ---------------------------------------------------------------------------
-// PlotQueue  -  process-global singleton, thread-safe
-// ---------------------------------------------------------------------------
+    auto lines = plotlypp::Scatter()
+                        .x(std::vector{2, 3, 4, 5})
+                        .y(std::vector{16, 5, 11, 9})
+                        .mode({plotlypp::Scatter::Mode::Lines})
+                        .name("Lines");
 
-export class PlotQueue {
-public:
-    static PlotQueue& instance() {
-        static PlotQueue inst;
-        return inst;
-    }
+    auto scatter_and_lines = plotlypp::Scatter()
+                                 .x(std::vector{1, 2, 3, 4})
+                                 .y(std::vector{12, 9, 15, 12})
+                                 .mode({plotlypp::Scatter::Mode::Lines, plotlypp::Scatter::Mode::Markers})
+                                 .name("Lines & Markers");
 
-    PlotQueue(const PlotQueue&) = delete;
-    PlotQueue& operator=(const PlotQueue&) = delete;
+    auto layout = plotlypp::Layout()
+                      .title([](auto& t) { t.text("This Graph's Title"); })
+                      .xaxis(plotlypp::Layout::Xaxis().title([](auto& t) { t.text("x-axis title"); }))
+                      .yaxis(plotlypp::Layout::Yaxis().title(plotlypp::Layout::Yaxis::Title().text("y-axis title")));
+    return plotlypp::Figure()
+        .addTraces(std::vector<plotlypp::Trace>{std::move(scatter), std::move(lines), std::move(scatter_and_lines)})
+        .setLayout(std::move(layout));
+}
 
-    void push(PlotRequest req) {
-        {
-            std::unique_lock lock(m_mutex);
-            m_queue.push(std::move(req));
-        }
-        m_cv.notify_one();
-    }
-
-    // Non-blocking pop -- returns nullopt if the queue is empty.
-    std::optional<PlotRequest> try_pop() {
-        std::unique_lock lock(m_mutex);
-        if (m_queue.empty()) return std::nullopt;
-        auto req = std::move(m_queue.front());
-        m_queue.pop();
-        return req;
-    }
-
-    // Blocking pop with timeout.
-    std::optional<PlotRequest> pop_wait_for(std::chrono::milliseconds timeout) {
-        std::unique_lock lock(m_mutex);
-        if (m_cv.wait_for(lock, timeout, [this] { return !m_queue.empty(); })) {
-            auto req = std::move(m_queue.front());
-            m_queue.pop();
-            return req;
-        }
-        return std::nullopt;
-    }
-
-private:
-    PlotQueue() = default;
-
-    std::mutex              m_mutex;
-    std::condition_variable m_cv;
-    std::queue<PlotRequest> m_queue;
-};
-
+}
 }

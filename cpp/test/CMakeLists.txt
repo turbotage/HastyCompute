@@ -23,8 +23,19 @@ set_target_properties(HastyTest PROPERTIES
 )
 
 find_package(HastyCompute REQUIRED)
+find_package(HastyServer REQUIRED)
 target_link_libraries(HastyTest PRIVATE
 	HastyCompute::HastyCompute
+	HastyServer::HastyServer
 )
+# lld doesn't resolve transitive shared-lib deps; link directly against the
+# LibTorch libs that HastyCompute installed alongside itself.
+foreach(_lib c10 torch torch_cpu c10_cuda torch_cuda)
+    find_library(_found_lib ${_lib})
+    if(_found_lib)
+        target_link_libraries(HastyTest PRIVATE ${_found_lib})
+    endif()
+    unset(_found_lib CACHE)
+endforeach()
 
 install(TARGETS HastyTest RUNTIME DESTINATION bin)

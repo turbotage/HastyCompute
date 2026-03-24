@@ -352,7 +352,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
         }
     }
 
-    void execute(const Tensor& input, const Tensor& output) const
+    void execute(const Tensor& input, Tensor& output) const
     {
         // Both input and output must be contiguous
         if (!input.is_contiguous())
@@ -390,26 +390,26 @@ struct NufftPlan<cuda_t, T, N, NT> {
                 cufinufftf_execute(
                     m_plan.plan, 
                     (cuFloatComplex*)input.const_data_ptr<c64>(), 
-                    (cuFloatComplex*)output.const_data_ptr<c64>()
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
                     (cuDoubleComplex*)input.const_data_ptr<c64>(), 
-                    (cuDoubleComplex*)output.const_data_ptr<c64>()
+                    (cuDoubleComplex*)output.mutable_data_ptr<c64>()
                 );
             }
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 cufinufftf_execute(
                     m_plan.plan, 
-                    (cuFloatComplex*)output.const_data_ptr<c64>(), 
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>(), 
                     (cuFloatComplex*)input.const_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
-                    (cuDoubleComplex*)output.const_data_ptr<c64>(), 
+                    (cuDoubleComplex*)output.mutable_data_ptr<c64>(), 
                     (cuDoubleComplex*)input.const_data_ptr<c64>()
                 );
             }
@@ -418,13 +418,91 @@ struct NufftPlan<cuda_t, T, N, NT> {
                 cufinufftf_execute(
                     m_plan.plan, 
                     (cuFloatComplex*)input.const_data_ptr<c64>(), 
-                    (cuFloatComplex*)output.const_data_ptr<c64>()
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 cufinufft_execute(
                     m_plan.plan, 
                     (cuDoubleComplex*)input.const_data_ptr<c64>(), 
-                    (cuDoubleComplex*)output.const_data_ptr<c64>()
+                    (cuDoubleComplex*)output.mutable_data_ptr<c64>()
+                );
+            }
+        }
+    }
+
+    void execute_adjoint(const Tensor& input, Tensor& output) const
+    {
+        // Both input and output must be contiguous
+        if (!input.is_contiguous())
+            throw std::runtime_error("Input tensor must be contiguous");
+        if (!output.is_contiguous())
+            throw std::runtime_error("Output tensor must be contiguous");
+
+        // Number of elements must match specification in plan stage
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
+            }
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
+            }
+            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if (output.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
+            }
+            if (input.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
+            }
+        }
+
+        // Execute the plan
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>(), 
+                    (cuFloatComplex*)input.const_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (cuDoubleComplex*)output.mutable_data_ptr<c128>(), 
+                    (cuDoubleComplex*)input.const_data_ptr<c128>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (cuFloatComplex*)input.const_data_ptr<c64>(), 
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (cuDoubleComplex*)input.const_data_ptr<c128>(), 
+                    (cuDoubleComplex*)output.mutable_data_ptr<c128>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (cuFloatComplex*)output.mutable_data_ptr<c64>(), 
+                    (cuFloatComplex*)input.const_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (cuDoubleComplex*)output.mutable_data_ptr<c128>(), 
+                    (cuDoubleComplex*)input.const_data_ptr<c128>()
                 );
             }
         }
@@ -553,6 +631,238 @@ struct NufftPlan<cpu_t, T, N, NT> {
             );
         }
 
+    }
+
+    ~NufftPlan()
+    {
+        if constexpr(std::is_same_v<T, f32>) {
+            finufftf_destroy(m_plan.plan);
+        } else if constexpr(std::is_same_v<T, f64>) {
+            finufft_destroy(m_plan.plan);
+        }
+    }
+
+    void setpts(const Tensor& coords)
+    requires(!std::is_same_v<NT, fft::NTN>)
+    {
+        verify_coords<cpu_t, T, N>(coords);
+        m_coords = coords;
+
+        if constexpr(std::is_same_v<T, f32>) {
+            finufftf_setpts(
+                m_plan.plan,
+                coords.sizes()[1],
+                coords.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords.select(0, 2).template mutable_data_ptr<T>() : nullptr,
+                0,
+                nullptr,
+                nullptr,
+                nullptr
+            );
+        } else if constexpr(std::is_same_v<T, f64>) {
+            finufft_setpts(
+                m_plan.plan,
+                coords.sizes()[1],
+                coords.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords.select(0, 2).template mutable_data_ptr<T>() : nullptr,
+                0,
+                nullptr,
+                nullptr,
+                nullptr
+            );
+        }
+    }
+
+    void setpts(const Tensor& coords_in, const Tensor& coords_out)
+    requires(std::is_same_v<NT, fft::NTN>)
+    {
+        verify_coords<cpu_t, T, N>(coords_in);
+        verify_coords<cpu_t, T, N>(coords_out);
+        m_coords = std::make_pair(coords_in, coords_out);
+
+        if constexpr(std::is_same_v<T, f32>) {
+            finufftf_setpts(
+                m_plan.plan,
+                coords_in.sizes()[1],
+                coords_in.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords_in.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords_in.select(0, 2).template mutable_data_ptr<T>() : nullptr,
+                coords_out.sizes()[1],
+                coords_out.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords_out.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords_out.select(0, 2).template mutable_data_ptr<T>() : nullptr
+            );
+        } else if constexpr(std::is_same_v<T, f64>) {
+            finufft_setpts(
+                m_plan.plan,
+                coords_in.sizes()[1],
+                coords_in.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords_in.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords_in.select(0, 2).template mutable_data_ptr<T>() : nullptr,
+                coords_out.sizes()[1],
+                coords_out.select(0, 0).template mutable_data_ptr<T>(),
+                (N > 1) ? coords_out.select(0, 1).template mutable_data_ptr<T>() : nullptr,
+                (N > 2) ? coords_out.select(0, 2).template mutable_data_ptr<T>() : nullptr
+            );
+        }
+    }
+
+    void execute(const Tensor& input, const Tensor& output) const
+    {
+        // Both input and output must be contiguous
+        if (!input.is_contiguous())
+            throw std::runtime_error("Input tensor must be contiguous");
+        if (!output.is_contiguous())
+            throw std::runtime_error("Output tensor must be contiguous");
+
+        // Number of elements must match specification in plan stage
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if (input.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
+            }
+            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
+            }
+            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if (input.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
+            }
+            if (output.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
+            }
+        }
+
+        // Execute the plan
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                finufftf_execute(
+                    m_plan.plan, 
+                    (c64*)input.const_data_ptr<T>(), 
+                    (c64*)output.const_data_ptr<T>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                finufft_execute(
+                    m_plan.plan, 
+                    (c128*)input.const_data_ptr<T>(), 
+                    (c128*)output.const_data_ptr<T>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                finufftf_execute(
+                    m_plan.plan, 
+                    (c64*)output.const_data_ptr<T>(), 
+                    (c64*)input.const_data_ptr<T>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                finufft_execute(
+                    m_plan.plan, 
+                    (c128*)output.const_data_ptr<T>(), 
+                    (c128*)input.const_data_ptr<T>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                finufftf_execute(
+                    m_plan.plan,
+                    (c64*)input.const_data_ptr<T>(),
+                    (c64*)output.const_data_ptr<T>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                finufft_execute(
+                    m_plan.plan,
+                    (c128*)input.const_data_ptr<T>(),
+                    (c128*)output.const_data_ptr<T>()
+                );
+            }
+        }
+    }
+
+    void execute_adjoint(const Tensor& input, Tensor& output) const
+    {
+        // Both input and output must be contiguous
+        if (!input.is_contiguous())
+            throw std::runtime_error("Input tensor must be contiguous");
+        if (!output.is_contiguous())
+            throw std::runtime_error("Output tensor must be contiguous");
+
+        // Number of elements must match specification in plan stage
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
+            }
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
+            }
+            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if (output.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
+                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
+            }
+            if (input.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
+                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
+            }
+        }
+
+        // Execute the plan
+        if constexpr(std::is_same_v<NT, fft::NTU>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (c64*)output.mutable_data_ptr<c64>(), 
+                    (c64*)input.const_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (c128*)output.mutable_data_ptr<c128>(), 
+                    (c128*)input.const_data_ptr<c128>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::UTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (c64*)input.const_data_ptr<c64>(), 
+                    (c64*)output.mutable_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (c128*)input.const_data_ptr<c128>(), 
+                    (c128*)output.mutable_data_ptr<c128>()
+                );
+            }
+        } else if constexpr(std::is_same_v<NT, fft::NTN>) {
+            if constexpr(std::is_same_v<T, f32>) {
+                cufinufftf_execute_adjoint(
+                    m_plan.plan, 
+                    (c64*)output.mutable_data_ptr<c64>(), 
+                    (c64*)input.const_data_ptr<c64>()
+                );
+            } else if constexpr(std::is_same_v<T, f64>) {
+                cufinufft_execute_adjoint(
+                    m_plan.plan, 
+                    (c128*)output.mutable_data_ptr<c128>(), 
+                    (c128*)input.const_data_ptr<c128>()
+                );
+            }
+        }
     }
 
 private:

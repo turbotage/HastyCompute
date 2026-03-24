@@ -50,19 +50,6 @@ if (HASTY_BUILD_LIB)
 	)
 endif()
 
-if (HASTY_BUILD_TEST)
-	ExternalProject_Add(
-		HastyTest
-		SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpp/test
-		BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/test-build
-		CONFIGURE_COMMAND ${CMAKE_COMMAND} --preset ${TEST_PRESET} -DCMAKE_PREFIX_PATH=${CMAKE_CURRENT_BINARY_DIR}/install -S ${CMAKE_CURRENT_SOURCE_DIR}/cpp/test -B ${CMAKE_CURRENT_BINARY_DIR}/test-build
-		BUILD_COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/test-build
-		BUILD_ALWAYS 1
-		INSTALL_COMMAND ""
-		DEPENDS HastyCompute
-	)
-endif()
-
 if (HASTY_BUILD_SERVER)
 	ExternalProject_Add(
 		HastyServer
@@ -71,8 +58,25 @@ if (HASTY_BUILD_SERVER)
 		CONFIGURE_COMMAND ${CMAKE_COMMAND} --preset ${SERVER_PRESET} -DCMAKE_PREFIX_PATH=${CMAKE_CURRENT_BINARY_DIR}/install -S ${CMAKE_CURRENT_SOURCE_DIR}/cpp/server -B ${CMAKE_CURRENT_BINARY_DIR}/server-build
 		BUILD_COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/server-build
 		BUILD_ALWAYS 1
-		INSTALL_COMMAND ""
+		INSTALL_COMMAND ${CMAKE_COMMAND} --install ${CMAKE_CURRENT_BINARY_DIR}/server-build --prefix ${CMAKE_CURRENT_BINARY_DIR}/install
 		DEPENDS HastyCompute
+	)
+endif()
+
+if (HASTY_BUILD_TEST)
+	set(_test_deps HastyCompute)
+	if (HASTY_BUILD_SERVER)
+		list(APPEND _test_deps HastyServer)
+	endif()
+	ExternalProject_Add(
+		HastyTest
+		SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpp/test
+		BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/test-build
+		CONFIGURE_COMMAND ${CMAKE_COMMAND} --preset ${TEST_PRESET} -DCMAKE_PREFIX_PATH=${CMAKE_CURRENT_BINARY_DIR}/install -S ${CMAKE_CURRENT_SOURCE_DIR}/cpp/test -B ${CMAKE_CURRENT_BINARY_DIR}/test-build
+		BUILD_COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/test-build
+		BUILD_ALWAYS 1
+		INSTALL_COMMAND ""
+		DEPENDS ${_test_deps}
 	)
 endif()
 
@@ -97,26 +101,64 @@ add_custom_target(merge_compile_commands ALL
     COMMENT "Merging compile_commands.json from subprojects"
 )
 
-# Clean only CMake cache files from all subprojects (preserves built artifacts and dependencies)
+# Cleans own code build artifacts and forces full reconfigure+rebuild,
+# but preserves fetched/compiled dependencies (_deps) so grpc/protobuf/
+# abseil/finufft etc. do NOT need to be rebuilt.
 add_custom_target(clean-cache
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeCache.txt
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeFiles
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeCache.txt
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeFiles
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeCache.txt
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeFiles
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_CURRENT_BINARY_DIR}/CMakeCache.txt
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles
-    COMMAND ${CMAKE_COMMAND} -E echo "CMake cache cleaned from all subprojects"
-    COMMENT "Cleaning CMake cache files recursively"
+    # Remove cmake caches and build-system files (NOT _deps)
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeCache.txt
+        ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeCache.txt
+        ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeCache.txt
+        ${CMAKE_CURRENT_BINARY_DIR}/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/lib-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/server-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/test-build/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles
+    # Remove ExternalProject stamps so configure/build steps re-run
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyCompute-prefix/src/HastyCompute-stamp
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyServer-prefix/src/HastyServer-stamp
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyTest-prefix/src/HastyTest-stamp
+    # Remove installed own libs and cmake configs so they are freshly reinstalled
+    # (runtime dep libs like libtorch/libcuda etc. are intentionally preserved)
+    COMMAND ${CMAKE_COMMAND} -E remove -f
+        ${CMAKE_CURRENT_BINARY_DIR}/install/lib/libHastyCompute.so
+        ${CMAKE_CURRENT_BINARY_DIR}/install/lib/libHastyServer.so
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/install/lib/cmake
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/install/include
+    # Ensure build dirs exist so ExternalProject configure can cd into them
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/lib-build
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/server-build
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/test-build
+    COMMAND ${CMAKE_COMMAND} -E echo "Clean done — _deps and runtime libs preserved"
+    COMMENT "Cleaning own code; fetched dependencies preserved"
 )
 
-# Nuclear option: removes all build artifacts including fetched dependencies
+# Nuclear option: removes everything including fetched dependencies and stamps.
+# Next build will re-download and recompile grpc/protobuf/abseil/etc.
 add_custom_target(deep-clean-all
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/lib-build
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/test-build
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/server-build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/test-build
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/install
-    COMMAND ${CMAKE_COMMAND} -E echo "Deep clean complete - all subprojects and dependencies removed"
-    COMMENT "Removing all build directories and dependencies"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyCompute-prefix
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyServer-prefix
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/HastyTest-prefix
+    COMMAND ${CMAKE_COMMAND} -E echo "Deep clean complete"
+    COMMENT "Removing all build dirs, install, and stamps (full rebuild required)"
 )
