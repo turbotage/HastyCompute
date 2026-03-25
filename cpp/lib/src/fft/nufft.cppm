@@ -93,6 +93,19 @@ i32 nufft_type_to_int(is_nufft_type auto t) {
     }
 }
 
+template<is_nufft_type T>
+i32 nufft_type_to_int() {
+    if constexpr (std::is_same_v<T, fft::NTU>) {
+        return 1;
+    } else if constexpr (std::is_same_v<T, fft::UTN>) {
+        return 2;
+    } else if constexpr (std::is_same_v<T, fft::NTN>) {
+        return 3;
+    } else {
+        static_assert(always_false<T>, "Invalid nufft type");
+    }
+}
+
 export template<is_device D, is_real_fp_tensor_type T, std::size_t N, is_nufft_type NT>
 requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan {};
@@ -200,8 +213,8 @@ struct NufftPlan<cuda_t, T, N, NT> {
             throw std::runtime_error("Invalid CUDA method");
         }
 
-        if (std::holds_alternative<NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
-            switch (std::get<NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
+        if (std::holds_alternative<typename NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
+            switch (std::get<typename NufftOptions<cuda_t, T, NT>::eUppsamplingFactor>(m_options.upsampling_factor)) {
             case NufftOptions<cuda_t, T, NT>::eUppsamplingFactor::UPSAMP_2_0:
                 m_opts.upsampfac = 2.0;
                 break;
@@ -237,12 +250,6 @@ struct NufftPlan<cuda_t, T, N, NT> {
             case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::SPREAD_ONLY:
                 m_opts.gpu_spreadinterponly = 1;
                 break;
-            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::INTERP_ONLY:
-                m_opts.gpu_spreadinterponly = 1;
-                break;
-            case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::SPREAD_INTERP_ONLY:
-                m_opts.gpu_spreadinterponly = 1;
-                break;
             case NufftOptions<cuda_t, T, NT>::eSpreadInterpMethod::DEFAULT:
                 break;
             default:
@@ -263,7 +270,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
             );
         } else if constexpr(std::is_same_v<T, f64>) {
             cufinufft_makeplan(
-                std::is_same_v<NT, fft::NTU> ? 1 : (std::is_same_v<NT, fft::UTN> ? 2 : 3),
+                nufft_type_to_int<NT>(),
                 N,
                 m_nmodes.data(),
                 static_cast<int>(m_options.sign),
@@ -288,7 +295,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
     void setpts(const Tensor& coords)
     requires(!std::is_same_v<NT, fft::NTN>)
     {
-        verify_coords<cpu_t, T, N>(coords);
+        verify_coords<cuda_t, T, N>(coords);
         m_coords = coords;
 
         if constexpr(std::is_same_v<T, f32>) {
@@ -321,8 +328,8 @@ struct NufftPlan<cuda_t, T, N, NT> {
     void setpts(const Tensor& coords_in, const Tensor& coords_out)
     requires(std::is_same_v<NT, fft::NTN>)
     {
-        verify_coords<cpu_t, T, N>(coords_in);
-        verify_coords<cpu_t, T, N>(coords_out);
+        verify_coords<cuda_t, T, N>(coords_in);
+        verify_coords<cuda_t, T, N>(coords_out);
         m_coords = std::make_pair(coords_in, coords_out);
 
         if constexpr(std::is_same_v<T, f32>) {
@@ -509,7 +516,7 @@ struct NufftPlan<cuda_t, T, N, NT> {
     }
 
 private:
-    finufft_plan_t<cpu_t, T> m_plan;
+    finufft_plan_t<cuda_t, T> m_plan;
     cufinufft_opts m_opts;
 
     std::conditional_t<std::is_same_v<NT, fft::NTN>, std::pair<Tensor,Tensor>, Tensor> m_coords;

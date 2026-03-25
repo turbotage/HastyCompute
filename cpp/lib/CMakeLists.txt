@@ -48,6 +48,9 @@ include(FetchContent)
 target_sources(HastyCompute
 	PRIVATE
 		"src/wrapper/vkfft.cpp"
+		"src/fft/toeplitz_creation.cpp"
+		"src/fft/toeplitz_mult.cpp"
+		"src/fft/toeplitz_transform.cpp"
 )
 
 # LIBRARY CPP MODULE SOURCES

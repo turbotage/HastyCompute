@@ -1,7 +1,5 @@
 module;
 
-#include <pch.hpp>
-
 module hasty_vkfft_mod;
 
 namespace hasty {

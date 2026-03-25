@@ -82,6 +82,8 @@ export namespace hat {
     using at::cat;
     using at::vdot;
     using at::exp;
+    using at::arange;
+    using at::view_as_complex;
 
 
 
@@ -147,6 +149,8 @@ export namespace hc10 {
     using c10::StringType;
     using c10::Type;
     using c10::TypePtr;
+
+    using c10::optional;
 
     namespace ivalue {
         using c10::ivalue::Tuple;

@@ -17,6 +17,8 @@ namespace hasty {
 export class Tensor {
 public:
 
+    Tensor() = default;
+
     Tensor(hat::Tensor base) : _base(std::move(base)) {}
 
     Tensor(const Tensor& other) : _base(other._base) {}
@@ -187,6 +189,8 @@ public:
 
     inline bool is_view() const { return _base.is_view(); }
 
+    inline bool is_complex() const noexcept { return _base.is_complex(); }
+
     inline Tensor unsqueeze(i32 dim) const { return Tensor(_base.unsqueeze(dim)); }
 
     inline Tensor& unsqueeze_(i32 dim) { _base.unsqueeze_(dim); return *this; }
@@ -196,6 +200,24 @@ public:
     inline Tensor view(eScalarType dtype) const { return Tensor(_base.view(scalartype::to_torch(dtype))); }
 
     inline Tensor view_as(const Tensor& other) const { return Tensor(_base.view_as(other._base)); }
+
+    inline Tensor flip(ArrayRef<i64> dims) const { return Tensor(_base.flip(dims.to_torch())); }
+
+    inline Tensor narrow(i64 dim, i64 start, i64 length) const { return Tensor(_base.narrow(dim, start, length)); }
+
+    inline Tensor conj() const { return Tensor(_base.conj()); }
+
+    inline Tensor clone() const { return Tensor(_base.clone()); }
+
+    inline std::vector<i64> sizes_vec() const {
+        auto s = _base.sizes();
+        return std::vector<i64>(s.begin(), s.end());
+    }
+
+    inline Tensor remainder(const Scalar& other) const { return Tensor(_base.remainder(other.to_torch())); }
+    inline Tensor& remainder_(const Scalar& other) { _base.remainder_(other.to_torch()); return *this; }
+    inline Tensor remainder(const Tensor& other) const { return Tensor(_base.remainder(other._base)); }
+    inline Tensor& remainder_(const Tensor& other) { _base.remainder_(other._base); return *this; }
 
     inline Tensor to(eScalarType dtype, bool non_blocking=false, bool copy = false, Opt<eMemoryFormat> memformat = nullopt) const {
         return Tensor(
