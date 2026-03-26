@@ -145,6 +145,10 @@ add_custom_command(TARGET HastyCompute POST_BUILD
 		"${NVRTC_PATH}" "$<TARGET_FILE_DIR:HastyCompute>/${NVRTC_FILENAME}"
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		"${CUDART_PATH}" "$<TARGET_FILE_DIR:HastyCompute>/${CUDART_FILENAME}"
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		$<TARGET_FILE:finufft> "$<TARGET_FILE_DIR:HastyCompute>/"
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		$<TARGET_FILE:cufinufft> "$<TARGET_FILE_DIR:HastyCompute>/"
 )
 
 # this gives access to cufinufft
@@ -152,6 +156,7 @@ set(FINUFFT_USE_CUDA ON CACHE BOOL "" FORCE)
 # this disables finufft leaving only cufinufft available
 set(FINUFFT_USE_CPU ON CACHE BOOL "" FORCE)
 set(FINUFFT_USE_DUCC0 ON CACHE BOOL "" FORCE)
+set(FINUFFT_STATIC_LINKING OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
   finufft
@@ -160,6 +165,28 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(finufft)
+
+# finufft/cufinufft are shared libraries that carry OpenMP as a PUBLIC
+# dependency (both INTERFACE_COMPILE_OPTIONS and via OpenMP::OpenMP_CXX
+# in INTERFACE_LINK_LIBRARIES).  That causes -fopenmp to bleed into
+# HastyCompute's own C++ module compilations, which breaks the `std`
+# module BMI because it was compiled without that flag.
+#
+# HastyCompute wraps finufft completely — no consumer of HastyCompute
+# ever calls finufft headers directly, so they need neither the compile
+# flag nor the link-time OpenMP target.  The .so files handle OpenMP
+# entirely at runtime through their own ELF NEEDED entries.
+foreach(_tgt finufft cufinufft)
+    if(TARGET ${_tgt})
+        set_property(TARGET ${_tgt} PROPERTY INTERFACE_COMPILE_OPTIONS "")
+        get_target_property(_iface_libs ${_tgt} INTERFACE_LINK_LIBRARIES)
+        if(_iface_libs)
+            list(FILTER _iface_libs EXCLUDE REGEX "OpenMP|[Oo]penmp|omp")
+            set_property(TARGET ${_tgt} PROPERTY INTERFACE_LINK_LIBRARIES "${_iface_libs}")
+        endif()
+        set_target_properties(${_tgt} PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
+endforeach()
 
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:finufft>)
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:cufinufft>)
@@ -286,8 +313,22 @@ add_custom_command(TARGET HastyCompute POST_BUILD
 
 install(TARGETS HastyCompute EXPORT HastyComputeTargets
     RUNTIME_DEPENDENCIES
-        PRE_EXCLUDE_REGEXES  ".*libstdc\\+\\+.*" ".*libgcc.*" ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
-        POST_EXCLUDE_REGEXES ".*libstdc\\+\\+.*" ".*libgcc.*" ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
+        # System libs the target machine must always provide
+        PRE_EXCLUDE_REGEXES
+            ".*libstdc\\+\\+.*" ".*libgcc.*"
+            ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
+            ".*libdl\\.so.*" ".*libm\\.so.*" ".*libpthread\\.so.*" ".*librt\\.so.*"
+            ".*libcuda\\.so.*"    # GPU driver — never bundle this
+        POST_EXCLUDE_REGEXES
+            ".*libstdc\\+\\+.*" ".*libgcc.*"
+            ".*libc\\.so.*" ".*libc\\+\\+.*" ".*ld-linux.*"
+            ".*libdl\\.so.*" ".*libm\\.so.*" ".*libpthread\\.so.*" ".*librt\\.so.*"
+            ".*libcuda\\.so.*"
+        # Tell CMake where to find libs that live outside standard system paths
+        DIRECTORIES
+            "$<TARGET_FILE_DIR:finufft>"
+            "$<TARGET_FILE_DIR:cufinufft>"
+            "${TORCH_INSTALL_PREFIX}/lib"
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -316,6 +357,8 @@ install(DIRECTORY ${HASTY_DATA_FOLDER}/models
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 	DESTINATION include/HastyCompute
 )
+
+install(FILES $<TARGET_FILE:finufft> $<TARGET_FILE:cufinufft> DESTINATION lib)
 
 # Install dependency headers needed by installed module files
 install(DIRECTORY ${finufft_SOURCE_DIR}/include/ DESTINATION include)

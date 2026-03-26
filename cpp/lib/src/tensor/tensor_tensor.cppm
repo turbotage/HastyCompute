@@ -112,13 +112,21 @@ public:
     template<is_pure_type T>
     requires (is_tensor_type<T>)
     inline T* mutable_data_ptr() const {
-        return _base.mutable_data_ptr<T>();
+        // ATen only pre-instantiates mutable_data_ptr for c10::complex, not std::complex.
+        // For complex types route through void* to avoid a missing symbol at link time.
+        if constexpr (std::is_same_v<T, c64> || std::is_same_v<T, c128>)
+            return reinterpret_cast<T*>(_base.mutable_data_ptr());
+        else
+            return _base.mutable_data_ptr<T>();
     }
 
     template<is_pure_type T>
     requires (is_tensor_type<T>)
     inline const T* const_data_ptr() const {
-        return _base.const_data_ptr<T>();
+        if constexpr (std::is_same_v<T, c64> || std::is_same_v<T, c128>)
+            return reinterpret_cast<const T*>(_base.const_data_ptr());
+        else
+            return _base.const_data_ptr<T>();
     }
 
     inline const void* const_data_ptr() const { return _base.const_data_ptr(); }

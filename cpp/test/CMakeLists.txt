@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(HastyTest "src/main.cpp")
 
-target_compile_features(HastyTest 
+target_compile_features(HastyTest
 	PRIVATE cxx_std_23
 	INTERFACE cxx_std_23
 )
@@ -28,14 +28,5 @@ target_link_libraries(HastyTest PRIVATE
 	HastyCompute::HastyCompute
 	HastyServer::HastyServer
 )
-# lld doesn't resolve transitive shared-lib deps; link directly against the
-# LibTorch libs that HastyCompute installed alongside itself.
-foreach(_lib c10 torch torch_cpu c10_cuda torch_cuda)
-    find_library(_found_lib ${_lib})
-    if(_found_lib)
-        target_link_libraries(HastyTest PRIVATE ${_found_lib})
-    endif()
-    unset(_found_lib CACHE)
-endforeach()
 
 install(TARGETS HastyTest RUNTIME DESTINATION bin)
