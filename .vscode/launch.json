@@ -26,10 +26,10 @@
             "stopOnEntry": false,
         },
         {
-            "name": "(lldb-dap) HastyServer",
+            "name": "(lldb-dap) HastyVkFFTTest",
             "type": "lldb-dap",
             "request": "launch",
-            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/server-build/HastyServer",
+            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyVkFFTTest",
             "args": [],
             "stopOnEntry": false,
         },

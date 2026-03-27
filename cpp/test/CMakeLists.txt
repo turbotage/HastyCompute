@@ -30,3 +30,40 @@ target_link_libraries(HastyTest PRIVATE
 )
 
 install(TARGETS HastyTest RUNTIME DESTINATION bin)
+
+
+
+add_executable(HastyVkFFTTest "src/vkfft_test.cpp")
+
+target_compile_features(HastyVkFFTTest
+	PRIVATE cxx_std_23
+	INTERFACE cxx_std_23
+)
+
+set_target_properties(HastyVkFFTTest PROPERTIES
+	CXX_STANDARD 23
+	CXX_STANDARD_REQUIRED ON
+	CXX_SCAN_FOR_MODULES ON
+	CXX_MODULE_STD ON
+)
+
+target_compile_features(HastyVkFFTTest PRIVATE cxx_std_17)
+
+set_target_properties(HastyVkFFTTest PROPERTIES
+	CXX_STANDARD 17
+	CXX_STANDARD_REQUIRED ON
+)
+
+find_package(CUDAToolkit REQUIRED)
+
+target_include_directories(HastyVkFFTTest PRIVATE
+	"${CMAKE_CURRENT_SOURCE_DIR}/../lib/external/vkFFT"
+	"${CUDAToolkit_INCLUDE_DIRS}"
+)
+
+target_link_libraries(HastyVkFFTTest PRIVATE
+	CUDA::cudart
+	CUDA::cuda_driver
+	CUDA::nvrtc
+	CUDA::cufft
+)

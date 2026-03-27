@@ -139,9 +139,66 @@ void test_toeplitz_multiplication()
         std::cout << "  FAIL (rel_err too large)\n";
 }
 
+// Identity-kernel test: no NUFFT.
+// Use an all-ones kernel of shape {2*NY, 2*NX} and check that output == input.
+void test_toeplitz_identity_kernel()
+{
+    using namespace hasty;
+    using namespace hasty::fft;
+
+    std::cout << "test_toeplitz_identity_kernel: ones kernel (no NUFFT)...\n";
+
+    constexpr i64 NY = 32;
+    constexpr i64 NX = 32;
+
+    Device cuda0(eDeviceType::CUDA, 0);
+
+    // Random complex image [1, NY, NX]
+    Tensor x_flat = view_as_complex(
+        stack({rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float)),
+               rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
+    Tensor x_img = x_flat.view({1, NY, NX});
+
+    // All-ones kernel of shape {2*NY, 2*NX}
+    Tensor kernel = view_as_complex(
+        stack({ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float)),
+               zeros({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
+
+    transform_toeplitz_kernel(kernel);
+
+    // Run toeplitz multiplication — expect output == input
+    Tensor y = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    toeplitz_multiplication(
+        x_img, y, kernel,
+        std::nullopt, std::nullopt, std::nullopt,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::MULT,
+        ToeplitzMultType::MULT_CONJ,
+        ToeplitzMultType::MULT,
+        ToeplitzMultType::MULT_CONJ,
+        ToeplitzAccumulateType::NONE
+    );
+
+    Tensor diff   = y.add(x_img, Scalar{-1.0f});
+    double norm_x = l2_norm(x_img.view({NY * NX}));
+    double norm_y = l2_norm(y.view({NY * NX}));
+    double norm_d = l2_norm(diff.view({NY * NX}));
+    double rel_err = (norm_x > 0.0) ? norm_d / norm_x : norm_d;
+
+    std::cout << "  ||x||    = " << norm_x  << "\n";
+    std::cout << "  ||y||    = " << norm_y  << "\n";
+    std::cout << "  rel_err  = " << rel_err << "\n";
+
+    if (rel_err < 1e-2)
+        std::cout << "  PASS\n";
+    else
+        std::cout << "  FAIL\n";
+}
+
 int main() {
     //server_test();
     //viz_test();
-    test_toeplitz_multiplication();
+    test_toeplitz_identity_kernel();
+    //test_toeplitz_multiplication();
     return 0;
 }
