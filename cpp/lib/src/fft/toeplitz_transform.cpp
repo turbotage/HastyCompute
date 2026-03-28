@@ -76,6 +76,7 @@ void transform_toeplitz_kernel_1D(Tensor& ker, bool clear_vkfft_plan)
 		if (res != VKFFT_SUCCESS)
 			throw std::runtime_error("VkFFT run failed, code: " + std::to_string(res));
 		CUDA_CHECK(cudaDeviceSynchronize());
+		ker = std::move(scratch);
 	}
 
 	if (clear_vkfft_plan)
@@ -122,6 +123,8 @@ void transform_toeplitz_kernel_2D(Tensor& ker, bool clear_vkfft_plan)
 			throw std::runtime_error("VkFFT run failed, code: " + std::to_string(res));
 		}
 		CUDA_CHECK(cudaDeviceSynchronize());
+
+		ker = std::move(scratch);
 	}
 
 	if (clear_vkfft_plan) {
@@ -172,6 +175,7 @@ void transform_toeplitz_kernel_3D(Tensor& ker, bool clear_vkfft_plan)
 			throw std::runtime_error("VkFFT run failed, code: " + std::to_string(res));
 		}
 		CUDA_CHECK(cudaDeviceSynchronize());
+		ker = std::move(scratch);
 	}
 
 	if (clear_vkfft_plan) {
