@@ -42,8 +42,8 @@ extern "C" __global__ void toeplitz_load_2D(
 		cuFloatComplex temp;
 		if (batch_out >= 0) {
 			const long int batch_idx = batch_out * NX * NY + idx;
-			const long int sx = x + NX - 1;
-			const long int sy = y + NY - 1;
+			const long int sx = x;
+			const long int sy = y;
 			temp = scratch[sy * NX2 + sx];
 			if (mult1 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);

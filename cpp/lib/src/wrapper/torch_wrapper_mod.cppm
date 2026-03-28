@@ -122,6 +122,18 @@ export namespace htorch {
         using torch::fft::ifftn;
         using torch::fft::rfftn;
         using torch::fft::irfftn;
+        using torch::fft::hfftn;
+        using torch::fft::ihfftn;
+
+        using torch::fft::fftshift;
+        using torch::fft::ifftshift;
+
+        using torch::fft::fft;
+        using torch::fft::rfft;
+        using torch::fft::hfft;
+        using torch::fft::ifft;
+        using torch::fft::irfft;
+        using torch::fft::ihfft;
     }
     namespace jit {
         using torch::jit::CompilationUnit;

@@ -161,7 +161,8 @@ namespace hasty {
         const Tensor&         t,
         Opt<ArrayRef<i64>>    s    = nullopt,
         Opt<ArrayRef<i64>>    dims = nullopt,
-        Opt<std::string_view> norm = nullopt)
+        Opt<std::string_view> norm = nullopt
+    )
     {
         // c10::optional = std::optional, c10::ArrayRef = at::IntArrayRef = hat::IntArrayRef
         std::optional<hat::IntArrayRef> s_ref =
@@ -171,6 +172,36 @@ namespace hasty {
         std::optional<std::string_view> norm_ref =
             norm ? std::optional<std::string_view>(*norm) : std::nullopt;
         return Tensor(htorch::fft::fftn(t.to_torch(), s_ref, dim_ref, norm_ref));
+    }
+
+    export Tensor ifftn(
+        const Tensor&       t,
+        Opt<ArrayRef<i64>>  s    = nullopt,
+        Opt<ArrayRef<i64>>  dims = nullopt,
+        Opt<std::string_view> norm = nullopt
+    )
+    {
+        std::optional<hat::IntArrayRef> s_ref =
+            s    ? std::optional<hat::IntArrayRef>(s->to_torch())    : std::nullopt;
+        std::optional<hat::IntArrayRef> dim_ref =
+            dims ? std::optional<hat::IntArrayRef>(dims->to_torch()) : std::nullopt;
+        std::optional<std::string_view> norm_ref =
+            norm ? std::optional<std::string_view>(*norm) : std::nullopt;
+        return Tensor(htorch::fft::ifftn(t.to_torch(), s_ref, dim_ref, norm_ref));
+    }
+
+    export Tensor fftshift(const Tensor& t, Opt<ArrayRef<i64>> dims = nullopt)
+    {
+        std::optional<hat::IntArrayRef> dim_ref =
+            dims ? std::optional<hat::IntArrayRef>(dims->to_torch()) : std::nullopt;
+        return Tensor(htorch::fft::fftshift(t.to_torch(), dim_ref));
+    }
+
+    export Tensor ifftshift(const Tensor& t, Opt<ArrayRef<i64>> dims = nullopt)
+    {
+        std::optional<hat::IntArrayRef> dim_ref =
+            dims ? std::optional<hat::IntArrayRef>(dims->to_torch()) : std::nullopt;
+        return Tensor(htorch::fft::ifftshift(t.to_torch(), dim_ref));
     }
 
 }

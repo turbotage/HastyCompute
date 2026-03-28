@@ -257,6 +257,19 @@ struct NufftPlan<cuda_t, T, N, NT> {
             }
         }
 
+        if (m_options.mode_order != NufftOptions<cuda_t, T, NT>::eModeOrder::DEFAULT) {
+            switch (m_options.mode_order) {
+            case NufftOptions<cuda_t, T, NT>::eModeOrder::CMCL:
+                m_opts.modeord = 0;
+                break;
+            case NufftOptions<cuda_t, T, NT>::eModeOrder::FFT:
+                m_opts.modeord = 1;
+                break;
+            default:
+                throw std::runtime_error("Invalid mode order");
+            }
+        }
+
         if constexpr(std::is_same_v<T, f32>) {
             cufinufftf_makeplan(
                 nufft_type_to_int<NT>(),

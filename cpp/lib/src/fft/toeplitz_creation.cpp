@@ -56,16 +56,19 @@ static Tensor ntu_nufft(
         Tensor wts_w    = weights.to(cplx_dtype).contiguous();
         Tensor output   = zeros({total}, TensorOptions(dev, cplx_dtype));
 
+        NufftOptions<cuda_t, T, NTU> opts;
+        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL;
+
         if (ndim == 1) {
-            NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]});
+            NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         } else if (ndim == 2) {
-            NufftPlan<cuda_t, T, 2, NTU> plan({nmodes_fft[0], nmodes_fft[1]});
+            NufftPlan<cuda_t, T, 2, NTU> plan({nmodes_fft[0], nmodes_fft[1]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         } else {
-            NufftPlan<cuda_t, T, 3, NTU> plan({nmodes_fft[0], nmodes_fft[1], nmodes_fft[2]});
+            NufftPlan<cuda_t, T, 3, NTU> plan({nmodes_fft[0], nmodes_fft[1], nmodes_fft[2]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }

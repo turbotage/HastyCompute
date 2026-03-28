@@ -38,7 +38,7 @@ extern "C" __global__ void toeplitz_load_1D(
 
     if (batch_out >= 0) {
         const long int batch_idx = batch_out * NX + idx;
-        const long int sx = idx + NX - 1;   // centre of 2*NX scratch
+        const long int sx = idx;
         temp = scratch[sx];
         if (mult1 != nullptr)
             temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);
