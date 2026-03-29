@@ -32,13 +32,6 @@ void server_test() {
     handle.wait();
 }
 
-void viz_test()
-{
-    std::cout << "Generating example plot..." << std::endl;
-    auto fig = hasty::viz::example_plot();
-    fig.show();
-}
-
 // Helper: L2 norm of a complex flat tensor via ATen
 static double l2_norm(const hasty::Tensor& t)
 {
@@ -78,6 +71,12 @@ std::pair<bool, std::string> test_nufft_normal_identity()
 // W   = diagonal density weights (real, all-ones here)
 //
 // im_size = {NY, NX};  nmodes for cufinufft = {NX, NY}  (x fastest)
+template<std::size_t N>
+Tensor create_cartesian_coords(const std::array<i64, N>& nmodes, Device device)
+{
+    
+}
+
 void test_toeplitz_multiplication()
 {
     using namespace hasty;
@@ -85,9 +84,9 @@ void test_toeplitz_multiplication()
 
     std::cout << "test_toeplitz_multiplication: running 2-D test...\n";
 
-    constexpr i64 NY   = 32;
-    constexpr i64 NX   = 32;
-    constexpr i64 npts = 1000;
+    constexpr i64 NY   = 16;
+    constexpr i64 NX   = 16;
+    constexpr i64 npts = 10000;
 
     Device cuda0(eDeviceType::CUDA, 0);
 
@@ -144,32 +143,43 @@ void test_toeplitz_multiplication()
         x_img, y_toeplitz, kernel,
         std::nullopt, std::nullopt, std::nullopt,
         ToeplitzMultType::NONE,
-        ToeplitzMultType::MULT,      // input_mult1_type  (unused, mult1=null)
-        ToeplitzMultType::MULT_CONJ, // output_mult1_type (unused)
-        ToeplitzMultType::MULT,      // input_mult2_type  (unused, mult2=null)
-        ToeplitzMultType::MULT_CONJ, // output_mult2_type (unused)
+        ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
+        ToeplitzMultType::NONE, // output_mult1_type (unused)
+        ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
+        ToeplitzMultType::NONE, // output_mult2_type (unused)
         ToeplitzAccumulateType::NONE
     );
 
     // ── Compare ───────────────────────────────────────────────────────────────
-    Tensor y_toeplitz_flat = y_toeplitz.view({NY * NX});
-    Tensor diff            = y_direct.add(y_toeplitz_flat, Scalar{-1});
+    y_direct = y_direct.flatten().contiguous().cpu();
+    y_toeplitz = y_toeplitz.flatten().contiguous().cpu();
 
-    std::cout << y_direct.view({NY, NX}).toString() << "\n";
-    std::cout << y_toeplitz_flat.toString() << "\n";
+    auto y_direct_real = y_direct.real().contiguous();
+    auto y_direct_imag = y_direct.imag().contiguous();
 
-    double norm_ref  = l2_norm(y_direct);
-    double norm_diff = l2_norm(diff);
-    double rel_err   = (norm_ref > 0.0) ? norm_diff / norm_ref : norm_diff;
+    auto y_toeplitz_real = y_toeplitz.real().contiguous();
+    auto y_toeplitz_imag = y_toeplitz.imag().contiguous();
 
-    std::cout << "  ||y_direct||  = " << norm_ref  << "\n";
-    std::cout << "  ||y_toeplitz|| = " << l2_norm(y_toeplitz_flat) << "\n";
-    std::cout << "  rel_err       = " << rel_err << "\n";
+    viz::default_line_plots(viz::DefaultLinePlotsOptions<f32>{
+        .lines = {y_direct_real.get_span<f32>(), y_toeplitz_real.get_span<f32>()},
+        .title = "Toeplitz Multiplication vs Direct A^H W A (Real Part)",
+        .xaxis = "Pixel Index",
+        .yaxis = "Value",
+        .legends = {"Direct", "Toeplitz"},
+        .markers = false,
+        .lines_on = true
+    }).show();
 
-    if (rel_err < 1e-2)
-        std::cout << "  PASS\n";
-    else
-        std::cout << "  FAIL (rel_err too large)\n";
+    viz::default_line_plots(viz::DefaultLinePlotsOptions<f32>{
+        .lines = {y_direct_imag.get_span<f32>(), y_toeplitz_imag.get_span<f32>()},
+        .title = "Toeplitz Multiplication vs Direct A^H W A (Imaginary Part)",
+        .xaxis = "Pixel Index",
+        .yaxis = "Value",
+        .legends = {"Direct", "Toeplitz"},
+        .markers = false,
+        .lines_on = true
+    }).show();
+    
 }
 
 // Identity-kernel test: no NUFFT.

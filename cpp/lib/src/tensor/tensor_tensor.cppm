@@ -49,7 +49,40 @@ public:
     inline Tensor& operator^=(const Tensor& other) { return bitwise_xor_(other); }
     inline Tensor& operator^=(const Scalar& other) { return bitwise_xor_(other); }
 
+    template<is_tensor_type T>
+    std::span<T> get_span() &{
+        if (!_base.is_contiguous()) {
+            throw std::runtime_error("Tensor must be contiguous to get a span");
+        }
+        if (scalar_type() != scalar_type_of<T>()) {
+            throw std::runtime_error("Tensor scalar type does not match requested span type");
+        }
+        if (device().type != eDeviceType::CPU) {
+            throw std::runtime_error("Tensor must be on CPU to get a span");
+        }
+        return std::span<T>(mutable_data_ptr<T>(), numel());
+    }
 
+    template<is_tensor_type T>
+    std::span<const T> get_span() const & {
+        if (!_base.is_contiguous()) {
+            throw std::runtime_error("Tensor must be contiguous to get a span");
+        }
+        if (scalar_type() != scalar_type_of<T>()) {
+            throw std::runtime_error("Tensor scalar type does not match requested span type");
+        }
+        if (device().type != eDeviceType::CPU) {
+            throw std::runtime_error("Tensor must be on CPU to get a span");
+        }
+        return std::span<const T>(const_data_ptr<T>(), numel());
+    }
+
+    template<is_tensor_type T>
+    std::span<T> get_span() && = delete;
+    template<is_tensor_type T>
+    std::span<const T> get_span() && = delete;
+    
+    
     template<is_tensor_index_type... Idx>
     inline Tensor operator[](Idx... indices) const {
         return Tensor(_base.index({std::get<Idx>(indices).to_torch()...}));
@@ -129,7 +162,8 @@ public:
 
     template<is_pure_type T>
     requires (is_tensor_type<T>)
-    inline T* mutable_data_ptr() const {
+    inline T* mutable_data_ptr() const 
+    {
         // ATen only pre-instantiates mutable_data_ptr for c10::complex, not std::complex.
         // For complex types route through void* to avoid a missing symbol at link time.
         if constexpr (std::is_same_v<T, c64> || std::is_same_v<T, c128>)
@@ -140,7 +174,8 @@ public:
 
     template<is_pure_type T>
     requires (is_tensor_type<T>)
-    inline const T* const_data_ptr() const {
+    inline const T* const_data_ptr() const 
+    {
         if constexpr (std::is_same_v<T, c64> || std::is_same_v<T, c128>)
             return reinterpret_cast<const T*>(_base.const_data_ptr());
         else
@@ -150,7 +185,8 @@ public:
     inline const void* const_data_ptr() const { return _base.const_data_ptr(); }
 
     template<is_pure_type T>
-    const T* cast_const_data_ptr() const {
+    const T* cast_const_data_ptr() const 
+    {
         if constexpr(is_tensor_type<T>) {
             return reinterpret_cast<const T*>(_base.const_data_ptr());
         }
@@ -235,6 +271,12 @@ public:
 
     inline Tensor clone() const { return Tensor(_base.clone()); }
 
+    inline Tensor flatten() const { return Tensor(_base.flatten()); }
+
+    inline Tensor real() const { return Tensor(hat::real(_base)); }
+
+    inline Tensor imag() const { return Tensor(hat::imag(_base)); }
+
     inline std::vector<i64> sizes_vec() const {
         auto s = _base.sizes();
         return std::vector<i64>(s.begin(), s.end());
@@ -270,6 +312,8 @@ public:
             )
         );
     }
+
+    inline Tensor cpu() const { return Tensor(_base.cpu()); }
     
     inline Tensor select(i64 dim, i64 index) const { return Tensor(_base.select(dim, index)); }
     inline Tensor select_scatter(const Tensor& src, i64 dim, i64 index) const { return Tensor(_base.select_scatter(src._base, dim, index)); }
@@ -421,3 +465,67 @@ private:
  
 
 }
+
+
+
+
+/*
+template<is_tensor_type T, std::size_t N>
+std::mdspan<T, std::dextents<std::size_t, N>> get_mdspan() & {
+    if (!_base.is_contiguous()) {
+        throw std::runtime_error("Tensor must be contiguous to get an mdspan");
+    }
+    if (scalar_type() != scalar_type_of<T>()) {
+        throw std::runtime_error("Tensor scalar type does not match requested mdspan type");
+    }
+    if (device().type != eDeviceType::CPU) {
+        throw std::runtime_error("Tensor must be on CPU to get an mdspan");
+    }
+    if (ndimension() != N) {
+        throw std::runtime_error("Tensor dimension does not match requested mdspan rank");
+    }
+    auto sizes = _base.sizes();
+    if (static_cast<std::size_t>(sizes.size()) != N) {
+        throw std::runtime_error("Tensor dimension does not match requested mdspan rank");
+    }
+
+    std::dextents<std::size_t, N> extents;
+    for (std::size_t i = 0; i < N; ++i) {
+        extents[i] = static_cast<std::size_t>(sizes[i]);
+    }
+
+    return std::mdspan<const T, std::dextents<std::size_t, N>>(mutable_data_ptr<T>(), extents);
+}
+
+template<is_tensor_type T, std::size_t N>
+std::mdspan<const T, std::dextents<std::size_t, N>> get_mdspan() const & {
+    if (!_base.is_contiguous()) {
+        throw std::runtime_error("Tensor must be contiguous to get an mdspan");
+    }
+    if (scalar_type() != scalar_type_of<T>()) {
+        throw std::runtime_error("Tensor scalar type does not match requested mdspan type");
+    }
+    if (device().type != eDeviceType::CPU) {
+        throw std::runtime_error("Tensor must be on CPU to get an mdspan");
+    }
+    if (ndimension() != N) {
+        throw std::runtime_error("Tensor dimension does not match requested mdspan rank");
+    }
+    auto sizes = _base.sizes();
+    if (static_cast<std::size_t>(sizes.size()) != N) {
+        throw std::runtime_error("Tensor dimension does not match requested mdspan rank");
+    }
+
+    std::dextents<std::size_t, N> extents;
+    for (std::size_t i = 0; i < N; ++i) {
+        extents[i] = static_cast<std::size_t>(sizes[i]);
+    }
+
+    return std::mdspan<const T, std::dextents<std::size_t, N>>(const_data_ptr<T>(), extents);
+}
+
+template<is_tensor_type T, std::size_t N>
+std::mdspan<T, std::dextents<std::size_t, N>> get_mdspan() && = delete;
+template<is_tensor_type T, std::size_t N>
+std::mdspan<const T, std::dextents<std::size_t, N>> get_mdspan() && = delete;
+*/

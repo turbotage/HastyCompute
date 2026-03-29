@@ -122,6 +122,23 @@ export std::string scalar_type_to_string(eScalarType dtype) {
     }
 }
 
+export template<is_tensor_type T>
+inline constexpr eScalarType scalar_type_of() {
+    if constexpr (std::is_same_v<T, u8>) return scalar_alias::u8;
+    else if constexpr (std::is_same_v<T, i8>) return scalar_alias::i8;
+    else if constexpr (std::is_same_v<T, i16>) return scalar_alias::i16;
+    else if constexpr (std::is_same_v<T, i32>) return scalar_alias::i32;
+    else if constexpr (std::is_same_v<T, i64>) return scalar_alias::i64;
+    else if constexpr (std::is_same_v<T, f16>) return scalar_alias::f16;
+    else if constexpr (std::is_same_v<T, f32>) return scalar_alias::f32;
+    else if constexpr (std::is_same_v<T, f64>) return scalar_alias::f64;
+    else if constexpr (std::is_same_v<T, c32>) return scalar_alias::c32;
+    else if constexpr (std::is_same_v<T, c64>) return scalar_alias::c64;
+    else if constexpr (std::is_same_v<T, b8>) return scalar_alias::b8;
+    else if constexpr (std::is_same_v<T, bf16>) return scalar_alias::bf16;
+    else static_assert(always_false<T>, "Unsupported tensor type");
+}
+
 export i64 scalar_type_size(eScalarType dtype) {
     switch (dtype) {
         case scalar_alias::u8:
