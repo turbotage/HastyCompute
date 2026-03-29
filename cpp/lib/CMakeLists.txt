@@ -74,6 +74,7 @@ target_sources(HastyCompute
 			"src/threading/threading_mod.cppm"
 			"src/util/util_alias.cppm"
 			"src/util/util_containers.cppm"
+			"src/util/util_idx.cppm"
             "src/util/util_meta.cppm"
             "src/util/util_mod.cppm"
             "src/util/util_span.cppm"

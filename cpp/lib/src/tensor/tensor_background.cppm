@@ -560,19 +560,28 @@ public:
     TensorIndex(const Slice& slice) : m_torch_index(slice.to_torch()) {}
     TensorIndex(const Tensor& tensor);
 
-    inline bool is_none() const { return m_torch_index.is_none(); }
-    inline bool is_ellipsis() const { return m_torch_index.is_ellipsis(); }
-    inline bool is_integer() const { return m_torch_index.is_integer(); }
-    inline i64 integer() const { return m_torch_index.integer().expect_int(); }
-    inline bool is_boolean() const { return m_torch_index.is_boolean(); }
-    inline bool boolean() const { return m_torch_index.boolean(); }
-    inline bool is_slice() const { return m_torch_index.is_slice(); }
-    inline Slice slice() const { return Slice(m_torch_index.slice()); }
-    inline bool is_tensor() const { return m_torch_index.is_tensor(); }
-    Tensor tensor() const;
+    inline bool     is_none() const { return m_torch_index.is_none(); }
+    inline bool     is_ellipsis() const { return m_torch_index.is_ellipsis(); }
+    inline bool     is_integer() const { return m_torch_index.is_integer(); }
+    inline i64      integer() const { return m_torch_index.integer().expect_int(); }
+    inline bool     is_boolean() const { return m_torch_index.is_boolean(); }
+    inline bool     boolean() const { return m_torch_index.boolean(); }
+    inline bool     is_slice() const { return m_torch_index.is_slice(); }
+    inline Slice    slice() const { return Slice(m_torch_index.slice()); }
+    inline bool     is_tensor() const { return m_torch_index.is_tensor(); }
+    Tensor          tensor() const;
+
+    inline hat::indexing::TensorIndex to_torch() const {
+        return m_torch_index;
+    }
 };
 
 export using TensorIndexType = TensorIndex;
+
+template<typename T>
+concept is_tensor_index_type = std::is_same_v<T, TensorIndexType>;
+
+
 
 
 // <================== CUDA GUARD ==================> //

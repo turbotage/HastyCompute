@@ -49,6 +49,24 @@ public:
     inline Tensor& operator^=(const Tensor& other) { return bitwise_xor_(other); }
     inline Tensor& operator^=(const Scalar& other) { return bitwise_xor_(other); }
 
+
+    template<is_tensor_index_type... Idx>
+    inline Tensor operator[](Idx... indices) const {
+        return Tensor(_base.index({std::get<Idx>(indices).to_torch()...}));
+    }
+
+    template<is_tensor_index_type... Idx>
+    inline Tensor operator[](const std::tuple<Idx...>& indices) const {
+        return Tensor(_base.index({std::get<Idx>(indices).to_torch()...}));
+    }
+
+    inline Tensor index(ArrayRef<TensorIndex> indices) const {
+        std::vector<hat::indexing::TensorIndex> tind;
+        tind.reserve(indices.size());
+        for (const auto &idx : indices) tind.push_back(idx.to_torch());
+        return Tensor(_base.index(tind));
+    }
+
     // LibTorch extensions
 
     inline static Tensor from_blob(void* data, ArrayRef<i64> sizes, eScalarType dtype, Device device) {

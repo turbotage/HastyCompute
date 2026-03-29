@@ -57,7 +57,7 @@ static Tensor ntu_nufft(
         Tensor output   = zeros({total}, TensorOptions(dev, cplx_dtype));
 
         NufftOptions<cuda_t, T, NTU> opts;
-        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL;
+        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
 
         if (ndim == 1) {
             NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);
@@ -104,10 +104,12 @@ static Tensor adjoint_flip_and_concat(
     const std::vector<i64>&   shape_out,
     bool                      double_prec)
 {
-    // Build [ndim, 1] flip coefficient: -1 at row `dim`, +1 elsewhere
+    // Build [ndim, 1] flip coefficient: -1 at the coordinate row corresponding to
+    // image axis `dim`.  omega[i] maps to image axis ndim-1-i (kx→x, ky→y, kz→z),
+    // so extending along image axis `dim` requires negating coordinate ndim-1-dim.
     auto make_flip = [&]() {
         Tensor fc = ones({ndim, 1}, TensorOptions(omega.device(), eScalarType::Float));
-        fc.select(0, dim).fill_(Scalar{-1.0f});
+        fc.select(0, ndim - 1 - dim).fill_(Scalar{-1.0f});
         return fc;
     };
 
