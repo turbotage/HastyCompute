@@ -71,11 +71,55 @@ std::pair<bool, std::string> test_nufft_normal_identity()
 // W   = diagonal density weights (real, all-ones here)
 //
 // im_size = {NY, NX};  nmodes for cufinufft = {NX, NY}  (x fastest)
+// Returns a [N, npts] float tensor of Cartesian k-space coordinates in [-pi, pi).
+// nmodes[0] is the fastest-varying dimension (x), matching the cufinufft/NUFFT convention.
+// npts = prod(nmodes).  Pair with create_toeplitz_kernel(..., im_size={nmodes[N-1],...,nmodes[0]}).
 template<std::size_t N>
-Tensor create_cartesian_coords(const std::array<i64, N>& nmodes, Device device)
+hasty::Tensor create_cartesian_coords(const std::array<hasty::i64, N>& nmodes, hasty::Device device)
 {
-    
+    using namespace hasty;
+    constexpr float pi = 3.14159265358979f;
+
+    i64 npts = 1;
+    for (auto n : nmodes) npts *= n;
+
+    std::vector<Tensor> coord_rows;
+    coord_rows.reserve(N);
+
+    for (std::size_t d = 0; d < N; ++d) {
+        i64 n = nmodes[d];
+
+        // inner = nmodes[0] * ... * nmodes[d-1]  → makes dim 0 cycle fastest
+        i64 inner = 1;
+        for (std::size_t k = 0; k < d; ++k) inner *= nmodes[k];
+
+        // outer = nmodes[d+1] * ... * nmodes[N-1]
+        i64 outer = 1;
+        for (std::size_t k = d + 1; k < N; ++k) outer *= nmodes[k];
+
+        // 1D grid for this dimension: 2*pi*k/n - pi, k = 0 .. n-1
+        Tensor c1d = arange(n, TensorOptions(device, eScalarType::Float));
+        c1d = c1d.mul(Scalar{2.0f * pi / static_cast<float>(n)}).add(Scalar{-pi});
+
+        // Indices for one tile: each of the n values repeated `inner` times
+        // [0,0,...(inner), 1,1,...(inner), ..., n-1,...(inner)]
+        // Use float arange + divide + truncate-to-long (safe for non-negative values)
+        Tensor fidx = arange(n * inner, TensorOptions(device, eScalarType::Float));
+        Tensor idx  = fidx.div(Scalar{static_cast<float>(inner)}).to(eScalarType::Long);
+        Tensor tile = c1d.index_select(0, idx);  // size = n * inner
+
+        // Repeat the tile `outer` times along dim 0
+        std::vector<Tensor> tiles;
+        tiles.reserve(outer);
+        for (i64 o = 0; o < outer; ++o) tiles.push_back(tile);
+
+        coord_rows.push_back(cat(tiles, 0));  // size = npts
+    }
+
+    return hasty::stack(coord_rows, 0);  // [N, npts]
 }
+
+
 
 void test_toeplitz_multiplication()
 {
@@ -84,63 +128,28 @@ void test_toeplitz_multiplication()
 
     std::cout << "test_toeplitz_multiplication: running 2-D test...\n";
 
-    constexpr i64 NY   = 16;
-    constexpr i64 NX   = 16;
-    constexpr i64 npts = 10000;
-
+    constexpr i64 NY   = 64;
+    constexpr i64 NX   = 96;
+    
     Device cuda0(eDeviceType::CUDA, 0);
-
-    // ── k-space trajectory: [2, npts] float, uniform in [-pi, pi] ────────────
-    // rand gives [0,1); scale to [-pi, pi)
-    constexpr float pi = 3.14159265358979f;
-    Tensor coords = rand({2, npts}, TensorOptions(cuda0, eScalarType::Float));
-    coords.mul_(Scalar{2.0f * pi});
-    coords.add_(Scalar{-pi});
-
-    // ── Density weights: all ones (real) ─────────────────────────────────────
-    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::Float));
-
-    // ── Random complex image, flat [NY*NX] ───────────────────────────────────
-    Tensor x_flat = view_as_complex(
-        stack({rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float)),
-               rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-
-    // ── Direct A^H W A x ─────────────────────────────────────────────────────
-
-    // Forward NUFFT: x [NY*NX] → kspace [npts]
-    // nmodes = {NX, NY} so cufinufft outputs x-fastest, matching flat x_flat layout
-    NufftPlan<cuda_t, f32, 2, UTN> plan_utn({NX, NY});
-    plan_utn.setpts(coords);
-    Tensor kspace = zeros({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-    plan_utn.execute(x_flat, kspace);
-
-    // Apply real weights W (promote to complex)
-    Tensor w_cplx = view_as_complex(
-        stack({weights, zeros_like(weights)}, -1).contiguous());
-    kspace.mul_(w_cplx.mul_(Scalar{1.0f/static_cast<float>(NY * NX)})); // scale by 1/N for adjoint normalization
-
-    // Adjoint NUFFT: kspace [npts] → y_direct [NY*NX]
-    NufftPlan<cuda_t, f32, 2, NTU> plan_ntu({NX, NY});
-    plan_ntu.setpts(coords);
-    Tensor y_direct = zeros({NY * NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-    plan_ntu.execute(kspace, y_direct);
-
-    // ── Toeplitz approach ─────────────────────────────────────────────────────
+    
+    
 
     // Build and transform kernel (shape {2*NY, 2*NX} → VkFFT convolution format)
-    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX});
-    
-    //kernel = ifftshift(kernel);
+    //Tensor kernel = create_toeplitz_kernel_standard<2>(coords_flipped, weights, {NY, NX});
+    Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    //kernel = ifftshift(fftshift(kernel));
     //kernel = ifftn(kernel);
 
-    transform_toeplitz_kernel(kernel);
+    //transform_toeplitz_kernel(kernel);
 
     // Input needs a batch dimension: [1, NY, NX]
-    Tensor x_img      = x_flat.view({1, NY, NX});
-    Tensor y_toeplitz = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
 
     toeplitz_multiplication(
-        x_img, y_toeplitz, kernel,
+        input, output, kernel,
         std::nullopt, std::nullopt, std::nullopt,
         ToeplitzMultType::NONE,
         ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
@@ -151,205 +160,58 @@ void test_toeplitz_multiplication()
     );
 
     // ── Compare ───────────────────────────────────────────────────────────────
-    y_direct = y_direct.flatten().contiguous().cpu();
-    y_toeplitz = y_toeplitz.flatten().contiguous().cpu();
+    output = output.contiguous().view({NY,NX}).cpu();
 
-    auto y_direct_real = y_direct.real().contiguous();
-    auto y_direct_imag = y_direct.imag().contiguous();
+    auto output_real = output.real().contiguous();
+    auto output_imag = output.imag().contiguous();
 
-    auto y_toeplitz_real = y_toeplitz.real().contiguous();
-    auto y_toeplitz_imag = y_toeplitz.imag().contiguous();
+    auto input_real = input.view({NY, NX}).cpu().real().contiguous();
+    auto input_imag = input.view({NY, NX}).cpu().imag().contiguous();
 
-    viz::default_line_plots(viz::DefaultLinePlotsOptions<f32>{
-        .lines = {y_direct_real.get_span<f32>(), y_toeplitz_real.get_span<f32>()},
-        .title = "Toeplitz Multiplication vs Direct A^H W A (Real Part)",
-        .xaxis = "Pixel Index",
-        .yaxis = "Value",
-        .legends = {"Direct", "Toeplitz"},
-        .markers = false,
-        .lines_on = true
+    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+        .z = {{input_real.spanning_view(), output_real.spanning_view()}},
+        .titles = {{"Input Real Part", "Toeplitz Output Real Part"}}
     }).show();
 
-    viz::default_line_plots(viz::DefaultLinePlotsOptions<f32>{
-        .lines = {y_direct_imag.get_span<f32>(), y_toeplitz_imag.get_span<f32>()},
-        .title = "Toeplitz Multiplication vs Direct A^H W A (Imaginary Part)",
-        .xaxis = "Pixel Index",
-        .yaxis = "Value",
-        .legends = {"Direct", "Toeplitz"},
-        .markers = false,
-        .lines_on = true
+    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+        .z = {{input_imag.spanning_view(), output_imag.spanning_view()}},
+        .titles = {{"Input Imag Part", "Toeplitz Output Imaginary Part"}}
     }).show();
-    
+
 }
 
-// Identity-kernel test: no NUFFT.
-// Use an all-ones kernel of shape {2*NY, 2*NX} and check that output == input.
-std::pair<bool, std::string> test_toeplitz_identity_kernel()
+void test_tensor_array_operator()
 {
     using namespace hasty;
     using namespace hasty::fft;
 
-    std::string test_string;
-    bool test_success = true;
+    auto res = [&]() -> std::pair<bool,std::string> {
+        std::string out;
+        bool ok = true;
 
-    // 1D Test
-    {
-        test_string += "\n test_toeplitz_identity_kernel_1D\n";
+        // simple CPU tensors
+        Tensor a = zeros({2, 3}, TensorOptions());
+        Tensor r = ones({3}, TensorOptions());
 
-        constexpr i64 NX = 128;
+        // assignment via proxy
+        a[0] = r;
+        Tensor got = a[0].get_tensor();
+        Tensor diff = got.add(r, Scalar{-1.0f});
+        double err = l2_norm(diff.flatten());
+        out += "index assign err=" + std::to_string(err) + "\n";
+        if (err > 1e-6) ok = false;
 
-        Device cuda0(eDeviceType::CUDA, 0);
+        // construct Tensor from proxy (rvalue constructor)
+        Tensor t2 = a[0];
+        Tensor diff2 = t2.add(got, Scalar{-1.0f});
+        double err2 = l2_norm(diff2.flatten());
+        out += "proxy->tensor err=" + std::to_string(err2) + "\n";
+        if (err2 > 1e-6) ok = false;
 
-        // Random complex image [1, NX]
-        Tensor x_flat = view_as_complex(
-            stack({rand({NX}, TensorOptions(cuda0, eScalarType::Float)),
-                rand({NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-        Tensor x_img = x_flat.view({1, NX});
+        return {ok, out};
+    }();
 
-        // All-ones kernel of shape {2*NX}
-        //Tensor kernel = view_as_complex(
-        //    stack({ones({2*NX}, TensorOptions(cuda0, eScalarType::Float)),
-        //           zeros({2*NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-
-        Tensor kernel = ones({2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-
-        transform_toeplitz_kernel(kernel);
-
-        // Run toeplitz multiplication — expect output == input
-        Tensor y = zeros({1, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-        toeplitz_multiplication(
-            x_img, y, kernel,
-            std::nullopt, std::nullopt, std::nullopt,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::MULT,
-            ToeplitzMultType::MULT_CONJ,
-            ToeplitzMultType::MULT,
-            ToeplitzMultType::MULT_CONJ,
-            ToeplitzAccumulateType::NONE
-        );
-
-        Tensor diff   = y.add(x_img, Scalar{-1.0f});
-        double norm_x = l2_norm(x_img.view({NX}));
-        double norm_y = l2_norm(y.view({NX}));
-        double norm_d = l2_norm(diff.view({NX}));
-        double rel_err = (norm_x > 0.0) ? norm_d / norm_x : norm_d;
-
-        test_string +=  "\t ||x||    = "  + std::to_string(norm_x)  + "\n";
-        test_string +=  "\t ||y||    = " + std::to_string(norm_y)  + "\n";
-        test_string +=  "\t rel_err  = " + std::to_string(rel_err) + "\n";
-
-        if (rel_err > 1e-5) {
-            test_success = false;
-        }
-    }
-
-    // 2D Test
-    {
-        test_string += "\n test_toeplitz_identity_kernel_2D\n";
-
-        constexpr i64 NY = 128;
-        constexpr i64 NX = 128;
-
-        Device cuda0(eDeviceType::CUDA, 0);
-
-        // Random complex image [1, NY, NX]
-        Tensor x_flat = view_as_complex(
-            stack({rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float)),
-                rand({NY * NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-        Tensor x_img = x_flat.view({1, NY, NX});
-
-        // All-ones kernel of shape {2*NY, 2*NX}
-        //Tensor kernel = view_as_complex(
-        //    stack({ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float)),
-        //           zeros({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-
-        Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-
-        transform_toeplitz_kernel(kernel);
-
-        // Run toeplitz multiplication — expect output == input
-        Tensor y = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-        toeplitz_multiplication(
-            x_img, y, kernel,
-            std::nullopt, std::nullopt, std::nullopt,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::MULT,
-            ToeplitzMultType::MULT_CONJ,
-            ToeplitzMultType::MULT,
-            ToeplitzMultType::MULT_CONJ,
-            ToeplitzAccumulateType::NONE
-        );
-
-        Tensor diff   = y.add(x_img, Scalar{-1.0f});
-        double norm_x = l2_norm(x_img.view({NY * NX}));
-        double norm_y = l2_norm(y.view({NY * NX}));
-        double norm_d = l2_norm(diff.view({NY * NX}));
-        double rel_err = (norm_x > 0.0) ? norm_d / norm_x : norm_d;
-
-        test_string +=  "\t ||x||    = "  + std::to_string(norm_x)  + "\n";
-        test_string +=  "\t ||y||    = " + std::to_string(norm_y)  + "\n";
-        test_string +=  "\t rel_err  = " + std::to_string(rel_err) + "\n";
-
-        if (rel_err > 1e-5) {
-            test_success = false;
-        }
-
-    }
-
-    // 3D Test
-    {
-        test_string += "\n test_toeplitz_identity_kernel_3D\n";
-
-        constexpr i64 NZ = 128;
-        constexpr i64 NY = 128;
-        constexpr i64 NX = 128;
-
-        Device cuda0(eDeviceType::CUDA, 0);
-
-        // Random complex image [1, NZ, NY, NX]
-        Tensor x_flat = view_as_complex(
-            stack({rand({NZ * NY * NX}, TensorOptions(cuda0, eScalarType::Float)),
-                rand({NZ * NY * NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-        Tensor x_img = x_flat.view({1, NZ, NY, NX});
-
-        // All-ones kernel of shape {2*NY, 2*NX}
-        //Tensor kernel = view_as_complex(
-        //    stack({ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float)),
-        //           zeros({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::Float))}, -1).contiguous());
-
-        Tensor kernel = ones({2*NZ, 2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-
-        transform_toeplitz_kernel(kernel);
-
-        // Run toeplitz multiplication — expect output == input
-        Tensor y = zeros({1, NZ, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-        toeplitz_multiplication(
-            x_img, y, kernel,
-            std::nullopt, std::nullopt, std::nullopt,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::NONE,
-            ToeplitzMultType::NONE,
-            ToeplitzAccumulateType::NONE
-        );
-
-        Tensor diff   = y.add(x_img, Scalar{-1.0f});
-        double norm_x = l2_norm(x_img.view({NZ * NY * NX}));
-        double norm_y = l2_norm(y.view({NZ * NY * NX}));
-        double norm_d = l2_norm(diff.view({NZ * NY * NX}));
-        double rel_err = (norm_x > 0.0) ? norm_d / norm_x : norm_d;
-
-        test_string +=  "\t ||x||    = "  + std::to_string(norm_x)  + "\n";
-        test_string +=  "\t ||y||    = " + std::to_string(norm_y)  + "\n";
-        test_string +=  "\t rel_err  = " + std::to_string(rel_err) + "\n";
-
-        if (rel_err > 1e-5) {
-            test_success = false;
-        }
-    }
-
-    return {test_success, test_string};
+    std::cout << "test_index_proxy: " << (res.first ? "PASS" : "FAIL") << "\n" << res.second << std::endl;
 }
 
 int main() {
@@ -357,8 +219,12 @@ int main() {
     //viz_test();
     //auto test_pair = test_toeplitz_identity_kernel();
     //std::cout << test_pair.second;
-    test_toeplitz_multiplication();
+    //test_toeplitz_multiplication();
+    //test_cartesian_coords_gives_unity_kernel();
+    //test_tensor_array_operator();
 
+    test_toeplitz_multiplication();
+    //hasty::viz::test_tensor_viz();
 
     return 0;
 }

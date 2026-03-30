@@ -1,5 +1,6 @@
 module;
 
+#include "tensor_spanning_view.hpp"
 #include <cuComplex.h>
 
 export module hasty_tensor_mod:tensor;
@@ -82,16 +83,138 @@ public:
     template<is_tensor_type T>
     std::span<const T> get_span() && = delete;
     
+    // Return a lightweight non-owning view of this tensor's CPU memory.
+    inline TensorSpanningView spanning_view() const {
+        auto tc = this->cpu();
+        TensorSpanningView v;
+        v.data = tc.const_data_ptr();
+        // map module scalar types to header SimpleDType
+        switch (tc.scalar_type()) {
+            case scalar_alias::f32: v.simple_dtype = hasty::SimpleDType::F32; break;
+            case scalar_alias::f64: v.simple_dtype = hasty::SimpleDType::F64; break;
+            case scalar_alias::i64: v.simple_dtype = hasty::SimpleDType::I64; break;
+            case scalar_alias::i32: v.simple_dtype = hasty::SimpleDType::I32; break;
+            case scalar_alias::i16: v.simple_dtype = hasty::SimpleDType::I16; break;
+            case scalar_alias::b8:  v.simple_dtype = hasty::SimpleDType::B8;  break;
+            default:                v.simple_dtype = hasty::SimpleDType::Null; break;
+        }
+        v.ndim = static_cast<int>(tc.ndimension());
+        auto sv = tc.sizes_vec();
+        v.sizes.assign(sv.begin(), sv.end());
+        auto st = tc.strides();
+        v.strides.assign(st.begin(), st.end());
+        return v;
+    }
+
     
     template<is_tensor_index_type... Idx>
-    inline Tensor operator[](Idx... indices) const {
-        return Tensor(_base.index({std::get<Idx>(indices).to_torch()...}));
+    inline Tensor operator[](Idx... indices) const & {
+        return Tensor(_base.index({TensorIndex(indices).to_torch()...}));
     }
 
     template<is_tensor_index_type... Idx>
-    inline Tensor operator[](const std::tuple<Idx...>& indices) const {
-        return Tensor(_base.index({std::get<Idx>(indices).to_torch()...}));
+    inline Tensor operator[](const std::tuple<Idx...>& indices) const & {
+        return std::apply([this](auto&&... elems) {
+            return Tensor(_base.index({TensorIndex(elems).to_torch()...}));
+        }, indices);
     }
+
+    template<std::size_t N>
+    class IndexProxy {
+        Tensor* _parent;
+        std::array<hat::indexing::TensorIndex, N> _tinds;
+
+        // Only Tensor may construct an IndexProxy
+        friend class Tensor;
+        explicit IndexProxy(Tensor* p, std::array<hat::indexing::TensorIndex, N>&& inds)
+            : _parent(p), _tinds(std::move(inds)) {}
+
+    public:
+        IndexProxy() = delete;
+        // Non-copyable, non-movable to prevent storing
+        IndexProxy(const IndexProxy&) = delete;
+        IndexProxy(IndexProxy&&) = delete;
+
+        // Allow assignment from another IndexProxy (same-type copy-assignment)
+        IndexProxy& operator=(const IndexProxy& rhs) {
+            Tensor rhs_t = rhs.get_tensor();
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, rhs_t._base);
+            return *this;
+        }
+
+        // Allow assignment from rvalue IndexProxy
+        IndexProxy& operator=(IndexProxy&& rhs) {
+            Tensor rhs_t = rhs.get_tensor();
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, rhs_t._base);
+            return *this;
+        }
+
+        ~IndexProxy() = default;
+
+        // Assign tensor into selection using index_put_
+        IndexProxy& operator=(const Tensor& rhs) {
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, rhs._base);
+            return *this;
+        }
+
+        IndexProxy& operator=(Tensor&& rhs) {
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, rhs._base);
+            return *this;
+        }
+
+        // Assign scalar into selection
+        IndexProxy& operator=(const Scalar& s) {
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, s.to_torch());
+            return *this;
+        }
+
+        // Assign from another IndexProxy (write rhs selection into this selection)
+        template<std::size_t M>
+        IndexProxy& operator=(const IndexProxy<M>& rhs) {
+            // Extract the rhs tensor view and write it into this selection
+            Tensor rhs_t = rhs.get_tensor();
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            _parent->_base.index_put_(v, rhs_t._base);
+            return *this;
+        }
+
+        // Extract the selected Tensor (explicit getter)
+        Tensor get_tensor() const {
+            std::vector<hat::indexing::TensorIndex> v(_tinds.begin(), _tinds.end());
+            return Tensor(_parent->_base.index(v));
+        }
+    };
+
+    // Lvalue-only operator[] returning proxy for assignment
+    template<is_tensor_index_type... Idx>
+    inline IndexProxy<sizeof...(Idx)> operator[](Idx... indices) & {
+        std::array<hat::indexing::TensorIndex, sizeof...(Idx)> arr{TensorIndex(indices).to_torch()...};
+        return IndexProxy<sizeof...(Idx)>(this, std::move(arr));
+    }
+
+    template<is_tensor_index_type... Idx>
+    inline IndexProxy<sizeof...(Idx)> operator[](const std::tuple<Idx...>& indices) & {
+        std::array<hat::indexing::TensorIndex, sizeof...(Idx)> arr{};
+        std::size_t i = 0;
+        std::apply([&](auto&&... elems) {
+            ((arr[i++] = TensorIndex(elems).to_torch()), ...);
+        }, indices);
+        return IndexProxy<sizeof...(Idx)>(this, std::move(arr));
+    }
+
+    // Disable operator[] on rvalues to avoid surprising temporaries
+    template<is_tensor_index_type... Idx>
+    inline Tensor operator[](Idx... indices) && = delete;
+
+    // Construct a Tensor directly from an IndexProxy (rvalue only)
+    template<std::size_t N>
+    Tensor(IndexProxy<N>&& p)
+        : _base(p._parent->_base.index(std::vector<hat::indexing::TensorIndex>(p._tinds.begin(), p._tinds.end()))) {}
 
     inline Tensor index(ArrayRef<TensorIndex> indices) const {
         std::vector<hat::indexing::TensorIndex> tind;
@@ -99,6 +222,9 @@ public:
         for (const auto &idx : indices) tind.push_back(idx.to_torch());
         return Tensor(_base.index(tind));
     }
+
+    
+
 
     // LibTorch extensions
 
@@ -237,6 +363,11 @@ public:
 
     inline eScalarType dtype() const {
         return scalartype::from_torch(_base.scalar_type());
+    }
+
+    /* WARNING: This ignores layout and memory format*/
+    inline TensorOptions options() const {
+        return TensorOptions(device(), scalar_type());
     }
 
     inline i64 size(i32 dim) const { return _base.size(dim); }

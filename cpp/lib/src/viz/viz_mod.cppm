@@ -1,19 +1,24 @@
 module;
 
+#include "tensor_spanning_view.hpp"
+
 #include <plotlypp/figure.hpp>
 #include <plotlypp/traces/scatter.hpp>
+#include <plotlypp/traces/heatmap.hpp>
 
 export module hasty_viz_mod;
 
-import std;
 import hasty_threading_mod;
+import hasty_tensor_mod;
+import hasty_util_mod;
+
 
 namespace hasty {
 namespace viz {
 
 export template<typename T>
 struct DefaultLinePlotsOptions {
-    std::vector<std::span<T>> lines;
+    std::vector<TensorSpanningView> lines;
     std::string title{};
     std::string xaxis{};
     std::string yaxis{};
@@ -37,16 +42,15 @@ plotlypp::Figure default_line_plots(const DefaultLinePlotsOptions<T>& opts)
 
     size_t li = 0;
     for (const auto &ln : opts.lines) {
-        std::vector<double> y;
-        y.reserve(ln.size());
-        for (const auto &v : ln) y.push_back(static_cast<double>(v));
+        if (ln.ndim > 1)
+            throw std::runtime_error("Lines must be dimension 1");
 
-        std::vector<double> x(y.size());
+        std::vector<double> x(ln.sizes[0]);
         for (size_t i = 0; i < x.size(); ++i) x[i] = static_cast<double>(i);
 
         auto scatter = plotlypp::Scatter()
                            .x(x)
-                           .y(y);
+                           .y(ln);
 
         if (opts.lines_on && opts.markers) {
             scatter.mode({plotlypp::Scatter::Mode::Lines, plotlypp::Scatter::Mode::Markers});
@@ -80,6 +84,59 @@ plotlypp::Figure default_line_plots(const DefaultLinePlotsOptions<T>& opts)
     return plotlypp::Figure().addTraces(std::move(traces)).setLayout(std::move(layout));
 }
 
+export template<std::size_t N1, std::size_t N2>
+struct DefaultHeatmapOptions {
+    Arr<Arr<TensorSpanningView, N2>, N1> z;
+    Opt<Arr<Arr<std::string, N2>, N1>> titles = nullopt; // per-subplot titles
+};
+
+export template<std::size_t N1, std::size_t N2>
+plotlypp::Figure default_heatmap(const DefaultHeatmapOptions<N1, N2>& opts)
+{
+
+    auto gridLayout = plotlypp::Layout().grid(
+        plotlypp::Layout::Grid().rows(N1).columns(N2).pattern(plotlypp::Layout::Grid::Pattern::Independent));
+
+    plotlypp::Figure fig;
+
+    for_sequence<N1>([&opts, &fig](auto i) {
+        for_sequence<N2>([&opts, &fig, i](auto j) {
+            const auto &z = opts.z[i][j];
+            // create heatmap trace for z
+            plotlypp::Heatmap hm;
+            hm.z(opts.z[i][j]);
+            // set title if provided
+            if (opts.titles && !(*opts.titles)[i][j].empty()) {
+                hm.name((*opts.titles)[i][j]);
+            }
+            // assign trace to the correct subplot axes (x/x2, y/y2, ...)
+            // Plotly uses "x", "x2", "x3"... and similarly for y axes. Subplot
+            // numbering is 1-based in row-major order.
+            const int subplot_index = static_cast<int>(i) * static_cast<int>(N2) + static_cast<int>(j) + 1;
+            std::string xaxis = (subplot_index == 1) ? "x" : ("x" + std::to_string(subplot_index));
+            std::string yaxis = (subplot_index == 1) ? "y" : ("y" + std::to_string(subplot_index));
+            hm.json["xaxis"] = xaxis;
+            hm.json["yaxis"] = yaxis;
+
+            hm.showscale(true);
+            // add to figure
+            fig.addTrace(std::move(hm));
+        });
+    });
+
+    fig.setLayout(std::move(gridLayout));
+    return fig;
+}
+
+export void test_tensor_viz()
+{
+    auto rand1 = hasty::rand({100,200}, hasty::TensorOptions());
+    auto rand2 = hasty::rand({100,100}, hasty::TensorOptions());
+
+    default_heatmap(DefaultHeatmapOptions<1, 2>{
+        .z = {{rand1.spanning_view(), rand2.spanning_view()}}
+    }).show();
+}
 
 
 }

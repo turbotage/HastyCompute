@@ -182,7 +182,7 @@ void benchmark_fft(int NX, int NY, int NZ, bool precission = true, bool speed = 
 
 	const int iterations = 20;
 
-    auto gendat = generate_data(NX, NY, NZ, IDENTITY);
+    auto gendat = generate_data(NX, NY, NZ, OTHER);
 
 	std::vector<cuFloatComplex> h_cu_output(N2), h_vk_output(N2);
 	cuFloatComplex *d_kernel;

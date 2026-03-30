@@ -237,5 +237,83 @@ Tensor create_toeplitz_kernel(
     return kernel.contiguous();
 }
 
-} // namespace fft
+// Explicit template instantiations for linker visibility
+template Tensor create_toeplitz_kernel_standard<1>(
+    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
+template Tensor create_toeplitz_kernel_standard<2>(
+    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
+template Tensor create_toeplitz_kernel_standard<3>(
+    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
+
+template<std::size_t DIM>
+Tensor create_toeplitz_kernel_standard(
+    const Tensor&           coords,
+    const Tensor&           weights,
+    const std::vector<i64>& im_size
+)
+{
+    // Expect coords tensor of shape [DIM, M]
+    if (coords.ndimension() != 2 || coords.size(0) != (i64)DIM)
+        throw std::runtime_error("create_toeplitz_kernel_standard<DIM>: coords must be [DIM, M]");
+
+    i64 M = coords.size(1);
+
+    // Validate nudata/weights length
+    Tensor nudata = weights;
+    if (nudata.ndimension() == 2) {
+        if (nudata.size(1) != M)
+            throw std::runtime_error("create_toeplitz_kernel_standard: nudata.shape[1] must equal coord length");
+    } else if (nudata.ndimension() == 1) {
+        if (nudata.size(0) != M)
+            throw std::runtime_error("create_toeplitz_kernel_standard: nudata length must equal coord length");
+    } else {
+        throw std::runtime_error("create_toeplitz_kernel_standard: nudata must be 1-D or 2-D with leading ntransf==1");
+    }
+
+    // Build nmodes (image-sized) from im_size
+    std::vector<i64> nmodes(DIM);
+    for (size_t i = 0; i < DIM; ++i) nmodes[i] = im_size[i];
+
+    // prepare nudata 1-D weights for ntu_nufft: if (1,M) take first row
+    Tensor nudata_1d = nudata;
+    if (nudata.ndimension() == 2) nudata_1d = nudata.select(0, 0).contiguous();
+
+    if (!nudata_1d.is_complex())
+        nudata_1d = view_as_complex(stack({nudata_1d, zeros_like(nudata_1d)}, -1).contiguous());
+
+    // nmodes for ntu_nufft are reversed (cufinufft convention)
+    std::vector<i64> nmodes_fft(DIM);
+    for (size_t i = 0; i < DIM; ++i) nmodes_fft[i] = nmodes[DIM - 1 - i];
+
+    // Run adjoint NUFFT on the image-sized grid to produce reduced image
+    Tensor reduced = ntu_nufft(coords, nudata_1d, nmodes_fft, nmodes, /*double_prec=*/false);
+
+    // Allocate full kernel (2*im_size) and copy reduced into its front portion
+    std::vector<i64> full_shape(DIM);
+    for (size_t i = 0; i < DIM; ++i) full_shape[i] = nmodes[i] * 2;
+    Tensor kernel = zeros(ArrayRef<i64>(full_shape), TensorOptions(reduced.device(), reduced.dtype()));
+
+    // Narrow the front region and copy reduced image there
+    Tensor target = kernel;
+    for (size_t i = 0; i < DIM; ++i) target = target.narrow((int)i, 0, nmodes[i]);
+    target.copy_(reduced);
+
+    // FFT the full kernel and scale by 1 / prod(2*im_size)
+    std::vector<i64> fft_dims((int)DIM);
+    for (int i = 0; i < (int)DIM; ++i) fft_dims[i] = i;
+    kernel = fftn(kernel, nullopt, ArrayRef<i64>(fft_dims));
+
+    double scale = 1.0;
+    for (auto s : im_size) scale /= static_cast<double>(2 * s);
+    kernel = kernel.mul(Scalar{scale});
+
+    if (kernel.dtype() != eScalarType::ComplexFloat)
+        kernel = kernel.to(eScalarType::ComplexFloat);
+
+    return kernel.contiguous();
+}
+
+
+
+}// namespace fft
 } // namespace hasty

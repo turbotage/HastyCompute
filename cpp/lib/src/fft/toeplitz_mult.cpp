@@ -14,6 +14,8 @@ module hasty_fft_mod;
 import hasty_nvrtc_mod;
 import hasty_vkfft_mod;
 
+import hasty_viz_mod;
+
 inline void CUDA_CHECK(cudaError_t err) {
 	if (err != cudaSuccess) {
 		throw std::runtime_error("CUDA error: " + std::string(cudaGetErrorString(err)) + "\n");
@@ -87,10 +89,13 @@ void launch_toeplitz_load_1D(
         (void*)&accumulate
     };
 
-    cuLaunchKernel(nvrtc_modules[device_idx].function,
+    CUresult cres = cuLaunchKernel(nvrtc_modules[device_idx].function,
         blocks, 1, 1,
         threads_per_block, 1, 1,
         0, 0, args, 0);
+    if (cres != CUDA_SUCCESS) {
+        throw std::runtime_error("cuLaunchKernel failed with error code " + std::to_string(cres));
+    }
 }
 
 
@@ -149,13 +154,16 @@ void launch_toeplitz_load_2D(
         (void*)&accumulate
     };
 
-    cuLaunchKernel(
+    CUresult cres = cuLaunchKernel(
         nvrtc_modules[device_idx].function,
         blocks, 1, 1,
         threads_per_block, 1, 1,
         0, 0,
         args, 0
     );
+    if (cres != CUDA_SUCCESS) {
+        throw std::runtime_error("cuLaunchKernel failed with error code " + std::to_string(cres));
+    }
 
 }
 
@@ -215,14 +223,16 @@ void launch_toeplitz_load_3D(
         (void*)&accumulate
     };
 
-    cuLaunchKernel(
+    CUresult cres = cuLaunchKernel(
         nvrtc_modules[device_idx].function,
         blocks, 1, 1,
         threads_per_block, 1, 1,
         0, 0,
         args, 0
     );
-
+    if (cres != CUDA_SUCCESS) {
+        throw std::runtime_error("cuLaunchKernel failed with error code " + std::to_string(cres));
+    }
 }
 
 
@@ -407,6 +417,25 @@ void perform_toeplitz_multiplication_cuda_2D(
         device_idx
     );
 
+    if (scratchmem.has_value()) {
+        auto scratch_cpu = scratchmem->cpu();
+        auto scratch_real = scratch_cpu.real().contiguous();
+        auto scratch_imag = scratch_cpu.imag().contiguous();
+
+        std::cout << scalar_type_to_string(scratch_cpu.scalar_type()) << " scratch CPU tensor:\n";
+        std::cout << scalar_type_to_string(scratch_real.scalar_type()) << " scratch_real CPU tensor:\n";
+        std::cout << scalar_type_to_string(scratch_imag.scalar_type()) << " scratch_imag CPU tensor:\n";
+
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
+            .z = {{scratch_real.spanning_view()}},
+            .titles = {{"ScratchMem Real"}}
+        }).show();
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
+            .z = {{scratch_imag.spanning_view()}},
+            .titles = {{"ScratchMem Imag"}}
+        }).show();
+    }
+
     // Create VkFFT plans and execute FFTs here
     VkFFT_Cache::VkFFT_Key key(device_idx);
     key.performConvolution = true;
@@ -415,10 +444,10 @@ void perform_toeplitz_multiplication_cuda_2D(
     key.FFTdim = 2;
     key.performZeropadding[0] = true;
     key.performZeropadding[1] = true;
-    key.fft_zeropad_left[0] = 0;
-    key.fft_zeropad_left[1] = 0;
-    key.fft_zeropad_right[0] = NX;
-    key.fft_zeropad_right[1] = NY;
+    key.fft_zeropad_left[0] = NX/2;
+    key.fft_zeropad_left[1] = NY/2;
+    key.fft_zeropad_right[0] = NX-NX/2;
+    key.fft_zeropad_right[1] = NY-NY/2;
 
     VkFFTApplication& app = global_vkfft_cache[device_idx].get_or_create(key);
 
@@ -435,6 +464,25 @@ void perform_toeplitz_multiplication_cuda_2D(
         VkFFTResult res = VkFFTAppend(&app, 0, &launchParams);
         if (res != VKFFT_SUCCESS) {
             throw std::runtime_error("VkFFT run failed, code: " + std::to_string(res));
+        }
+
+        if (scratchmem.has_value()) {
+            auto scratch_cpu = scratchmem->cpu();
+            auto scratch_real = scratch_cpu.real().contiguous();
+            auto scratch_imag = scratch_cpu.imag().contiguous();
+
+            std::cout << scalar_type_to_string(scratch_cpu.scalar_type()) << " scratch CPU tensor:\n";
+            std::cout << scalar_type_to_string(scratch_real.scalar_type()) << " scratch_real CPU tensor:\n";
+            std::cout << scalar_type_to_string(scratch_imag.scalar_type()) << " scratch_imag CPU tensor:\n";
+
+            viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
+                .z = {{scratch_real.spanning_view()}},
+                .titles = {{"ScratchMem Real"}}
+            }).show();
+            viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
+                .z = {{scratch_imag.spanning_view()}},
+                .titles = {{"ScratchMem Imag"}}
+            }).show();
         }
 
         // For other accumulate types, adjust outputbatch as needed

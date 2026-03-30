@@ -559,7 +559,7 @@ public:
 
 export using SliceIndexType = Slice;
 
-export class Tensor;
+export class Tensor; // forward declaration for TensorIndex constructor
 
 export struct TensorIndex final {
 private:
@@ -596,7 +596,7 @@ public:
 export using TensorIndexType = TensorIndex;
 
 template<typename T>
-concept is_tensor_index_type = std::is_same_v<T, TensorIndexType>;
+concept is_tensor_index_type = std::is_convertible_v<T, TensorIndexType>;
 
 
 

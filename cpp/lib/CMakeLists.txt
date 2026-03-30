@@ -66,6 +66,7 @@ target_sources(HastyCompute
 			"src/tensor/tensor_background.cppm"
 			"src/tensor/tensor_concepts.cppm"
 			"src/tensor/tensor_external.cppm"
+			"src/tensor/tensor_json.cppm"
 			"src/tensor/tensor_mod.cppm"
 			"src/tensor/tensor_scalar.cppm"
             "src/tensor/tensor_tensor.cppm"
@@ -218,6 +219,11 @@ FetchContent_MakeAvailable(plotlypp)
 
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:plotlypp::plotlypp>)
 
+
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
+target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 
 

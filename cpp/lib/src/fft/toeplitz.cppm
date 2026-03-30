@@ -38,6 +38,13 @@ export Tensor create_toeplitz_kernel(
     bool                    double_prec = false
 );
 
+export template<std::size_t DIM>
+Tensor create_toeplitz_kernel_standard(
+    const Tensor&           coords,
+    const Tensor&           weights,
+    const std::vector<i64>& im_size
+);
+
 export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = false);
 
 export void toeplitz_multiplication(

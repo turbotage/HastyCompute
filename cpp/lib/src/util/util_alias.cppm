@@ -72,7 +72,7 @@ namespace hasty {
         return std::make_tuple(std::forward<Ts>(args)...);
     }
 
-    export template<typename... Args>
-    using Arr = std::array<Args...>;
+    export template<typename T, std::size_t N>
+    using Arr = std::array<T, N>;
 
 }

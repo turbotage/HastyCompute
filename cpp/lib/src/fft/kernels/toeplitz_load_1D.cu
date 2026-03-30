@@ -38,7 +38,7 @@ extern "C" __global__ void toeplitz_load_1D(
 
     if (batch_out >= 0) {
         const long int batch_idx = batch_out * NX + idx;
-        const long int sx = idx;
+        const long int sx = idx + (NX - 1);
         temp = scratch[sx];
         if (mult1 != nullptr)
             temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);
@@ -61,6 +61,7 @@ extern "C" __global__ void toeplitz_load_1D(
             temp = complex_mult_toeplitz_load(temp, mult1[idx], input_mult1_type);
         if (mult2 != nullptr)
             temp = complex_mult_toeplitz_load(temp, mult2[idx], input_mult2_type);
-        scratch[idx] = temp;   // loads into [0, NX), VkFFT zero-pads [NX, 2*NX)
+        const long int sx = idx + (NX - 1);
+        scratch[sx] = temp;   // embed into centered location in 2*NX grid
     }
 }
