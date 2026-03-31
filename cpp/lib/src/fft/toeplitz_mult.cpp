@@ -306,8 +306,8 @@ void perform_toeplitz_multiplication_cuda_1D(
     key.size[0]                = 2 * NX;
     key.FFTdim                 = 1;
     key.performZeropadding[0]  = true;
-    key.fft_zeropad_left[0]    = 0;
-    key.fft_zeropad_right[0]   = NX;
+    key.fft_zeropad_left[0]    = NX;
+    key.fft_zeropad_right[0]   = 2 * NX;
 
     VkFFTApplication& app = global_vkfft_cache[device_idx].get_or_create(key);
 
@@ -417,25 +417,6 @@ void perform_toeplitz_multiplication_cuda_2D(
         device_idx
     );
 
-    if (scratchmem.has_value()) {
-        auto scratch_cpu = scratchmem->cpu();
-        auto scratch_real = scratch_cpu.real().contiguous();
-        auto scratch_imag = scratch_cpu.imag().contiguous();
-
-        std::cout << scalar_type_to_string(scratch_cpu.scalar_type()) << " scratch CPU tensor:\n";
-        std::cout << scalar_type_to_string(scratch_real.scalar_type()) << " scratch_real CPU tensor:\n";
-        std::cout << scalar_type_to_string(scratch_imag.scalar_type()) << " scratch_imag CPU tensor:\n";
-
-        viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
-            .z = {{scratch_real.spanning_view()}},
-            .titles = {{"ScratchMem Real"}}
-        }).show();
-        viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
-            .z = {{scratch_imag.spanning_view()}},
-            .titles = {{"ScratchMem Imag"}}
-        }).show();
-    }
-
     // Create VkFFT plans and execute FFTs here
     VkFFT_Cache::VkFFT_Key key(device_idx);
     key.performConvolution = true;
@@ -444,10 +425,10 @@ void perform_toeplitz_multiplication_cuda_2D(
     key.FFTdim = 2;
     key.performZeropadding[0] = true;
     key.performZeropadding[1] = true;
-    key.fft_zeropad_left[0] = NX/2;
-    key.fft_zeropad_left[1] = NY/2;
-    key.fft_zeropad_right[0] = NX-NX/2;
-    key.fft_zeropad_right[1] = NY-NY/2;
+    key.fft_zeropad_left[0] = NX;
+    key.fft_zeropad_left[1] = NY;
+    key.fft_zeropad_right[0] = 2*NX; //NX-NX/2;
+    key.fft_zeropad_right[1] = 2*NY; //NY-NY/2;
 
     VkFFTApplication& app = global_vkfft_cache[device_idx].get_or_create(key);
 
@@ -464,25 +445,6 @@ void perform_toeplitz_multiplication_cuda_2D(
         VkFFTResult res = VkFFTAppend(&app, 0, &launchParams);
         if (res != VKFFT_SUCCESS) {
             throw std::runtime_error("VkFFT run failed, code: " + std::to_string(res));
-        }
-
-        if (scratchmem.has_value()) {
-            auto scratch_cpu = scratchmem->cpu();
-            auto scratch_real = scratch_cpu.real().contiguous();
-            auto scratch_imag = scratch_cpu.imag().contiguous();
-
-            std::cout << scalar_type_to_string(scratch_cpu.scalar_type()) << " scratch CPU tensor:\n";
-            std::cout << scalar_type_to_string(scratch_real.scalar_type()) << " scratch_real CPU tensor:\n";
-            std::cout << scalar_type_to_string(scratch_imag.scalar_type()) << " scratch_imag CPU tensor:\n";
-
-            viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
-                .z = {{scratch_real.spanning_view()}},
-                .titles = {{"ScratchMem Real"}}
-            }).show();
-            viz::default_heatmap(viz::DefaultHeatmapOptions<1,1>{
-                .z = {{scratch_imag.spanning_view()}},
-                .titles = {{"ScratchMem Imag"}}
-            }).show();
         }
 
         // For other accumulate types, adjust outputbatch as needed
@@ -600,12 +562,12 @@ void perform_toeplitz_multiplication_cuda_3D(
     key.performZeropadding[0] = true;
     key.performZeropadding[1] = true;
     key.performZeropadding[2] = true;
-    key.fft_zeropad_left[0] = 0;
-    key.fft_zeropad_left[1] = 0;
-    key.fft_zeropad_left[2] = 0;
-    key.fft_zeropad_right[0] = NX;
-    key.fft_zeropad_right[1] = NY;
-    key.fft_zeropad_right[2] = NZ;
+    key.fft_zeropad_left[0] = NX;
+    key.fft_zeropad_left[1] = NY;
+    key.fft_zeropad_left[2] = NZ;
+    key.fft_zeropad_right[0] = 2 * NX;
+    key.fft_zeropad_right[1] = 2 * NY;
+    key.fft_zeropad_right[2] = 2 * NZ;
 
     VkFFTApplication& app = global_vkfft_cache[device_idx].get_or_create(key);
     

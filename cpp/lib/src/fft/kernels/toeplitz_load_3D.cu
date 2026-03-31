@@ -45,10 +45,7 @@ extern "C" __global__ void toeplitz_load_3D(
 		cuFloatComplex temp;
 		if (batch_out >= 0) {
 			const long int batch_idx = batch_out * NX * NY * NZ + idx;
-			const long int sx = x + (NX - 1);
-			const long int sy = y + (NY - 1);
-			const long int sz = z + (NZ - 1);
-			temp = scratch[sz * NX2 * NY2 + sy * NX2 + sx];
+			temp = scratch[z * NX2 * NY2 + y * NX2 + x];
 			if (mult1 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);
 			}
@@ -74,10 +71,7 @@ extern "C" __global__ void toeplitz_load_3D(
 			if (mult2 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult2[idx], input_mult2_type);
 			}
-			const long int sx = x + (NX - 1);
-			const long int sy = y + (NY - 1);
-			const long int sz = z + (NZ - 1);
-			scratch[sz * NX2 * NY2 + sy * NX2 + sx] = temp;
+			scratch[z * NX2 * NY2 + y * NX2 + x] = temp;
 		}
 	}
 }

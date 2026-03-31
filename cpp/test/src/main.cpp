@@ -128,12 +128,13 @@ void test_toeplitz_multiplication()
 
     std::cout << "test_toeplitz_multiplication: running 2-D test...\n";
 
-    constexpr i64 NY   = 64;
-    constexpr i64 NX   = 96;
+    constexpr i64 NY   = 128;
+    constexpr i64 NX   = 128;
     
     Device cuda0(eDeviceType::CUDA, 0);
     
     
+
 
     // Build and transform kernel (shape {2*NY, 2*NX} → VkFFT convolution format)
     //Tensor kernel = create_toeplitz_kernel_standard<2>(coords_flipped, weights, {NY, NX});
@@ -142,7 +143,7 @@ void test_toeplitz_multiplication()
     //kernel = ifftshift(fftshift(kernel));
     //kernel = ifftn(kernel);
 
-    //transform_toeplitz_kernel(kernel);
+    transform_toeplitz_kernel(kernel);
 
     // Input needs a batch dimension: [1, NY, NX]
     Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));

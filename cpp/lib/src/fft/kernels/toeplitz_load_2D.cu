@@ -41,12 +41,8 @@ extern "C" __global__ void toeplitz_load_2D(
 
 		cuFloatComplex temp;
 		if (batch_out >= 0) {
-			const long int batch_idx = batch_out * NX * NY + y * NX + x;
-			//const long int sx = x + (NX - 1);
-			//const long int sy = y + (NY - 1);
-			const long int sx = x;
-			const long int sy = y;
-			temp = scratch[sy * NX2 + sx];
+			const long int batch_idx = batch_out * NX * NY + idx;
+			temp = scratch[y * NX2 + x];
 			if (mult1 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);
 			}
@@ -64,7 +60,7 @@ extern "C" __global__ void toeplitz_load_2D(
 			output[batch_idx] = temp;
 		}
 		if (batch_in >= 0) {
-			const long int batch_idx = batch_in * NX * NY + y * NX + x;
+			const long int batch_idx = batch_in * NX * NY + idx;
 			temp = input[batch_idx];
 			if (mult1 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult1[idx], input_mult1_type);
@@ -72,11 +68,7 @@ extern "C" __global__ void toeplitz_load_2D(
 			if (mult2 != nullptr) {
 				temp = complex_mult_toeplitz_load(temp, mult2[idx], input_mult2_type);
 			}
-			//const long int sx = x + (NX - 1);
-			//const long int sy = y + (NY - 1);
-			const long int sx = x;
-			const long int sy = y;
-			scratch[sy * NX2 + sx] = temp;
+			scratch[y * NX2 + x] = temp;
 		}
 	}
 }
