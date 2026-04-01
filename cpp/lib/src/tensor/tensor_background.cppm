@@ -122,6 +122,24 @@ export std::string scalar_type_to_string(eScalarType dtype) {
     }
 }
 
+export eScalarType string_to_scalar_type(const std::string& s)
+{
+    if (s == "u8")   return eScalarType::Byte;
+	if (s == "i8")   return eScalarType::Char;
+	if (s == "i16")  return eScalarType::Short;
+	if (s == "i32")  return eScalarType::Int;
+	if (s == "i64")  return eScalarType::Long;
+	if (s == "f16")  return eScalarType::Half;
+	if (s == "f32")  return eScalarType::Float;
+	if (s == "f64")  return eScalarType::Double;
+	if (s == "c16")  return eScalarType::ComplexHalf;
+	if (s == "c32")  return eScalarType::ComplexFloat;
+	if (s == "c64")  return eScalarType::ComplexDouble;
+	if (s == "b8")   return eScalarType::Bool;
+	if (s == "bf16") return eScalarType::BFloat16;
+	throw std::runtime_error("Unknown scalar dtype '" + s + "' in HDF5 file");
+}
+
 export template<is_tensor_type T>
 inline constexpr eScalarType scalar_type_of() {
     if constexpr (std::is_same_v<T, u8>) return scalar_alias::u8;

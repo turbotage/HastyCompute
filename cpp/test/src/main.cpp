@@ -4,6 +4,7 @@ import hasty_tensor_mod;
 import hasty_fft_mod;
 import hasty_generic_value_mod;
 import hasty_server_mod;
+import hasty_io_mod;
 
 import hasty_viz_mod;
 
@@ -319,6 +320,15 @@ int main() {
     //test_toeplitz_multiplication();
     //test_cartesian_coords_gives_unity_kernel();
     //test_tensor_array_operator();
+
+    hasty::GenericValue gv = hasty::io::hdf5::read_generic_value(HASTY_DATA_DIR + "/images.h5", "astronaut_luma_512x512");
+
+    hasty::Tensor t = gv.as_tensor().contiguous();
+
+    hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
+        .z = {{t.spanning_view()}},
+        .titles = {{"Astronaut Luma 512x512"}}
+    }).show();
 
     test_toeplitz_multiplication();
     //hasty::viz::test_tensor_viz();

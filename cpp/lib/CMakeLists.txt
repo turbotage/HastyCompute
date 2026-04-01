@@ -61,6 +61,9 @@ target_sources(HastyCompute
 			"src/fft/nufft.cppm"
 			"src/fft/toeplitz.cppm"
 			"src/generic_value/generic_value_mod.cppm"
+            "src/io/io_blosc.cppm"
+            "src/io/io_hdf5.cppm"
+			"src/io/io_mod.cppm"
 			"src/nvrtc/nvrtc_mod.cppm"
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
@@ -178,23 +181,46 @@ FetchContent_MakeAvailable(finufft)
 # ever calls finufft headers directly, so they need neither the compile
 # flag nor the link-time OpenMP target.  The .so files handle OpenMP
 # entirely at runtime through their own ELF NEEDED entries.
+# Strip INTERFACE_COMPILE_OPTIONS and remove every non-IMPORTED target from
+# INTERFACE_LINK_LIBRARIES on finufft/cufinufft.  These .so files contain their
+# own runtime deps (OpenMP, ducc0, xsimd …) via ELF NEEDED + RPATH, so
+# consumers of HastyCompute don't need those sub-dep targets on their link
+# line.  Keeping only IMPORTED (find_package) targets prevents the CMake 4.x
+# export-checker from cascading into finufft's FetchContent sub-dep graph.
 foreach(_tgt finufft cufinufft)
     if(TARGET ${_tgt})
+        # Clear all interface compile options (removes -fopenmp and friends so
+        # they cannot bleed into HastyCompute's C++ module BMI compilations).
         set_property(TARGET ${_tgt} PROPERTY INTERFACE_COMPILE_OPTIONS "")
         get_target_property(_iface_libs ${_tgt} INTERFACE_LINK_LIBRARIES)
         if(_iface_libs)
-            list(FILTER _iface_libs EXCLUDE REGEX "OpenMP|[Oo]penmp|omp")
-            set_property(TARGET ${_tgt} PROPERTY INTERFACE_LINK_LIBRARIES "${_iface_libs}")
+            set(_clean_libs "")
+            foreach(_lib IN LISTS _iface_libs)
+                # Explicitly drop OpenMP targets: even though they're IMPORTED
+                # their INTERFACE_COMPILE_OPTIONS carry -fopenmp which would
+                # re-infect HastyCompute's module compilations.
+                if("${_lib}" MATCHES "[Oo]pen[Mm][Pp]|omp")
+                    continue()
+                endif()
+                if(TARGET "${_lib}")
+                    # Keep only IMPORTED (find_package) targets; drop every
+                    # FetchContent-built sub-dep so the export-checker can't
+                    # cascade into finufft's sub-dep graph.
+                    get_target_property(_is_imp "${_lib}" IMPORTED)
+                    if(_is_imp)
+                        list(APPEND _clean_libs "${_lib}")
+                    endif()
+                else()
+                    list(APPEND _clean_libs "${_lib}")
+                endif()
+            endforeach()
+            set_property(TARGET ${_tgt} PROPERTY INTERFACE_LINK_LIBRARIES "${_clean_libs}")
         endif()
         set_target_properties(${_tgt} PROPERTIES INSTALL_RPATH "$ORIGIN")
     endif()
 endforeach()
 
-target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:finufft>)
-target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:cufinufft>)
-
-set_target_properties(cufinufft PROPERTIES EXPORT_EXCLUDE TRUE)
-set_target_properties(finufft PROPERTIES EXPORT_EXCLUDE TRUE)
+target_link_libraries(HastyCompute PUBLIC finufft cufinufft)
 
 
 FetchContent_Declare(
@@ -204,9 +230,29 @@ FetchContent_Declare(
 ) # 10.2.1
 FetchContent_MakeAvailable(fmt)
 
-target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:fmt::fmt>)
+# Same interface-strip treatment for fmt so it can be safely added to the
+# export set without cascading into any of its own FetchContent sub-deps.
+if(TARGET fmt)
+    set_property(TARGET fmt PROPERTY INTERFACE_COMPILE_OPTIONS "")
+    get_target_property(_fmt_iface fmt INTERFACE_LINK_LIBRARIES)
+    if(_fmt_iface)
+        set(_clean_fmt "")
+        foreach(_lib IN LISTS _fmt_iface)
+            if(TARGET "${_lib}")
+                get_target_property(_is_imp "${_lib}" IMPORTED)
+                if(_is_imp)
+                    list(APPEND _clean_fmt "${_lib}")
+                endif()
+            else()
+                list(APPEND _clean_fmt "${_lib}")
+            endif()
+        endforeach()
+        set_property(TARGET fmt PROPERTY INTERFACE_LINK_LIBRARIES "${_clean_fmt}")
+    endif()
+    set_target_properties(fmt PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
 
-set_target_properties(fmt PROPERTIES EXPORT_EXCLUDE TRUE)
+target_link_libraries(HastyCompute PUBLIC fmt::fmt)
 
 
 
@@ -217,13 +263,54 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(plotlypp)
 
+# plotlypp is header-only (INTERFACE target).  Keep it PRIVATE to HastyCompute
+# so it never appears in the export checker's walk; its headers are installed
+# below and reach consumers via HastyCompute's INSTALL_INTERFACE:include dir.
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:plotlypp::plotlypp>)
 
 
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
 FetchContent_MakeAvailable(json)
 
+# nlohmann_json is header-only (INTERFACE target) — same rationale as plotlypp.
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
+
+set(BLOSC_INSTALL        OFF CACHE BOOL "" FORCE)
+set(BUILD_BENCHMARKS     OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES       OFF CACHE BOOL "" FORCE)
+set(BUILD_FUZZERS        OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS          OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+	blosc2
+	GIT_REPOSITORY https://github.com/Blosc/c-blosc2.git
+	GIT_TAG v2.23.1
+)
+FetchContent_MakeAvailable(blosc2)
+
+# Same interface-strip treatment for blosc2_shared (lz4/zstd/zlib are found
+# via find_package so they're IMPORTED and safe; any FetchContent sub-deps
+# are stripped to prevent cascade errors).
+if(TARGET blosc2_shared)
+    set_property(TARGET blosc2_shared PROPERTY INTERFACE_COMPILE_OPTIONS "")
+    get_target_property(_blosc2_iface blosc2_shared INTERFACE_LINK_LIBRARIES)
+    if(_blosc2_iface)
+        set(_clean_blosc2 "")
+        foreach(_lib IN LISTS _blosc2_iface)
+            if(TARGET "${_lib}")
+                get_target_property(_is_imp "${_lib}" IMPORTED)
+                if(_is_imp)
+                    list(APPEND _clean_blosc2 "${_lib}")
+                endif()
+            else()
+                list(APPEND _clean_blosc2 "${_lib}")
+            endif()
+        endforeach()
+        set_property(TARGET blosc2_shared PROPERTY INTERFACE_LINK_LIBRARIES "${_clean_blosc2}")
+    endif()
+    set_target_properties(blosc2_shared PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+
+target_link_libraries(HastyCompute PUBLIC blosc2_shared)
 
 
 
@@ -231,7 +318,20 @@ target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:nlohmann_json::nloh
 find_package(Torch REQUIRED)
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:${TORCH_LIBRARIES}>)
 
-find_package(HighFive CONFIG REQUIRED)
+set(HIGHFIVE_USE_BOOST        OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_BUILD_DOCS       OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_UNIT_TESTS       OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_EXAMPLES         OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_STATIC_HDF5      OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    HighFive
+    GIT_REPOSITORY https://github.com/highfive-devs/highfive.git
+    GIT_TAG        v3.3.0
+)
+FetchContent_MakeAvailable(HighFive)
+
+# HighFive is header-only; keep PRIVATE + BUILD_INTERFACE so it never
+# appears in HastyComputeTargets.cmake (consumers supply their own HDF5).
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:HighFive>)
 
 if (MSVC)
@@ -318,6 +418,17 @@ add_custom_command(TARGET HastyCompute POST_BUILD
 	COMMENT "Copying wavelet models to build directory"
 )
 
+# Add FetchContent-built compiled deps to the same export set so that:
+#  1. CMake 4.x export-checker is satisfied (all link-chain targets are exported)
+#  2. Consumers of HastyCompute get transitive linking automatically
+install(TARGETS finufft cufinufft fmt blosc2_shared
+    EXPORT HastyComputeTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)
+
 install(TARGETS HastyCompute EXPORT HastyComputeTargets
     RUNTIME_DEPENDENCIES
         # System libs the target machine must always provide
@@ -365,10 +476,13 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 	DESTINATION include/HastyCompute
 )
 
-install(FILES $<TARGET_FILE:finufft> $<TARGET_FILE:cufinufft> DESTINATION lib)
-
-# Install dependency headers needed by installed module files
+# Install headers for all FetchContent deps so consumers can compile against them
 install(DIRECTORY ${finufft_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${fmt_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${blosc2_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${plotlypp_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${json_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${HighFive_SOURCE_DIR}/include/ DESTINATION include)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/vkFFT/
 	DESTINATION include/HastyCompute
 	FILES_MATCHING PATTERN "*.h"
