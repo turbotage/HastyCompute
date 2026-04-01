@@ -128,15 +128,21 @@ void test_toeplitz_multiplication()
 
     std::cout << "test_toeplitz_multiplication: running 2-D test...\n";
 
-    constexpr i64 NY   = 128;
-    constexpr i64 NX   = 128;
+    constexpr i64 NY   = 64;
+    constexpr i64 NX   = 64;
     
     Device cuda0(eDeviceType::CUDA, 0);
     
-    
-    Tensor coords = rand({2, 1000}, TensorOptions(cuda0, eScalarType::Float));
-    coords.mul_(Scalar{2*3.141592f});
-    coords.add_(Scalar{-3.141592f});
+    bool cartesion_coords = true;
+
+    Tensor coords;
+    if (cartesion_coords) {
+        coords = create_cartesian_coords<2>({NX, NY}, cuda0);
+    } else {
+        coords = rand({2, 1000}, TensorOptions(cuda0, eScalarType::Float));
+        coords.mul_(Scalar{2*3.141592f});
+        coords.add_(Scalar{-3.141592f});
+    }
     
     
     i64 npts = coords.size(1);
@@ -148,12 +154,46 @@ void test_toeplitz_multiplication()
     //Tensor kernel = create_toeplitz_kernel_standard<2>(coords_flipped, weights, {NY, NX});
     //Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
 
-    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, false);
+    //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, false);
+    auto coord_swapped = empty_like(coords);
+    coord_swapped.select(0, 0).copy_(coords.select(0, 1));
+    coord_swapped.select(0, 1).copy_(coords.select(0, 0));
 
+    Tensor kernel = create_toeplitz_kernel_standard<2>(coord_swapped, weights, {NY, NX});
+
+    {
+        auto kernel_real_cpu = kernel.real().cpu().contiguous();
+        auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+            .z = {{kernel_real_cpu.spanning_view(), kernel_imag_cpu.spanning_view()}},
+            .titles = {{"Kernel Real Part", "Kernel Imaginary Part"}}
+        }).show();
+    }
 
     //kernel = ifftshift(fftshift(kernel));
+    // kernel = ifftshift(kernel);
+
+    // {
+    //     auto kernel_real_cpu = kernel.real().cpu().contiguous();
+    //     auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
+    //     viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+    //         .z = {{kernel_real_cpu.spanning_view(), kernel_imag_cpu.spanning_view()}},
+    //         .titles = {{"Kernel Real Part", "Kernel Imaginary Part"}}
+    //     }).show();
+    // }
+
     //kernel = ifftn(kernel);
-    transform_toeplitz_kernel(kernel);
+    //transform_toeplitz_kernel(kernel);
+
+    // {
+    //     auto kernel_real_cpu = kernel.real().cpu().contiguous();
+    //     auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
+    //     viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+    //         .z = {{kernel_real_cpu.spanning_view(), kernel_imag_cpu.spanning_view()}},
+    //         .titles = {{"Kernel Real Part", "Kernel Imaginary Part"}}
+    //     }).show();
+    // }
+
 
     // Input needs a batch dimension: [1, NY, NX]
     Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
@@ -190,8 +230,8 @@ void test_toeplitz_multiplication()
     );
 
 
-    output_toep = output_toep.cpu();
-    output_nufft = output_nufft.cpu();
+    output_toep = output_toep.view({NY, NX}).cpu();
+    output_nufft = output_nufft.view({NY, NX}).cpu();
 
     auto output_toep_real = output_toep.real().contiguous();
     auto output_toep_imag = output_toep.imag().contiguous();
@@ -199,14 +239,15 @@ void test_toeplitz_multiplication()
     auto output_nufft_real = output_nufft.real().contiguous();
     auto output_nufft_imag = output_nufft.imag().contiguous();
 
-    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-        .z = {{output_toep_real.spanning_view(), output_nufft_real.spanning_view()}},
-        .titles = {{"output_toep_real", "output_nufft_real"}}
-    }).show();
-
-    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-        .z = {{output_toep_imag.spanning_view(), output_nufft_imag.spanning_view()}},
-        .titles = {{"output_toep_imag", "output_nufft_imag"}}
+    viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
+        .z = Arr{
+            Arr{output_toep_real.spanning_view(), output_nufft_real.spanning_view()},
+            Arr{output_toep_imag.spanning_view(), output_nufft_imag.spanning_view()}
+        },
+        .titles = Arr{
+            Arr<std::string,2>{"output_toep_real", "output_nufft_real"}, 
+            Arr<std::string,2>{"output_toep_imag", "output_nufft_imag"}
+        }
     }).show();
 
     // ── Compare ───────────────────────────────────────────────────────────────

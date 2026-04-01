@@ -87,46 +87,111 @@ plotlypp::Figure default_line_plots(const DefaultLinePlotsOptions<T>& opts)
 export template<std::size_t N1, std::size_t N2>
 struct DefaultHeatmapOptions {
     Arr<Arr<TensorSpanningView, N2>, N1> z;
-    Opt<Arr<Arr<std::string, N2>, N1>> titles = nullopt; // per-subplot titles
+    Opt<Arr<Arr<std::string, N2>, N1>> titles = nullopt;
 };
 
 export template<std::size_t N1, std::size_t N2>
 plotlypp::Figure default_heatmap(const DefaultHeatmapOptions<N1, N2>& opts)
 {
-
-    auto gridLayout = plotlypp::Layout().grid(
-        plotlypp::Layout::Grid().rows(N1).columns(N2).pattern(plotlypp::Layout::Grid::Pattern::Independent));
-
     plotlypp::Figure fig;
+    auto layout = plotlypp::Layout();
 
-    for_sequence<N1>([&opts, &fig](auto i) {
-        for_sequence<N2>([&opts, &fig, i](auto j) {
-            const auto &z = opts.z[i][j];
-            // create heatmap trace for z
+    std::vector<plotlypp::Layout::Annotation> annotations;
+
+    const double col_width  = 1.0 / static_cast<double>(N2);
+    const double row_height = 1.0 / static_cast<double>(N1);
+
+
+    const double cb_frac = 0.12;   // reserved space in cell
+    const double cb_gap  = 0.005;   // small gap between plot and colorbar
+    const double cb_width = 0.015;  // thickness (fraction mode)
+    const double ygap = 0.03;
+
+    for_sequence<N1>([&](auto i) {
+        for_sequence<N2>([&](auto j) {
+
+            const int idx =
+                static_cast<int>(i) * static_cast<int>(N2)
+              + static_cast<int>(j) + 1;
+
+            std::string xref = (idx == 1) ? "x" : ("x" + std::to_string(idx));
+            std::string yref = (idx == 1) ? "y" : ("y" + std::to_string(idx));
+
+            // ---- Compute subplot "cell" ----
+            double x0 = j * col_width;
+            double x1 = (j + 1) * col_width;
+
+            //double y1 = 1.0 - i * row_height;
+            //double y0 = y1 - row_height;
+            double total_ygap = (N1 - 1) * ygap;
+            double row_height = (1.0 - total_ygap) / static_cast<double>(N1);
+
+            double y1 = 1.0 - i * (row_height + ygap);
+            double y0 = y1 - row_height;
+
+            // shrink plot area to make space for colorbar INSIDE cell
+            double plot_x1 = x1 - cb_frac * col_width;
+            // ---- Colorbar inside subplot cell ----
+            double cb_x = plot_x1 + cb_gap;
+            double cb_y = (y0 + y1) * 0.5;
+
+            // ---- Assign domains (THIS is the key part) ----
+            layout.xaxis(idx, [&](auto& ax) {
+                ax.domain({x0, plot_x1});
+            });
+
+            layout.yaxis(idx, [&](auto& ay) {
+                ay.domain({y0, y1});
+            });
+
+            // ---- Heatmap ----
             plotlypp::Heatmap hm;
             hm.z(opts.z[i][j]);
-            // set title if provided
-            if (opts.titles && !(*opts.titles)[i][j].empty()) {
-                hm.name((*opts.titles)[i][j]);
-            }
-            // assign trace to the correct subplot axes (x/x2, y/y2, ...)
-            // Plotly uses "x", "x2", "x3"... and similarly for y axes. Subplot
-            // numbering is 1-based in row-major order.
-            const int subplot_index = static_cast<int>(i) * static_cast<int>(N2) + static_cast<int>(j) + 1;
-            std::string xaxis = (subplot_index == 1) ? "x" : ("x" + std::to_string(subplot_index));
-            std::string yaxis = (subplot_index == 1) ? "y" : ("y" + std::to_string(subplot_index));
-            hm.json["xaxis"] = xaxis;
-            hm.json["yaxis"] = yaxis;
+
+            hm.json["xaxis"] = xref;
+            hm.json["yaxis"] = yref;
 
             hm.showscale(true);
-            // add to figure
+            hm.colorbar(
+                plotlypp::Heatmap::Colorbar()
+                    .x(cb_x)
+                    .y(cb_y)
+                    .len((y1 - y0) * 0.95)
+                    .thicknessmode(plotlypp::Heatmap::Colorbar::Thicknessmode::Fraction)
+                    .thickness(cb_width)
+            );
+
             fig.addTrace(std::move(hm));
+
+            // ---- Titles via annotations ----
+            if (opts.titles && !(*opts.titles)[i][j].empty()) {
+
+                double x_center = (x0 + plot_x1) * 0.5;
+                double y_top    = y1 + 0.02;
+
+                annotations.emplace_back(
+                    plotlypp::Layout::Annotation()
+                        .text((*opts.titles)[i][j])
+                        .x(x_center)
+                        .y(y_top)
+                        .xref("paper")
+                        .yref("paper")
+                        .showarrow(false)
+                );
+            }
+
         });
     });
 
-    fig.setLayout(std::move(gridLayout));
+    if (!annotations.empty()) {
+        layout.annotations(std::move(annotations));
+    }
+
+    fig.setLayout(std::move(layout));
     return fig;
 }
+
+
 
 export void test_tensor_viz()
 {

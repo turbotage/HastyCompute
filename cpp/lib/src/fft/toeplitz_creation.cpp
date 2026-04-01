@@ -57,7 +57,7 @@ static Tensor ntu_nufft(
         Tensor output   = zeros({total}, TensorOptions(dev, cplx_dtype));
 
         NufftOptions<cuda_t, T, NTU> opts;
-        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
+        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL;
 
         if (ndim == 1) {
             NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);

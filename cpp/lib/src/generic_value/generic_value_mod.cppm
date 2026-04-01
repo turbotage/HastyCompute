@@ -301,39 +301,39 @@ public:
         i64 total_elements;
     };
 
-    static void serialize(GenericValue value, threadsafe_stream& stream)
+    static void serialize(GenericValue value, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE)
     {
         switch (value.type()) {
         case GenericValue::eType::NONE:
-            serialize_none(stream);
+            serialize_none(stream, chunk_size);
             break;
         case GenericValue::eType::TENSOR:
-            serialize_tensor(value.as_tensor(), stream);
+            serialize_tensor(value.as_tensor(), stream, chunk_size);
             break;
         case GenericValue::eType::VECTOR:
-            serialize_vector(value.as_vector(), stream);
+            serialize_vector(value.as_vector(), stream, chunk_size);
             break;
         case GenericValue::eType::DICT:
-            serialize_dict(value.as_dict(), stream);
+            serialize_dict(value.as_dict(), stream, chunk_size);
             break;
         case GenericValue::eType::TUPLE:
-            serialize_tuple(value.as_vector(), stream);
+            serialize_tuple(value.as_vector(), stream, chunk_size);
             break;
         case GenericValue::eType::STRING:
-            serialize_string(value.as_string(), stream);
+            serialize_string(value.as_string(), stream, chunk_size);
             break;
         }
     }
 
 private:
 
-    static void serialize_none(threadsafe_stream& stream) 
+    static void serialize_none(threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // No data to write for None, we can just send a header with type NONE
         stream.write({static_cast<u8>(GenericValue::eType::NONE)});
     }
 
-    static void serialize_tensor(const Tensor& tensor, threadsafe_stream& stream) 
+    static void serialize_tensor(const Tensor& tensor, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // First write a header with the tensor metadata
         SerializedTensorHeader header;
@@ -367,7 +367,7 @@ private:
 
         i64 bytes_written = 0;
         while (bytes_written < total_bytes) {
-            i64 bytes_to_write = std::min(SERIALIZE_CHUNK_SIZE, total_bytes - bytes_written);
+            i64 bytes_to_write = std::min(chunk_size, total_bytes - bytes_written);
             std::vector<u8> chunk(data_ptr + bytes_written, data_ptr + bytes_written + bytes_to_write);
             stream.write(std::move(chunk));
             bytes_written += bytes_to_write;
@@ -380,7 +380,7 @@ private:
         }
     }
 
-    static void serialize_vector(const std::vector<GenericValue>& vec, threadsafe_stream& stream) 
+    static void serialize_vector(const std::vector<GenericValue>& vec, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // Write the type and the size of the vector
         {
@@ -397,7 +397,7 @@ private:
         }
     }
 
-    static void serialize_dict(const std::unordered_map<std::string, GenericValue>& dict, threadsafe_stream& stream) 
+    static void serialize_dict(const std::unordered_map<std::string, GenericValue>& dict, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // Write the type and the size of the dictionary
         {
@@ -415,7 +415,7 @@ private:
         }
     }
 
-    static void serialize_tuple(const std::vector<GenericValue>& elements, threadsafe_stream& stream) 
+    static void serialize_tuple(const std::vector<GenericValue>& elements, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // Write the type and the size of the tuple
         {
@@ -432,7 +432,7 @@ private:
         }
     }
 
-    static void serialize_string(const std::string& str, threadsafe_stream& stream) 
+    static void serialize_string(const std::string& str, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
     {
         // Write the type and the length of the string
         std::vector<u8> bytes(sizeof(u64) + 1);
@@ -451,7 +451,7 @@ private:
 
 public:
 
-    static GenericValue deserialize(threadsafe_stream& stream)
+    static GenericValue deserialize(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE)
     {
         // First read the type byte
         std::vector<u8> type_byte_vec = stream.read_exact_nbytes_blocking(1).first;
@@ -463,17 +463,17 @@ public:
 
         switch (type) {
         case eType::NONE:
-            return deserialize_none(stream);
+            return deserialize_none(stream, chunk_size);
         case eType::TENSOR:
-            return deserialize_tensor(stream);
+            return deserialize_tensor(stream, chunk_size);
         case eType::VECTOR:
-            return deserialize_vector(stream);
+            return deserialize_vector(stream, chunk_size);
         case eType::DICT:
-            return deserialize_dict(stream);
+            return deserialize_dict(stream, chunk_size);
         case eType::TUPLE:
-            return deserialize_tuple(stream);
+            return deserialize_tuple(stream, chunk_size);
         case eType::STRING:
-            return deserialize_string(stream);
+            return deserialize_string(stream, chunk_size);
         default:
             throw std::runtime_error("Unknown type byte: " + std::to_string(type_byte));
         }
@@ -481,13 +481,13 @@ public:
 
 private:
 
-    static GenericValue deserialize_none(threadsafe_stream& stream) 
+    static GenericValue deserialize_none(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE) 
     {
         // Nothing to read for None, we have already consumed the type byte
         return GenericValue();
     }
 
-    static GenericValue deserialize_tensor(threadsafe_stream& stream) 
+    static GenericValue deserialize_tensor(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE) 
     {
         // First read the header
         SerializedTensorHeader header;
@@ -518,7 +518,7 @@ private:
         data_bytes.reserve(total_bytes);
         i64 bytes_read = 0;
         while (bytes_read < total_bytes) {
-            std::vector<u8> chunk = stream.read_max_nbytes_blocking(std::min(static_cast<i64>(DESERIALIZE_CHUNK_SIZE), total_bytes - bytes_read)).first;
+            std::vector<u8> chunk = stream.read_max_nbytes_blocking(std::min(chunk_size, total_bytes - bytes_read)).first;
             if (chunk.empty()) {
                 throw std::runtime_error("Failed to read tensor data");
             }
@@ -537,7 +537,7 @@ private:
         return GenericValue(std::move(tensor));
     }
 
-    static GenericValue deserialize_vector(threadsafe_stream& stream)
+    static GenericValue deserialize_vector(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE)
     {
         // First read the size of the vector
         std::vector<u8> header_bytes = stream.read_exact_nbytes_blocking(sizeof(u64)).first;
@@ -550,13 +550,13 @@ private:
         std::vector<GenericValue> elements;
         elements.reserve(size);
         for (u64 i = 0; i < size; ++i) {
-            elements.push_back(deserialize(stream));
+            elements.push_back(deserialize(stream, chunk_size));
         }
 
         return GenericValue(std::move(elements));
     }
 
-    static GenericValue deserialize_dict(threadsafe_stream& stream) 
+    static GenericValue deserialize_dict(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE) 
     {
         // First read the size of the dictionary
         std::vector<u8> header_bytes = stream.read_exact_nbytes_blocking(sizeof(u64)).first;
@@ -568,15 +568,15 @@ private:
 
         std::unordered_map<std::string, GenericValue> dict;
         for (u64 i = 0; i < size; ++i) {
-            std::string key = deserialize_string(stream).as_string();
-            GenericValue value = deserialize(stream);
+            std::string key = deserialize_string(stream, chunk_size).as_string();
+            GenericValue value = deserialize(stream, chunk_size);
             dict.emplace(std::move(key), std::move(value));
         }
 
         return GenericValue(std::move(dict));
     }
 
-    static GenericValue deserialize_tuple(threadsafe_stream& stream) 
+    static GenericValue deserialize_tuple(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE) 
     {
         // First read the size of the tuple
         std::vector<u8> header_bytes = stream.read_exact_nbytes_blocking(sizeof(u64)).first;
@@ -589,13 +589,13 @@ private:
         std::vector<GenericValue> elements;
         elements.reserve(size);
         for (u64 i = 0; i < size; ++i) {
-            elements.push_back(deserialize(stream));
+            elements.push_back(deserialize(stream, chunk_size));
         }
 
         return GenericValue::make_tuple(std::move(elements));
     }
 
-    static GenericValue deserialize_string(threadsafe_stream& stream) 
+    static GenericValue deserialize_string(threadsafe_stream& stream, i64 chunk_size = DESERIALIZE_CHUNK_SIZE) 
     {
         // First read the length of the string
         std::vector<u8> header_bytes = stream.read_exact_nbytes_blocking(sizeof(u64)).first;
