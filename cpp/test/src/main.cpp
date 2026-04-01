@@ -134,23 +134,52 @@ void test_toeplitz_multiplication()
     Device cuda0(eDeviceType::CUDA, 0);
     
     
+    Tensor coords = rand({2, 1000}, TensorOptions(cuda0, eScalarType::Float));
+    coords.mul_(Scalar{2*3.141592f});
+    coords.add_(Scalar{-3.141592f});
+    
+    
+    i64 npts = coords.size(1);
+    
+    Tensor weights = ones({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
 
 
     // Build and transform kernel (shape {2*NY, 2*NX} → VkFFT convolution format)
     //Tensor kernel = create_toeplitz_kernel_standard<2>(coords_flipped, weights, {NY, NX});
-    Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    //Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, false);
+
 
     //kernel = ifftshift(fftshift(kernel));
     //kernel = ifftn(kernel);
-
     transform_toeplitz_kernel(kernel);
 
     // Input needs a batch dimension: [1, NY, NX]
     Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
-    Tensor output = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output_toep = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output_nufft = zeros_like(output_toep);
+
+    {
+        Tensor intermediate_output = zeros({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+        {
+            NufftOptions<cuda_t, f32, UTN> opts;
+            NufftPlan<cuda_t, f32, 2, UTN> plan({NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(input, intermediate_output);
+
+        }
+        {
+            NufftOptions<cuda_t, f32, NTU> opts;
+            NufftPlan<cuda_t, f32, 2, NTU> plan({NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(intermediate_output, output_nufft);
+        }
+    }
+
 
     toeplitz_multiplication(
-        input, output, kernel,
+        input, output_toep, kernel,
         std::nullopt, std::nullopt, std::nullopt,
         ToeplitzMultType::NONE,
         ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
@@ -160,24 +189,50 @@ void test_toeplitz_multiplication()
         ToeplitzAccumulateType::NONE
     );
 
+
+    output_toep = output_toep.cpu();
+    output_nufft = output_nufft.cpu();
+
+    auto output_toep_real = output_toep.real().contiguous();
+    auto output_toep_imag = output_toep.imag().contiguous();
+
+    auto output_nufft_real = output_nufft.real().contiguous();
+    auto output_nufft_imag = output_nufft.imag().contiguous();
+
+    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+        .z = {{output_toep_real.spanning_view(), output_nufft_real.spanning_view()}},
+        .titles = {{"output_toep_real", "output_nufft_real"}}
+    }).show();
+
+    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+        .z = {{output_toep_imag.spanning_view(), output_nufft_imag.spanning_view()}},
+        .titles = {{"output_toep_imag", "output_nufft_imag"}}
+    }).show();
+
     // ── Compare ───────────────────────────────────────────────────────────────
-    output = output.contiguous().view({NY,NX}).cpu();
+    if (false) {
+        output_toep = output_toep.contiguous().view({NY,NX}).cpu();
+    
+        auto output_real = output_toep.real().contiguous();
+        auto output_imag = output_toep.imag().contiguous();
+    
+        auto input_real = input.view({NY, NX}).cpu().real().contiguous();
+        auto input_imag = input.view({NY, NX}).cpu().imag().contiguous();
+    
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+            .z = {{input_real.spanning_view(), output_real.spanning_view()}},
+            .titles = {{"Input Real Part", "Toeplitz Output Real Part"}}
+        }).show();
+    
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+            .z = {{input_imag.spanning_view(), output_imag.spanning_view()}},
+            .titles = {{"Input Imag Part", "Toeplitz Output Imaginary Part"}}
+        }).show();
+    }
 
-    auto output_real = output.real().contiguous();
-    auto output_imag = output.imag().contiguous();
 
-    auto input_real = input.view({NY, NX}).cpu().real().contiguous();
-    auto input_imag = input.view({NY, NX}).cpu().imag().contiguous();
 
-    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-        .z = {{input_real.spanning_view(), output_real.spanning_view()}},
-        .titles = {{"Input Real Part", "Toeplitz Output Real Part"}}
-    }).show();
 
-    viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-        .z = {{input_imag.spanning_view(), output_imag.spanning_view()}},
-        .titles = {{"Input Imag Part", "Toeplitz Output Imaginary Part"}}
-    }).show();
 
 }
 
