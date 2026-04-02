@@ -131,10 +131,26 @@ void test_toeplitz_multiplication()
 
     std::cout << "test_toeplitz_multiplication: running 2-D test...\n";
 
-    constexpr i64 NY   = 64;
-    constexpr i64 NX   = 64;
-    
     Device cuda0(eDeviceType::CUDA, 0);
+
+    Tensor input;
+    {
+        auto img_path = std::string(HASTY_DATA_DIR) + "/imgs/images_1.h5";
+        std::cout << "Loading image from " << img_path << std::endl;
+    
+        hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "coins_303x384", false);
+    
+        input = gv.as_tensor();
+        hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
+            .z = {{input.spanning_view()}},
+            .titles = {{"Input"}}
+        }).show();
+
+        input = input.to(TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous().unsqueeze(0);
+    }
+
+    i64 NY   = input.size(1);
+    i64 NX   = input.size(2);
     
     bool cartesion_coords = true;
 
@@ -150,7 +166,7 @@ void test_toeplitz_multiplication()
     
     i64 npts = coords.size(1);
     
-    Tensor weights = ones({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
 
 
     // Build and transform kernel (shape {2*NY, 2*NX} → VkFFT convolution format)
@@ -162,7 +178,11 @@ void test_toeplitz_multiplication()
     coord_swapped.select(0, 0).copy_(coords.select(0, 1));
     coord_swapped.select(0, 1).copy_(coords.select(0, 0));
 
-    Tensor kernel = create_toeplitz_kernel_standard<2>(coord_swapped, weights, {NY, NX});
+    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
+    //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
+    //transform_toeplitz_kernel(kernel, true);
+    kernel.mul_(Scalar{1.0f / static_cast<float>(std::sqrt(NY * NX))});
+      // undo scaling for testing
 
     {
         auto kernel_real_cpu = kernel.real().cpu().contiguous();
@@ -173,55 +193,11 @@ void test_toeplitz_multiplication()
         }).show();
     }
 
-    //kernel = ifftshift(fftshift(kernel));
-    // kernel = ifftshift(kernel);
-
-    // {
-    //     auto kernel_real_cpu = kernel.real().cpu().contiguous();
-    //     auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
-    //     viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-    //         .z = {{kernel_real_cpu.spanning_view(), kernel_imag_cpu.spanning_view()}},
-    //         .titles = {{"Kernel Real Part", "Kernel Imaginary Part"}}
-    //     }).show();
-    // }
-
-    //kernel = ifftn(kernel);
-    //transform_toeplitz_kernel(kernel);
-
-    // {
-    //     auto kernel_real_cpu = kernel.real().cpu().contiguous();
-    //     auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
-    //     viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-    //         .z = {{kernel_real_cpu.spanning_view(), kernel_imag_cpu.spanning_view()}},
-    //         .titles = {{"Kernel Real Part", "Kernel Imaginary Part"}}
-    //     }).show();
-    // }
-
-
-    // Input needs a batch dimension: [1, NY, NX]
-    //Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
-    Tensor input;
-    {
-        auto img_path = std::string(HASTY_DATA_DIR) + "/imgs/images.h5";
-        std::cout << "Loading image from " << img_path << std::endl;
-    
-        hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "astronaut_luma_512x512", false);
-    
-        input = gv.as_tensor();
-        hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
-            .z = {{input.spanning_view()}},
-            .titles = {{"Input"}}
-        }).show();
-
-        input = input.to(TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous().view({1, NY, NX});
-    }
-
-
     Tensor output_toep = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
     Tensor output_nufft = zeros_like(output_toep);
 
     {
-        Tensor intermediate_output = zeros({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
         {
             NufftOptions<cuda_t, f32, UTN> opts;
             NufftPlan<cuda_t, f32, 2, UTN> plan({NY, NX}, opts);
@@ -229,6 +205,7 @@ void test_toeplitz_multiplication()
             plan.execute(input, intermediate_output);
 
         }
+        intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NY * NX)});  // scale for unnormalized FFT
         {
             NufftOptions<cuda_t, f32, NTU> opts;
             NufftPlan<cuda_t, f32, 2, NTU> plan({NY, NX}, opts);
@@ -297,39 +274,6 @@ void test_toeplitz_multiplication()
 
 }
 
-void test_tensor_array_operator()
-{
-    using namespace hasty;
-    using namespace hasty::fft;
-
-    auto res = [&]() -> std::pair<bool,std::string> {
-        std::string out;
-        bool ok = true;
-
-        // simple CPU tensors
-        Tensor a = zeros({2, 3}, TensorOptions());
-        Tensor r = ones({3}, TensorOptions());
-
-        // assignment via proxy
-        a[0] = r;
-        Tensor got = a[0].get_tensor();
-        Tensor diff = got.add(r, Scalar{-1.0f});
-        double err = l2_norm(diff.flatten());
-        out += "index assign err=" + std::to_string(err) + "\n";
-        if (err > 1e-6) ok = false;
-
-        // construct Tensor from proxy (rvalue constructor)
-        Tensor t2 = a[0];
-        Tensor diff2 = t2.add(got, Scalar{-1.0f});
-        double err2 = l2_norm(diff2.flatten());
-        out += "proxy->tensor err=" + std::to_string(err2) + "\n";
-        if (err2 > 1e-6) ok = false;
-
-        return {ok, out};
-    }();
-
-    std::cout << "test_index_proxy: " << (res.first ? "PASS" : "FAIL") << "\n" << res.second << std::endl;
-}
 
 int main() {
     //server_test();
@@ -340,9 +284,8 @@ int main() {
     //test_cartesian_coords_gives_unity_kernel();
     //test_tensor_array_operator();
 
-    test_hdf5_blosc();
 
-    //test_toeplitz_multiplication();
+    test_toeplitz_multiplication();
     //hasty::viz::test_tensor_viz();
 
     return 0;

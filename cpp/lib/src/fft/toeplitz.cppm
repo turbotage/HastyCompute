@@ -34,15 +34,14 @@ namespace fft {
 export Tensor create_toeplitz_kernel(
     const Tensor&           coords,         // [ndim, npts] float on CUDA
     const Tensor&           weights,        // [npts] complex float on CUDA
-    const std::vector<i64>& im_size,        // {NX} / {NY,NX} / {NZ,NY,NX}
+    ArrayRef<i64>           im_size,                  // {NX} / {NY,NX} / {NZ,NY,NX}
     bool                    double_prec = false
 );
 
-export template<std::size_t DIM>
-Tensor create_toeplitz_kernel_standard(
+export Tensor create_toeplitz_kernel_standard(
     const Tensor&           coords,
     const Tensor&           weights,
-    const std::vector<i64>& im_size
+    ArrayRef<i64>           im_size
 );
 
 export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = false);

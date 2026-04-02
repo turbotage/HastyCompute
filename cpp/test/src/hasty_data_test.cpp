@@ -7,6 +7,7 @@ import hasty_util_mod;
 import hasty_tensor_mod;
 import hasty_io_mod;
 import hasty_generic_value_mod;
+import hasty_viz_mod;
 
 void load_hdf5_test()
 {

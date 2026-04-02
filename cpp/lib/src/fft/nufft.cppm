@@ -380,27 +380,53 @@ struct NufftPlan<cuda_t, T, N, NT> {
         if (!output.is_contiguous())
             throw std::runtime_error("Output tensor must be contiguous");
 
+        if (input.device().type != eDeviceType::CUDA || output.device().type != eDeviceType::CUDA) {
+            throw std::runtime_error("Input and output tensors must be on CUDA");
+        }
+
         // Number of elements must match specification in plan stage
         if constexpr(std::is_same_v<NT, fft::NTU>) {
-            if (input.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
-            }
-            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
-            }
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.size(1) != m_coords.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTU");
+
+            if (output.ndimension() != N+1)
+                throw std::runtime_error("Output tensor must have ndim = N+1 for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Output tensor numel must match ntransf * product of nmodes for NTU");
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
-            }
+            if (input.ndimension() != N+1)
+                throw std::runtime_error("Input tensor must have ndim = N+1 for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Input tensor numel must match ntransf * product of nmodes for NTU");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.size(1) != m_coords.size(1))
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTU");
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
-            if (input.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTN");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTN");
+            if (input.size(1) != m_coords.first.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTN");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTN");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTN");
+            if (output.size(1) != m_coords.second.size(1)) {
+                throw std::runtime_error("Output tensor second dimension must match number of output coordinates for NTN");
             }
         }
 
@@ -458,27 +484,53 @@ struct NufftPlan<cuda_t, T, N, NT> {
         if (!output.is_contiguous())
             throw std::runtime_error("Output tensor must be contiguous");
 
+        if (input.device().type != eDeviceType::CUDA || output.device().type != eDeviceType::CUDA) {
+            throw std::runtime_error("Input and output tensors must be on CUDA");
+        }
+
         // Number of elements must match specification in plan stage
         if constexpr(std::is_same_v<NT, fft::NTU>) {
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
-            }
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
-            }
+            if (input.ndimension() != N+1)
+                throw std::runtime_error("Input tensor must have ndim = N+1 for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Input tensor numel must match ntransf * product of nmodes for NTU");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.size(1) != m_coords.size(1))
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTU");
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
-            }
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.size(1) != m_coords.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTU");
+
+            if (output.ndimension() != N+1)
+                throw std::runtime_error("Output tensor must have ndim = N+1 for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Output tensor numel must match ntransf * product of nmodes for NTU");
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
-            if (output.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
-            }
-            if (input.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTN");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTN");
+            if (input.size(1) != m_coords.second.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of output coordinates for NTN");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTN");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTN");
+            if (output.size(1) != m_coords.first.size(1)) {
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTN");
             }
         }
 
@@ -737,27 +789,53 @@ struct NufftPlan<cpu_t, T, N, NT> {
         if (!output.is_contiguous())
             throw std::runtime_error("Output tensor must be contiguous");
 
+        if (input.device().type != eDeviceType::CPU || output.device().type != eDeviceType::CPU) {
+            throw std::runtime_error("Input and output tensors must be on CPU");
+        }
+
         // Number of elements must match specification in plan stage
         if constexpr(std::is_same_v<NT, fft::NTU>) {
-            if (input.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
-            }
-            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
-            }
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.size(1) != m_coords.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTU");
+
+            if (output.ndimension() != N+1)
+                throw std::runtime_error("Output tensor must have ndim = N+1 for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Output tensor numel must match ntransf * product of nmodes for NTU");
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
-            }
+            if (input.ndimension() != N+1)
+                throw std::runtime_error("Input tensor must have ndim = N+1 for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Input tensor numel must match ntransf * product of nmodes for NTU");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.size(1) != m_coords.size(1))
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTU");
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
-            if (input.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTN");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTN");
+            if (input.size(1) != m_coords.first.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTN");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTN");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTN");
+            if (output.size(1) != m_coords.second.size(1)) {
+                throw std::runtime_error("Output tensor second dimension must match number of output coordinates for NTN");
             }
         }
 
@@ -815,27 +893,53 @@ struct NufftPlan<cpu_t, T, N, NT> {
         if (!output.is_contiguous())
             throw std::runtime_error("Output tensor must be contiguous");
 
+        if (input.device().type != eDeviceType::CPU || output.device().type != eDeviceType::CPU) {
+            throw std::runtime_error("Input and output tensors must be on CPU");
+        }
+
         // Number of elements must match specification in plan stage
         if constexpr(std::is_same_v<NT, fft::NTU>) {
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTU");
-            }
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTU");
-            }
+            if (input.ndimension() != N+1)
+                throw std::runtime_error("Input tensor must have ndim = N+1 for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Input tensor numel must match ntransf * product of nmodes for NTU");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.size(1) != m_coords.size(1))
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTU");
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
-            if (input.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>())) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for UTN");
-            }
-            if (output.numel() != m_options.ntransf * m_coords.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for UTN");
-            }
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTU");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTU");
+            if (input.size(1) != m_coords.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of input coordinates for NTU");
+
+            if (output.ndimension() != N+1)
+                throw std::runtime_error("Output tensor must have ndim = N+1 for NTU");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTU");
+            if (output.numel() != m_options.ntransf * std::accumulate(m_nmodes.begin(), m_nmodes.end(), 1LL, std::multiplies<>()))
+                throw std::runtime_error("Output tensor numel must match ntransf * product of nmodes for NTU");
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
-            if (output.numel() != m_options.ntransf * m_coords.first.sizes()[1]) {
-                throw std::runtime_error("Output tensor numel must match number of output coordinates for NTN");
-            }
-            if (input.numel() != m_options.ntransf * m_coords.second.sizes()[1]) {
-                throw std::runtime_error("Input tensor numel must match number of input coordinates for NTN");
+            if (input.ndimension() != 2)
+                throw std::runtime_error("Input tensor must be 2D for NTN");
+            if (input.size(0) != m_options.ntransf)
+                throw std::runtime_error("Input tensor first dimension must match ntransf for NTN");
+            if (input.size(1) != m_coords.second.size(1))
+                throw std::runtime_error("Input tensor second dimension must match number of output coordinates for NTN");
+
+            if (output.ndimension() != 2)
+                throw std::runtime_error("Output tensor must be 2D for NTN");
+            if (output.size(0) != m_options.ntransf)
+                throw std::runtime_error("Output tensor first dimension must match ntransf for NTN");
+            if (output.size(1) != m_coords.first.size(1)) {
+                throw std::runtime_error("Output tensor second dimension must match number of input coordinates for NTN");
             }
         }
 

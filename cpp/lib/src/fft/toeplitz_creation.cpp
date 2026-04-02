@@ -33,11 +33,11 @@ static Tensor circ_reverse(const Tensor& t, i64 d)
 //
 // Returns cfloat tensor of shape `shape_out`
 static Tensor ntu_nufft(
-    const Tensor&           omega,
-    const Tensor&           weights,
-    const std::vector<i64>& nmodes_fft,
-    const std::vector<i64>& shape_out,
-    bool                    double_prec)
+    const Tensor&               omega,
+    const Tensor&               weights,
+    ArrayRef<i64>               nmodes_fft,
+    ArrayRef<i64>               shape_out,
+    bool                        double_prec)
 {
     int ndim  = (int)shape_out.size();
     i64 total = 1;
@@ -53,11 +53,11 @@ static Tensor ntu_nufft(
             std::is_same_v<T, f32> ? eScalarType::Float : eScalarType::Double;
 
         Tensor coords_w = omega.to(real_dtype).contiguous();
-        Tensor wts_w    = weights.to(cplx_dtype).contiguous();
-        Tensor output   = zeros({total}, TensorOptions(dev, cplx_dtype));
+        Tensor wts_w    = weights.to(cplx_dtype).unsqueeze(0).contiguous();
+        Tensor output   = zeros(shape_out, TensorOptions(dev, cplx_dtype)).unsqueeze(0);
 
         NufftOptions<cuda_t, T, NTU> opts;
-        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL;
+        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
 
         if (ndim == 1) {
             NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);
@@ -67,20 +67,21 @@ static Tensor ntu_nufft(
             NufftPlan<cuda_t, T, 2, NTU> plan({nmodes_fft[0], nmodes_fft[1]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
-        } else {
+        }
+        else if (ndim == 3) {
             NufftPlan<cuda_t, T, 3, NTU> plan({nmodes_fft[0], nmodes_fft[1], nmodes_fft[2]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }
-
-        // Reshape flat output to image-order shape
-        Tensor r = output.view(ArrayRef<i64>(shape_out));
+        else {
+            throw std::runtime_error("Unsupported ndim in ntu_nufft: " + std::to_string(ndim));
+        }
 
         // Cast back to cfloat if running in double precision
         if constexpr (!std::is_same_v<T, f32>)
-            r = r.to(eScalarType::ComplexFloat);
+            output = output.to(eScalarType::ComplexFloat);
 
-        return r.contiguous();
+        return output.squeeze(0).contiguous();
     };
 
     return double_prec ? execute.template operator()<f64>()
@@ -96,13 +97,13 @@ static Tensor ntu_nufft(
 // Doubles the kernel along `dim` by concatenating:
 //   [ kernel_normal | zero_slice | kernel_flipped.narrow.flip ]
 static Tensor adjoint_flip_and_concat(
-    int                       dim,
-    const Tensor&             omega,      // [ndim, npts] float
-    const Tensor&             weights,    // [npts] cfloat
-    int                       ndim,
-    const std::vector<i64>&   nmodes_fft,
-    const std::vector<i64>&   shape_out,
-    bool                      double_prec)
+    int                             dim,
+    const Tensor&                   omega,      // [ndim, npts] float
+    const Tensor&                   weights,    // [npts] cfloat
+    int                             ndim,
+    ArrayRef<i64>                   nmodes_fft,
+    ArrayRef<i64>                   shape_out,
+    bool                            double_prec)
 {
     // Build [ndim, 1] flip coefficient: -1 at the coordinate row corresponding to
     // image axis `dim`.  omega[i] maps to image axis ndim-1-i (kx→x, ky→y, kz→z),
@@ -121,7 +122,7 @@ static Tensor adjoint_flip_and_concat(
         : ntu_nufft(make_flip().mul(omega).contiguous(), weights, nmodes_fft, shape_out, double_prec);
 
     // Zero block: same shape as kernel1 but size 1 along `dim`
-    std::vector<i64> zero_shape = kernel1.sizes_vec();
+    std::vector<i64> zero_shape = kernel1.sizes().vec();
     zero_shape[dim] = 1;
     Tensor zero_block = zeros(ArrayRef<i64>(zero_shape), TensorOptions(kernel1.device(), kernel1.dtype()));
 
@@ -145,7 +146,7 @@ static Tensor reflect_conj_concat(const Tensor& kernel, i64 dim)
         tmp = circ_reverse(tmp, d);
 
     // Zero block: shape[dim] = 1
-    std::vector<i64> zero_shape = kernel.sizes_vec();
+    std::vector<i64> zero_shape = kernel.sizes().vec();
     zero_shape[dim] = 1;
     Tensor zero_block = zeros(ArrayRef<i64>(zero_shape), TensorOptions(kernel.device(), kernel.dtype()));
 
@@ -185,7 +186,7 @@ static Tensor hermitify(const Tensor& kernel, i64 dim)
 Tensor create_toeplitz_kernel(
     const Tensor&           coords,
     const Tensor&           weights,
-    const std::vector<i64>& im_size,
+    ArrayRef<i64>           im_size,
     bool                    double_prec)
 {
     int ndim = (int)im_size.size();
@@ -237,70 +238,52 @@ Tensor create_toeplitz_kernel(
     return kernel.contiguous();
 }
 
-// Explicit template instantiations for linker visibility
-template Tensor create_toeplitz_kernel_standard<1>(
-    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
-template Tensor create_toeplitz_kernel_standard<2>(
-    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
-template Tensor create_toeplitz_kernel_standard<3>(
-    const Tensor& coords, const Tensor& weights, const std::vector<i64>& im_size);
-
-template<std::size_t DIM>
 Tensor create_toeplitz_kernel_standard(
     const Tensor&           coords,
     const Tensor&           weights,
-    const std::vector<i64>& im_size
+    ArrayRef<i64>           im_size
 )
 {
-    // Expect coords tensor of shape [DIM, M]
-    if (coords.ndimension() != 2 || coords.size(0) != (i64)DIM)
-        throw std::runtime_error("create_toeplitz_kernel_standard<DIM>: coords must be [DIM, M]");
+    i64 ndim = (i64)im_size.size();
+
+    // Expect coords tensor of shape [ndim, M]
+    if (coords.ndimension() != 2 || coords.size(0) != ndim)
+        throw std::runtime_error("create_toeplitz_kernel_standard: coords must be [ndim, M]");
 
     i64 M = coords.size(1);
 
-    // Validate nudata/weights length
-    Tensor nudata = weights;
-    if (nudata.ndimension() == 2) {
-        if (nudata.size(1) != M)
-            throw std::runtime_error("create_toeplitz_kernel_standard: nudata.shape[1] must equal coord length");
-    } else if (nudata.ndimension() == 1) {
-        if (nudata.size(0) != M)
-            throw std::runtime_error("create_toeplitz_kernel_standard: nudata length must equal coord length");
-    } else {
-        throw std::runtime_error("create_toeplitz_kernel_standard: nudata must be 1-D or 2-D with leading ntransf==1");
+    if (weights.ndimension() != 1)
+        throw std::runtime_error("create_toeplitz_kernel_standard: weights must be 1-D");
+
+    // Build nmodes (image-sized) and full_shape (2x image-sized) from im_size
+    std::vector<i64> full_shape(ndim);
+    for (std::size_t i = 0; i < ndim; ++i) {
+        full_shape[i] = 2 * im_size[i];
     }
 
-    // Build nmodes (image-sized) from im_size
-    std::vector<i64> nmodes(DIM);
-    for (size_t i = 0; i < DIM; ++i) nmodes[i] = im_size[i];
+    if (weights.dtype() != eScalarType::ComplexFloat)
+        throw std::runtime_error("create_toeplitz_kernel_standard: weights must be complex float");
 
-    // prepare nudata 1-D weights for ntu_nufft: if (1,M) take first row
-    Tensor nudata_1d = nudata;
-    if (nudata.ndimension() == 2) nudata_1d = nudata.select(0, 0).contiguous();
+    // NUFFT onto the 2N grid in FFT mode: DC is at index 0, so output is
 
-    if (!nudata_1d.is_complex())
-        nudata_1d = view_as_complex(stack({nudata_1d, zeros_like(nudata_1d)}, -1).contiguous());
+    // NUFFT onto the 2N grid in FFT mode: DC is at index 0, so output is
+    // [h[0], h[1], ..., h[N-1], h[-N], h[-N+1], ..., h[-1]] — already the
+    // correct Toeplitz circulant column layout (no ifftshift needed).
+    // nmodes_fft are reversed (cufinufft convention: x-fastest).
+    std::vector<i64> nmodes_fft(ndim);
+    for (std::size_t i = 0; i < ndim; ++i) nmodes_fft[i] = full_shape[ndim - 1 - i];
 
-    // nmodes for ntu_nufft are reversed (cufinufft convention)
-    std::vector<i64> nmodes_fft(DIM);
-    for (size_t i = 0; i < DIM; ++i) nmodes_fft[i] = nmodes[DIM - 1 - i];
+    Tensor kernel = ntu_nufft(coords, weights, nmodes_fft, full_shape, /*double_prec=*/false);
 
-    // Run adjoint NUFFT on the image-sized grid to produce reduced image
-    Tensor reduced = ntu_nufft(coords, nudata_1d, nmodes_fft, nmodes, /*double_prec=*/false);
-
-    // Allocate full kernel (2*im_size) and copy reduced into its front portion
-    std::vector<i64> full_shape(DIM);
-    for (size_t i = 0; i < DIM; ++i) full_shape[i] = nmodes[i] * 2;
-    Tensor kernel = zeros(ArrayRef<i64>(full_shape), TensorOptions(reduced.device(), reduced.dtype()));
-
-    // Narrow the front region and copy reduced image there
-    Tensor target = kernel;
-    for (size_t i = 0; i < DIM; ++i) target = target.narrow((int)i, 0, nmodes[i]);
-    target.copy_(reduced);
+    // Zero the Nyquist slice along each dim independently — h[-N,*] and h[*,-N]
+    // are not part of the circulant embedding and must be set to zero.
+    // Each dim is zeroed separately (full slab, not just the corner element).
+    for (std::size_t i = 0; i < ndim; ++i)
+        kernel.narrow((int)i, (i64)im_size[i], 1).zero_();
 
     // FFT the full kernel and scale by 1 / prod(2*im_size)
-    std::vector<i64> fft_dims((int)DIM);
-    for (int i = 0; i < (int)DIM; ++i) fft_dims[i] = i;
+    std::vector<i64> fft_dims((int)ndim);
+    for (int i = 0; i < (int)ndim; ++i) fft_dims[i] = i;
     kernel = fftn(kernel, nullopt, ArrayRef<i64>(fft_dims));
 
     double scale = 1.0;

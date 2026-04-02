@@ -105,6 +105,10 @@ public:
 		return true;
 	}
 
+	std::vector<T> vec() const {
+		return std::vector<T>(m_data, m_data + m_size);
+	}
+
 };
 
 export template<typename It>

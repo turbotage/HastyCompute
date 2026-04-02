@@ -99,7 +99,7 @@ public:
             default:                v.simple_dtype = hasty::SimpleDType::Null; break;
         }
         v.ndim = static_cast<int>(tc.ndimension());
-        auto sv = tc.sizes_vec();
+        auto sv = tc.sizes().vec();
         v.sizes.assign(sv.begin(), sv.end());
         auto st = tc.strides();
         v.strides.assign(st.begin(), st.end());
@@ -388,6 +388,10 @@ public:
 
     inline Tensor& unsqueeze_(i32 dim) { _base.unsqueeze_(dim); return *this; }
 
+    inline Tensor squeeze(i32 dim) const { return Tensor(_base.squeeze(dim)); }
+
+    inline Tensor& squeeze_(i32 dim) { _base.squeeze_(dim); return *this; }
+
     inline Tensor view(ArrayRef<i64> sizes) const { return _base.view(sizes.to_torch()); }
 
     inline Tensor view(eScalarType dtype) const { return Tensor(_base.view(scalartype::to_torch(dtype))); }
@@ -397,6 +401,8 @@ public:
     inline Tensor flip(ArrayRef<i64> dims) const { return Tensor(_base.flip(dims.to_torch())); }
 
     inline Tensor narrow(i64 dim, i64 start, i64 length) const { return Tensor(_base.narrow(dim, start, length)); }
+
+    inline Tensor roll(ArrayRef<i64> shifts, ArrayRef<i64> dims) const { return Tensor(_base.roll(shifts.to_torch(), dims.to_torch())); }
 
     inline Tensor conj() const { return Tensor(_base.conj()); }
 
@@ -419,11 +425,6 @@ public:
     inline Tensor std() const { return Tensor(hat::std(_base)); }
 
     inline Tensor median() const { return Tensor(hat::median(_base)); }
-
-    inline std::vector<i64> sizes_vec() const {
-        auto s = _base.sizes();
-        return std::vector<i64>(s.begin(), s.end());
-    }
 
     inline Tensor remainder(const Scalar& other) const { return Tensor(_base.remainder(other.to_torch())); }
     inline Tensor& remainder_(const Scalar& other) { _base.remainder_(other.to_torch()); return *this; }
@@ -478,6 +479,10 @@ public:
         return const_cast<Tensor&>(*this);
     }
 
+    inline Tensor& zero_() const {
+        _base.zero_();
+        return const_cast<Tensor&>(*this);
+    }
 
     Tensor add(const Tensor& other, const Scalar& alpha=1) const {
         return Tensor(_base.add(other._base, alpha.to_torch()));
