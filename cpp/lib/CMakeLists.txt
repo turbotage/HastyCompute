@@ -48,6 +48,7 @@ include(FetchContent)
 target_sources(HastyCompute
 	PRIVATE
 		"src/wrapper/vkfft.cpp"
+        "src/io/io_hdf5_impl.cpp"
 		"src/fft/toeplitz_creation.cpp"
 		"src/fft/toeplitz_mult.cpp"
 		"src/fft/toeplitz_transform.cpp"
@@ -312,27 +313,54 @@ endif()
 
 target_link_libraries(HastyCompute PUBLIC blosc2_shared)
 
-
-
-
 find_package(Torch REQUIRED)
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:${TORCH_LIBRARIES}>)
 
-set(HIGHFIVE_USE_BOOST        OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_BUILD_DOCS       OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_UNIT_TESTS       OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_EXAMPLES         OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_STATIC_HDF5      OFF CACHE BOOL "" FORCE)
+
+
+
+# ── HDF5 via FetchContent ────────────────────────────────────────────────────
+set(HDF5_BUILD_TESTS           OFF CACHE BOOL "" FORCE)
+set(HDF5_BUILD_TOOLS           OFF CACHE BOOL "" FORCE)
+set(HDF5_BUILD_EXAMPLES        OFF CACHE BOOL "" FORCE)
+set(HDF5_BUILD_CPP_LIB         OFF CACHE BOOL "" FORCE)
+set(HDF5_BUILD_HL_LIB          OFF CACHE BOOL "" FORCE)
+set(HDF5_ENABLE_Z_LIB_SUPPORT  OFF CACHE BOOL "" FORCE)
+set(HDF5_ENABLE_PLUGIN_SUPPORT OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    hdf5
+    GIT_REPOSITORY https://github.com/HDFGroup/hdf5.git
+    GIT_TAG        hdf5_1.14.6
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(hdf5)
+
+# ── HighFive via FetchContent ─────────────────────────────────────────────────
+set(HIGHFIVE_USE_BOOST  OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_EXAMPLES   OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_FIND_HDF5  OFF CACHE BOOL "" FORCE)
+set(HIGHFIVE_USE_HDF5   OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     HighFive
     GIT_REPOSITORY https://github.com/highfive-devs/highfive.git
     GIT_TAG        v3.3.0
+    GIT_SHALLOW    TRUE
+    GIT_CONFIG     "credential.helper=" "core.askPass="
 )
 FetchContent_MakeAvailable(HighFive)
 
-# HighFive is header-only; keep PRIVATE + BUILD_INTERFACE so it never
-# appears in HastyComputeTargets.cmake (consumers supply their own HDF5).
+# Don't inject hdf5-shared into HighFive's INTERFACE — that would cause
+# HighFive's own export() to fail because hdf5-shared isn't in its export set.
+# Instead wire HDF5 directly into HastyCompute: headers via include_directories,
+# lib via target_link_libraries.
+target_include_directories(HastyCompute PRIVATE
+    $<BUILD_INTERFACE:${hdf5_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${hdf5_BINARY_DIR}/src>
+)
 target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:HighFive>)
+target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:hdf5-shared>)
 
 if (MSVC)
   file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
@@ -385,17 +413,18 @@ target_include_directories(HastyCompute
 set(MODULE_CACHE_RELATIVE_PATH "module_cache")
 set(TENSOR_CACHE_RELATIVE_PATH "tensor_cache")
 set(DATA_RELATIVE_PATH "data")
-configure_file(
-	"${CMAKE_CURRENT_SOURCE_DIR}/include/configure_file_settings.hpp.in"
-	"${CMAKE_CURRENT_BINARY_DIR}/generated_includes/configure_file_settings.hpp"
-)
 
-# Apply to target
+# Apply to target — generated_includes is PUBLIC so consumers get configure_file_settings.hpp
 target_include_directories(HastyCompute 
 	PUBLIC
     	${HastyCompute_INCLUDE_DIRS}
-	PRIVATE
 		$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated_includes>
+		$<INSTALL_INTERFACE:include/HastyCompute>
+	PRIVATE
+		${pybind11_INCLUDE_DIRS}
+		${TORCH_INCLUDE_DIRS}
+		${CUDA_INCLUDE_DIRS}
+		${Python3_INCLUDE_DIRS}
 )
 
 
@@ -409,6 +438,14 @@ if (NOT DEFINED HASTY_DATA_FOLDER OR HASTY_DATA_FOLDER STREQUAL "")
 	# This default path assumes both HastyCompute and HastyData are cloned in the same parent directory
 	set(HASTY_DATA_FOLDER ${CMAKE_SOURCE_DIR}"../../../HastyData")
 endif()
+
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/include/configure_file_settings.hpp.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/generated_includes/configure_file_settings.hpp"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated_includes/configure_file_settings.hpp"
+    DESTINATION include/HastyCompute
+)
 
 # Copy models folder to build directory (for Debug/Release builds)
 add_custom_command(TARGET HastyCompute POST_BUILD
@@ -482,7 +519,16 @@ install(DIRECTORY ${fmt_SOURCE_DIR}/include/ DESTINATION include)
 install(DIRECTORY ${blosc2_SOURCE_DIR}/include/ DESTINATION include)
 install(DIRECTORY ${plotlypp_SOURCE_DIR}/include/ DESTINATION include)
 install(DIRECTORY ${json_SOURCE_DIR}/include/ DESTINATION include)
-install(DIRECTORY ${HighFive_SOURCE_DIR}/include/ DESTINATION include)
+install(DIRECTORY ${highfive_SOURCE_DIR}/include/ DESTINATION include)
+# HDF5 public headers — source tree has the C API, build tree has H5pubconf.h.
+# Install flat into include/ so #include <hdf5.h> works without an extra prefix.
+install(DIRECTORY ${hdf5_SOURCE_DIR}/src/ DESTINATION include FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY ${hdf5_BINARY_DIR}/src/ DESTINATION include FILES_MATCHING PATTERN "*.h")
+install(TARGETS hdf5-shared
+    EXPORT  HastyComputeTargets
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/vkFFT/
 	DESTINATION include/HastyCompute
 	FILES_MATCHING PATTERN "*.h"

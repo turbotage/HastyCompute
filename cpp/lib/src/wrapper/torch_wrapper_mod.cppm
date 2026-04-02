@@ -74,6 +74,12 @@ export namespace hat {
     using at::rand_like;
     using at::real;
     using at::imag;
+    using at::abs;
+    using at::max;
+    using at::min;
+    using at::mean;
+    using at::std;
+    using at::median;
     using at::makeArrayRef;
     using at::from_blob;
     using at::scalar_tensor;

@@ -156,6 +156,24 @@ public:
         return vector[index];
     }
 
+    bool operator==(const GenericValue& other) const {
+        if (m_type != other.m_type) return false;
+        switch (m_type) {
+        case eType::NONE:
+            return true;
+        case eType::TENSOR:
+            return as_tensor().equal(other.as_tensor());
+        case eType::VECTOR:
+        case eType::TUPLE:
+            return as_vector() == other.as_vector();
+        case eType::DICT:
+            return as_dict() == other.as_dict();
+        case eType::STRING:
+            return as_string() == other.as_string();
+        }
+        return false; // should never reach here
+    }
+
     template<std::size_t N>
     auto as_tuple() const {
         const auto& vector = as_vector();
@@ -568,7 +586,8 @@ private:
 
         std::unordered_map<std::string, GenericValue> dict;
         for (u64 i = 0; i < size; ++i) {
-            std::string key = deserialize_string(stream, chunk_size).as_string();
+            // deserialize() consumes the type byte first, then dispatches to deserialize_string
+            std::string key = deserialize(stream, chunk_size).as_string();
             GenericValue value = deserialize(stream, chunk_size);
             dict.emplace(std::move(key), std::move(value));
         }

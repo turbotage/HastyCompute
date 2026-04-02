@@ -408,6 +408,18 @@ public:
 
     inline Tensor imag() const { return Tensor(hat::imag(_base)); }
 
+    inline Tensor abs() const { return Tensor(hat::abs(_base)); }
+
+    inline Tensor max() const { return Tensor(hat::max(_base)); }
+
+    inline Tensor min() const { return Tensor(hat::min(_base)); }
+
+    inline Tensor mean() const { return Tensor(hat::mean(_base)); }
+
+    inline Tensor std() const { return Tensor(hat::std(_base)); }
+
+    inline Tensor median() const { return Tensor(hat::median(_base)); }
+
     inline std::vector<i64> sizes_vec() const {
         auto s = _base.sizes();
         return std::vector<i64>(s.begin(), s.end());
@@ -572,6 +584,7 @@ public:
         return *this;
     }
 
+    inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 
 
 

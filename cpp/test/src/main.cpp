@@ -1,3 +1,5 @@
+#include <configure_file_settings.hpp>
+
 import std;
 import hasty_util_mod;
 import hasty_tensor_mod;
@@ -197,7 +199,24 @@ void test_toeplitz_multiplication()
 
 
     // Input needs a batch dimension: [1, NY, NX]
-    Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
+    //Tensor input  = rand({1, NY, NX},  TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor input;
+    {
+        auto img_path = std::string(HASTY_DATA_DIR) + "/imgs/images.h5";
+        std::cout << "Loading image from " << img_path << std::endl;
+    
+        hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "astronaut_luma_512x512", false);
+    
+        input = gv.as_tensor();
+        hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
+            .z = {{input.spanning_view()}},
+            .titles = {{"Input"}}
+        }).show();
+
+        input = input.to(TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous().view({1, NY, NX});
+    }
+
+
     Tensor output_toep = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
     Tensor output_nufft = zeros_like(output_toep);
 
@@ -321,16 +340,9 @@ int main() {
     //test_cartesian_coords_gives_unity_kernel();
     //test_tensor_array_operator();
 
-    hasty::GenericValue gv = hasty::io::hdf5::read_generic_value(HASTY_DATA_DIR + "/images.h5", "astronaut_luma_512x512");
+    test_hdf5_blosc();
 
-    hasty::Tensor t = gv.as_tensor().contiguous();
-
-    hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
-        .z = {{t.spanning_view()}},
-        .titles = {{"Astronaut Luma 512x512"}}
-    }).show();
-
-    test_toeplitz_multiplication();
+    //test_toeplitz_multiplication();
     //hasty::viz::test_tensor_viz();
 
     return 0;
