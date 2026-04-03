@@ -1,10 +1,6 @@
 
-
-
 test_toeplitz_multiplication: running 2-D test...
-Loading image from /home/turbotage/Documents/GitHub/HastyData/imgs/images_1.h5
-opening /tmp/plotlypp_plot_0.html
-opening /tmp/plotlypp_plot_1.html
+
 nvrtcCompileProgram error: NVRTC_ERROR_COMPILATION
 At end of source: error: expected a "}"
 VkFFT.cu(2190): note #3196-D: to match this "{"

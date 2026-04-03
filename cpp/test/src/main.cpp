@@ -138,9 +138,14 @@ void test_toeplitz_multiplication()
         auto img_path = std::string(HASTY_DATA_DIR) + "/imgs/images_1.h5";
         std::cout << "Loading image from " << img_path << std::endl;
     
-        hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "coins_303x384", false);
+        //hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "coins_303x384", false);
+        //hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "astronaut_luma_512x512", false);
     
-        input = gv.as_tensor();
+        //input = gv.as_tensor();
+        //input = input.transpose(0, 1).contiguous();
+
+        input = rand({64, 128}, TensorOptions(eScalarType::Float));
+
         hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
             .z = {{input.spanning_view()}},
             .titles = {{"Input"}}
@@ -153,7 +158,6 @@ void test_toeplitz_multiplication()
     i64 NX   = input.size(2);
     
     bool cartesion_coords = true;
-
     Tensor coords;
     if (cartesion_coords) {
         coords = create_cartesian_coords<2>({NX, NY}, cuda0);
@@ -178,8 +182,8 @@ void test_toeplitz_multiplication()
     coord_swapped.select(0, 0).copy_(coords.select(0, 1));
     coord_swapped.select(0, 1).copy_(coords.select(0, 0));
 
-    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
-    //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
+    //Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
+    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
     //transform_toeplitz_kernel(kernel, true);
     kernel.mul_(Scalar{1.0f / static_cast<float>(std::sqrt(NY * NX))});
       // undo scaling for testing
@@ -200,7 +204,7 @@ void test_toeplitz_multiplication()
         Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
         {
             NufftOptions<cuda_t, f32, UTN> opts;
-            NufftPlan<cuda_t, f32, 2, UTN> plan({NY, NX}, opts);
+            NufftPlan<cuda_t, f32, 2, UTN> plan({NX, NY}, opts);
             plan.setpts(coords);
             plan.execute(input, intermediate_output);
 
@@ -208,7 +212,7 @@ void test_toeplitz_multiplication()
         intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NY * NX)});  // scale for unnormalized FFT
         {
             NufftOptions<cuda_t, f32, NTU> opts;
-            NufftPlan<cuda_t, f32, 2, NTU> plan({NY, NX}, opts);
+            NufftPlan<cuda_t, f32, 2, NTU> plan({NX, NY}, opts);
             plan.setpts(coords);
             plan.execute(intermediate_output, output_nufft);
         }
@@ -226,6 +230,8 @@ void test_toeplitz_multiplication()
         ToeplitzAccumulateType::NONE
     );
 
+    auto ratio = output_toep.real().mean().item<double>() / output_nufft.real().mean().item<double>();
+    std::cout << "Mean ratio (toep/NUFFT): " << ratio << std::endl;
 
     output_toep = output_toep.view({NY, NX}).cpu();
     output_nufft = output_nufft.view({NY, NX}).cpu();

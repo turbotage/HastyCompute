@@ -591,9 +591,9 @@ public:
 
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 
+    inline Tensor transpose(i32 dim0, i32 dim1) const { return Tensor(_base.transpose(dim0, dim1)); }
 
-
-
+    inline Tensor& transpose_(i32 dim0, i32 dim1) { _base.transpose_(dim0, dim1); return *this; }
 
     hat::Tensor to_torch() const { return _base; }
 
