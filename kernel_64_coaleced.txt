@@ -1,0 +1,6943 @@
+
+extern __shared__ float shared[];
+extern "C" __global__ void __launch_bounds__(64) VkFFT_main (const float2* inputs, float2* outputs) {
+float2* sdata = (float2*)shared;
+
+float2 temp_0;
+temp_0.x = 0.0f;
+temp_0.y = 0.0f;
+float2 temp_1;
+temp_1.x = 0.0f;
+temp_1.y = 0.0f;
+float2 temp_2;
+temp_2.x = 0.0f;
+temp_2.y = 0.0f;
+float2 temp_3;
+temp_3.x = 0.0f;
+temp_3.y = 0.0f;
+float2 temp_4;
+temp_4.x = 0.0f;
+temp_4.y = 0.0f;
+float2 temp_5;
+temp_5.x = 0.0f;
+temp_5.y = 0.0f;
+float2 temp_6;
+temp_6.x = 0.0f;
+temp_6.y = 0.0f;
+float2 temp_7;
+temp_7.x = 0.0f;
+temp_7.y = 0.0f;
+float2 temp_8;
+temp_8.x = 0.0f;
+temp_8.y = 0.0f;
+float2 temp_9;
+temp_9.x = 0.0f;
+temp_9.y = 0.0f;
+float2 temp_10;
+temp_10.x = 0.0f;
+temp_10.y = 0.0f;
+float2 temp_11;
+temp_11.x = 0.0f;
+temp_11.y = 0.0f;
+float2 temp_12;
+temp_12.x = 0.0f;
+temp_12.y = 0.0f;
+float2 temp_13;
+temp_13.x = 0.0f;
+temp_13.y = 0.0f;
+float2 temp_14;
+temp_14.x = 0.0f;
+temp_14.y = 0.0f;
+float2 temp_15;
+temp_15.x = 0.0f;
+temp_15.y = 0.0f;
+float2 w;
+w.x = 0.0f;
+w.y = 0.0f;
+float2 loc_0;
+loc_0.x = 0.0f;
+loc_0.y = 0.0f;
+float2 loc_1;
+loc_1.x = 0.0f;
+loc_1.y = 0.0f;
+unsigned int tempInt;
+tempInt = 0;
+unsigned int tempInt2;
+tempInt2 = 0;
+unsigned int shiftX;
+shiftX = 0;
+unsigned int shiftY;
+shiftY = 0;
+unsigned int shiftZ;
+shiftZ = 0;
+float2 iw;
+iw.x = 0.0f;
+iw.y = 0.0f;
+unsigned int stageInvocationID;
+stageInvocationID = 0;
+unsigned int blockInvocationID;
+blockInvocationID = 0;
+unsigned int sdataID;
+sdataID = 0;
+unsigned int combinedID;
+combinedID = 0;
+unsigned int inoutID;
+inoutID = 0;
+unsigned int inoutID_x;
+inoutID_x = 0;
+unsigned int inoutID_y;
+inoutID_y = 0;
+unsigned int disableThreads;
+disableThreads = 1;
+float angle;
+angle = 0.0f;
+shiftX = blockIdx.x;
+shiftY = blockIdx.y;
+shiftY = shiftY * 1;
+if (shiftY >= 512) {
+if (shiftY < 1024) {
+disableThreads = 0;
+}
+}
+shiftZ = 0;
+shiftZ = shiftZ + 0;
+if (disableThreads > 0) {
+inoutID = 1024 * shiftY;
+inoutID = inoutID + shiftZ;
+inoutID = inoutID + threadIdx.x;
+combinedID = threadIdx.x + 0;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_0 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 64;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_1 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 128;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_2 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 192;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_3 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 256;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_4 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 320;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_5 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 384;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_6 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 448;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_7 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 512;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_8 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 576;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_9 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 640;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_10 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 704;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_11 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 768;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_12 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 832;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_13 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 896;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_14 = __ldg(&inputs[inoutID]);
+}
+}
+combinedID = threadIdx.x + 960;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_15 = __ldg(&inputs[inoutID]);
+}
+}
+}
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 1;
+angle = stageInvocationID * -3.14159265358979324e+00f;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y;
+loc_0.y = -temp_12.x;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y;
+loc_0.y = -temp_13.x;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y;
+loc_0.y = -temp_14.x;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_3.y;
+loc_0.y = -temp_3.x;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = temp_11.y;
+loc_0.y = -temp_11.x;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = -1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = temp_7.y;
+loc_0.y = -temp_7.x;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 1;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 1;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 2;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 3;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 4;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 5;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 6;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 7;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 8;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 9;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 10;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 11;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 12;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 13;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 14;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 15;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_15;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 16;
+angle = stageInvocationID * -1.96349540849362077e-01f;
+sdataID = threadIdx.x + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.x + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.x + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.x + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_12 = sdata[sdataID];
+sdataID = threadIdx.x + 256;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.x + 320;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.x + 384;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.x + 448;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_14 = sdata[sdataID];
+sdataID = threadIdx.x + 512;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.x + 576;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.x + 640;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.x + 704;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_13 = sdata[sdataID];
+sdataID = threadIdx.x + 768;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.x + 832;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.x + 896;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.x + 960;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_15 = sdata[sdataID];
+loc_0.x = angle * 1.87500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0.x = angle * 1.75000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0.x = angle * 1.62500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0.x = angle * 1.50000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_3.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_3.x, w.x, loc_0.x);
+loc_0.y = temp_3.y * w.x;
+temp_3.y = fma(temp_3.x, w.y, loc_0.y);
+temp_3.x = loc_0.x;
+loc_0.x = angle * 1.37500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+loc_0.x = angle * 1.12500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+loc_0.x = angle * 1.00000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_1.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_1.x, w.x, loc_0.x);
+loc_0.y = temp_1.y * w.x;
+temp_1.y = fma(temp_1.x, w.y, loc_0.y);
+temp_1.x = loc_0.x;
+loc_0.x = angle * 8.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0.x = angle * 7.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+loc_0.x = angle * 6.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_2.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_2.x, w.x, loc_0.x);
+loc_0.y = temp_2.y * w.x;
+temp_2.y = fma(temp_2.x, w.y, loc_0.y);
+temp_2.x = loc_0.x;
+loc_0.x = angle * 3.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+temp_12.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = loc_0.x;
+loc_0.x = angle * 2.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+temp_4.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+temp_8.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = loc_0.x;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_3.y;
+loc_0.y = -temp_3.x;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = temp_11.y;
+loc_0.y = -temp_11.x;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = temp_7.y;
+loc_0.y = -temp_7.x;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y;
+loc_0.y = -temp_12.x;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y;
+loc_0.y = -temp_13.x;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = -1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y;
+loc_0.y = -temp_14.x;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 16;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 16;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 32;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 48;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 80;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 96;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 112;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 144;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 160;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 176;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 208;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 224;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 240;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_15;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.x + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.x + 256;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.x + 512;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.x + 768;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_12 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+loc_0.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+loc_0.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+stageInvocationID = threadIdx.x + 64;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.x + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.x + 320;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.x + 576;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.x + 832;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_13 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+loc_0.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+loc_0.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+stageInvocationID = threadIdx.x + 128;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.x + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.x + 384;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.x + 640;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.x + 896;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_14 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+loc_0.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+loc_0.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+stageInvocationID = threadIdx.x + 192;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.x + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.x + 448;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.x + 704;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.x + 960;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_15 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+loc_0.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+loc_0.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+}
+if (disableThreads > 0) {
+}
+if (disableThreads > 0) {
+inoutID = 1024 * shiftY;
+inoutID = inoutID + shiftZ;
+inoutID = inoutID + threadIdx.x;
+combinedID = threadIdx.x + 0;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_0;
+}
+combinedID = threadIdx.x + 64;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_1;
+}
+combinedID = threadIdx.x + 128;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_2;
+}
+combinedID = threadIdx.x + 192;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_3;
+}
+combinedID = threadIdx.x + 256;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_8;
+}
+combinedID = threadIdx.x + 320;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_9;
+}
+combinedID = threadIdx.x + 384;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_10;
+}
+combinedID = threadIdx.x + 448;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_11;
+}
+combinedID = threadIdx.x + 512;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_4;
+}
+combinedID = threadIdx.x + 576;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_5;
+}
+combinedID = threadIdx.x + 640;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_6;
+}
+combinedID = threadIdx.x + 704;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_7;
+}
+combinedID = threadIdx.x + 768;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_12;
+}
+combinedID = threadIdx.x + 832;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_13;
+}
+combinedID = threadIdx.x + 896;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_14;
+}
+combinedID = threadIdx.x + 960;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+outputs[inoutID] = temp_15;
+}
+}
+}
+
+extern __shared__ float shared[];
+extern "C" __global__ void __launch_bounds__(512) VkFFT_main (const float2* inputs, float2* outputs, const float2* __restrict__ kernel_obj) {
+float2* sdata = (float2*)shared;
+
+float2 temp_0;
+temp_0.x = 0.0f;
+temp_0.y = 0.0f;
+float2 temp_1;
+temp_1.x = 0.0f;
+temp_1.y = 0.0f;
+float2 temp_2;
+temp_2.x = 0.0f;
+temp_2.y = 0.0f;
+float2 temp_3;
+temp_3.x = 0.0f;
+temp_3.y = 0.0f;
+float2 temp_4;
+temp_4.x = 0.0f;
+temp_4.y = 0.0f;
+float2 temp_5;
+temp_5.x = 0.0f;
+temp_5.y = 0.0f;
+float2 temp_6;
+temp_6.x = 0.0f;
+temp_6.y = 0.0f;
+float2 temp_7;
+temp_7.x = 0.0f;
+temp_7.y = 0.0f;
+float2 temp_8;
+temp_8.x = 0.0f;
+temp_8.y = 0.0f;
+float2 temp_9;
+temp_9.x = 0.0f;
+temp_9.y = 0.0f;
+float2 temp_10;
+temp_10.x = 0.0f;
+temp_10.y = 0.0f;
+float2 temp_11;
+temp_11.x = 0.0f;
+temp_11.y = 0.0f;
+float2 temp_12;
+temp_12.x = 0.0f;
+temp_12.y = 0.0f;
+float2 temp_13;
+temp_13.x = 0.0f;
+temp_13.y = 0.0f;
+float2 temp_14;
+temp_14.x = 0.0f;
+temp_14.y = 0.0f;
+float2 temp_15;
+temp_15.x = 0.0f;
+temp_15.y = 0.0f;
+float2 temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+float2 w;
+w.x = 0.0f;
+w.y = 0.0f;
+float2 loc_0;
+loc_0.x = 0.0f;
+loc_0.y = 0.0f;
+float2 loc_1;
+loc_1.x = 0.0f;
+loc_1.y = 0.0f;
+unsigned int tempInt;
+tempInt = 0;
+unsigned int tempInt2;
+tempInt2 = 0;
+unsigned int shiftX;
+shiftX = 0;
+unsigned int shiftY;
+shiftY = 0;
+unsigned int shiftZ;
+shiftZ = 0;
+float2 iw;
+iw.x = 0.0f;
+iw.y = 0.0f;
+unsigned int stageInvocationID;
+stageInvocationID = 0;
+unsigned int blockInvocationID;
+blockInvocationID = 0;
+unsigned int sdataID;
+sdataID = 0;
+unsigned int combinedID;
+combinedID = 0;
+unsigned int inoutID;
+inoutID = 0;
+unsigned int inoutID_x;
+inoutID_x = 0;
+unsigned int inoutID_y;
+inoutID_y = 0;
+unsigned int disableThreads;
+disableThreads = 1;
+float angle;
+angle = 0.0f;
+shiftX = (threadIdx.x + blockIdx.x * 8);
+shiftZ = 0;
+shiftZ = shiftZ + 0;
+inoutID_x = shiftX % 1024;
+tempInt2 = shiftX / 1024;
+tempInt2 = tempInt2 % 1;
+tempInt = shiftX / 1024;
+tempInt = tempInt * 1024;
+tempInt2 = tempInt2 + tempInt;
+if (tempInt2 < 1024) {
+inoutID_y = threadIdx.y * 1;
+inoutID_y = inoutID_y + tempInt2;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_0 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_1 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_2 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_3 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_4 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_5 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_6 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_7 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_8 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_9 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_10 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_11 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_12 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_13 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_14 = __ldg(&inputs[inoutID]);
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+temp_15 = __ldg(&inputs[inoutID]);
+}
+}
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 1;
+angle = stageInvocationID * -3.14159265358979324e+00f;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y;
+loc_0.y = -temp_12.x;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y;
+loc_0.y = -temp_13.x;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y;
+loc_0.y = -temp_14.x;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_3.y;
+loc_0.y = -temp_3.x;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = temp_11.y;
+loc_0.y = -temp_11.x;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = -1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = temp_7.y;
+loc_0.y = -temp_7.x;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 1;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 1;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 2;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 3;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 4;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 5;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 6;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 7;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 8;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 9;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 10;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 11;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 12;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 13;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 14;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 15;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_15;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 16;
+angle = stageInvocationID * -1.96349540849362077e-01f;
+sdataID = threadIdx.y + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.y + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.y + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.y + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_12 = sdata[sdataID];
+sdataID = threadIdx.y + 256;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.y + 320;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.y + 384;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.y + 448;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_14 = sdata[sdataID];
+sdataID = threadIdx.y + 512;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.y + 576;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.y + 640;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.y + 704;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_13 = sdata[sdataID];
+sdataID = threadIdx.y + 768;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.y + 832;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.y + 896;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.y + 960;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_15 = sdata[sdataID];
+loc_0.x = angle * 1.87500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0.x = angle * 1.75000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0.x = angle * 1.62500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0.x = angle * 1.50000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_3.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_3.x, w.x, loc_0.x);
+loc_0.y = temp_3.y * w.x;
+temp_3.y = fma(temp_3.x, w.y, loc_0.y);
+temp_3.x = loc_0.x;
+loc_0.x = angle * 1.37500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+loc_0.x = angle * 1.12500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+loc_0.x = angle * 1.00000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_1.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_1.x, w.x, loc_0.x);
+loc_0.y = temp_1.y * w.x;
+temp_1.y = fma(temp_1.x, w.y, loc_0.y);
+temp_1.x = loc_0.x;
+loc_0.x = angle * 8.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0.x = angle * 7.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+loc_0.x = angle * 6.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_2.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_2.x, w.x, loc_0.x);
+loc_0.y = temp_2.y * w.x;
+temp_2.y = fma(temp_2.x, w.y, loc_0.y);
+temp_2.x = loc_0.x;
+loc_0.x = angle * 3.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+temp_12.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = loc_0.x;
+loc_0.x = angle * 2.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+temp_4.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+temp_8.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = loc_0.x;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_3.y;
+loc_0.y = -temp_3.x;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = temp_11.y;
+loc_0.y = -temp_11.x;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = temp_7.y;
+loc_0.y = -temp_7.x;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y;
+loc_0.y = -temp_12.x;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y;
+loc_0.y = -temp_13.x;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = -1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y;
+loc_0.y = -temp_14.x;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = -9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = -7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y;
+loc_0.y = -temp_15.x;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 16;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 16;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 32;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 48;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 80;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 96;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 112;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 144;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 160;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 176;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 208;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 224;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 240;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_15;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.y + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.y + 256;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.y + 512;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.y + 768;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_12 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+loc_0.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+loc_0.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+stageInvocationID = threadIdx.y + 64;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.y + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.y + 320;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.y + 576;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.y + 832;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_13 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+loc_0.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+loc_0.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+stageInvocationID = threadIdx.y + 128;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.y + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.y + 384;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.y + 640;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.y + 896;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_14 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+loc_0.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+loc_0.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+stageInvocationID = threadIdx.y + 192;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * -1.22718463030851298e-02f;
+sdataID = threadIdx.y + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.y + 448;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.y + 704;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.y + 960;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_15 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+loc_0.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+loc_0.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = w.x;
+w.x = w.y;
+w.y = -loc_0.x;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+blockInvocationID = 0;
+blockInvocationID = blockInvocationID + 0;
+inoutID_x = shiftX % 1024;
+if (tempInt2 < 1024) {
+inoutID_y = threadIdx.y * 1;
+inoutID_y = inoutID_y + tempInt2;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + blockInvocationID;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_0.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_0.x, w.x);
+w.y = loc_0.y * temp_0.x;
+w.y = fma(loc_0.x, temp_0.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_0 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_1.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_1.x, w.x);
+w.y = loc_0.y * temp_1.x;
+w.y = fma(loc_0.x, temp_1.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_1 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_2.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_2.x, w.x);
+w.y = loc_0.y * temp_2.x;
+w.y = fma(loc_0.x, temp_2.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_2 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_3.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_3.x, w.x);
+w.y = loc_0.y * temp_3.x;
+w.y = fma(loc_0.x, temp_3.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_3 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_8.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_8.x, w.x);
+w.y = loc_0.y * temp_8.x;
+w.y = fma(loc_0.x, temp_8.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_8 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_9.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_9.x, w.x);
+w.y = loc_0.y * temp_9.x;
+w.y = fma(loc_0.x, temp_9.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_9 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_10.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_10.x, w.x);
+w.y = loc_0.y * temp_10.x;
+w.y = fma(loc_0.x, temp_10.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_10 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_11.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_11.x, w.x);
+w.y = loc_0.y * temp_11.x;
+w.y = fma(loc_0.x, temp_11.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_11 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_4.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_4.x, w.x);
+w.y = loc_0.y * temp_4.x;
+w.y = fma(loc_0.x, temp_4.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_4 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_5.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_5.x, w.x);
+w.y = loc_0.y * temp_5.x;
+w.y = fma(loc_0.x, temp_5.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_5 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_6.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_6.x, w.x);
+w.y = loc_0.y * temp_6.x;
+w.y = fma(loc_0.x, temp_6.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_6 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_7.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_7.x, w.x);
+w.y = loc_0.y * temp_7.x;
+w.y = fma(loc_0.x, temp_7.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_7 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_12.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_12.x, w.x);
+w.y = loc_0.y * temp_12.x;
+w.y = fma(loc_0.x, temp_12.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_12 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_13.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_13.x, w.x);
+w.y = loc_0.y * temp_13.x;
+w.y = fma(loc_0.x, temp_13.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_13 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_14.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_14.x, w.x);
+w.y = loc_0.y * temp_14.x;
+w.y = fma(loc_0.x, temp_14.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_14 = temp_conv_0;
+temp_conv_0.x = 0.0f;
+temp_conv_0.y = 0.0f;
+inoutID = inoutID + 65536;
+tempInt = inoutID + 0;
+loc_0 = __ldg(&kernel_obj[tempInt]);
+w.x = loc_0.y * temp_15.y;
+w.x = -w.x;
+w.x = fma(loc_0.x, temp_15.x, w.x);
+w.y = loc_0.y * temp_15.x;
+w.y = fma(loc_0.x, temp_15.y, w.y);
+temp_conv_0.x = temp_conv_0.x + w.x;
+temp_conv_0.y = temp_conv_0.y + w.y;
+temp_15 = temp_conv_0;
+}
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 1;
+angle = stageInvocationID * 3.14159265358979324e+00f;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_12.y;
+loc_0.y = temp_12.x;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = -temp_13.y;
+loc_0.y = temp_13.x;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = -temp_14.y;
+loc_0.y = temp_14.x;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_3.y;
+loc_0.y = temp_3.x;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = -temp_7.y;
+loc_0.y = temp_7.x;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = 1.00000000000000000e+00f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = -temp_11.y;
+loc_0.y = temp_11.x;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 1;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_0.x = temp_0.x * 9.76562500000000000e-04f;
+temp_0.y = temp_0.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 1;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_4.x = temp_4.x * 9.76562500000000000e-04f;
+temp_4.y = temp_4.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 2;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_8.x = temp_8.x * 9.76562500000000000e-04f;
+temp_8.y = temp_8.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 3;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_12.x = temp_12.x * 9.76562500000000000e-04f;
+temp_12.y = temp_12.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 4;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_2.x = temp_2.x * 9.76562500000000000e-04f;
+temp_2.y = temp_2.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 5;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_6.x = temp_6.x * 9.76562500000000000e-04f;
+temp_6.y = temp_6.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 6;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_10.x = temp_10.x * 9.76562500000000000e-04f;
+temp_10.y = temp_10.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 7;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_14.x = temp_14.x * 9.76562500000000000e-04f;
+temp_14.y = temp_14.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 8;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_1.x = temp_1.x * 9.76562500000000000e-04f;
+temp_1.y = temp_1.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 9;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_5.x = temp_5.x * 9.76562500000000000e-04f;
+temp_5.y = temp_5.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 10;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_9.x = temp_9.x * 9.76562500000000000e-04f;
+temp_9.y = temp_9.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 11;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_13.x = temp_13.x * 9.76562500000000000e-04f;
+temp_13.y = temp_13.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 12;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_3.x = temp_3.x * 9.76562500000000000e-04f;
+temp_3.y = temp_3.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 13;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_7.x = temp_7.x * 9.76562500000000000e-04f;
+temp_7.y = temp_7.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 14;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_11.x = temp_11.x * 9.76562500000000000e-04f;
+temp_11.y = temp_11.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 15;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_15.x = temp_15.x * 9.76562500000000000e-04f;
+temp_15.y = temp_15.y * 9.76562500000000000e-04f;
+sdata[sdataID] = temp_15;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 16;
+angle = stageInvocationID * 1.96349540849362077e-01f;
+sdataID = threadIdx.y + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.y + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.y + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.y + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_12 = sdata[sdataID];
+sdataID = threadIdx.y + 256;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.y + 320;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.y + 384;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.y + 448;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_14 = sdata[sdataID];
+sdataID = threadIdx.y + 512;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.y + 576;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.y + 640;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.y + 704;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_13 = sdata[sdataID];
+sdataID = threadIdx.y + 768;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.y + 832;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.y + 896;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.y + 960;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_15 = sdata[sdataID];
+loc_0.x = angle * 1.87500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0.x = angle * 1.75000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0.x = angle * 1.62500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0.x = angle * 1.50000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_3.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_3.x, w.x, loc_0.x);
+loc_0.y = temp_3.y * w.x;
+temp_3.y = fma(temp_3.x, w.y, loc_0.y);
+temp_3.x = loc_0.x;
+loc_0.x = angle * 1.37500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+loc_0.x = angle * 1.12500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+loc_0.x = angle * 1.00000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_1.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_1.x, w.x, loc_0.x);
+loc_0.y = temp_1.y * w.x;
+temp_1.y = fma(temp_1.x, w.y, loc_0.y);
+temp_1.x = loc_0.x;
+loc_0.x = angle * 8.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0.x = angle * 7.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+loc_0.x = angle * 6.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_2.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_2.x, w.x, loc_0.x);
+loc_0.y = temp_2.y * w.x;
+temp_2.y = fma(temp_2.x, w.y, loc_0.y);
+temp_2.x = loc_0.x;
+loc_0.x = angle * 3.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+temp_12.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = loc_0.x;
+loc_0.x = angle * 2.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+temp_8.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+temp_4.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = loc_0.x;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_3.y;
+loc_0.y = temp_3.x;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = -temp_7.y;
+loc_0.y = temp_7.x;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = -temp_11.y;
+loc_0.y = temp_11.x;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_12.y;
+loc_0.y = temp_12.x;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = -temp_13.y;
+loc_0.y = temp_13.x;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = 1.00000000000000000e+00f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = -temp_14.y;
+loc_0.y = temp_14.x;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 16;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 16;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 32;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 48;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 80;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 96;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 112;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 144;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 160;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 176;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 208;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 224;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 240;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+sdata[sdataID] = temp_15;
+__syncthreads();
+
+stageInvocationID = threadIdx.y + 0;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.y + 0;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.y + 256;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.y + 512;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.y + 768;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_12 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+loc_0.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+loc_0.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+stageInvocationID = threadIdx.y + 64;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.y + 64;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.y + 320;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.y + 576;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.y + 832;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_13 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+loc_0.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+loc_0.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+stageInvocationID = threadIdx.y + 128;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.y + 128;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.y + 384;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.y + 640;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.y + 896;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_14 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+loc_0.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+loc_0.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+stageInvocationID = threadIdx.y + 192;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.y + 192;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.y + 448;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.y + 704;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.y + 960;
+sdataID = sdataID * 8;
+sdataID = sdataID + threadIdx.x;
+temp_15 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+loc_0.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+loc_0.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+if (tempInt2 < 1024) {
+inoutID_y = threadIdx.y * 1;
+inoutID_y = inoutID_y + tempInt2;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_0;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_1;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_2;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_3;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_4;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_5;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_6;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_7;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_8;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_9;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_10;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_11;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_12;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_13;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_14;
+}
+inoutID_y = inoutID_y + 64;
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_y < 512) {
+tempInt = 1;
+}else{
+if (inoutID_y >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_15;
+}
+}
+}
+
+extern __shared__ float shared[];
+extern "C" __global__ void __launch_bounds__(64) VkFFT_main (const float2* inputs, float2* outputs) {
+float2* sdata = (float2*)shared;
+
+float2 temp_0;
+temp_0.x = 0.0f;
+temp_0.y = 0.0f;
+float2 temp_1;
+temp_1.x = 0.0f;
+temp_1.y = 0.0f;
+float2 temp_2;
+temp_2.x = 0.0f;
+temp_2.y = 0.0f;
+float2 temp_3;
+temp_3.x = 0.0f;
+temp_3.y = 0.0f;
+float2 temp_4;
+temp_4.x = 0.0f;
+temp_4.y = 0.0f;
+float2 temp_5;
+temp_5.x = 0.0f;
+temp_5.y = 0.0f;
+float2 temp_6;
+temp_6.x = 0.0f;
+temp_6.y = 0.0f;
+float2 temp_7;
+temp_7.x = 0.0f;
+temp_7.y = 0.0f;
+float2 temp_8;
+temp_8.x = 0.0f;
+temp_8.y = 0.0f;
+float2 temp_9;
+temp_9.x = 0.0f;
+temp_9.y = 0.0f;
+float2 temp_10;
+temp_10.x = 0.0f;
+temp_10.y = 0.0f;
+float2 temp_11;
+temp_11.x = 0.0f;
+temp_11.y = 0.0f;
+float2 temp_12;
+temp_12.x = 0.0f;
+temp_12.y = 0.0f;
+float2 temp_13;
+temp_13.x = 0.0f;
+temp_13.y = 0.0f;
+float2 temp_14;
+temp_14.x = 0.0f;
+temp_14.y = 0.0f;
+float2 temp_15;
+temp_15.x = 0.0f;
+temp_15.y = 0.0f;
+float2 w;
+w.x = 0.0f;
+w.y = 0.0f;
+float2 loc_0;
+loc_0.x = 0.0f;
+loc_0.y = 0.0f;
+float2 loc_1;
+loc_1.x = 0.0f;
+loc_1.y = 0.0f;
+unsigned int tempInt;
+tempInt = 0;
+unsigned int tempInt2;
+tempInt2 = 0;
+unsigned int shiftX;
+shiftX = 0;
+unsigned int shiftY;
+shiftY = 0;
+unsigned int shiftZ;
+shiftZ = 0;
+float2 iw;
+iw.x = 0.0f;
+iw.y = 0.0f;
+unsigned int stageInvocationID;
+stageInvocationID = 0;
+unsigned int blockInvocationID;
+blockInvocationID = 0;
+unsigned int sdataID;
+sdataID = 0;
+unsigned int combinedID;
+combinedID = 0;
+unsigned int inoutID;
+inoutID = 0;
+unsigned int inoutID_x;
+inoutID_x = 0;
+unsigned int inoutID_y;
+inoutID_y = 0;
+unsigned int disableThreads;
+disableThreads = 1;
+float angle;
+angle = 0.0f;
+shiftX = blockIdx.x;
+shiftY = blockIdx.y;
+shiftY = shiftY * 1;
+if (shiftY >= 512) {
+if (shiftY < 1024) {
+disableThreads = 0;
+}
+}
+shiftZ = 0;
+shiftZ = shiftZ + 0;
+if (disableThreads > 0) {
+inoutID = 1024 * shiftY;
+inoutID = inoutID + shiftZ;
+inoutID = inoutID + threadIdx.x;
+combinedID = threadIdx.x + 0;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+temp_0 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 64;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_1 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 128;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_2 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 192;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_3 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 256;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_4 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 320;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_5 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 384;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_6 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 448;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_7 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 512;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_8 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 576;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_9 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 640;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_10 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 704;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_11 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 768;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_12 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 832;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_13 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 896;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_14 = __ldg(&inputs[inoutID]);
+}
+combinedID = threadIdx.x + 960;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID + 64;
+temp_15 = __ldg(&inputs[inoutID]);
+}
+}
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 1;
+angle = stageInvocationID * 3.14159265358979324e+00f;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_12.y;
+loc_0.y = temp_12.x;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = -temp_13.y;
+loc_0.y = temp_13.x;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = -temp_14.y;
+loc_0.y = temp_14.x;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_3.y;
+loc_0.y = temp_3.x;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = -temp_11.y;
+loc_0.y = temp_11.x;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = 1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = -temp_7.y;
+loc_0.y = temp_7.x;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 1;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 1;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 2;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 3;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 4;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 5;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 6;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 7;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 8;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 9;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 10;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 11;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 12;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 13;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 14;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 15;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_15;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 16;
+angle = stageInvocationID * 1.96349540849362077e-01f;
+sdataID = threadIdx.x + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.x + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.x + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.x + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_12 = sdata[sdataID];
+sdataID = threadIdx.x + 256;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.x + 320;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.x + 384;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.x + 448;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_14 = sdata[sdataID];
+sdataID = threadIdx.x + 512;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.x + 576;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.x + 640;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.x + 704;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_13 = sdata[sdataID];
+sdataID = threadIdx.x + 768;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.x + 832;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.x + 896;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.x + 960;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_15 = sdata[sdataID];
+loc_0.x = angle * 1.87500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0.x = angle * 1.75000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+loc_0.x = angle * 1.62500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+loc_0.x = angle * 1.50000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_3.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_3.x, w.x, loc_0.x);
+loc_0.y = temp_3.y * w.x;
+temp_3.y = fma(temp_3.x, w.y, loc_0.y);
+temp_3.x = loc_0.x;
+loc_0.x = angle * 1.37500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+loc_0.x = angle * 1.12500000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+loc_0.x = angle * 1.00000000000000000e+00f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_1.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_1.x, w.x, loc_0.x);
+loc_0.y = temp_1.y * w.x;
+temp_1.y = fma(temp_1.x, w.y, loc_0.y);
+temp_1.x = loc_0.x;
+loc_0.x = angle * 8.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0.x = angle * 7.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+loc_0.x = angle * 6.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_2.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_2.x, w.x, loc_0.x);
+loc_0.y = temp_2.y * w.x;
+temp_2.y = fma(temp_2.x, w.y, loc_0.y);
+temp_2.x = loc_0.x;
+loc_0.x = angle * 3.75000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+temp_12.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = loc_0.x;
+loc_0.x = angle * 2.50000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+temp_4.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = loc_0.x;
+loc_0.x = angle * 1.25000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+temp_8.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = loc_0.x;
+loc_0 = temp_1;
+temp_1.x = temp_0.x - loc_0.x;
+temp_1.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_3;
+temp_3.x = temp_2.x - loc_0.x;
+temp_3.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_2;
+temp_2.x = temp_0.x - loc_0.x;
+temp_2.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_3.y;
+loc_0.y = temp_3.x;
+temp_3.x = temp_1.x - loc_0.x;
+temp_3.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_8.x - loc_0.x;
+temp_9.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_10.x - loc_0.x;
+temp_11.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_8.x - loc_0.x;
+temp_10.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0.x = -temp_11.y;
+loc_0.y = temp_11.x;
+temp_11.x = temp_9.x - loc_0.x;
+temp_11.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_5;
+temp_5.x = temp_4.x - loc_0.x;
+temp_5.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0 = temp_7;
+temp_7.x = temp_6.x - loc_0.x;
+temp_7.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0 = temp_6;
+temp_6.x = temp_4.x - loc_0.x;
+temp_6.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = -temp_7.y;
+loc_0.y = temp_7.x;
+temp_7.x = temp_5.x - loc_0.x;
+temp_7.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_12.x - loc_0.x;
+temp_13.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_14.x - loc_0.x;
+temp_15.y = temp_14.y - loc_0.y;
+temp_14.x = temp_14.x + loc_0.x;
+temp_14.y = temp_14.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_12.x - loc_0.x;
+temp_14.y = temp_12.y - loc_0.y;
+temp_12.x = temp_12.x + loc_0.x;
+temp_12.y = temp_12.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_13.x - loc_0.x;
+temp_15.y = temp_13.y - loc_0.y;
+temp_13.x = temp_13.x + loc_0.x;
+temp_13.y = temp_13.y + loc_0.y;
+loc_0 = temp_4;
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0 = temp_12;
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+loc_0 = temp_8;
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = -temp_12.y;
+loc_0.y = temp_12.x;
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+w.x = 9.23879532511286756e-01f;
+w.y = 3.82683432365089772e-01f;
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+temp_9.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = loc_0.x;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+temp_5.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = loc_0.x;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+temp_13.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = loc_0.x;
+loc_0 = temp_5;
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0 = temp_13;
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+loc_0 = temp_9;
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = -temp_13.y;
+loc_0.y = temp_13.x;
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+w.x = 7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+temp_10.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = loc_0.x;
+w.x = -2.50827880633416601e-20f;
+w.y = 1.00000000000000000e+00f;
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+temp_6.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+temp_14.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = loc_0.x;
+loc_0 = temp_6;
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0 = temp_14;
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+loc_0 = temp_10;
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = -temp_14.y;
+loc_0.y = temp_14.x;
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+w.x = 3.82683432365089772e-01f;
+w.y = 9.23879532511286756e-01f;
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+temp_11.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = loc_0.x;
+w.x = -7.07106781186547524e-01f;
+w.y = 7.07106781186547524e-01f;
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+temp_7.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = loc_0.x;
+w.x = -9.23879532511286756e-01f;
+w.y = -3.82683432365089772e-01f;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+temp_15.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = loc_0.x;
+loc_0 = temp_7;
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0 = temp_15;
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+loc_0 = temp_11;
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = -temp_15.y;
+loc_0.y = temp_15.x;
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+blockInvocationID = stageInvocationID;
+stageInvocationID = stageInvocationID % 16;
+blockInvocationID = blockInvocationID - stageInvocationID;
+inoutID = blockInvocationID * 16;
+inoutID = inoutID + stageInvocationID;
+sdataID = inoutID + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_0;
+sdataID = inoutID + 16;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_1;
+sdataID = inoutID + 32;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_2;
+sdataID = inoutID + 48;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_3;
+sdataID = inoutID + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_4;
+sdataID = inoutID + 80;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_5;
+sdataID = inoutID + 96;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_6;
+sdataID = inoutID + 112;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_7;
+sdataID = inoutID + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_8;
+sdataID = inoutID + 144;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_9;
+sdataID = inoutID + 160;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_10;
+sdataID = inoutID + 176;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_11;
+sdataID = inoutID + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_12;
+sdataID = inoutID + 208;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_13;
+sdataID = inoutID + 224;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_14;
+sdataID = inoutID + 240;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+sdata[sdataID] = temp_15;
+}
+__syncthreads();
+
+if (disableThreads > 0) {
+stageInvocationID = threadIdx.x + 0;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.x + 0;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_0 = sdata[sdataID];
+sdataID = threadIdx.x + 256;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_4 = sdata[sdataID];
+sdataID = threadIdx.x + 512;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_8 = sdata[sdataID];
+sdataID = threadIdx.x + 768;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_12 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_8.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_8.x, w.x, loc_0.x);
+loc_0.y = temp_8.y * w.x;
+loc_0.y = fma(temp_8.x, w.y, loc_0.y);
+temp_8.x = temp_0.x - loc_0.x;
+temp_8.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_4.x - loc_0.x;
+temp_12.y = temp_4.y - loc_0.y;
+temp_4.x = temp_4.x + loc_0.x;
+temp_4.y = temp_4.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_4.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_4.x, w.x, loc_0.x);
+loc_0.y = temp_4.y * w.x;
+loc_0.y = fma(temp_4.x, w.y, loc_0.y);
+temp_4.x = temp_0.x - loc_0.x;
+temp_4.y = temp_0.y - loc_0.y;
+temp_0.x = temp_0.x + loc_0.x;
+temp_0.y = temp_0.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_12.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_12.x, w.x, loc_0.x);
+loc_0.y = temp_12.y * w.x;
+loc_0.y = fma(temp_12.x, w.y, loc_0.y);
+temp_12.x = temp_8.x - loc_0.x;
+temp_12.y = temp_8.y - loc_0.y;
+temp_8.x = temp_8.x + loc_0.x;
+temp_8.y = temp_8.y + loc_0.y;
+stageInvocationID = threadIdx.x + 64;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.x + 64;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_1 = sdata[sdataID];
+sdataID = threadIdx.x + 320;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_5 = sdata[sdataID];
+sdataID = threadIdx.x + 576;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_9 = sdata[sdataID];
+sdataID = threadIdx.x + 832;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_13 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_9.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_9.x, w.x, loc_0.x);
+loc_0.y = temp_9.y * w.x;
+loc_0.y = fma(temp_9.x, w.y, loc_0.y);
+temp_9.x = temp_1.x - loc_0.x;
+temp_9.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_5.x - loc_0.x;
+temp_13.y = temp_5.y - loc_0.y;
+temp_5.x = temp_5.x + loc_0.x;
+temp_5.y = temp_5.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_5.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_5.x, w.x, loc_0.x);
+loc_0.y = temp_5.y * w.x;
+loc_0.y = fma(temp_5.x, w.y, loc_0.y);
+temp_5.x = temp_1.x - loc_0.x;
+temp_5.y = temp_1.y - loc_0.y;
+temp_1.x = temp_1.x + loc_0.x;
+temp_1.y = temp_1.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_13.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_13.x, w.x, loc_0.x);
+loc_0.y = temp_13.y * w.x;
+loc_0.y = fma(temp_13.x, w.y, loc_0.y);
+temp_13.x = temp_9.x - loc_0.x;
+temp_13.y = temp_9.y - loc_0.y;
+temp_9.x = temp_9.x + loc_0.x;
+temp_9.y = temp_9.y + loc_0.y;
+stageInvocationID = threadIdx.x + 128;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.x + 128;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_2 = sdata[sdataID];
+sdataID = threadIdx.x + 384;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_6 = sdata[sdataID];
+sdataID = threadIdx.x + 640;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_10 = sdata[sdataID];
+sdataID = threadIdx.x + 896;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_14 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_10.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_10.x, w.x, loc_0.x);
+loc_0.y = temp_10.y * w.x;
+loc_0.y = fma(temp_10.x, w.y, loc_0.y);
+temp_10.x = temp_2.x - loc_0.x;
+temp_10.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_6.x - loc_0.x;
+temp_14.y = temp_6.y - loc_0.y;
+temp_6.x = temp_6.x + loc_0.x;
+temp_6.y = temp_6.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_6.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_6.x, w.x, loc_0.x);
+loc_0.y = temp_6.y * w.x;
+loc_0.y = fma(temp_6.x, w.y, loc_0.y);
+temp_6.x = temp_2.x - loc_0.x;
+temp_6.y = temp_2.y - loc_0.y;
+temp_2.x = temp_2.x + loc_0.x;
+temp_2.y = temp_2.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_14.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_14.x, w.x, loc_0.x);
+loc_0.y = temp_14.y * w.x;
+loc_0.y = fma(temp_14.x, w.y, loc_0.y);
+temp_14.x = temp_10.x - loc_0.x;
+temp_14.y = temp_10.y - loc_0.y;
+temp_10.x = temp_10.x + loc_0.x;
+temp_10.y = temp_10.y + loc_0.y;
+stageInvocationID = threadIdx.x + 192;
+stageInvocationID = stageInvocationID % 256;
+angle = stageInvocationID * 1.22718463030851298e-02f;
+sdataID = threadIdx.x + 192;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_3 = sdata[sdataID];
+sdataID = threadIdx.x + 448;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_7 = sdata[sdataID];
+sdataID = threadIdx.x + 704;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_11 = sdata[sdataID];
+sdataID = threadIdx.x + 960;
+tempInt = sdataID / 16;
+tempInt = tempInt * 17;
+sdataID = sdataID % 16;
+sdataID = sdataID + tempInt;
+temp_15 = sdata[sdataID];
+__sincosf(angle, &w.y, &w.x);
+loc_0.x = temp_11.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_11.x, w.x, loc_0.x);
+loc_0.y = temp_11.y * w.x;
+loc_0.y = fma(temp_11.x, w.y, loc_0.y);
+temp_11.x = temp_3.x - loc_0.x;
+temp_11.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_7.x - loc_0.x;
+temp_15.y = temp_7.y - loc_0.y;
+temp_7.x = temp_7.x + loc_0.x;
+temp_7.y = temp_7.y + loc_0.y;
+loc_0.x = angle * 5.00000000000000000e-01f;
+__sincosf(loc_0.x, &w.y, &w.x);
+loc_0.x = temp_7.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_7.x, w.x, loc_0.x);
+loc_0.y = temp_7.y * w.x;
+loc_0.y = fma(temp_7.x, w.y, loc_0.y);
+temp_7.x = temp_3.x - loc_0.x;
+temp_7.y = temp_3.y - loc_0.y;
+temp_3.x = temp_3.x + loc_0.x;
+temp_3.y = temp_3.y + loc_0.y;
+loc_0.x = w.x;
+w.x = -w.y;
+w.y = loc_0.x;
+loc_0.x = temp_15.y * w.y;
+loc_0.x = -loc_0.x;
+loc_0.x = fma(temp_15.x, w.x, loc_0.x);
+loc_0.y = temp_15.y * w.x;
+loc_0.y = fma(temp_15.x, w.y, loc_0.y);
+temp_15.x = temp_11.x - loc_0.x;
+temp_15.y = temp_11.y - loc_0.y;
+temp_11.x = temp_11.x + loc_0.x;
+temp_11.y = temp_11.y + loc_0.y;
+}
+if (disableThreads > 0) {
+}
+if (disableThreads > 0) {
+inoutID = 1024 * shiftY;
+inoutID = inoutID + shiftZ;
+inoutID = inoutID + threadIdx.x;
+combinedID = threadIdx.x + 0;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_0;
+}
+}
+combinedID = threadIdx.x + 64;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_1;
+}
+}
+combinedID = threadIdx.x + 128;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_2;
+}
+}
+combinedID = threadIdx.x + 192;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_3;
+}
+}
+combinedID = threadIdx.x + 256;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_8;
+}
+}
+combinedID = threadIdx.x + 320;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_9;
+}
+}
+combinedID = threadIdx.x + 384;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_10;
+}
+}
+combinedID = threadIdx.x + 448;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_11;
+}
+}
+combinedID = threadIdx.x + 512;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_4;
+}
+}
+combinedID = threadIdx.x + 576;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_5;
+}
+}
+combinedID = threadIdx.x + 640;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_6;
+}
+}
+combinedID = threadIdx.x + 704;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_7;
+}
+}
+combinedID = threadIdx.x + 768;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_12;
+}
+}
+combinedID = threadIdx.x + 832;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_13;
+}
+}
+combinedID = threadIdx.x + 896;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_14;
+}
+}
+combinedID = threadIdx.x + 960;
+inoutID_x = combinedID % 1024;
+inoutID_y = combinedID / 1024;
+inoutID_y = inoutID_y + shiftY;
+tempInt = 1;
+if (inoutID_y >= 512) {
+if (inoutID_y < 1024) {
+tempInt = 0;
+}
+}
+if (tempInt > 0) {
+inoutID = inoutID_x;
+tempInt = inoutID_y * 1024;
+inoutID = inoutID + tempInt;
+inoutID = inoutID + shiftZ;
+tempInt = 0;
+if (inoutID_x < 512) {
+tempInt = 1;
+}else{
+if (inoutID_x >= 1024) {
+tempInt = 1;
+}
+}
+if (tempInt > 0) {
+outputs[inoutID] = temp_15;
+}
+}
+}
+}
+

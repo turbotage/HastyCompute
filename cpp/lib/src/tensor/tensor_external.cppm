@@ -204,5 +204,56 @@ namespace hasty {
         return Tensor(htorch::fft::ifftshift(t.to_torch(), dim_ref));
     }
 
+    export Tensor compress_hermitian(const Tensor& t, i64 dim)
+    {
+        // T[k] = conj(T[N-k]) (joint over all dims).
+        // Keep T[..., 0..N/2] along dim; the upper half is redundant.
+        i64 n = t.size(dim);
+        return t.narrow(dim, 0, n / 2 + 1).contiguous();
+    }
+
+    export Tensor decompress_hermitian(const Tensor& t, i64 dim, i64 original_size)
+    {
+        // Recover T[..., N/2+1..N-1] from stored T[..., 0..N/2].
+        //
+        // The Hermitian symmetry is JOINT: T[k1,...,kd] = conj(T[N1-k1,...,Nd-kd]).
+        // So T[k1,...,k_{d-1}, k_d] for k_d > N/2
+        //   = conj(T[N1-k1, ..., N_{d-1}-k_{d-1}, N-k_d])
+        //
+        // Concretely, to build the tail:
+        //   1. Narrow dim to the interior 1..N/2-1 and flip dim  → gives the right N-k_d indices
+        //   2. Circ-reverse every OTHER dim d2                   → gives the right Nd2-k_d2 indices
+        //   3. Conjugate                                          → satisfies T[k]=conj(T[N-k])
+        //
+        // circ_reverse: [a, b, c, ..., z] → [a, z, ..., c, b]  (index 0 fixed, rest reversed)
+        // This maps k → (N-k) % N correctly (0 stays at 0, k>0 maps to N-k).
+
+        i64 tail_len = original_size / 2 - 1;    // N/2-1 values
+        if (tail_len <= 0)
+            return t.contiguous();
+
+        int ndim = (int)t.ndimension();
+
+        auto circ_rev = [](const Tensor& x, i64 d) -> Tensor {
+            i64 n = x.size(d);
+            if (n <= 1) return x;
+            return cat({x.narrow(d, 0, 1),
+                        x.narrow(d, 1, n - 1).flip({d})}, d);
+        };
+
+        // Step 1: flip along compressed dim
+        Tensor tail = t.narrow(dim, 1, tail_len).flip({dim});
+
+        // Step 2: circ-reverse all other dims
+        for (int d = 0; d < ndim; ++d)
+            if (d != (int)dim)
+                tail = circ_rev(tail, (i64)d);
+
+        // Step 3: conjugate (no-op for real tensors, correct for complex)
+        tail = tail.conj().clone();
+
+        return cat({t, tail}, dim).contiguous();
+    }
+
 }
 

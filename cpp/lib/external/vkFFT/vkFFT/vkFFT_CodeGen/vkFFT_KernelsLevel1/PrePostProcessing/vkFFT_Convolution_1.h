@@ -227,12 +227,9 @@ static inline void appendKernelConvolution(VkFFTSpecializationConstantsLayout* s
 		}
 
 		if (sc->axis_id > 0) {
-			// Before fix
 			PfMul(sc, &sc->inoutID_y, &sc->gl_LocalInvocationID_y, &sc->stageStartSize, 0);
 			PfAdd(sc, &sc->inoutID_y, &sc->inoutID_y, &sc->tempInt2);
-			// After fix
-			//PfMov(sc, &sc->inoutID_y, &sc->gl_LocalInvocationID_y);
-			//PfAdd(sc, &sc->inoutID_y, &sc->inoutID_y, &sc->tempInt2);
+
 		}
 		else {
 			//&sc->tempIntLen = sprintf(&sc->tempIntStr, "		inoutID = (%s%s) %% (%" PRIu64 ") + %" PRIu64 " * (%s + %" PRIu64 ") + ((%s%s) / %" PRIu64 ") * (%" PRIu64 ");\n", &sc->gl_GlobalInvocationID_x, shiftX, &sc->stageStartSize, &sc->stageStartSize, &sc->gl_LocalInvocationID_y, (i + k * used_registers) * &sc->localSize[1], &sc->gl_GlobalInvocationID_x, shiftX, &sc->stageStartSize, &sc->stageStartSize * &sc->fftDim);
@@ -339,12 +336,9 @@ static inline void appendKernelConvolution(VkFFTSpecializationConstantsLayout* s
 			}
 			if (i > 0) {
 				if (sc->axis_id > 0) {
-					// Before fix
 					temp_int1.data.i = sc->stageStartSize.data.i * sc->inputStride[1].data.i * sc->localSize[1].data.i;
 					PfAdd(sc, &sc->inoutID, &sc->inoutID, &temp_int1);
-					// After fix
-					//temp_int1.data.i = sc->inputStride[1].data.i * sc->localSize[1].data.i;
-					//PfAdd(sc, &sc->inoutID, &sc->inoutID, &temp_int1);
+
 				}
 				else {
 					//&sc->tempIntLen = sprintf(&sc->tempIntStr, "		inoutID = (%s%s) %% (%" PRIu64 ") + %" PRIu64 " * (%s + %" PRIu64 ") + ((%s%s) / %" PRIu64 ") * (%" PRIu64 ");\n", &sc->gl_GlobalInvocationID_x, shiftX, &sc->stageStartSize, &sc->stageStartSize, &sc->gl_LocalInvocationID_y, (i + k * used_registers) * &sc->localSize[1], &sc->gl_GlobalInvocationID_x, shiftX, &sc->stageStartSize, &sc->stageStartSize * &sc->fftDim);

@@ -589,6 +589,31 @@ public:
         return *this;
     }
 
+    inline Tensor sin() const { return Tensor(_base.sin()); }
+    inline Tensor& sin_() { _base.sin_(); return *this; }
+
+    inline Tensor cos() const { return Tensor(_base.cos()); }
+    inline Tensor& cos_() { _base.cos_(); return *this; }
+
+    inline Tensor tan() const { return Tensor(_base.tan()); }
+    inline Tensor& tan_() { _base.tan_(); return *this; }
+
+    inline Tensor sinh() const { return Tensor(_base.sinh()); }
+    inline Tensor& sinh_() { _base.sinh_(); return *this; }
+
+    inline Tensor cosh() const { return Tensor(_base.cosh()); }
+    inline Tensor& cosh_() { _base.cosh_(); return *this; }
+
+    inline Tensor tanh() const { return Tensor(_base.tanh()); }
+    inline Tensor& tanh_() { _base.tanh_(); return *this; }
+
+    inline Tensor exp() const { return Tensor(_base.exp()); }
+    inline Tensor& exp_() { _base.exp_(); return *this; }
+
+    inline Tensor log() const { return Tensor(_base.log()); }
+    inline Tensor& log_() { _base.log_(); return *this; }
+
+
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 
     inline Tensor transpose(i32 dim0, i32 dim1) const { return Tensor(_base.transpose(dim0, dim1)); }

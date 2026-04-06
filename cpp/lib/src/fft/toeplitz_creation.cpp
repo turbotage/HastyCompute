@@ -30,6 +30,7 @@ static Tensor circ_reverse(const Tensor& t, i64 d)
 //              For im_size = {NZ,NY,NX}: nmodes_fft = {NX,NY,NZ}
 //              and cufinufft stores x-fastest → reshape = {NZ,NY,NX} = im_size ✓
 // double_prec: run in f64, cast result back to cfloat
+// cmcl_mode  : use CMCL mode ordering (DC at index N/2) instead of FFT ordering (DC at 0)
 //
 // Returns cfloat tensor of shape `shape_out`
 static Tensor ntu_nufft(
@@ -37,7 +38,8 @@ static Tensor ntu_nufft(
     const Tensor&               weights,
     ArrayRef<i64>               nmodes_fft,
     ArrayRef<i64>               shape_out,
-    bool                        double_prec)
+    bool                        double_prec,
+    bool                        cmcl_mode = false)
 {
     int ndim  = (int)shape_out.size();
     i64 total = 1;
@@ -57,7 +59,8 @@ static Tensor ntu_nufft(
         Tensor output   = zeros(shape_out, TensorOptions(dev, cplx_dtype)).unsqueeze(0);
 
         NufftOptions<cuda_t, T, NTU> opts;
-        opts.mode_order = NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
+        opts.mode_order = cmcl_mode ? NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL
+                                    : NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
 
         if (ndim == 1) {
             NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);
@@ -89,6 +92,48 @@ static Tensor ntu_nufft(
 }
 
 
+// Spatial NUFFT: like ntu_nufft but returns H[0..N-1] in spatial order rather than
+// FFT-mode-ordered Fourier coefficients.
+//
+// cufinufft type-1 with N modes in CMCL ordering gives output[m] = H[m - N/2].
+// By pre-modulating the weights with exp(i * sum_d (N_d/2 * omega_d[j])), we shift
+// the output so that output[m] = H[m], i.e. the spatial PSF at integer positions 0..N-1.
+//
+// This matches TorchKbNufft's adjoint output format without increasing the number of
+// output modes (N internal grid stays ~2N, same as a standard N-mode NUFFT).
+//
+// omega    : [ndim, npts] — trajectory; omega[0]=kx (fastest), omega[1]=ky, …
+// shape_out: im_size, e.g. {NY, NX}  (slowest first)
+// nmodes_cmcl: same as nmodes_fft — reversed im_size, {NX, NY, …}
+static Tensor ntu_nufft_spatial(
+    const Tensor&               omega,
+    const Tensor&               weights,
+    ArrayRef<i64>               nmodes_cmcl,
+    ArrayRef<i64>               shape_out,
+    bool                        double_prec)
+{
+    int ndim  = (int)shape_out.size();
+    i64 npts  = omega.size(1);
+    Device dev(eDeviceType::CUDA, (DeviceIndex)(int)omega.device().index);
+
+    // Phase shift = sum_d (shape_out[ndim-1-d] / 2) * omega[d]
+    // For 2D: NX/2 * kx + NY/2 * ky  (shape_out = {NY,NX}, omega[0]=kx, omega[1]=ky)
+    Tensor phase = zeros({npts}, TensorOptions(dev, eScalarType::Float));
+    for (int d = 0; d < ndim; ++d) {
+        float half_n = static_cast<float>(shape_out[ndim - 1 - d]) * 0.5f;
+        phase = phase.add(omega.select(0, d).mul(Scalar{half_n}));
+    }
+
+    // w_mod[j] = w[j] * exp(i * phase[j])
+    Tensor exp_phase = view_as_complex(
+        stack({phase.cos(), phase.sin()}, -1).contiguous()
+    );
+    Tensor w_mod = weights.mul(exp_phase);
+
+    return ntu_nufft(omega, w_mod, nmodes_cmcl, shape_out, double_prec, /*cmcl_mode=*/true);
+}
+
+
 // Mirrors TorchKbNufft's adjoint_flip_and_concat.
 //
 // dim: omega-row index being processed (starts at 1, up to ndim-1).
@@ -96,6 +141,9 @@ static Tensor ntu_nufft(
 //
 // Doubles the kernel along `dim` by concatenating:
 //   [ kernel_normal | zero_slice | kernel_flipped.narrow.flip ]
+//
+// Uses ntu_nufft_spatial (CMCL + weight modulation) so that each NUFFT call
+// returns H[0..N-1] in spatial order — matching TorchKbNufft's adjoint output.
 static Tensor adjoint_flip_and_concat(
     int                             dim,
     const Tensor&                   omega,      // [ndim, npts] float
@@ -116,10 +164,10 @@ static Tensor adjoint_flip_and_concat(
 
     Tensor kernel1 = (dim < ndim - 1)
         ? adjoint_flip_and_concat(dim + 1, omega, weights, ndim, nmodes_fft, shape_out, double_prec)
-        : ntu_nufft(omega, weights, nmodes_fft, shape_out, double_prec);
+        : ntu_nufft_spatial(omega, weights, nmodes_fft, shape_out, double_prec);
     Tensor kernel2 = (dim < ndim - 1)
         ? adjoint_flip_and_concat(dim + 1, make_flip().mul(omega).contiguous(), weights, ndim, nmodes_fft, shape_out, double_prec)
-        : ntu_nufft(make_flip().mul(omega).contiguous(), weights, nmodes_fft, shape_out, double_prec);
+        : ntu_nufft_spatial(make_flip().mul(omega).contiguous(), weights, nmodes_fft, shape_out, double_prec);
 
     // Zero block: same shape as kernel1 but size 1 along `dim`
     std::vector<i64> zero_shape = kernel1.sizes().vec();
@@ -209,7 +257,7 @@ Tensor create_toeplitz_kernel(
     if (ndim == 1) {
         // adjoint_flip_and_concat covers dims 1..ndim-1 (empty for 1-D);
         // reflect_conj_concat below handles dim 0 in all cases.
-        kernel = ntu_nufft(coords, wts, nmodes_fft, im_size, double_prec);
+        kernel = ntu_nufft_spatial(coords, wts, nmodes_fft, im_size, double_prec);
     } else {
         kernel = adjoint_flip_and_concat(
             1, coords, wts, ndim, nmodes_fft, im_size, double_prec);
@@ -226,16 +274,22 @@ Tensor create_toeplitz_kernel(
     for (int i = 0; i < ndim; ++i) fft_dims[i] = i;
     kernel = fftn(kernel, nullopt, ArrayRef<i64>(fft_dims));
 
-    // Scale: 1 / prod(2 * im_size[i])
-    double scale = 1.0;
-    for (auto s : im_size) scale /= static_cast<double>(2 * s);
-    kernel = kernel.mul(Scalar{scale});
+    kernel = kernel.contiguous();
+    // Scale: 1 / (2 * NX * sqrt(prod(im_size)))  where NX = im_size[ndim-1] (fastest dim).
+    // VkFFT performConvolution+performZeropadding normalises only the non-X inverse passes
+    // (Y, Z, …), leaving a net gain of 2*NX that must be cancelled here.
+    double scale = 0.5;
+    for (auto s : im_size) scale /= static_cast<double>(s); //std::sqrt(static_cast<double>(s));
+    scale /= static_cast<double>(im_size[ndim - 1]);
+    kernel = kernel.mul(Scalar{static_cast<float>(scale)});
+
+    //kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)
 
     // Ensure complex float output
     if (kernel.dtype() != eScalarType::ComplexFloat)
-        kernel = kernel.to(eScalarType::ComplexFloat);
+        throw std::runtime_error("create_toeplitz_kernel: unexpected kernel dtype after processing");
 
-    return kernel.contiguous();
+    return kernel;
 }
 
 Tensor create_toeplitz_kernel_standard(
@@ -286,14 +340,19 @@ Tensor create_toeplitz_kernel_standard(
     for (int i = 0; i < (int)ndim; ++i) fft_dims[i] = i;
     kernel = fftn(kernel, nullopt, ArrayRef<i64>(fft_dims));
 
-    double scale = 1.0;
-    for (auto s : im_size) scale /= static_cast<double>(2 * s);
-    kernel = kernel.mul(Scalar{scale});
+    kernel = kernel.contiguous();
+
+    double scale = 0.5;
+    for (auto s : im_size) scale /= static_cast<double>(s);
+    scale /= static_cast<double>(im_size[ndim - 1]);
+    kernel = kernel.mul(Scalar{static_cast<float>(scale)});
+
+    kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)
 
     if (kernel.dtype() != eScalarType::ComplexFloat)
-        kernel = kernel.to(eScalarType::ComplexFloat);
+        throw std::runtime_error("create_toeplitz_kernel_standard: unexpected kernel dtype after processing");
 
-    return kernel.contiguous();
+    return kernel;
 }
 
 

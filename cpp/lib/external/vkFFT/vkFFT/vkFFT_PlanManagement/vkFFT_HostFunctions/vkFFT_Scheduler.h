@@ -971,7 +971,11 @@ static inline VkFFTResult VkFFTScheduler(VkFFTApplication* app, VkFFTPlan* FFTPl
 	if ((app->configuration.vendorID == 0x1002) && (axis_id != 0)) registerBoost = 1;
 	if ((axis_id == nonStridedAxisId) && (!app->configuration.performConvolution)) maxSingleSizeNonStrided *= registerBoost;
 	int maxSequenceLengthSharedMemoryStrided = (app->configuration.coalescedMemory > complexSize) ? usedSharedMemory / ((int)app->configuration.coalescedMemory) : usedSharedMemory / complexSize;
+	// Before fix
 	int maxSingleSizeStrided = (!app->configuration.performConvolution) ? maxSequenceLengthSharedMemoryStrided * registerBoost : maxSequenceLengthSharedMemoryStrided;
+	// After fix
+	//int maxSingleSizeStrided = maxSequenceLengthSharedMemoryStrided * registerBoost;
+	
 	int numPasses = 1;
 	int numPassesHalfBandwidth = 1;
 	pfUINT temp;
@@ -982,8 +986,14 @@ static inline VkFFTResult VkFFTScheduler(VkFFTApplication* app, VkFFTPlan* FFTPl
 				registerBoost = i;
 			}
 		}
+		// Before fix
 		if ((!app->configuration.performConvolution)) maxSingleSizeNonStrided = maxSequenceLengthSharedMemory * registerBoost;
+		// After fix
+		//maxSingleSizeNonStrided = maxSequenceLengthSharedMemory * registerBoost;
+		// Before fix
 		if ((!app->configuration.performConvolution)) maxSingleSizeStrided = maxSequenceLengthSharedMemoryStrided * registerBoost;
+		// After fix
+		//maxSingleSizeStrided = maxSequenceLengthSharedMemoryStrided * registerBoost;
 		temp = ((axis_id == nonStridedAxisId) && ((!app->configuration.reorderFourStep) || (app->useBluesteinFFT[axis_id]))) ? FFTPlan->actualFFTSizePerAxis[axis_id][axis_id] / maxSingleSizeNonStrided : FFTPlan->actualFFTSizePerAxis[axis_id][axis_id] / maxSingleSizeStrided;
 		if (app->configuration.reorderFourStep && (!app->useBluesteinFFT[axis_id]))
 			numPasses = (int)pfceil(log2(FFTPlan->actualFFTSizePerAxis[axis_id][axis_id]) / log2(maxSingleSizeStrided));
@@ -1033,6 +1043,10 @@ static inline VkFFTResult VkFFTScheduler(VkFFTApplication* app, VkFFTPlan* FFTPl
 	if ((FFTPlan->actualFFTSizePerAxis[axis_id][axis_id] >= app->configuration.swapTo2Stage4Step) && (numPasses < 3)) numPasses = 2;//Force set to 2 stage 4 step algorithm
 	if ((FFTPlan->actualFFTSizePerAxis[axis_id][axis_id] >= app->configuration.swapTo3Stage4Step) && (app->configuration.swapTo3Stage4Step >= 65536)) numPasses = 3;//Force set to 3 stage 4 step algorithm
 	if (forceRaderTwoUpload && (numPasses == 1)) numPasses = 2;//Force set Rader cases that use more than 512 or maxNumThreads threads per one of Rader primes
+	// Test fix for performConvolution with coalesced 128
+	if (app->configuration.performConvolution && (numPasses > 1) && (axis_id != (int)nonStridedAxisId)) {
+        numPasses = 1;
+    }
 	pfUINT* locAxisSplit = FFTPlan->axisSplit[axis_id];
 	if (numPasses == 1) {
 		locAxisSplit[0] = FFTPlan->actualFFTSizePerAxis[axis_id][axis_id];

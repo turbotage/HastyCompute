@@ -139,12 +139,12 @@ void test_toeplitz_multiplication()
         std::cout << "Loading image from " << img_path << std::endl;
     
         //hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "coins_303x384", false);
-        //hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "astronaut_luma_512x512", false);
+        hasty::GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "astronaut_luma_512x512", false);
     
-        //input = gv.as_tensor();
+        input = gv.as_tensor();
         //input = input.transpose(0, 1).contiguous();
 
-        input = rand({64, 128}, TensorOptions(eScalarType::Float));
+        //input = rand({64, 128}, TensorOptions(eScalarType::Float));
 
         hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
             .z = {{input.spanning_view()}},
@@ -157,12 +157,12 @@ void test_toeplitz_multiplication()
     i64 NY   = input.size(1);
     i64 NX   = input.size(2);
     
-    bool cartesion_coords = true;
+    bool cartesion_coords = false;
     Tensor coords;
     if (cartesion_coords) {
         coords = create_cartesian_coords<2>({NX, NY}, cuda0);
     } else {
-        coords = rand({2, 1000}, TensorOptions(cuda0, eScalarType::Float));
+        coords = rand({2, 10000}, TensorOptions(cuda0, eScalarType::Float));
         coords.mul_(Scalar{2*3.141592f});
         coords.add_(Scalar{-3.141592f});
     }
@@ -173,22 +173,23 @@ void test_toeplitz_multiplication()
     Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
 
 
-    // Build and transform kernel (shape {2*NY, 2*NX} → VkFFT convolution format)
-    //Tensor kernel = create_toeplitz_kernel_standard<2>(coords_flipped, weights, {NY, NX});
-    //Tensor kernel = ones({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-
-    //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, false);
-    auto coord_swapped = empty_like(coords);
-    coord_swapped.select(0, 0).copy_(coords.select(0, 1));
-    coord_swapped.select(0, 1).copy_(coords.select(0, 0));
-
-    //Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
-    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
-    //transform_toeplitz_kernel(kernel, true);
-    kernel.mul_(Scalar{1.0f / static_cast<float>(std::sqrt(NY * NX))});
-      // undo scaling for testing
+    //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
+    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
 
     {
+        auto kernel_real_cpu = kernel.real().cpu().contiguous();
+        auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
+        
+        std::cout << "Kernel real max value: " << kernel_real_cpu.max().item<float>() << std::endl;
+        std::cout << "Kernel real min value: " << kernel_real_cpu.min().item<float>() << std::endl;
+        std::cout << "Kernel imag max value: " << kernel_imag_cpu.max().item<float>() << std::endl;
+        std::cout << "Kernel imag min value: " << kernel_imag_cpu.min().item<float>() << std::endl;
+        std::cout << "Kernel real mean value: " << kernel_real_cpu.mean().item<float>() << std::endl;
+        std::cout << "Kernel imag mean value: " << kernel_imag_cpu.mean().item<float>() << std::endl;
+    }
+
+    {
+
         auto kernel_real_cpu = kernel.real().cpu().contiguous();
         auto kernel_imag_cpu = kernel.imag().cpu().contiguous();
         viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
@@ -218,7 +219,6 @@ void test_toeplitz_multiplication()
         }
     }
 
-
     toeplitz_multiplication(
         input, output_toep, kernel,
         std::nullopt, std::nullopt, std::nullopt,
@@ -241,6 +241,31 @@ void test_toeplitz_multiplication()
 
     auto output_nufft_real = output_nufft.real().contiguous();
     auto output_nufft_imag = output_nufft.imag().contiguous();
+
+
+    {
+        auto straight_output = zeros({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+        straight_output[Slice(0, NY), Slice(0, NX)] = input.squeeze(0);
+        straight_output = fftn(straight_output);
+        straight_output.mul_(Scalar{1.0f / static_cast<float>(4 * NY * NX)});  // scale for unnormalized FFT
+        straight_output.mul_(kernel);
+        straight_output = ifftn(straight_output);
+        straight_output = straight_output[Slice(0, NY), Slice(0, NX)];
+
+        auto straight_output_real = straight_output.real().cpu().contiguous();
+        auto straight_output_imag = straight_output.imag().cpu().contiguous();
+
+        viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
+            .z = Arr{
+                    Arr{straight_output_real.spanning_view(), output_nufft_real.spanning_view()},
+                    Arr{straight_output_imag.spanning_view(), output_nufft_imag.spanning_view()}
+                },
+            .titles = Arr{
+                Arr<std::string,2>{"straight_output_real", "output_nufft_real"}, 
+                Arr<std::string,2>{"straight_output_imag", "output_nufft_imag"}
+            }
+        }).show();
+    }
 
     viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
         .z = Arr{
@@ -280,9 +305,42 @@ void test_toeplitz_multiplication()
 
 }
 
+void test_slider_heatmap() {
+    using namespace hasty;
+    using namespace hasty::viz;
+
+    // Sanity-check: synthetic volume where slice k is filled with value k.
+    // If the slider works, the heatmap brightness should change as you drag.
+    {
+        constexpr i64 NZ = 16, NY = 64, NX = 64;
+        Tensor synth = zeros({NZ, NY, NX}, TensorOptions(eScalarType::Float));
+        for (i64 k = 0; k < NZ; ++k)
+            synth.select(0, k).fill_(Scalar{static_cast<float>(k)});
+
+        default_heatmap_slider(DefaultHeatmapSliderOptions<1, 1>{
+            .z = {{synth.spanning_view()}},
+            .titles = {{"Slider sanity-check (brightness = slice index)"}},
+            .slider_prefix = "z = "
+        }).show();
+    }
+
+    auto img_path = std::string(HASTY_DATA_DIR) + "/imgs/images_1.h5";
+    std::cout << "Loading shepp_logan_3d_64x400x400 from " << img_path << "\n";
+
+    GenericValue gv = hasty::io::hdf5::read_generic_value_entry(img_path, "shepp_logan_3d_64x400x400", false);
+    Tensor vol = gv.as_tensor().contiguous();  // [64, 400, 400] on CPU
+
+    std::cout << "Loaded shape: [" << vol.size(0) << ", " << vol.size(1) << ", " << vol.size(2) << "]\n";
+
+    default_heatmap_slider(DefaultHeatmapSliderOptions<1, 1>{
+        .z = {{vol.spanning_view()}},
+        .titles = {{"Shepp-Logan 3D"}},
+        .slider_prefix = "z = "
+    }).show();
+}
 
 int main() {
-    //server_test();
+    //test_slider_heatmap();
     //viz_test();
     //auto test_pair = test_toeplitz_identity_kernel();
     //std::cout << test_pair.second;
