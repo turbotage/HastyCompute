@@ -429,7 +429,7 @@ void perform_toeplitz_multiplication_cuda_2D(
     key.fft_zeropad_left[1] = NY;
     key.fft_zeropad_right[0] = 2*NX; //NX-NX/2;
     key.fft_zeropad_right[1] = 2*NY; //NY-NY/2;
-    key.keepShaderCode = true; // For debugging, can be set to false in production
+    key.useLUT = true;
 
     VkFFTApplication& app = global_vkfft_cache[device_idx].get_or_create(key);
 

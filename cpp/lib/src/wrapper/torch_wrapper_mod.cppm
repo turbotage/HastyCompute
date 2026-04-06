@@ -90,6 +90,7 @@ export namespace hat {
     using at::exp;
     using at::arange;
     using at::view_as_complex;
+    using at::allclose;
 
 
 

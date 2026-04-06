@@ -35,96 +35,245 @@ void server_test() {
     handle.wait();
 }
 
-// Helper: L2 norm of a complex flat tensor via ATen
-static double l2_norm(const hasty::Tensor& t)
-{
-    return t.to_torch().norm().item<double>();
-}
 
-std::pair<bool, std::string> test_nufft_normal_identity()
+void test_toeplitz_multiplication_3D(hasty::ArrayRef<hasty::i64> im_size, double rtol = 1e-5, double atol = 1e-3)
 {
     using namespace hasty;
     using namespace hasty::fft;
 
-    std::cout << "test_nufft_normal_identity: running 2-D test...\n";
+    Device cuda0(eDeviceType::CUDA, 0);
 
-    constexpr i64 NY   = 16;
-    constexpr i64 NX   = 16;
-    constexpr i64 npts = 100;
+    Tensor input = rand({1, im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+
+    i64 NZ      = input.size(1);
+    i64 NY      = input.size(2);
+    i64 NX      = input.size(3);
+    
+    bool cartesion_coords = false;
+    Tensor coords;
+    if (cartesion_coords) {
+        coords = create_cartesian_coords<3>({NZ, NY, NX}, cuda0);
+    } else {
+        coords = rand({3, 10000}, TensorOptions(cuda0, eScalarType::Float));
+        coords.mul_(Scalar{2*3.141592f});
+        coords.add_(Scalar{-3.141592f});
+    }
+    
+    
+    i64 npts = coords.size(1);
+    
+    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+
+    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NZ, NY, NX});
+
+
+    Tensor output_toep = zeros({1, NZ, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output_nufft = zeros_like(output_toep);
+
+    {
+        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+        {
+            NufftOptions<cuda_t, f32, UTN> opts;
+            NufftPlan<cuda_t, f32, 3, UTN> plan({NZ, NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(input, intermediate_output);
+
+        }
+        intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NZ * NY * NX)});  // scale for unnormalized FFT
+        {
+            NufftOptions<cuda_t, f32, NTU> opts;
+            NufftPlan<cuda_t, f32, 3, NTU> plan({NZ, NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(intermediate_output, output_nufft);
+        }
+    }
+
+    toeplitz_multiplication(
+        input, output_toep, kernel,
+        std::nullopt, std::nullopt, std::nullopt,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
+        ToeplitzMultType::NONE, // output_mult1_type (unused)
+        ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
+        ToeplitzMultType::NONE, // output_mult2_type (unused)
+        ToeplitzAccumulateType::NONE
+    );
+
+    output_toep = output_toep.view({NZ, NY, NX}).cpu();
+    output_nufft = output_nufft.view({NZ, NY, NX}).cpu();
+
+    bool real_allclose = allclose(output_toep.real(), output_nufft.real(), rtol, atol);
+    bool imag_allclose = allclose(output_toep.imag(), output_nufft.imag(), rtol, atol);
+
+    if (!real_allclose || !imag_allclose) {
+        std::cout << "Test: Toeplitz Multiplication (3D): FAILED\n";
+    } else {
+        std::cout << "Test: Toeplitz Multiplication (3D): PASSED\n";
+    }
+
+}
+
+void test_toeplitz_multiplication_2D(hasty::ArrayRef<hasty::i64> im_size, double rtol = 1e-5, double atol = 1e-3)
+{
+    using namespace hasty;
+    using namespace hasty::fft;
 
     Device cuda0(eDeviceType::CUDA, 0);
 
-    // ── k-space trajectory: [2, npts] float, uniform in [-pi, pi] ────────────
-    // rand gives [0,1); scale to [-pi, pi)
-    constexpr float pi = 3.14159265358979f;
-    Tensor coords = rand({2, npts}, TensorOptions(cuda0, eScalarType::Float));
-    coords.mul_(Scalar{2.0f * pi});
-    coords.add_(Scalar{-pi});
+    Tensor input = rand({1, im_size[0], im_size[1]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    input = input.to(TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
 
-    // ── Density weights: all ones (real) ─────────────────────────────────────
-    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::Float));
+    i64 NY = input.size(1);
+    i64 NX = input.size(2);
 
-    return {false, ""};
-}
+    bool cartesian_coords = false;
+    Tensor coords;
 
-// Test that toeplitz_multiplication(x) ≈ A^H W A x for a random 2-D problem.
-//
-// A   = UTN (uniform → non-uniform, type-2 NUFFT)
-// A^H = NTU (non-uniform → uniform, type-1 NUFFT)
-// W   = diagonal density weights (real, all-ones here)
-//
-// im_size = {NY, NX};  nmodes for cufinufft = {NX, NY}  (x fastest)
-// Returns a [N, npts] float tensor of Cartesian k-space coordinates in [-pi, pi).
-// nmodes[0] is the fastest-varying dimension (x), matching the cufinufft/NUFFT convention.
-// npts = prod(nmodes).  Pair with create_toeplitz_kernel(..., im_size={nmodes[N-1],...,nmodes[0]}).
-template<std::size_t N>
-hasty::Tensor create_cartesian_coords(const std::array<hasty::i64, N>& nmodes, hasty::Device device)
-{
-    using namespace hasty;
-    constexpr float pi = 3.14159265358979f;
-
-    i64 npts = 1;
-    for (auto n : nmodes) npts *= n;
-
-    std::vector<Tensor> coord_rows;
-    coord_rows.reserve(N);
-
-    for (std::size_t d = 0; d < N; ++d) {
-        i64 n = nmodes[d];
-
-        // inner = nmodes[0] * ... * nmodes[d-1]  → makes dim 0 cycle fastest
-        i64 inner = 1;
-        for (std::size_t k = 0; k < d; ++k) inner *= nmodes[k];
-
-        // outer = nmodes[d+1] * ... * nmodes[N-1]
-        i64 outer = 1;
-        for (std::size_t k = d + 1; k < N; ++k) outer *= nmodes[k];
-
-        // 1D grid for this dimension: 2*pi*k/n - pi, k = 0 .. n-1
-        Tensor c1d = arange(n, TensorOptions(device, eScalarType::Float));
-        c1d = c1d.mul(Scalar{2.0f * pi / static_cast<float>(n)}).add(Scalar{-pi});
-
-        // Indices for one tile: each of the n values repeated `inner` times
-        // [0,0,...(inner), 1,1,...(inner), ..., n-1,...(inner)]
-        // Use float arange + divide + truncate-to-long (safe for non-negative values)
-        Tensor fidx = arange(n * inner, TensorOptions(device, eScalarType::Float));
-        Tensor idx  = fidx.div(Scalar{static_cast<float>(inner)}).to(eScalarType::Long);
-        Tensor tile = c1d.index_select(0, idx);  // size = n * inner
-
-        // Repeat the tile `outer` times along dim 0
-        std::vector<Tensor> tiles;
-        tiles.reserve(outer);
-        for (i64 o = 0; o < outer; ++o) tiles.push_back(tile);
-
-        coord_rows.push_back(cat(tiles, 0));  // size = npts
+    if (cartesian_coords) {
+        coords = create_cartesian_coords<2>({NY, NX}, cuda0);
+    } else {
+        coords = rand({2, 10000}, TensorOptions(cuda0, eScalarType::Float));
+        coords.mul_(Scalar{2 * 3.141592f});
+        coords.add_(Scalar{-3.141592f});
     }
 
-    return hasty::stack(coord_rows, 0);  // [N, npts]
+    i64 npts = coords.size(1);
+
+    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
+
+    Tensor output_toep = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output_nufft = zeros_like(output_toep);
+
+    // --- NUFFT reference ---
+    {
+        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+        {
+            NufftOptions<cuda_t, f32, UTN> opts;
+            NufftPlan<cuda_t, f32, 2, UTN> plan({NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(input, intermediate_output);
+        }
+
+        intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NY * NX)});
+
+        {
+            NufftOptions<cuda_t, f32, NTU> opts;
+            NufftPlan<cuda_t, f32, 2, NTU> plan({NY, NX}, opts);
+            plan.setpts(coords);
+            plan.execute(intermediate_output, output_nufft);
+        }
+    }
+
+    // --- Toeplitz ---
+    toeplitz_multiplication(
+        input, output_toep, kernel,
+        std::nullopt, std::nullopt, std::nullopt,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzAccumulateType::NONE
+    );
+
+    bool real_allclose = allclose(output_toep.real(), output_nufft.real(), rtol, atol);
+    bool imag_allclose = allclose(output_toep.imag(), output_nufft.imag(), rtol, atol);
+
+    if (!real_allclose || !imag_allclose) {
+        std::cout << "Test: Toeplitz Multiplication (2D): FAILED\n";
+    } else {
+        std::cout << "Test: Toeplitz Multiplication (2D): PASSED\n";
+    }
 }
 
+void test_toeplitz_multiplication_1D(hasty::ArrayRef<hasty::i64> im_size, double rtol = 1e-5, double atol = 1e-3)
+{
+    using namespace hasty;
+    using namespace hasty::fft;
 
+    Device cuda0(eDeviceType::CUDA, 0);
+
+    Tensor input = rand({1, im_size[0]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    i64 NX = input.size(1);
+
+    bool cartesian_coords = false;
+    Tensor coords;
+
+    if (cartesian_coords) {
+        coords = create_cartesian_coords<1>({NX}, cuda0);
+    } else {
+        coords = rand({1, 10000}, TensorOptions(cuda0, eScalarType::Float));
+        coords.mul_(Scalar{2 * 3.141592f});
+        coords.add_(Scalar{-3.141592f});
+    }
+
+    i64 npts = coords.size(1);
+
+    Tensor weights = ones({npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NX});
+
+    Tensor output_toep = zeros({1, NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor output_nufft = zeros_like(output_toep);
+
+    // --- NUFFT reference ---
+    {
+        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+        {
+            NufftOptions<cuda_t, f32, UTN> opts;
+            NufftPlan<cuda_t, f32, 1, UTN> plan({NX}, opts);
+            plan.setpts(coords);
+            plan.execute(input, intermediate_output);
+        }
+
+        intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NX)});
+
+        {
+            NufftOptions<cuda_t, f32, NTU> opts;
+            NufftPlan<cuda_t, f32, 1, NTU> plan({NX}, opts);
+            plan.setpts(coords);
+            plan.execute(intermediate_output, output_nufft);
+        }
+    }
+
+    // --- Toeplitz ---
+    toeplitz_multiplication(
+        input, output_toep, kernel,
+        std::nullopt, std::nullopt, std::nullopt,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzMultType::NONE,
+        ToeplitzAccumulateType::NONE
+    );
+
+    output_toep = output_toep.view({NX}).cpu();
+    output_nufft = output_nufft.view({NX}).cpu();
+
+    
+
+}
 
 void test_toeplitz_multiplication()
+{
+    test_toeplitz_multiplication_1D({128}, 1e-5);
+    test_toeplitz_multiplication_2D({128, 128}, 1e-5);
+    test_toeplitz_multiplication_3D({128, 128, 128}, 1e-5);
+
+    test_toeplitz_multiplication_1D({303}, 1e-5);
+    test_toeplitz_multiplication_2D({303, 384}, 1e-5);
+    test_toeplitz_multiplication_3D({64, 128, 303}, 1e-5);
+}
+
+void test_toeplitz_multiplication_2D_visual()
 {
     using namespace hasty;
     using namespace hasty::fft;
@@ -144,7 +293,7 @@ void test_toeplitz_multiplication()
         input = gv.as_tensor();
         //input = input.transpose(0, 1).contiguous();
 
-        //input = rand({64, 128}, TensorOptions(eScalarType::Float));
+        //input = rand({384, 303}, TensorOptions(eScalarType::Float));
 
         hasty::viz::default_heatmap(hasty::viz::DefaultHeatmapOptions<1,1>{
             .z = {{input.spanning_view()}},
@@ -160,7 +309,7 @@ void test_toeplitz_multiplication()
     bool cartesion_coords = false;
     Tensor coords;
     if (cartesion_coords) {
-        coords = create_cartesian_coords<2>({NX, NY}, cuda0);
+        coords = create_cartesian_coords<2>({NY, NX}, cuda0);
     } else {
         coords = rand({2, 10000}, TensorOptions(cuda0, eScalarType::Float));
         coords.mul_(Scalar{2*3.141592f});
@@ -174,7 +323,7 @@ void test_toeplitz_multiplication()
 
 
     //Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
-    Tensor kernel = create_toeplitz_kernel_standard(coords, weights, {NY, NX});
+    Tensor kernel = create_toeplitz_kernel(coords, weights, {NY, NX}, true);
 
     {
         auto kernel_real_cpu = kernel.real().cpu().contiguous();
@@ -202,21 +351,24 @@ void test_toeplitz_multiplication()
     Tensor output_nufft = zeros_like(output_toep);
 
     {
-        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+        auto temp_input = input.to(eScalarType::ComplexDouble).contiguous();
+        auto coords_temp = coords.to(eScalarType::Double).contiguous();
+        Tensor intermediate_output = zeros({1, npts}, TensorOptions(cuda0, eScalarType::ComplexDouble));
         {
-            NufftOptions<cuda_t, f32, UTN> opts;
-            NufftPlan<cuda_t, f32, 2, UTN> plan({NX, NY}, opts);
-            plan.setpts(coords);
-            plan.execute(input, intermediate_output);
-
+            NufftOptions<cuda_t, f64, UTN> opts;
+            NufftPlan<cuda_t, f64, 2, UTN> plan({NY, NX}, opts);
+            plan.setpts(coords_temp);
+            plan.execute(temp_input, intermediate_output);
         }
-        intermediate_output.mul_(Scalar{1.0f / static_cast<float>(NY * NX)});  // scale for unnormalized FFT
+        intermediate_output.mul_(Scalar{1.0f / static_cast<double>(NY * NX)});  // scale for unnormalized FFT
+        auto output_temp = zeros({1, NY, NX}, TensorOptions(cuda0, eScalarType::ComplexDouble));
         {
-            NufftOptions<cuda_t, f32, NTU> opts;
-            NufftPlan<cuda_t, f32, 2, NTU> plan({NX, NY}, opts);
-            plan.setpts(coords);
-            plan.execute(intermediate_output, output_nufft);
+            NufftOptions<cuda_t, f64, NTU> opts;
+            NufftPlan<cuda_t, f64, 2, NTU> plan({NY, NX}, opts);
+            plan.setpts(coords_temp);
+            plan.execute(intermediate_output, output_temp);
         }
+        output_nufft = output_temp.to(eScalarType::ComplexFloat);
     }
 
     toeplitz_multiplication(
@@ -233,16 +385,51 @@ void test_toeplitz_multiplication()
     auto ratio = output_toep.real().mean().item<double>() / output_nufft.real().mean().item<double>();
     std::cout << "Mean ratio (toep/NUFFT): " << ratio << std::endl;
 
-    output_toep = output_toep.view({NY, NX}).cpu();
-    output_nufft = output_nufft.view({NY, NX}).cpu();
+    {
+        auto diff = output_toep.sub(output_nufft).view({NY, NX});
+        auto diff_real = diff.real().contiguous();
+        auto diff_imag = diff.imag().contiguous();
+    
+        auto diff_real_rel = diff_real.abs().div_(output_nufft.view({NY, NX}).real().abs().add(1e-8)).cpu();
+        auto diff_imag_rel = diff_imag.abs().div_(output_nufft.view({NY, NX}).imag().abs().add(1e-8)).cpu();
 
-    auto output_toep_real = output_toep.real().contiguous();
-    auto output_toep_imag = output_toep.imag().contiguous();
+        diff_real = diff_real.cpu();
+        diff_imag = diff_imag.cpu();
 
-    auto output_nufft_real = output_nufft.real().contiguous();
-    auto output_nufft_imag = output_nufft.imag().contiguous();
+        viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
+            .z = Arr{
+                    Arr{diff_real.spanning_view(), diff_imag.spanning_view()},
+                    Arr{diff_real_rel.spanning_view(), diff_imag_rel.spanning_view()}
+                },
+            .titles = Arr{
+                Arr<std::string,2>{"Difference Real Part", "Difference Imaginary Part"},
+                Arr<std::string,2>{"Relative Difference Real Part", "Relative Difference Imaginary Part"}
+            }
+        }).show();
 
+    }
 
+    output_toep = output_toep.view({NY, NX});
+    output_nufft = output_nufft.view({NY, NX});
+
+    auto output_toep_real = output_toep.real().cpu().contiguous();
+    auto output_toep_imag = output_toep.imag().cpu().contiguous();
+
+    auto output_nufft_real = output_nufft.real().cpu().contiguous();
+    auto output_nufft_imag = output_nufft.imag().cpu().contiguous();
+
+    viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
+        .z = Arr{
+            Arr{output_toep_real.spanning_view(), output_nufft_real.spanning_view()},
+            Arr{output_toep_imag.spanning_view(), output_nufft_imag.spanning_view()}
+        },
+        .titles = Arr{
+            Arr<std::string,2>{"output_toep_real", "output_nufft_real"}, 
+            Arr<std::string,2>{"output_toep_imag", "output_nufft_imag"}
+        }
+    }).show();
+
+    /*
     {
         auto straight_output = zeros({2*NY, 2*NX}, TensorOptions(cuda0, eScalarType::ComplexFloat));
         straight_output[Slice(0, NY), Slice(0, NX)] = input.squeeze(0);
@@ -251,6 +438,15 @@ void test_toeplitz_multiplication()
         straight_output.mul_(kernel);
         straight_output = ifftn(straight_output);
         straight_output = straight_output[Slice(0, NY), Slice(0, NX)];
+
+        auto straight_diff = straight_output.sub(output_nufft);
+        auto straight_diff_real = straight_diff.real().cpu().contiguous();
+        auto straight_diff_imag = straight_diff.imag().cpu().contiguous();
+
+        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
+            .z = {{straight_diff_real.spanning_view(), straight_diff_imag.spanning_view()}},
+            .titles = {{"Straight Difference Real Part", "Straight Difference Imaginary Part"}}
+        }).show();
 
         auto straight_output_real = straight_output.real().cpu().contiguous();
         auto straight_output_imag = straight_output.imag().cpu().contiguous();
@@ -266,41 +462,7 @@ void test_toeplitz_multiplication()
             }
         }).show();
     }
-
-    viz::default_heatmap(viz::DefaultHeatmapOptions<2, 2>{
-        .z = Arr{
-            Arr{output_toep_real.spanning_view(), output_nufft_real.spanning_view()},
-            Arr{output_toep_imag.spanning_view(), output_nufft_imag.spanning_view()}
-        },
-        .titles = Arr{
-            Arr<std::string,2>{"output_toep_real", "output_nufft_real"}, 
-            Arr<std::string,2>{"output_toep_imag", "output_nufft_imag"}
-        }
-    }).show();
-
-    // ── Compare ───────────────────────────────────────────────────────────────
-    if (false) {
-        output_toep = output_toep.contiguous().view({NY,NX}).cpu();
-    
-        auto output_real = output_toep.real().contiguous();
-        auto output_imag = output_toep.imag().contiguous();
-    
-        auto input_real = input.view({NY, NX}).cpu().real().contiguous();
-        auto input_imag = input.view({NY, NX}).cpu().imag().contiguous();
-    
-        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-            .z = {{input_real.spanning_view(), output_real.spanning_view()}},
-            .titles = {{"Input Real Part", "Toeplitz Output Real Part"}}
-        }).show();
-    
-        viz::default_heatmap(viz::DefaultHeatmapOptions<1, 2>{
-            .z = {{input_imag.spanning_view(), output_imag.spanning_view()}},
-            .titles = {{"Input Imag Part", "Toeplitz Output Imaginary Part"}}
-        }).show();
-    }
-
-
-
+    */
 
 
 }
@@ -349,7 +511,8 @@ int main() {
     //test_tensor_array_operator();
 
 
-    test_toeplitz_multiplication();
+    //test_toeplitz_multiplication();
+    test_toeplitz_multiplication_2D_visual();
     //hasty::viz::test_tensor_viz();
 
     return 0;

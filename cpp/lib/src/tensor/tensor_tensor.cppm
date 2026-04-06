@@ -426,12 +426,18 @@ public:
 
     inline Tensor median() const { return Tensor(hat::median(_base)); }
 
+    inline Tensor norm(const Scalar& p=2) const { return Tensor(_base.norm(p.to_torch())); }
+    inline Tensor norm(const Opt<Scalar>& p, ArrayRef<i64> dims, bool keepdim = false) const {
+        return Tensor(_base.norm(std::make_optional<hat::Scalar>(p->to_torch()), dims.to_torch(), keepdim));
+    }
+
+
     inline Tensor remainder(const Scalar& other) const { return Tensor(_base.remainder(other.to_torch())); }
     inline Tensor& remainder_(const Scalar& other) { _base.remainder_(other.to_torch()); return *this; }
     inline Tensor remainder(const Tensor& other) const { return Tensor(_base.remainder(other._base)); }
     inline Tensor& remainder_(const Tensor& other) { _base.remainder_(other._base); return *this; }
 
-    inline Tensor to(eScalarType dtype, bool non_blocking=false, bool copy = false, Opt<eMemoryFormat> memformat = nullopt) const {
+    Tensor to(eScalarType dtype, bool non_blocking=false, bool copy = false, Opt<eMemoryFormat> memformat = nullopt) const {
         return Tensor(
             _base.to(
                 scalartype::to_torch(dtype), non_blocking, copy, 

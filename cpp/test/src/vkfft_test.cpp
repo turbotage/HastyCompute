@@ -138,7 +138,7 @@ std::pair<VkFFTConfiguration, VkFFTConfiguration> get_convolution_configurations
     static int cuda_device_id = 0;
     static pfUINT buf_size = N * sizeof(cuFloatComplex);
 	
-	int coalescedMemory = 64;
+	int coalescedMemory = 32;
 
 	VkFFTConfiguration configuration_kernel = {};
 	configuration_kernel.device = &cuda_device_id;
@@ -168,6 +168,7 @@ std::pair<VkFFTConfiguration, VkFFTConfiguration> get_convolution_configurations
     configuration_convolution.bufferSize = &buf_size;
 	configuration_convolution.performConvolution = 1;
 	configuration_convolution.coalescedMemory = coalescedMemory;
+	configuration_convolution.useLUT = 1;
 
 	return {configuration_kernel, configuration_convolution};
 }

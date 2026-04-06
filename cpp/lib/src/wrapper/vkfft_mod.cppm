@@ -84,6 +84,8 @@ namespace hasty {
 				bool frequencyZeroPadding = false;
 				bool performConvolution = false;
 				bool kernelConvolution = false;
+				bool useLUT = false;
+				bool useLUT_4step = false;
 
 				bool keepShaderCode = false;
 
@@ -157,6 +159,9 @@ namespace hasty {
 					appwrap->config.frequencyZeroPadding = frequencyZeroPadding ? 1 : 0;
 					appwrap->config.performConvolution = performConvolution ? 1 : 0;
 					appwrap->config.kernelConvolution = kernelConvolution ? 1 : 0;
+					appwrap->config.useLUT = useLUT ? 1 : 0;
+					appwrap->config.useLUT_4step = useLUT_4step ? 1 : 0;
+
 
 					if (keepShaderCode) {
 						appwrap->config.keepShaderCode = 1;

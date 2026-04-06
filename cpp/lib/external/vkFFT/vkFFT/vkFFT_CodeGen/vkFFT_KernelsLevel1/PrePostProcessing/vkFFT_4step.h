@@ -65,16 +65,7 @@ static inline void appendReorder4Step(VkFFTSpecializationConstantsLayout* sc, in
 					PfMod(sc, &sc->inoutID, &sc->inoutID, &temp_int);
 				}
 				else {
-					// Before fix
 					PfMod(sc, &sc->inoutID, &sc->inoutID, &sc->stageStartSize);
-					// After fix
-					/*
-					if (sc->numAxisUploads > 1) {
-						PfMod(sc, &sc->inoutID, &sc->inoutID, &sc->firstStageStartSize);
-					} else {
-						PfMod(sc, &sc->inoutID, &sc->inoutID, &sc->stageStartSize);
-					}
-					*/
 				}
 			}
 			else {
@@ -122,18 +113,8 @@ static inline void appendReorder4Step(VkFFTSpecializationConstantsLayout* sc, in
 					PfMul(sc, &sc->tempInt, &sc->inoutID, &sc->tempInt, 0);
 					if (sc->reorderFourStep == 2)
 						temp_double.data.d = pfFPinit("2.0") * sc->double_PI/ (pfLD)(sc->fft_dim_full.data.i / sc->firstStageStartSize.data.i);
-					else {
-						// Before fix
+					else
 						temp_double.data.d = pfFPinit("2.0") * sc->double_PI/ (pfLD)(sc->stageStartSize.data.i * sc->fftDim.data.i);
-						// After fix
-						/*
-						if (sc->numAxisUploads > 1) {
-							temp_double.data.d = pfFPinit("2.0") * sc->double_PI / (pfLD)(sc->fft_dim_full.data.i);
-						} else {
-							temp_double.data.d = pfFPinit("2.0") * sc->double_PI / (pfLD)(sc->stageStartSize.data.i * sc->fftDim.data.i);
-						}
-						*/
-					}
 					
 					PfMul(sc, &sc->angle, &sc->tempInt, &temp_double, 0);
 					PfSinCos(sc, &sc->mult, &sc->angle);

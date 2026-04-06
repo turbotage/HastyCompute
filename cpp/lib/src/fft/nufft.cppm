@@ -183,10 +183,12 @@ requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan<cuda_t, T, N, NT> {
 
     NufftPlan(
-        const std::array<i64, N>& nmodes,
+        const std::array<i64, N>& im_size,
         const NufftOptions<cuda_t, T, NT>& options = NufftOptions<cuda_t, T, NT>()
-    )   : m_nmodes(nmodes), m_options(options)
+    )   : m_options(options)
     {
+        std::reverse_copy(im_size.begin(), im_size.end(), m_nmodes.begin());
+
         cufinufft_default_opts(&m_opts);
 
         switch (m_options.method) {
@@ -620,7 +622,7 @@ struct NufftOptions<cpu_t, T, NT> {
 
     eNufftSign sign = std::is_same_v<NT, fft::NTU> ? eNufftSign::DEFAULT_NTU : eNufftSign::DEFAULT_UTN;
     i32 ntransf = 1;
-    double tol = std::is_same_v<T, f32> ? 1e-6 : 1e-15;
+    double tol = std::is_same_v<T, f32> ? 1e-6 : 5e-14;
 
     eModeOrder mode_order = eModeOrder::DEFAULT;
     eSpreadInterpMethod spread_interp_method = eSpreadInterpMethod::DEFAULT;
@@ -633,10 +635,11 @@ requires (std::is_same_v<T, f32> || std::is_same_v<T, f64>) && is_dim3<N>
 struct NufftPlan<cpu_t, T, N, NT> {
 
     NufftPlan(
-        const std::array<i64, N>& nmodes,
+        const std::array<i64, N>& im_size,
         const NufftOptions<cpu_t, T, NT>& options = NufftOptions<cpu_t, T, NT>()
-    )   : m_nmodes(nmodes), m_options(options)
+    )   : m_options(options)
     {
+        std::reverse_copy(im_size.begin(), im_size.end(), m_nmodes.begin());
         finufft_default_opts(&m_opts);
 
         if (m_options.modeord != NufftOptions<cpu_t, T, NT>::eModeOrder::DEFAULT) {

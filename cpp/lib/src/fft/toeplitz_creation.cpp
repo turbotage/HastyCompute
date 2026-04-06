@@ -36,7 +36,6 @@ static Tensor circ_reverse(const Tensor& t, i64 d)
 static Tensor ntu_nufft(
     const Tensor&               omega,
     const Tensor&               weights,
-    ArrayRef<i64>               nmodes_fft,
     ArrayRef<i64>               shape_out,
     bool                        double_prec,
     bool                        cmcl_mode = false)
@@ -63,26 +62,22 @@ static Tensor ntu_nufft(
                                     : NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
 
         if (ndim == 1) {
-            NufftPlan<cuda_t, T, 1, NTU> plan({nmodes_fft[0]}, opts);
+            NufftPlan<cuda_t, T, 1, NTU> plan({shape_out[0]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         } else if (ndim == 2) {
-            NufftPlan<cuda_t, T, 2, NTU> plan({nmodes_fft[0], nmodes_fft[1]}, opts);
+            NufftPlan<cuda_t, T, 2, NTU> plan({shape_out[0], shape_out[1]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }
         else if (ndim == 3) {
-            NufftPlan<cuda_t, T, 3, NTU> plan({nmodes_fft[0], nmodes_fft[1], nmodes_fft[2]}, opts);
+            NufftPlan<cuda_t, T, 3, NTU> plan({shape_out[0], shape_out[1], shape_out[2]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }
         else {
             throw std::runtime_error("Unsupported ndim in ntu_nufft: " + std::to_string(ndim));
         }
-
-        // Cast back to cfloat if running in double precision
-        if constexpr (!std::is_same_v<T, f32>)
-            output = output.to(eScalarType::ComplexFloat);
 
         return output.squeeze(0).contiguous();
     };
@@ -108,7 +103,6 @@ static Tensor ntu_nufft(
 static Tensor ntu_nufft_spatial(
     const Tensor&               omega,
     const Tensor&               weights,
-    ArrayRef<i64>               nmodes_cmcl,
     ArrayRef<i64>               shape_out,
     bool                        double_prec)
 {
@@ -118,19 +112,22 @@ static Tensor ntu_nufft_spatial(
 
     // Phase shift = sum_d (shape_out[ndim-1-d] / 2) * omega[d]
     // For 2D: NX/2 * kx + NY/2 * ky  (shape_out = {NY,NX}, omega[0]=kx, omega[1]=ky)
-    Tensor phase = zeros({npts}, TensorOptions(dev, eScalarType::Float));
+    eScalarType real_dtype = double_prec ? eScalarType::Double : eScalarType::Float;
+    eScalarType cplx_dtype = double_prec ? eScalarType::ComplexDouble : eScalarType::ComplexFloat;
+    Tensor omega_r = omega.to(real_dtype);
+    Tensor phase = zeros({npts}, TensorOptions(dev, real_dtype));
     for (int d = 0; d < ndim; ++d) {
-        float half_n = static_cast<float>(shape_out[ndim - 1 - d]) * 0.5f;
-        phase = phase.add(omega.select(0, d).mul(Scalar{half_n}));
+        double half_n = static_cast<double>(shape_out[ndim - 1 - d]) * 0.5;
+        phase = phase.add(omega_r.select(0, d).mul(Scalar{half_n}));
     }
 
     // w_mod[j] = w[j] * exp(i * phase[j])
     Tensor exp_phase = view_as_complex(
         stack({phase.cos(), phase.sin()}, -1).contiguous()
     );
-    Tensor w_mod = weights.mul(exp_phase);
+    Tensor w_mod = weights.to(cplx_dtype).mul(exp_phase);
 
-    return ntu_nufft(omega, w_mod, nmodes_cmcl, shape_out, double_prec, /*cmcl_mode=*/true);
+    return ntu_nufft(omega, w_mod, shape_out, double_prec, /*cmcl_mode=*/true);
 }
 
 
@@ -149,7 +146,6 @@ static Tensor adjoint_flip_and_concat(
     const Tensor&                   omega,      // [ndim, npts] float
     const Tensor&                   weights,    // [npts] cfloat
     int                             ndim,
-    ArrayRef<i64>                   nmodes_fft,
     ArrayRef<i64>                   shape_out,
     bool                            double_prec)
 {
@@ -163,11 +159,11 @@ static Tensor adjoint_flip_and_concat(
     };
 
     Tensor kernel1 = (dim < ndim - 1)
-        ? adjoint_flip_and_concat(dim + 1, omega, weights, ndim, nmodes_fft, shape_out, double_prec)
-        : ntu_nufft_spatial(omega, weights, nmodes_fft, shape_out, double_prec);
+        ? adjoint_flip_and_concat(dim + 1, omega, weights, ndim, shape_out, double_prec)
+        : ntu_nufft_spatial(omega, weights, shape_out, double_prec);
     Tensor kernel2 = (dim < ndim - 1)
-        ? adjoint_flip_and_concat(dim + 1, make_flip().mul(omega).contiguous(), weights, ndim, nmodes_fft, shape_out, double_prec)
-        : ntu_nufft_spatial(make_flip().mul(omega).contiguous(), weights, nmodes_fft, shape_out, double_prec);
+        ? adjoint_flip_and_concat(dim + 1, make_flip().mul(omega).contiguous(), weights, ndim, shape_out, double_prec)
+        : ntu_nufft_spatial(make_flip().mul(omega).contiguous(), weights, shape_out, double_prec);
 
     // Zero block: same shape as kernel1 but size 1 along `dim`
     std::vector<i64> zero_shape = kernel1.sizes().vec();
@@ -241,13 +237,6 @@ Tensor create_toeplitz_kernel(
     if (ndim < 1 || ndim > 3)
         throw std::runtime_error("create_toeplitz_kernel: ndim must be 1, 2, or 3");
 
-    // cufinufft nmodes: reversed so coords[0] (x, fastest) → nmodes_fft[0]
-    // and the flat output reshapes back to im_size.
-    // e.g. im_size={NZ,NY,NX} → nmodes_fft={NX,NY,NZ}
-    std::vector<i64> nmodes_fft(ndim);
-    for (int i = 0; i < ndim; ++i)
-        nmodes_fft[i] = im_size[ndim - 1 - i];
-
     // Ensure weights are complex float
     Tensor wts = weights;
     if (!wts.is_complex())
@@ -257,10 +246,10 @@ Tensor create_toeplitz_kernel(
     if (ndim == 1) {
         // adjoint_flip_and_concat covers dims 1..ndim-1 (empty for 1-D);
         // reflect_conj_concat below handles dim 0 in all cases.
-        kernel = ntu_nufft_spatial(coords, wts, nmodes_fft, im_size, double_prec);
+        kernel = ntu_nufft_spatial(coords, wts, im_size, double_prec);
     } else {
         kernel = adjoint_flip_and_concat(
-            1, coords, wts, ndim, nmodes_fft, im_size, double_prec);
+            1, coords, wts, ndim, im_size, double_prec);
     }
 
     // Hermitian-symmetric extension along dim 0
@@ -281,13 +270,11 @@ Tensor create_toeplitz_kernel(
     double scale = 0.5;
     for (auto s : im_size) scale /= static_cast<double>(s); //std::sqrt(static_cast<double>(s));
     scale /= static_cast<double>(im_size[ndim - 1]);
-    kernel = kernel.mul(Scalar{static_cast<float>(scale)});
+    kernel = kernel.mul(Scalar{scale});
 
-    //kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)
-
-    // Ensure complex float output
+    // Cast back to cfloat now that all double-precision work is done
     if (kernel.dtype() != eScalarType::ComplexFloat)
-        throw std::runtime_error("create_toeplitz_kernel: unexpected kernel dtype after processing");
+        kernel = kernel.to(eScalarType::ComplexFloat);
 
     return kernel;
 }
@@ -320,14 +307,7 @@ Tensor create_toeplitz_kernel_standard(
 
     // NUFFT onto the 2N grid in FFT mode: DC is at index 0, so output is
 
-    // NUFFT onto the 2N grid in FFT mode: DC is at index 0, so output is
-    // [h[0], h[1], ..., h[N-1], h[-N], h[-N+1], ..., h[-1]] — already the
-    // correct Toeplitz circulant column layout (no ifftshift needed).
-    // nmodes_fft are reversed (cufinufft convention: x-fastest).
-    std::vector<i64> nmodes_fft(ndim);
-    for (std::size_t i = 0; i < ndim; ++i) nmodes_fft[i] = full_shape[ndim - 1 - i];
-
-    Tensor kernel = ntu_nufft(coords, weights, nmodes_fft, full_shape, /*double_prec=*/false);
+    Tensor kernel = ntu_nufft(coords, weights, full_shape, /*double_prec=*/false);
 
     // Zero the Nyquist slice along each dim independently — h[-N,*] and h[*,-N]
     // are not part of the circulant embedding and must be set to zero.
@@ -347,7 +327,7 @@ Tensor create_toeplitz_kernel_standard(
     scale /= static_cast<double>(im_size[ndim - 1]);
     kernel = kernel.mul(Scalar{static_cast<float>(scale)});
 
-    kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)
+    //kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)
 
     if (kernel.dtype() != eScalarType::ComplexFloat)
         throw std::runtime_error("create_toeplitz_kernel_standard: unexpected kernel dtype after processing");
