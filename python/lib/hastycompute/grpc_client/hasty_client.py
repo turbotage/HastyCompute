@@ -3,9 +3,9 @@ gRPC client for HastyServer.
 """
 
 import grpc
-from gen import hasty_service_pb2 as pb
-from gen import hasty_service_pb2_grpc as pb_grpc
-from generic_value import GenericValue
+from hastycompute.grpc_client.gen import hasty_service_pb2 as pb
+from hastycompute.grpc_client.gen import hasty_service_pb2_grpc as pb_grpc
+from hastycompute.generic_value import GenericValue
 
 _CHUNK_SIZE = 2 * 1024 * 1024
 

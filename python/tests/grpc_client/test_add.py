@@ -15,8 +15,8 @@ import time
 import pathlib
 import torch
 
-from hasty_client import HastyClient
-from generic_value import GenericValue
+from hastycompute.grpc_client.hasty_client import HastyClient
+from hastycompute.generic_value import GenericValue
 
 
 # ---------------------------------------------------------------------------

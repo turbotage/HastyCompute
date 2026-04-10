@@ -223,11 +223,6 @@ public:
         return Tensor(_base.index(tind));
     }
 
-    
-
-
-    // LibTorch extensions
-
     inline static Tensor from_blob(void* data, ArrayRef<i64> sizes, eScalarType dtype, Device device) {
         return Tensor(hat::from_blob(data, sizes.to_torch(), TensorOptions(device).dtype(dtype).to_torch()));
     }

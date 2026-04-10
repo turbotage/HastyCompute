@@ -136,6 +136,7 @@
     "mathover.matchRegex": "\\\\f\\[(.*?)\\\\f\\]",
     "mathover.forwardSkip": 3,
     "mathover.backwardSkip": 3,
-    "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+    "python.analysis.extraPaths": ["${workspaceFolder}/python/lib"]
 }

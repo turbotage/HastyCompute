@@ -19,6 +19,17 @@
             "justMyCode": false
         },
         {
+            "name": "Python Debugger: Current File as Module",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${command:python.interpreterPath}",
+            "program": "${workspaceFolder}/python/_run_module.py",
+            "args": ["${file}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "(lldb-dap) HastyTest",
             "type": "lldb-dap",
             "request": "launch",
