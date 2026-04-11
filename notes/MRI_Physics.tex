@@ -1,4 +1,80 @@
-The signal equation 
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{mathtools}
+\usepackage{comment}
+
+\DeclarePairedDelimiterX{\norm}[1]{\lVert}{\rVert}{#1}
 
 
+\title{SomeMRI Math}
+\author{viktor.vigren }
+\date{November 2025}
 
+\begin{document}
+
+
+The signal equation of MRI is given by
+\begin{equation}
+    S_c(t) = \int_V s_c(\mathbf{r})\rho(\mathbf{r}, t) e^{-i\gamma\int_0^t \Delta B(\mathbf{r},\tau) d\tau} d\mathbf{r}
+\end{equation}
+The difference $\Delta B$ from the main magnetic field $B_0$ can be expressed like
+\begin{equation}
+    \Delta B(\mathbf{r}, t) = 
+        \Delta B_0(\mathbf{r}) + \hspace{-4mm}
+        \sum_{\beta \in \{x,y,z\}} \hspace{-4mm} G^0_\beta(t)r_\beta  + \hspace{-4mm}
+        \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} \hspace{-4mm} G^{lm}_\beta(t) R^m_l(\mathbf{r})
+\end{equation}
+Where $R^m_l(\mathbf{r})$ are the solid harmonics, which can be expressed in terms of the spherical harmonics $Y^m_l(\mathbf{r})$ as
+\begin{equation}
+    R^m_l(\mathbf{r}) = \norm{\mathbf{r}}^l Y^m_l(\mathbf{r}).
+\end{equation}
+In the ideal case, the higher order terms from the harmonics are zero, and only the linear terms $G^0_\beta(t)r_\beta$ remain.
+However, in practice there are always some higher order terms present, and the ideal gradient fields precsribed are the actual 
+gradient fields realized. The actual gradient waveforms can be modelled well by a convolution of the ideal gradient waveforms 
+with an impulse response function $\alpha(t)$. This can be expressed for all orders of the gradient fields as
+\begin{equation}
+    G^{lm}_\beta(t) = (\alpha^{lm}_\beta * G^{lm, \text{ideal}}_\beta)(t)
+\end{equation}
+Or if gradient heating is to be taken into account, the impulse response function can be made time-varying as
+\begin{equation}
+    G^{lm}_\beta(t) = (\alpha^{lm}_\beta(t) * G^{lm, \text{ideal}}_\beta)(t).
+\end{equation}
+While the magnetization $\rho(\mathbf{r}, t)$ is time dependent, we consider readout to be short enough that the only
+time dependence is due to $T_2$ decay. Thus, we can express the magnetization as
+\begin{equation}
+    S_c(t) = \int_V s_C(\mathbf{r})\rho(\mathbf{r}) e^{-t/T_2(\mathbf{r})} e^{-i\gamma\int_0^t \Delta B(\mathbf{r},\tau) d\tau} d\mathbf{r}
+\end{equation}
+With this we can gather all terms that makes the signal equation deviate from a Fourier transform of the
+static magnetization in the linear gradient fields and form
+\begin{equation*}
+    S_c(t) = \int_V s_C(\mathbf{r})\rho(\mathbf{r})e^{\Phi(\mathbf{r}, t)} e^{-i\mathbf{k}(t)\cdot\mathbf{r}} d\mathbf{r} \\
+\end{equation*}
+where
+\begin{align*}
+    \Phi(\mathbf{r}, t) &= 
+        -t/T_2(\mathbf{r}) - i\gamma\int_0^t \Delta B_0(\mathbf{r}) + 
+        \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} G^{lm}_\beta(\tau) R^m_l(\mathbf{r}) d\tau
+    \\
+    \mathbf{k}(t) &= \gamma\int_0^t (G^0_x(\tau), G^0_y(\tau), G^0_z(\tau)) d\tau
+\end{align*}
+Considering a voxel discretization, we can express the operators
+\begin{align*}
+    (\mathbf{A}_c)_{kj} &= s_C(\mathbf{r}_j)e^{\Phi(\mathbf{r}_j, t_k)} e^{-i\mathbf{k}(t_k)\cdot\mathbf{r}_j} \\
+    (\mathbf{A}^H_c)_{ik} &= s^*_C(\mathbf{r}_i)e^{\Phi^*(\mathbf{r}_i, t_k)} e^{i\mathbf{k}(t_k)\cdot\mathbf{r}_i} \\
+    (\mathbf{A}^H_c\mathbf{A}_c)_{ij} &= \sum_k s_C(\mathbf{r}_j)s^*_C(\mathbf{r}_i)e^{\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)} e^{-i\mathbf{k}(t_k)\cdot(\mathbf{r}_j - \mathbf{r}_i)}
+\end{align*}
+Now, to get back a Fourier transform, and to enable the Toeplitz property in $\mathbf{A}^H_c\mathbf{A}_c$. We introduce 
+approximations
+\begin{align*}
+    \exp(\Phi(\mathbf{r}_j, t_k)) &\approx \sum_{l=0}^L \sigma^1_{kl} \exp(\Phi(\mathbf{r}_j, t_l)) \\
+    \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) &\approx \sum_{l=0}^P \sigma^2_{kl} \exp(\Phi(\mathbf{r}_j, t_l) + \Phi^*(\mathbf{r}_i, t_l))
+\end{align*}
+
+
+\end{document}
