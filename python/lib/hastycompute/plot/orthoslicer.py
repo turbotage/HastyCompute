@@ -1,584 +1,469 @@
+"""dash_orthoslicer.py
+
+Browser-based orthogonal slicer built with Plotly / Dash.
+Mirrors the API of HastyOrthoSlicer / image_nd from orthoslicer.py but
+renders inside a browser tab instead of a Matplotlib window.
+"""
+
+import threading
+import time
+import webbrowser
+
 import numpy as np
-
-import weakref
-
-import matplotlib.pyplot as plt
-import matplotlib.patches as pltpatch
-from matplotlib.widgets import TextBox
-
-import hastycompute.plot.plot_utility as pu
-
-class HastyOrthoSlicer:
-
-	def __init__(self, data, title=None, max_clim=False):
-		self._is_complex_dtype = data.dtype == np.complex64 or data.dtype == np.complex128
-		if self._is_complex_dtype:
-			self._phase = np.angle(data)
-			self._phase_clim = np.array([-3.141592, 3.141592]) #[self._phase.min(), self._phase.max()]
-			self._abs = np.abs(data)
-			self._abs_clim = np.percentile(self._abs, (1.0, 99.0))
-		data = self._abs if self._is_complex_dtype else data
-
-		"""
-		Parameters
-		----------
-		data : array-like
-			The data that will be displayed by the slicer. Should have 3+
-			dimensions.
-		title : str or None, optional
-			The title to display. Can be None (default) to display no
-			title.
-		"""
-		if len(data.shape) == 1:
-			data = data[:,np.newaxis,np.newaxis,np.newaxis,np.newaxis]
-		if len(data.shape) == 2:
-			data = data[:,:,np.newaxis,np.newaxis,np.newaxis]
-		if len(data.shape) == 3:
-			data = data[:,:,:,np.newaxis,np.newaxis]
-		if len(data.shape) == 4:
-			data = data[:,:,:,:,np.newaxis]
-
-		if len(data.shape) > 5:
-			raise RuntimeError("Can't use HastyOrthoSlicer for more than 5d data")
+import plotly.graph_objects as go
+import dash
+from dash import dcc, html, Input, Output, State, ctx
 
 
-		# Use these late imports of matplotlib so that we have some hope that
-		# the test functions are the first to set the matplotlib backend. The
-		# tests set the backend to something that doesn't require a display.
-		self._title = title
-		self._closed = False
-		self._cross = True
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
-		self._mask_mode = False
-		self._mask_idxs = []
+def _make_marks(n, max_ticks=8):
+    """Return a {value: label} dict for a Dash Slider with at most *max_ticks*."""
+    step = max(1, n // max_ticks)
+    return {i: str(i) for i in range(0, n, step)}
 
-		data = np.asanyarray(data)
-		if data.ndim < 3:
-			raise ValueError('data must have at least 3 dimensions')
-		if np.iscomplexobj(data):
-			raise TypeError('Complex data not supported')
-		affine = np.eye(4)
-		if affine.shape != (4, 4):
-			raise ValueError('affine must be a 4x4 matrix')
-		# determine our orientation
-		self._affine = affine
-		#codes = axcodes2ornt(aff2axcodes(self._affine))
-		self._order = np.array([0,1,2], dtype=np.int64) #np.argsort([c[0] for c in codes])
-		self._flips = [False, False, False, False] #np.array([c[1] < 0 for c in codes])[self._order]
-		self._scalers = [1.0, 1.0, 1.0] #voxel_sizes(self._affine)
-		self._inv_affine = np.linalg.inv(affine)
-		# current volume info
-		self._volume_dims = data.shape[3:]
-		self._current_vol_data = data[:, :, :, ...] if data.ndim > 3 else data
-		self._data = data
-		self._clim = [np.min(data), np.max(data)] if max_clim else np.percentile(data, (1.0, 99.0))
-		del data
 
-		# ^ +---------+   ^ +---------+
-		# | |         |   | |         |
-		#   |   Sag   |     |   Cor   |
-		# S |    0    |   S |    1    |
-		#   |         |     |         |
-		#   |         |     |         |
-		#   +---------+     +---------+
-		#        A  -->     <--  R
-		# ^ +---------+     +---------+
-		# | |         |     |         |
-		#   |  Axial  |     |   Vol   |
-		# A |    2    |     |    3    |
-		#   |         |     |         |
-		#   |         |     |         |
-		#   +---------+     +---------+
-		#   <--  R          <--  t  -->
+# ---------------------------------------------------------------------------
+# DashOrthoSlicer
+# ---------------------------------------------------------------------------
 
-		fig, axes = plt.subplots(2, 2)
-		fig.set_size_inches((9, 9), forward=True)
-		self._axes = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
-		plt.tight_layout(pad=0.1)
-		self._textax = plt.axes([0.1, 0.01, 0.8, 0.025])
-		self._text_box = TextBox(self._textax, 'Command Window', '')
-		self._text_box.on_submit(self._on_text_submit)
-		#if self.n_volumes <= 1:
-		#	fig.delaxes(self._axes[3])
-		#	self._axes.pop(-1)
-		if self._title is not None:
-			fig.canvas.manager.set_window_title(str(title))
+class DashOrthoSlicer:
+    """
+    Orthogonal 3-D (+ optional volume dims) slicer rendered in a browser.
 
-		# Start midway through each axis, idx is current slice number
-		self._ims, self._data_idx = list(), list()
+    Data layout (same as HastyOrthoSlicer)
+    ---------------------------------------
+    data[dim0, dim1, dim2, vol3, vol4]
+        dim0/1/2  – spatial axes
+        vol3/vol4 – optional volume / time axes (size 1 if absent)
 
-		# set up axis crosshairs
-		self._crosshairs = [None] * 3
-		r = [
-			self._scalers[self._order[2]] / self._scalers[self._order[1]],
-			self._scalers[self._order[2]] / self._scalers[self._order[0]],
-			self._scalers[self._order[1]] / self._scalers[self._order[0]],
-		]
-		self._sizes = [self._data.shape[order] for order in self._order]
-		for ii, xax, yax, ratio, label in zip([0, 1, 2], [1, 0, 0], [2, 2, 1], r, ('SAIP', 'SRIL', 'ARPL')):
-			ax = self._axes[ii]
-			d = np.zeros((self._sizes[yax], self._sizes[xax]))
-			im = self._axes[ii].imshow(
-				d,
-				vmin=self._clim[0],
-				vmax=self._clim[1],
-				aspect=1,
-				cmap='gray',
-				interpolation='nearest',
-				origin='lower',
-			)
-			self._ims.append(im)
-			vert = ax.plot(
-				[0] * 2, [-0.5, self._sizes[yax] - 0.5], color=(0, 1, 0), linestyle='-'
-			)[0]
-			horiz = ax.plot(
-				[-0.5, self._sizes[xax] - 0.5], [0] * 2, color=(0, 1, 0), linestyle='-'
-			)[0]
-			self._crosshairs[ii] = dict(vert=vert, horiz=horiz)
-			# add text labels (top, right, bottom, left)
-			lims = [0, self._sizes[xax], 0, self._sizes[yax]]
-			bump = 0.01
-			poss = [
-				[lims[1] / 2.0, lims[3]],
-				[(1 + bump) * lims[1], lims[3] / 2.0],
-				[lims[1] / 2.0, 0],
-				[lims[0] - bump * lims[1], lims[3] / 2.0],
-			]
-			anchors = [
-				['center', 'bottom'],
-				['left', 'center'],
-				['center', 'top'],
-				['right', 'center'],
-			]
-			for pos, anchor, lab in zip(poss, anchors, label):
-				ax.text(
-					pos[0], pos[1], lab, horizontalalignment=anchor[0], verticalalignment=anchor[1]
-				)
-			ax.axis(lims)
-			ax.set_aspect(ratio)
-			ax.patch.set_visible(False)
-			ax.set_frame_on(False)
-			ax.axes.get_yaxis().set_visible(False)
-			ax.axes.get_xaxis().set_visible(False)
-			self._data_idx.append(0)
+    Views
+    -----
+    Sagittal  (view 0) : dim1–dim2 plane at fixed dim0
+    Coronal   (view 1) : dim0–dim2 plane at fixed dim1
+    Axial     (view 2) : dim0–dim1 plane at fixed dim2
+    Volumes   (panel 3): mean across spatial dims; click to change volume
+    """
 
-		# Set up volumes axis
-		self._data_idx.append(0)
-		self._data_idx.append(0)
-		ax = self._axes[3]
-		try:
-			ax.set_facecolor('k')
-		except AttributeError:  # old mpl
-			ax.set_axis_bgcolor('k')
-		ax.set_title('Volumes')
-		
-		vol3 = self._data.shape[3]
-		vol4 = self._data.shape[4]
+    # (xax, yax) for each orthogonal view
+    _VIEW_AXES   = [(1, 2), (0, 2), (0, 1)]
+    _VIEW_LABELS = ['Sagittal', 'Coronal', 'Axial']
+    _GRAPH_IDS   = ['sag-graph', 'cor-graph', 'axial-graph', 'vol-graph']
+    _SLIDER_IDS  = ['slider-s0', 'slider-s1', 'slider-s2',
+                    'slider-vol3', 'slider-vol4']
 
-		volwid = ax.imshow(np.mean(self._data, axis=(0,1,2)), 
-			extent=(0,vol4,0,vol3), cmap='gray', aspect='auto')
-	
-		xy = (0.5, 0.5)
-		patch = pltpatch.Rectangle(
-			xy,
-			1,
-			1,
-			fill=True,
-			facecolor=(0, 1, 0),
-			edgecolor=(1, 0, 0),
-			alpha=0.5,
-		)
-		ax.add_patch(patch)
-		self._volume_ax_objs = dict(volwid=volwid, patch=patch)
+    def __init__(self, data, title='DashOrthoSlicer', max_clim=False, port=8050):
+        # ---- complex handling ------------------------------------------------
+        self._is_complex = np.iscomplexobj(data)
+        if self._is_complex:
+            data = np.asarray(data)
+            self._phase     = np.angle(data).astype(np.float32)
+            self._abs       = np.abs(data).astype(np.float32)
+            self._phase_clim = [-np.pi, np.pi]
+            self._abs_clim   = list(map(float, np.percentile(self._abs, (1.0, 99.0))))
+            data = self._abs
 
-		self._figs = {a.figure for a in self._axes}
-		for fig in self._figs:
-			fig.canvas.mpl_connect('scroll_event', self._on_scroll)
-			fig.canvas.mpl_connect('motion_notify_event', self._on_mouse)
-			fig.canvas.mpl_connect('button_press_event', self._on_mouse)
-			fig.canvas.mpl_connect('key_press_event', self._on_keypress)
-			fig.canvas.mpl_connect('key_release_event', self._on_keyrelease)
-			fig.canvas.mpl_connect('close_event', self._cleanup)
+        data = np.asarray(data, dtype=np.float32)
 
-		# actually set data meaningfully
-		self._position = np.zeros(4)
-		self._position[3] = 1.0  # convenience for affine multiplication
-		self._changing = False  # keep track of status to avoid loops
-		self._links = []  # other viewers this one is linked to
-		plt.draw()
-		for fig in self._figs:
-			fig.canvas.draw()
-		self._set_volume_index((0,0), update_slices=False)
-		self._set_position(0.0, 0.0, 0.0)
-		self._draw()
+        # ---- normalise to exactly 5-D ----------------------------------------
+        if data.ndim < 3:
+            raise ValueError('data must have at least 3 dimensions')
+        if data.ndim == 3:
+            data = data[:, :, :, np.newaxis, np.newaxis]
+        elif data.ndim == 4:
+            data = data[:, :, :, :, np.newaxis]
+        elif data.ndim > 5:
+            raise ValueError('data must not have more than 5 dimensions')
 
-	def show(self):
-		"""Show the slicer in blocking mode; convenience for ``plt.show()``"""
-		plt.show()
-	
-	def close(self):
-		"""Close the viewer figures"""
-		self._cleanup()
-		for f in self._figs:
-			plt.close(f)
+        self._data      = data
+        self._sizes     = list(data.shape[:3])         # [size0, size1, size2]
+        self._vol_shape = data.shape[3:]               # (vol3, vol4)
 
-	def _cleanup(self, kwargs):
-		"""Clean up before closing"""
-		self._closed = True
-		for link in list(self._links):  # make a copy before iterating
-			self._unlink(link())
+        if max_clim:
+            self._clim = [float(data.min()), float(data.max())]
+        else:
+            self._clim = list(map(float, np.percentile(data, (1.0, 99.0))))
 
-	def draw(self):
-		"""Redraw the current image"""
-		for fig in self._figs:
-			fig.canvas.draw()
+        # volume-overview thumbnail: mean over all spatial dims → (vol3, vol4)
+        self._vol_mean = np.mean(data, axis=(0, 1, 2))
 
-	@property
-	def n_volumes(self):
-		"""Number of volumes in the data"""
-		return int(np.prod(self._volume_dims))
+        self._port  = port
+        self._title = title
 
-	@property
-	def position(self):
-		"""The current coordinates"""
-		return self._position[:3].copy()
+        self._app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        self._app.title = title
+        self._build_layout()
+        self._register_callbacks()
 
-	@property
-	def figs(self):
-		"""A tuple of the figure(s) containing the axes"""
-		return tuple(self._figs)
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
-	@property
-	def cmap(self):
-		"""The current colormap"""
-		return self._cmap
-	
-	@cmap.setter
-	def cmap(self, cmap):
-		for im in self._ims:
-			im.set_cmap(cmap)
-		self._cmap = cmap
-		self.draw()
+    def _init_idx(self):
+        return [
+            self._sizes[0] // 2,
+            self._sizes[1] // 2,
+            self._sizes[2] // 2,
+            0,
+            0,
+        ]
 
-	@property
-	def clim(self):
-		"""The current color limits"""
-		return self._clim
+    def _vol_data(self, idx3, idx4):
+        return self._data[:, :, :, int(idx3), int(idx4)]
 
-	@clim.setter
-	def clim(self, clim):
-		clim = np.array(clim, float)
-		if clim.shape != (2,):
-			raise ValueError('clim must be a 2-element array-like')
-		for im in self._ims:
-			im.set_clim(clim)
-		self._clim = tuple(clim)
-		self.draw()
+    def _make_slice_fig(self, view, idx, vol_data):
+        """Return a go.Figure for one orthogonal view."""
+        xax, yax = self._VIEW_AXES[view]
+        size_x   = self._sizes[xax]
+        size_y   = self._sizes[yax]
 
-	def link_to(self, other):
-		"""Link positional changes between two canvases
+        # Extract 2-D slice; .T matches HastyOrthoSlicer's transpose rule
+        # (order[xax] < order[yax] is always true with identity order [0,1,2])
+        slc = np.rollaxis(vol_data, view)[idx[view]].T   # shape: (size_y, size_x)
 
-		Parameters
-		----------
-		other : instance of OrthoSlicer3D
-			Other viewer to use to link movements.
-		"""
-		if not isinstance(other, self.__class__):
-			raise TypeError(
-				f'other must be an instance of {self.__class__.__name__}, not {type(other)}'
-			)
-		self._link(other, is_primary=True)
+        ch_x, ch_y = idx[xax], idx[yax]
 
-	def _link(self, other, is_primary):
-		"""Link a viewer"""
-		ref = weakref.ref(other)
-		if ref in self._links:
-			return
-		self._links.append(ref)
-		if is_primary:
-			other._link(self, is_primary=False)
-			other.set_position(*self.position)
+        fig = go.Figure()
+        fig.add_trace(go.Heatmap(
+            z=slc,
+            x=list(range(size_x)),
+            y=list(range(size_y)),
+            colorscale='gray',
+            zmin=self._clim[0],
+            zmax=self._clim[1],
+            showscale=False,
+            hovertemplate='<extra></extra>',
+        ))
 
-	def _unlink(self, other):
-		"""Unlink a viewer"""
-		ref = weakref.ref(other)
-		if ref in self._links:
-			self._links.pop(self._links.index(ref))
-			ref()._unlink(self)
+        # Crosshairs
+        fig.add_shape(
+            type='line',
+            x0=ch_x, x1=ch_x, y0=-0.5, y1=size_y - 0.5,
+            line=dict(color='lime', width=1),
+        )
+        fig.add_shape(
+            type='line',
+            x0=-0.5, x1=size_x - 0.5, y0=ch_y, y1=ch_y,
+            line=dict(color='lime', width=1),
+        )
 
-	def _notify_links(self):
-		"""Notify linked canvases of a position change"""
-		for link in self._links:
-			link().set_position(*self.position[:3])
+        fig.update_layout(
+            margin=dict(l=5, r=5, t=28, b=5),
+            paper_bgcolor='#111',
+            plot_bgcolor='#111',
+            title=dict(
+                text=self._VIEW_LABELS[view],
+                font=dict(color='white', size=13),
+                x=0.5,
+            ),
+            uirevision='constant',
+            xaxis=dict(
+                visible=False,
+                range=[-0.5, size_x - 0.5],
+                constrain='domain',
+                uirevision='constant',
+            ),
+            yaxis=dict(
+                visible=False,
+                range=[-0.5, size_y - 0.5],
+                scaleanchor='x',
+                scaleratio=1,
+                uirevision='constant',
+            ),
+            height=380,
+            clickmode='event',
+            dragmode=False,
+        )
+        return fig
 
-	def set_position(self, x=None, y=None, z=None):
-		"""Set current displayed slice indices
+    def _make_vol_fig(self, idx):
+        """Return a go.Figure for the volume-overview panel."""
+        vol3, vol4 = self._vol_shape
+        idx3, idx4 = idx[3], idx[4]
 
-		Parameters
-		----------
-		x : float | None
-			X coordinate to use. If None, do not change.
-		y : float | None
-			Y coordinate to use. If None, do not change.
-		z : float | None
-			Z coordinate to use. If None, do not change.
-		"""
-		self._set_position(x, y, z)
-		self._draw()
+        fig = go.Figure()
+        fig.add_trace(go.Heatmap(
+            z=self._vol_mean,
+            x=list(range(vol4)),
+            y=list(range(vol3)),
+            colorscale='gray',
+            showscale=False,
+            hovertemplate='<extra></extra>',
+        ))
+        fig.add_shape(
+            type='rect',
+            x0=idx4 - 0.5, x1=idx4 + 0.5,
+            y0=idx3 - 0.5, y1=idx3 + 0.5,
+            line=dict(color='red', width=2),
+            fillcolor='rgba(0,255,0,0.3)',
+        )
+        fig.update_layout(
+            margin=dict(l=5, r=5, t=28, b=5),
+            paper_bgcolor='#111',
+            plot_bgcolor='#111',
+            title=dict(text='Volumes', font=dict(color='white', size=13), x=0.5),
+            uirevision='constant',
+            xaxis=dict(visible=False, range=[-0.5, max(vol4 - 0.5, 0.5)],
+                       uirevision='constant'),
+            yaxis=dict(visible=False, range=[-0.5, max(vol3 - 0.5, 0.5)],
+                       uirevision='constant'),
+            height=380,
+            clickmode='event',
+            dragmode=False,
+        )
+        return fig
 
-	def set_volume_idx(self, v):
-		"""Set current displayed volume index
+    # ------------------------------------------------------------------
+    # Layout
+    # ------------------------------------------------------------------
 
-		Parameters
-		----------
-		v : int
-			Volume index.
-		"""
-		self._set_volume_index(v)
-		self._draw()
+    def _build_layout(self):
+        init   = self._init_idx()
+        vd     = self._vol_data(init[3], init[4])
+        config = {'displayModeBar': False, 'scrollZoom': False}
+        gs     = {'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'}
 
-	def _set_volume_index(self, v, update_slices=True):
-		"""Set the plot data using a volume index"""
-		v = self._data_idx[3:] if v is None else (int(v[0]), int(v[1]))
-		if v == self._data_idx[3:]:
-			return
-		max_ = np.prod(self._volume_dims)
-		idx = (slice(None), slice(None), slice(None))
-		if self._data.ndim > 3:
-			idx = idx + v
-		self._data_idx[3:] = v
-		self._current_vol_data = self._data[idx]
-		# update all of our slice plots
-		if update_slices:
-			self._set_position(None, None, None, notify=False)
+        # Sliders – always rendered but hidden (display:none) when size == 1
+        dim_sizes  = self._sizes + list(self._vol_shape)
+        dim_labels = ['Sag (dim 0)', 'Cor (dim 1)', 'Axial (dim 2)',
+                      'Vol dim 3', 'Vol dim 4']
+        slider_divs = []
+        for sid, size, label, init_val in zip(
+                self._SLIDER_IDS, dim_sizes, dim_labels, init):
+            s_max   = max(size - 1, 1)
+            visible = size > 1
+            slider_divs.append(html.Div([
+                html.Label(
+                    label,
+                    style={'color': '#aaa', 'fontSize': '11px', 'fontFamily': 'monospace'},
+                ),
+                dcc.Slider(
+                    id=sid,
+                    min=0, max=s_max, step=1, value=init_val,
+                    marks=_make_marks(s_max + 1),
+                    updatemode='drag',
+                    tooltip={'placement': 'bottom', 'always_visible': False},
+                ),
+            ], style={} if visible else {'display': 'none'}))
 
-	def _set_position(self, x, y, z, notify=True):
-		"""Set the plot data using a physical position"""
-		# deal with volume first
-		if self._changing:
-			return
-		self._changing = True
-		x = self._position[0] if x is None else float(x)
-		y = self._position[1] if y is None else float(y)
-		z = self._position[2] if z is None else float(z)
+        self._app.layout = html.Div([
+            dcc.Store(id='state', data={'idx': init}),
 
-		# deal with slicing appropriately
-		self._position[:3] = [x, y, z]
-		idxs = np.dot(self._inv_affine, self._position)[:3]
-		for ii, (size, idx) in enumerate(zip(self._sizes, idxs)):
-			self._data_idx[ii] = max(min(int(round(idx)), size - 1), 0)
-		for ii in range(3):
-			# sagittal: get to S/A
-			# coronal: get to S/L
-			# axial: get to A/L
-			data = np.rollaxis(self._current_vol_data, axis=self._order[ii])[self._data_idx[ii]]
-			xax = [1, 0, 0][ii]
-			yax = [2, 2, 1][ii]
-			if self._order[xax] < self._order[yax]:
-				data = data.T
-			if self._flips[xax]:
-				data = data[:, ::-1]
-			if self._flips[yax]:
-				data = data[::-1]
-			self._ims[ii].set_data(data)
-			# deal with crosshairs
-			loc = self._data_idx[ii]
-			if self._flips[ii]:
-				loc = self._sizes[ii] - loc
-			loc = [loc] * 2
-			if ii == 0:
-				self._crosshairs[2]['vert'].set_xdata(loc)
-				self._crosshairs[1]['vert'].set_xdata(loc)
-			elif ii == 1:
-				self._crosshairs[2]['horiz'].set_ydata(loc)
-				self._crosshairs[0]['vert'].set_xdata(loc)
-			else:  # ii == 2
-				self._crosshairs[1]['horiz'].set_ydata(loc)
-				self._crosshairs[0]['horiz'].set_ydata(loc)
+            # Title
+            html.Div(
+                self._title,
+                style={
+                    'color': 'white', 'textAlign': 'center',
+                    'padding': '6px 0', 'fontFamily': 'sans-serif',
+                    'fontSize': '16px', 'fontWeight': 'bold',
+                },
+            ),
 
-		# Update volume trace
-		if self.n_volumes > 1 and len(self._axes) > 3:
-			idx = [slice(None)] * 3
-			for ii in range(3):
-				idx[self._order[ii]] = self._data_idx[ii]
-			idx += [slice(None)] * 2
+            # ── 2 × 2 grid ──────────────────────────────────────────────────
+            html.Div([
+                html.Div(dcc.Graph(
+                    id='sag-graph', config=config,
+                    figure=self._make_slice_fig(0, init, vd)), style=gs),
+                html.Div(dcc.Graph(
+                    id='cor-graph', config=config,
+                    figure=self._make_slice_fig(1, init, vd)), style=gs),
+            ]),
+            html.Div([
+                html.Div(dcc.Graph(
+                    id='axial-graph', config=config,
+                    figure=self._make_slice_fig(2, init, vd)), style=gs),
+                html.Div(dcc.Graph(
+                    id='vol-graph', config=config,
+                    figure=self._make_vol_fig(init)), style=gs),
+            ]),
 
-			vdata = self._data[tuple(idx)]
+            # ── Controls ────────────────────────────────────────────────────
+            html.Div([
+                html.Div(
+                    id='idx-display',
+                    style={
+                        'color': '#bbb', 'fontFamily': 'monospace',
+                        'fontSize': '12px', 'padding': '4px 12px',
+                    },
+                ),
+                html.Div(slider_divs, style={'padding': '4px 16px 10px'}),
+            ], style={'backgroundColor': '#1a1a1a', 'borderTop': '1px solid #333'}),
 
-			patchobj = self._volume_ax_objs['patch']
-			patchobj.set_x(self._data_idx[4])
-			patchobj.set_y(self._data_idx[3])
+        ], style={'backgroundColor': '#000', 'minHeight': '100vh'})
 
-			volwidobj = self._volume_ax_objs['volwid']
-			volwidobj.set_data(vdata)
-			#volwidobj.set_clim(vdata.min(), vdata.max())
-			volwidobj.set_clim(self._clim[0], self._clim[1])
-			
-		if notify:
-			self._notify_links()
-		self._changing = False
+    # ------------------------------------------------------------------
+    # Callbacks
+    # ------------------------------------------------------------------
 
-	# Matplotlib handlers ####################################################
-	def _in_axis(self, event):
-		"""Return axis index if within one of our axes, else None"""
-		if getattr(event, 'inaxes') is None:
-			return None
-		for ii, ax in enumerate(self._axes):
-			if event.inaxes is ax:
-				return ii
-			
-	def _on_scroll(self, event):
-		"""Handle mpl scroll wheel event"""
-		assert event.button in ('up', 'down')
-		ii = self._in_axis(event)
-		if ii is None:
-			return
-		if event.key is not None and 'shift' in event.key:
-			if self.n_volumes <= 1:
-				return
-			ii = 3  # shift: change volume in any axis
-		assert ii in range(5)
-		dv = 10.0 if event.key is not None and 'control' in event.key else 1.0
-		dv *= 1.0 if event.button == 'up' else -1.0
-		dv *= -1 if self._flips[ii] else 1
-		val = self._data_idx[ii] + dv
-		#if ii == 3:
-		#	self._set_volume_index(val)
-		#else:
-		coords = [self._data_idx[k] for k in range(3)] + [1.0]
-		coords[ii] = val
-		self._set_position(*np.dot(self._affine, coords)[:3])
-		self._draw()
+    def _register_callbacks(self):
+        app       = self._app
+        sizes     = self._sizes
+        vol_shape = self._vol_shape
 
-	def _on_mouse(self, event):
-		"""Handle mpl mouse move and button press events"""
-		if event.button != 1:  # only enabled while dragging
-			return
-		ii = self._in_axis(event)
-		if ii is None:
-			return
-		if ii == 3:
-			if self._mask_mode:
-				pass
-			else:
-				# volume plot directly translates
-				self._set_volume_index((event.ydata,event.xdata))
-		else:
-			if self._mask_mode:
-				self._mask_idxs.append((event.ydata,event.xdata))
-			else:
-				# translate click xdata/ydata to physical position
-				xax, yax = [[1, 2], [0, 2], [0, 1]][ii]
-				x, y = event.xdata, event.ydata
-				x = self._sizes[xax] - x if self._flips[xax] else x
-				y = self._sizes[yax] - y if self._flips[yax] else y
-				idxs = [None, None, None, 1.0]
-				idxs[xax] = x
-				idxs[yax] = y
-				idxs[ii] = self._data_idx[ii]
-				self._set_position(*np.dot(self._affine, idxs)[:3])
-		self._draw()
+        # Map each slider id to (dimension-index, max-value)
+        slider_dim_map = {
+            'slider-s0':   (0, sizes[0] - 1),
+            'slider-s1':   (1, sizes[1] - 1),
+            'slider-s2':   (2, sizes[2] - 1),
+            'slider-vol3': (3, vol_shape[0] - 1),
+            'slider-vol4': (4, vol_shape[1] - 1),
+        }
 
-	def _on_keypress(self, event):
-		"""Handle mpl keypress events"""
-		if event.key is not None and 'escape' in event.key:
-			self.close()
-		elif event.key == 'up':
-			new_idx = list(self._data_idx[3:])
-			new_idx[0] += 1
-			new_idx[0] = min(self._data.shape[3]-1, new_idx[0])
-			self._set_volume_index(tuple(new_idx), update_slices=True)
-			self._draw()
-		elif event.key == 'down':
-			new_idx = list(self._data_idx[3:])
-			new_idx[0] -= 1
-			new_idx[0] = max(0, new_idx[0])
-			self._set_volume_index(tuple(new_idx), update_slices=True)
-			self._draw()
-		elif event.key == 'right':
-			new_idx = list(self._data_idx[3:])
-			new_idx[1] += 1
-			new_idx[1] = min(self._data.shape[4]-1, new_idx[1])
-			self._set_volume_index(tuple(new_idx), update_slices=True)
-			self._draw()
-		elif event.key == 'left':
-			new_idx = list(self._data_idx[3:])
-			new_idx[1] -= 1
-			new_idx[1] = max(0, new_idx[1])
-			self._set_volume_index(tuple(new_idx), update_slices=True)
-			self._draw()
-		elif event.key == 'ctrl+x':
-			self._cross = not self._cross
-			self._draw()
-		elif event.key == 'm':
-			self._mask_idxs = []
-			self._mask_mode = True
-			self._cross = False
-			self._draw()
+        @app.callback(
+            Output('state',       'data'),
+            Output('sag-graph',   'figure'),
+            Output('cor-graph',   'figure'),
+            Output('axial-graph', 'figure'),
+            Output('vol-graph',   'figure'),
+            Output('idx-display', 'children'),
+            # sliders (always present)
+            Input('slider-s0',   'value'),
+            Input('slider-s1',   'value'),
+            Input('slider-s2',   'value'),
+            Input('slider-vol3', 'value'),
+            Input('slider-vol4', 'value'),
+            # graph clicks
+            Input('sag-graph',   'clickData'),
+            Input('cor-graph',   'clickData'),
+            Input('axial-graph', 'clickData'),
+            Input('vol-graph',   'clickData'),
+            State('state',       'data'),
+            prevent_initial_call=True,
+        )
+        def _update(s0, s1, s2, v3, v4,
+                    sag_click, cor_click, axial_click, vol_click,
+                    state):
+            idx       = list(state['idx'])
+            triggered = ctx.triggered_id
 
-	def _on_keyrelease(self, event):
-		if event.key == 'm':
-			self._mask_idxs = []
-			self._mask_mode = False
+            def clip(val, lo, hi):
+                return int(round(float(np.clip(val, lo, hi))))
 
-	def _on_text_submit(self, text):
-		if text == '':
-			return
-		if text == 'phaseimg':
-			if not self._is_complex_dtype:
-				return
-			self._data = self._phase
-			self.clim(self._phase_clim)
-			return
-		if text == 'absimg':
-			self._data = self._abs
-			self.clim(self._abs_clim)
-			return
+            if triggered in slider_dim_map:
+                # Only update the ONE dimension whose slider moved.
+                # Updating all sliders from DOM values reverts positions set by graph clicks.
+                dim, max_val = slider_dim_map[triggered]
+                all_vals = [s0, s1, s2, v3, v4]
+                val = all_vals[dim]
+                if val is not None:
+                    idx[dim] = clip(val, 0, max_val)
 
-		evalamda = lambda absimg, phaseimg: eval(text)
-		try:
-			data = evalamda(self._abs, self._phase)
-		except:
-			self._text_box.set_val('Invalid Expression')
-		self._data = data
+            elif triggered == 'sag-graph' and sag_click:
+                pt = sag_click['points'][0]
+                xax, yax = self._VIEW_AXES[0]
+                idx[xax] = clip(pt['x'], 0, sizes[xax] - 1)
+                idx[yax] = clip(pt['y'], 0, sizes[yax] - 1)
 
-	def _draw(self):
-		"""Update all four (or three) plots"""
-		if self._closed:  # make sure we don't draw when we shouldn't
-			return
-		for ii in range(3):
-			ax = self._axes[ii]
-			self._ims[ii].set_clim(self._clim[0], self._clim[1])
-			ax.draw_artist(self._ims[ii])
-			if self._cross:
-				for line in self._crosshairs[ii].values():
-					ax.draw_artist(line)
-			ax.figure.canvas.blit(ax.bbox)
-		if self.n_volumes > 1 and len(self._axes) > 3:
-			ax = self._axes[3]
-			ax.draw_artist(ax.patch)  # axis bgcolor to erase old lines
-			for key in ('volwid', 'patch'):
-				ax.draw_artist(self._volume_ax_objs[key])
-			ax.figure.canvas.blit(ax.bbox)
+            elif triggered == 'cor-graph' and cor_click:
+                pt = cor_click['points'][0]
+                xax, yax = self._VIEW_AXES[1]
+                idx[xax] = clip(pt['x'], 0, sizes[xax] - 1)
+                idx[yax] = clip(pt['y'], 0, sizes[yax] - 1)
 
-def image_nd(img, max_clim=False):
-	
-	if img.ndim == 3:
-		img = img[None, None, ...]
-	if img.ndim == 4:
-		img = img[None,...]
-	
-	dataf = np.flip(img.transpose((2,3,4,0,1)), axis=2)
-	slicer = HastyOrthoSlicer(dataf, max_clim=max_clim)
-	slicer.show()
+            elif triggered == 'axial-graph' and axial_click:
+                pt = axial_click['points'][0]
+                xax, yax = self._VIEW_AXES[2]
+                idx[xax] = clip(pt['x'], 0, sizes[xax] - 1)
+                idx[yax] = clip(pt['y'], 0, sizes[yax] - 1)
+
+            elif triggered == 'vol-graph' and vol_click:
+                pt = vol_click['points'][0]
+                idx[3] = clip(pt['y'], 0, vol_shape[0] - 1)
+                idx[4] = clip(pt['x'], 0, vol_shape[1] - 1)
+
+            vd      = self._vol_data(idx[3], idx[4])
+            display = (f'dim0:{idx[0]}  dim1:{idx[1]}  dim2:{idx[2]}  '
+                       f'vol3:{idx[3]}  vol4:{idx[4]}')
+
+            return (
+                {'idx': idx},
+                self._make_slice_fig(0, idx, vd),
+                self._make_slice_fig(1, idx, vd),
+                self._make_slice_fig(2, idx, vd),
+                self._make_vol_fig(idx),
+                display,
+            )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def show(self, blocking=True):
+        """Launch the Dash server and open the slicer in the default browser.
+
+        Parameters
+        ----------
+        blocking : bool
+            If True (default), block until the server is stopped (Ctrl-C).
+            If False, run in a background daemon thread and return it.
+
+        Returns
+        -------
+        threading.Thread or None
+        """
+        url = f'http://127.0.0.1:{self._port}/'
+        if blocking:
+            webbrowser.open(url)
+            self._app.run(debug=False, port=self._port, use_reloader=False)
+            return None
+        else:
+            t = threading.Thread(
+                target=self._app.run,
+                kwargs=dict(debug=False, port=self._port, use_reloader=False),
+                daemon=True,
+            )
+            t.start()
+            time.sleep(0.8)   # give the server a moment to bind
+            webbrowser.open(url)
+            return t
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrapper – same calling convention as HastyOrthoSlicer.image_nd
+# ---------------------------------------------------------------------------
+
+def image_nd(img, title='Image', max_clim=False, port=8050, blocking=True):
+    """Display an N-D array via DashOrthoSlicer.
+
+    Input layout (identical to the matplotlib ``image_nd`` in orthoslicer.py):
+
+        3-D  →  (z, y, x)
+        4-D  →  (vol3, z, y, x)
+        5-D  →  (vol3, vol4, z, y, x)
+
+    The array is transposed internally to (dim0=z, dim1=y, dim2=x, vol3, vol4)
+    with the z-axis flipped, matching the original behaviour exactly.
+
+    Parameters
+    ----------
+    img       : array-like
+    title     : str
+    max_clim  : bool
+    port      : int
+    blocking  : bool   block until Ctrl-C when True; run in background thread otherwise
+
+    Returns
+    -------
+    threading.Thread or None
+    """
+    img = np.asarray(img)
+    if img.ndim == 3:
+        img = img[np.newaxis, np.newaxis, ...]
+    elif img.ndim == 4:
+        img = img[np.newaxis, ...]
+    if img.ndim != 5:
+        raise ValueError('image_nd expects 3-5 dimensional data')
+
+    # (vol3, vol4, z, y, x) → (z, y, x, vol3, vol4), z-axis flipped
+    dataf = np.flip(img.transpose((2, 3, 4, 0, 1)), axis=2)
+
+    slicer = DashOrthoSlicer(dataf, title=title, max_clim=max_clim, port=port)
+    return slicer.show(blocking=blocking)
+
 
 if __name__ == '__main__':
-	import h5py
-	with h5py.File('/home/turbotage/Documents/4DRecon/image_320.h5', 'r') as f:
-		data = f['image'][()]
-
-	dataf = np.flip(data[None,...].transpose((2,3,4,0,1)), axis=2)
-	slicer = HastyOrthoSlicer(dataf[:,:,:,:,:])
-
-	slicer.show()
-	
+    # Quick smoke-test with synthetic data
+    data = np.random.rand(64, 64, 64).astype(np.float32)
+    image_nd(data, title='Smoke test', blocking=True)

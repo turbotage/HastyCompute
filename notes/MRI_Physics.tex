@@ -28,7 +28,7 @@ The difference $\Delta B$ from the main magnetic field $B_0$ can be expressed li
     \Delta B(\mathbf{r}, t) = 
         \Delta B_0(\mathbf{r}) + \hspace{-4mm}
         \sum_{\beta \in \{x,y,z\}} \hspace{-4mm} G^0_\beta(t)r_\beta  + \hspace{-4mm}
-        \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} \hspace{-4mm} G^{lm}_\beta(t) R^m_l(\mathbf{r})
+        \sum_{\substack{|l|,|m| \geq 0 \\ \beta \in \{x,y,z\}}} \hspace{-4mm} G^{lm}_\beta(t) R^m_l(\mathbf{r})
 \end{equation}
 Where $R^m_l(\mathbf{r})$ are the solid harmonics, which can be expressed in terms of the spherical harmonics $Y^m_l(\mathbf{r})$ as
 \begin{equation}
@@ -39,11 +39,11 @@ However, in practice there are always some higher order terms present, and the i
 gradient fields realized. The actual gradient waveforms can be modelled well by a convolution of the ideal gradient waveforms 
 with an impulse response function $\alpha(t)$. This can be expressed for all orders of the gradient fields as
 \begin{equation}
-    G^{lm}_\beta(t) = (\alpha^{lm}_\beta * G^{lm, \text{ideal}}_\beta)(t)
+    G^{lm}_\beta(t) = (\alpha^{lm}_\beta * G^{\text{ideal}}_\beta)(t)
 \end{equation}
 Or if gradient heating is to be taken into account, the impulse response function can be made time-varying as
 \begin{equation}
-    G^{lm}_\beta(t) = (\alpha^{lm}_\beta(t) * G^{lm, \text{ideal}}_\beta)(t).
+    G^{lm}_\beta(t) = (\alpha^{lm}_\beta(t) * G^{\text{ideal}}_\beta)(t).
 \end{equation}
 While the magnetization $\rho(\mathbf{r}, t)$ is time dependent, we consider readout to be short enough that the only
 time dependence is due to $T_2$ decay. Thus, we can express the magnetization as
@@ -52,18 +52,18 @@ time dependence is due to $T_2$ decay. Thus, we can express the magnetization as
 \end{equation}
 With this we can gather all terms that makes the signal equation deviate from a Fourier transform of the
 static magnetization in the linear gradient fields and form
-\begin{equation*}
+\begin{equation}
     S_c(t) = \int_V s_C(\mathbf{r})\rho(\mathbf{r})e^{\Phi(\mathbf{r}, t)} e^{-i\mathbf{k}(t)\cdot\mathbf{r}} d\mathbf{r} \\
-\end{equation*}
+\end{equation}
 where
-\begin{align*}
+\begin{align}
     \Phi(\mathbf{r}, t) &= 
         -t/T_2(\mathbf{r}) - i\gamma\int_0^t \Delta B_0(\mathbf{r}) + 
         \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} G^{lm}_\beta(\tau) R^m_l(\mathbf{r}) d\tau
     \\
     \mathbf{k}(t) &= \gamma\int_0^t (G^0_x(\tau), G^0_y(\tau), G^0_z(\tau)) d\tau
-\end{align*}
-Considering a voxel discretization, we can express the operators
+\end{align}
+Considering a voxel discretization, we can express the operators as matrices by
 \begin{align*}
     (\mathbf{A}_c)_{kj} &= s_C(\mathbf{r}_j)e^{\Phi(\mathbf{r}_j, t_k)} e^{-i\mathbf{k}(t_k)\cdot\mathbf{r}_j} \\
     (\mathbf{A}^H_c)_{ik} &= s^*_C(\mathbf{r}_i)e^{\Phi^*(\mathbf{r}_i, t_k)} e^{i\mathbf{k}(t_k)\cdot\mathbf{r}_i} \\
@@ -71,10 +71,53 @@ Considering a voxel discretization, we can express the operators
 \end{align*}
 Now, to get back a Fourier transform, and to enable the Toeplitz property in $\mathbf{A}^H_c\mathbf{A}_c$. We introduce 
 approximations
-\begin{align*}
-    \exp(\Phi(\mathbf{r}_j, t_k)) &\approx \sum_{l=0}^L \sigma^1_{kl} \exp(\Phi(\mathbf{r}_j, t_l)) \\
-    \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) &\approx \sum_{l=0}^P \sigma^2_{kl} \exp(\Phi(\mathbf{r}_j, t_l) + \Phi^*(\mathbf{r}_i, t_l))
-\end{align*}
+\begin{align}
+    \exp(\Phi(\mathbf{r}_j, t_k)) &\approx \sum_{l=0}^L \Omega_{kl} \Upsilon_{jl} \label{eq:approx1}
+\end{align}
+This enables us to approximate the forward and backward operators by evaluating $L$ fourier transforms. 
+We wish to get a similar decomposition for the normal operator. However, a naive application of the above approximation would give us a 
+decomposition with $L^2$ Fourier transforms, which is infeasible. We thus try to get a decomposition into fewer Fourier terms.
+We begin with the naive multiplication
+\begin{equation}
+    \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) 
+        \approx \sum_{l_1=0}^L \sum_{l_2=0}^L (\Omega_{kl_1} \Omega^*_{kl_2})(\Upsilon_{jl_1} \Upsilon^*_{il_2}) \label{eq:normal_op}
+\end{equation}
+For each $k$ we have a $L\times L$ hermitian matrix, thus we can extract the $L(L+1)/2$ unique elements to form a $(L(L+1)/2) \times K$ matrix on which
+we can perform a SVD truncated to the $P$'th largest singular values and reform the $L \times L$ matrix to get
+\begin{equation}
+    \Omega_{kl_1} \Omega^*_{kl_2} \approx \sum_{p=0}^P C_{l_1l_2,p} \Lambda_{kp}. \label{eq:time_approx_SVD}
+\end{equation}
+For each $p$ we have a $L \times L$ matrix, for which we can perform a decomposition into the rank $R$ approximation as
+\begin{equation}
+    C_{l_1l_2,p} \approx \sum_{r=0}^R \hat{C}_{l_1rp} \hat{C}^*_{l_2rp}.
+\end{equation}
+With $R = 1$ in \eqref{eq:time_approx_SVD} this would correspond to a Canonical Polyadic Decomposition.
+
+Inserting these approximations into the normal operator \eqref{eq:normal_op} we get
+\begin{align}
+    \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) 
+        &\approx \sum_{l_1=0}^L \sum_{l_2=0}^L \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \hat{C}_{l_1rp} \hat{C}^*_{l_2rp} \Upsilon_{jl_1} \Upsilon^*_{il_2} \\
+        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \left(\sum_{l_1=0}^L \hat{C}_{l_1rp} \Upsilon_{jl_1}\right) \left(\sum_{l_2=0}^L \hat{C}_{l_2rp} \Upsilon_{il_2}\right)^* \\
+        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \Theta_{jrp} \Theta^*_{irp} \label{eq:final_approx_normal_op}
+\end{align}
+
+Now, to find the approximations, performing the randomized SVD and SVD in these steps is computationally expensive, therefore, one can 
+approach this with a histogram based method. First of all, the off-resonance and off-linear gradient terms only have effects on the signal on the support
+of the image. Thus, we do these approximations first only on voxels that are within the support. Next we can consider
+the feature vector
+\begin{equation}
+    \overline{\Psi}(\mathbf{r}) = \begin{bmatrix}
+        \mathbf{z}(\mathbf{r}) = \Delta B_0(\mathbf{r}) + 1/ T_2(\mathbf{r}) \\
+        R^0_0(\mathbf{r}) \\
+        R^0_1(\mathbf{r}) \\
+        R^{-1}_1(\mathbf{r}) \\
+        \vdots
+    \end{bmatrix}
+\end{equation}
+Now, we can make a histogram of the feature vectors for all voxels in the support, and perform the approximations on the histogram bins instead of on the individual voxels.
+
+
+
 
 
 \end{document}

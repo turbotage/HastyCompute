@@ -65,6 +65,8 @@ target_sources(HastyCompute
             "src/io/io_blosc.cppm"
             "src/io/io_hdf5.cppm"
 			"src/io/io_mod.cppm"
+            "src/mri/forward.cppm"
+            "src/mri/mri_mod.cppm"
 			"src/nvrtc/nvrtc_mod.cppm"
 			"src/tensor/tensor_background_impl.cppm"
 			"src/tensor/tensor_background.cppm"
