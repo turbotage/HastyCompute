@@ -366,6 +366,120 @@ def phi_lowrank(
 
 
 # ---------------------------------------------------------------------------
+# Krylov (Lanczos) low-rank decomposition — no random noise, monotone in L
+# ---------------------------------------------------------------------------
+
+def phi_lowrank_krylov(
+    fwd: Callable,
+    adj: Callable,
+    N: int,
+    L: int,
+    dtype: torch.dtype = torch.complex64,
+    device: torch.device | str = 'cpu',
+    n_krylov: int | None = None,
+    weights: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Rank-L decomposition of exp(Φ) via thick-restart Lanczos (ARPACK/eigsh).
+
+    Uses only matvec products  A v  and  A^H u  without forming A^H A
+    explicitly.  Because there is no random test matrix, the approximation
+    is guaranteed to improve (or stay equal) as L increases — no noise floor
+    from randomization.
+
+    In C++ this becomes a direct SLEPc SVDSolve call against the same
+    shell operator.
+
+    exp(Φ) ≈ Ω Υᵀ  with  Ω: (K, L),  Υ: (N, L)
+
+    Weighted SVD
+    ------------
+    If `weights` (N,) is provided, the decomposition minimises the
+    column-weighted Frobenius norm
+
+        Σ_{k,b} w_b · |A[k,b] − (ΩΥᵀ)[k,b]|²
+
+    by applying the substitution  Ã = A D^{1/2}  and solving the
+    *unweighted* SVD of Ã via the weighted Gram operator
+
+        G̃ v = w_sqrt · adj(fwd(w_sqrt · v))
+
+    After finding eigenvectors Ṽ of G̃ the unweighted spatial basis is
+    recovered as  V = D^{-1/2} Ṽ,  then Ω and Υ are built as usual.
+
+    Setting weights = bin occupancy counts makes the decomposition
+    prioritise bins that cover many voxels in the image support.
+
+    Args:
+        fwd:      (N, n) → (K, n) — applies exp(Φ);    from make_phi_matvec.
+        adj:      (K, n) → (N, n) — applies exp(Φ)^H;  from make_phi_matvec.
+        N:        Spatial dimension (e.g. n_hist histogram bins).
+        L:        Target rank.
+        dtype:    complex64 or complex128.
+        device:   Torch device for the result tensors.
+        n_krylov: Krylov subspace size (ncv in ARPACK).  Defaults to
+                  min(N, max(2*L + 1, L + 32)) — same heuristic as scipy.
+        weights:  (N,) non-negative real weights per spatial point.  None
+                  means uniform weights (standard unweighted SVD).
+
+    Returns:
+        Omega   : (K, L) complex
+        Upsilon : (N, L) complex
+    """
+    from scipy.sparse.linalg import eigsh, LinearOperator
+    import numpy as np
+
+    np_dtype = np.complex64 if dtype == torch.complex64 else np.complex128
+    float_dtype = torch.float32 if dtype == torch.complex64 else torch.float64
+    dev = device if isinstance(device, torch.device) else torch.device(device)
+
+    if weights is not None:
+        w_sqrt = weights.to(float_dtype).to(dev).sqrt()     # (N,) real
+        w_sqrt_safe = w_sqrt.clamp(min=1e-15)
+    else:
+        w_sqrt = w_sqrt_safe = None
+
+    def _matvec(x_np: np.ndarray) -> np.ndarray:
+        x_t = torch.from_numpy(x_np.astype(np_dtype)).to(dev)
+        if w_sqrt is not None:
+            x_t = x_t * w_sqrt                              # D^{1/2} v
+        Ax   = fwd(x_t.unsqueeze(1)).squeeze(1)             # (K,)
+        AhAx = adj(Ax.unsqueeze(1)).squeeze(1)              # (N,)
+        if w_sqrt is not None:
+            AhAx = AhAx * w_sqrt                            # D^{1/2} A^H A D^{1/2} v
+        return AhAx.cpu().numpy().astype(np_dtype)
+
+    op  = LinearOperator((N, N), matvec=_matvec, dtype=np_dtype)
+    ncv = n_krylov if n_krylov is not None else min(N, max(2 * L + 1, L + 32))
+
+    eigvals, eigvecs = eigsh(op, k=L, which='LM', ncv=ncv, tol=0, maxiter=None)
+
+    order   = np.argsort(eigvals)[::-1]
+    eigvals = np.maximum(eigvals[order], 0.0)    # (L,) σ²
+    eigvecs = eigvecs[:, order]                  # (N, L) Ṽ
+
+    S_sing      = torch.from_numpy(eigvals.astype('float64')).to(float_dtype).to(dev).sqrt()
+    S_sing_sqrt = S_sing.sqrt()
+    safe        = S_sing_sqrt.clamp(min=1e-15)
+
+    V_tilde = torch.from_numpy(eigvecs.astype(np_dtype)).to(dev)   # (N, L)
+
+    if w_sqrt is not None:
+        # Ω = fwd(D^{1/2} Ṽ) / √σ   (A D^{1/2} Ṽ = σ U, so U = fwd(D^{1/2}Ṽ)/σ)
+        AV  = fwd(V_tilde * w_sqrt.unsqueeze(1))                   # (K, L)
+        # Υ = Ṽ^* · √σ / w_sqrt    (right singular vector of A = Ṽ / w_sqrt)
+        V   = V_tilde / w_sqrt_safe.unsqueeze(1)                   # (N, L)
+    else:
+        AV  = fwd(V_tilde)                                          # (K, L)
+        V   = V_tilde
+
+    Omega   = AV / safe.unsqueeze(0)            # (K, L)
+    Upsilon = V.conj() * safe.unsqueeze(0)      # (N, L)
+
+    return Omega, Upsilon
+
+
+# ---------------------------------------------------------------------------
 # Normal-operator low-rank decomposition
 # ---------------------------------------------------------------------------
 
