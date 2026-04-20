@@ -294,7 +294,8 @@ def approx_signal_at(prob, hist, Upsilon_hist, Omega_full, subsample_idx):
 # Exact signal via signal_simul
 # ---------------------------------------------------------------------------
 
-def exact_signal_at(prob, subsample_idx, k_batch_size=2, t_batch_size=4):
+def exact_signal_at(prob, subsample_idx, k_batch_size=2, t_batch_size=4,
+                    apply_ratemap=True, apply_nonlin=True):
     """Evaluate signal_simul at M subsampled (k_i, t_i) pairs → [C, M]."""
     M      = len(subsample_idx)
     device = prob['mag'].device
@@ -307,6 +308,7 @@ def exact_signal_at(prob, subsample_idx, k_batch_size=2, t_batch_size=4):
         prob['mag'], prob['ratemap'], prob['coilmaps'],
         prob['k_traj_norm'][idx], prob['t'][idx], nonlinterms,
         k_batch_size=k_batch_size, t_batch_size=t_batch_size,
+        apply_ratemap=apply_ratemap, apply_nonlin=apply_nonlin,
     )   # [C, M, M]
 
     arange_M = torch.arange(M, device=device)
@@ -392,6 +394,27 @@ def main():
           flush=True)
     S_exact = exact_signal_at(prob, subsample_idx)
     print(f"  |S_exact| = {S_exact.norm():.4e}")
+
+    # ------------------------------------------------------------------
+    # Step 4b: effect of each term in isolation
+    # ------------------------------------------------------------------
+    print(f"\n{'Signal variant':<28}  {'rel err vs full':>15}  {'|S|':>12}")
+    print("-" * 60)
+
+    variants = [
+        ("both (reference)",       True,  True),
+        ("off-res only",           True,  False),
+        ("nonlinear only",         False, True),
+        ("neither (DFT only)",     False, False),
+    ]
+    for label, do_rate, do_nl in variants:
+        S_var = exact_signal_at(prob, subsample_idx,
+                                apply_ratemap=do_rate, apply_nonlin=do_nl)
+        if do_rate and do_nl:
+            err = torch.tensor(0.0)
+        else:
+            err = (S_exact - S_var).norm() / S_exact.norm()
+        print(f"  {label:<26}  {err:>15.3e}  {S_var.norm():>12.4e}")
 
     # ------------------------------------------------------------------
     # Step 5: L sweep

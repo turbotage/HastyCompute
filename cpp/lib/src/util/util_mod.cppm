@@ -34,4 +34,16 @@ private:
 	T&& _obj;
 };
 
+export std::array<std::uint8_t, 16> generate_uuid() {
+	static std::mutex mtx;
+	static std::mt19937_64 rng{std::random_device{}()};
+	static std::uniform_int_distribution<std::uint64_t> dist;
+	std::lock_guard lock(mtx);
+	std::array<std::uint8_t, 16> uuid;
+	std::uint64_t a = dist(rng), b = dist(rng);
+	std::memcpy(uuid.data(),     &a, 8);
+	std::memcpy(uuid.data() + 8, &b, 8);
+	return uuid;
+}
+
 }

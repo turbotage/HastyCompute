@@ -53,6 +53,21 @@ public:
         return uuid;
     }
 
+    void push_with_key(const std::array<std::uint8_t, 16>& uuid, hasty::GenericValue value) {
+        std::string key(reinterpret_cast<const char*>(uuid.data()), 16);
+        std::unique_lock lock(_mutex);
+        if (_bank.contains(key))
+            throw std::runtime_error("Key already exists in GenericValueBank: " + key);
+        _bank.emplace(std::move(key), std::move(value));
+    }
+
+    void push_with_key(const std::string& key, hasty::GenericValue value) {
+        std::unique_lock lock(_mutex);
+        if (_bank.contains(key))
+            throw std::runtime_error("Key already exists in GenericValueBank: " + key);
+        _bank[key] = std::move(value);
+    }
+
     std::optional<hasty::GenericValue> fetch(const std::string& key) const {
         std::shared_lock lock(_mutex);
         auto it = _bank.find(key);
@@ -74,17 +89,6 @@ public:
     }
 
 private:
-    static std::array<std::uint8_t, 16> generate_uuid() {
-        static std::mutex mtx;
-        static std::mt19937_64 rng{std::random_device{}()};
-        static std::uniform_int_distribution<std::uint64_t> dist;
-        std::lock_guard lock(mtx);
-        std::array<std::uint8_t, 16> uuid;
-        std::uint64_t a = dist(rng), b = dist(rng);
-        std::memcpy(uuid.data(),     &a, 8);
-        std::memcpy(uuid.data() + 8, &b, 8);
-        return uuid;
-    }
 
     mutable std::shared_mutex _mutex;
     std::unordered_map<std::string, hasty::GenericValue> _bank;

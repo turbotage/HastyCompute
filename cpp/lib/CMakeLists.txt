@@ -47,6 +47,7 @@ include(FetchContent)
 # LIBRARY CPP SOURCES
 target_sources(HastyCompute
 	PRIVATE
+        "src/viz/viz.cpp"
 		"src/wrapper/vkfft.cpp"
         "src/io/io_hdf5_impl.cpp"
 		"src/fft/toeplitz_creation.cpp"

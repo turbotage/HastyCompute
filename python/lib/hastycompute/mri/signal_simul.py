@@ -4,7 +4,8 @@ import torch
 
 
 def signal_simul(mag, ratemap, coilmaps, coords, timepoints, nonlinterms,
-                 k_batch_size=64, t_batch_size=None):
+                 k_batch_size=64, t_batch_size=None,
+                 apply_ratemap=True, apply_nonlin=True):
     """
     Simulates MRI signal via direct DFT.
 
@@ -62,14 +63,19 @@ def signal_simul(mag, ratemap, coilmaps, coords, timepoints, nonlinterms,
         t_batch = timepoints[t0:t1].to(torch.complex64)          # [t_B]
 
         # Time-phase for this t-batch: [N, t_B]
-        time_phase = torch.exp(
-            -2j * math.pi * ratemap_flat.unsqueeze(1) * t_batch.unsqueeze(0)
-        )
-        for field_flat, alpha in nonlin_fields:
-            alpha_batch = alpha[t0:t1].to(torch.complex64)       # [t_B]
-            time_phase = time_phase * torch.exp(
-                1j * field_flat.unsqueeze(1) * alpha_batch.unsqueeze(0)
+        if apply_ratemap:
+            time_phase = torch.exp(
+                -2j * math.pi * ratemap_flat.unsqueeze(1) * t_batch.unsqueeze(0)
             )
+        else:
+            time_phase = torch.ones(N, t1 - t0, dtype=torch.complex64, device=device)
+
+        if apply_nonlin:
+            for field_flat, alpha in nonlin_fields:
+                alpha_batch = alpha[t0:t1].to(torch.complex64)   # [t_B]
+                time_phase = time_phase * torch.exp(
+                    1j * field_flat.unsqueeze(1) * alpha_batch.unsqueeze(0)
+                )
 
         for k0 in range(0, num_k, k_batch_size):
             k1 = min(k0 + k_batch_size, num_k)
