@@ -14,24 +14,24 @@ def lanczos_svd(
     max_iter: Optional[int] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Computes a rank-L SVD approximation via Golub-Kahan bidiagonalization
-    with full reorthogonalization (GKBSVD).
+    Rank-L SVD approximation via Golub-Kahan bidiagonalization with full
+    double-pass reorthogonalization.
 
     Args:
-        matvec:  x -> A @ x,  x shape (n,), output shape (m,)
+        matvec:  x -> A @ x,   x shape (n,), output shape (m,)
         rmatvec: y -> A^H @ y, y shape (m,), output shape (n,)
         m: number of rows of A
         n: number of columns of A
-        L: number of singular triplets to compute
-        k: size of Krylov subspace beyond L. -1 => auto (2*L)
+        L: number of singular triplets to compute  (must be < min(m,n))
+        k: Krylov oversampling beyond L.  -1 => auto (2*L)
         dtype: floating-point dtype (default: torch.float64)
         device: compute device (default: cpu)
-        max_iter: maximum bidiag steps (default: L + k)
+        max_iter: hard cap on bidiagonalization steps (default: L + k)
 
     Returns:
-        U:  (m, L) left singular vectors
+        U:  (m, L) left  singular vectors (orthonormal columns)
         S:  (L,)   singular values, descending
-        Vh: (L, n) right singular vectors (conjugate-transposed rows)
+        Vh: (L, n) right singular vectors (orthonormal rows)
     """
     if dtype is None:
         dtype = torch.float64
@@ -39,6 +39,7 @@ def lanczos_svd(
         device = torch.device("cpu")
     if k < 0:
         k = 2 * L
+
     niters = L + k
     if max_iter is not None:
         niters = min(niters, max_iter)
@@ -47,62 +48,58 @@ def lanczos_svd(
     real_dtype = torch.float32 if dtype in (torch.float32, torch.complex64) else torch.float64
     _eps = 1e-7 if real_dtype == torch.float32 else 1e-14
 
+    # When m < n, run GK on A^H instead of A.  This way the small dimension
+    # (m) exhausts on the V-side (beta restart), which is numerically clean,
+    # rather than the U-side (alpha ≈ 0), which corrupts the bidiagonal.
+    transposed = m < n
+    if transposed:
+        _mv, _rmv = rmatvec, matvec   # A^H: R^m -> R^n
+        _nrows, _ncols = n, m         # working dims of A^H
+    else:
+        _mv, _rmv = matvec, rmatvec   # A:   R^n -> R^m
+        _nrows, _ncols = m, n
+
     def _dot(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-        if is_complex:
-            return torch.dot(a.conj(), b)
-        return torch.dot(a, b)
+        return torch.dot(a.conj(), b) if is_complex else torch.dot(a, b)
 
     def _norm(a: torch.Tensor) -> torch.Tensor:
         return torch.linalg.norm(a)
 
     def _reorth(vec: torch.Tensor, basis: torch.Tensor, count: int) -> torch.Tensor:
-        """Double-pass modified Gram-Schmidt against basis[0:count]."""
         for _ in range(2):
             for i in range(count):
                 vec = vec - _dot(basis[i], vec) * basis[i]
         return vec
 
-    def _fresh_orth(space_dim: int, basis: torch.Tensor, count: int,
-                    rand_dtype: torch.dtype) -> Optional[torch.Tensor]:
-        """Return a unit vector orthogonal to basis[0:count], or None if exhausted."""
-        vec = torch.randn(space_dim, dtype=rand_dtype, device=device)
+    def _fresh(dim: int, basis: torch.Tensor, count: int) -> Optional[torch.Tensor]:
+        vec = torch.randn(dim, dtype=dtype, device=device)
         vec = _reorth(vec, basis, count)
         nrm = _norm(vec)
-        if nrm < _eps:
-            return None
-        return vec / nrm
+        return (vec / nrm) if nrm > _eps else None
 
-    # Storage: rows are basis vectors
-    U_basis = torch.zeros(niters + 1, m, dtype=dtype, device=device)
-    V_basis = torch.zeros(niters + 1, n, dtype=dtype, device=device)
+    # Basis storage: rows are vectors
+    U_basis = torch.zeros(niters + 1, _nrows, dtype=dtype, device=device)
+    V_basis = torch.zeros(niters + 1, _ncols, dtype=dtype, device=device)
+    alpha   = torch.zeros(niters, dtype=real_dtype, device=device)
+    beta    = torch.zeros(niters, dtype=real_dtype, device=device)
 
-    # Bidiagonal scalars (real even for complex A)
-    alpha = torch.zeros(niters, dtype=real_dtype, device=device)
-    beta  = torch.zeros(niters, dtype=real_dtype, device=device)
-
-    # Initialise with a random unit n-vector
-    v = torch.randn(n, dtype=dtype, device=device)
+    v = torch.randn(_ncols, dtype=dtype, device=device)
     v = v / _norm(v)
     V_basis[0] = v
-
-    beta_prev = torch.zeros((), dtype=real_dtype, device=device)
-    actual = 0  # tracks how many steps complete successfully
+    beta_prev  = torch.zeros((), dtype=real_dtype, device=device)
+    actual     = 0
 
     for j in range(niters):
         # ---- left step: u = A v_j - beta_{j-1} u_{j-1} ----
-        u = matvec(V_basis[j])
+        u = _mv(V_basis[j])
         if j > 0:
             u = u - beta_prev * U_basis[j - 1]
-
         u = _reorth(u, U_basis, j)
         alpha_j = _norm(u)
 
         if alpha_j < _eps:
-            # A maps V_basis[j] into span(U_basis[0:j]) — null-space hit.
-            # Fill with a fresh direction so the basis stays orthonormal.
-            fresh = _fresh_orth(m, U_basis, j, dtype)
+            fresh = _fresh(_nrows, U_basis, j)
             if fresh is None:
-                # R^m is exhausted; cannot extend further.
                 break
             u = fresh
             alpha[j] = torch.zeros((), dtype=real_dtype, device=device)
@@ -114,15 +111,13 @@ def lanczos_svd(
         actual = j + 1
 
         # ---- right step: v = A^H u_j - alpha_j v_j ----
-        v = rmatvec(u)
+        v = _rmv(u)
         v = v - alpha[j] * V_basis[j]
-
         v = _reorth(v, V_basis, j + 1)
         beta_j = _norm(v)
 
         if beta_j < _eps:
-            # A^H maps U_basis[j] into span(V_basis[0:j+1]) — invariant subspace.
-            fresh = _fresh_orth(n, V_basis, j + 1, dtype)
+            fresh = _fresh(_ncols, V_basis, j + 1)
             if fresh is None:
                 break
             v = fresh
@@ -134,26 +129,49 @@ def lanczos_svd(
         V_basis[j + 1] = v
         beta_prev = beta[j]
 
-    # Build lower-bidiagonal matrix B (actual x actual)
+    # ---- Build lower-bidiagonal B and compute its SVD ----
     B = torch.zeros(actual, actual, dtype=real_dtype, device=device)
     for j in range(actual):
         B[j, j] = alpha[j]
         if j > 0:
             B[j, j - 1] = beta[j - 1]
 
-    # SVD of the small bidiagonal matrix
     Ub, Sb, Vhb = torch.linalg.svd(B, full_matrices=False)
 
     L_actual = min(L, actual)
-    Ub  = Ub[:, :L_actual]    # (actual, L)
-    Sb  = Sb[:L_actual]        # (L,)
-    Vhb = Vhb[:L_actual, :]   # (L, actual)
+    Sb  = Sb[:L_actual]
+    Vhb = Vhb[:L_actual, :]        # (L, actual)
+    V_mat = V_basis[:actual]        # (actual, _ncols)
 
-    # Lift back to full-dimensional space
-    U_mat = U_basis[:actual]   # (actual, m)
-    V_mat = V_basis[:actual]   # (actual, n)
+    # Right Ritz vectors of the working operator (accurate from V Krylov subspace)
+    Vh_work = Vhb.to(dtype) @ V_mat   # (L, _ncols)
 
-    U_full  = U_mat.T @ Ub.to(dtype)   # (m, L)
-    Vh_full = Vhb.to(dtype) @ V_mat    # (L, n)
+    # Left vectors: A @ v_j / s_j  (avoids ill-conditioned U lift-back)
+    U_work = torch.empty(_nrows, L_actual, dtype=dtype, device=device)
+    for j in range(L_actual):
+        s_j = Sb[j]
+        if s_j.abs() > _eps:
+            U_work[:, j] = _mv(Vh_work[j]) / s_j
+        else:
+            U_work[:, j] = (U_basis[:actual].T @ Ub[:, j].to(dtype))
 
-    return U_full, Sb, Vh_full
+    # ---- Map back to the original (non-transposed) SVD convention ----
+    if transposed:
+        # GK ran on A^H, so:
+        #   Vh_work rows  ≈ u_j  (left  sv of A, from V Krylov of A^H, dim _ncols = m)
+        #   U_work  cols  ≈ v_j  (right sv of A, computed as A^H @ u_j / s_j, dim _nrows = n)
+        #
+        # Recompute U_out as A @ v_j / s_j so that A Vh^T − U S = 0 exactly.
+        U_out = torch.empty(_ncols, L_actual, dtype=dtype, device=device)  # (m, L)
+        for j in range(L_actual):
+            s_j = Sb[j]
+            if s_j.abs() > _eps:
+                U_out[:, j] = _rmv(U_work[:, j]) / s_j   # A @ v_j / s_j ≈ u_j
+            else:
+                U_out[:, j] = Vh_work[j].conj()
+        Vh_out = U_work.conj().T                           # (L, n), rows = v_j^H
+    else:
+        U_out  = U_work                                    # (m, L)
+        Vh_out = Vh_work.conj()                            # (L, n), rows = v_j^H
+
+    return U_out, Sb, Vh_out
