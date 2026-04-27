@@ -267,6 +267,38 @@ public:
         return "Tensor[dtype=" + dtype_str + ",device=" + device_str + "," + shape_str + "]";
     }
 
+    static std::pair<TensorOptions, std::vector<i64>> from_metadata_string(const std::string& metadata) {
+        // Example metadata string format:
+        // "Tensor[dtype=float32,device=cuda:0,shape=(1,3,224,224)]"
+        auto dtype_pos = metadata.find("dtype=");
+        auto device_pos = metadata.find("device=");
+        auto shape_pos = metadata.find("shape=");
+
+        if (dtype_pos == std::string::npos || device_pos == std::string::npos || shape_pos == std::string::npos) {
+            throw std::runtime_error("Invalid metadata string format");
+        }
+
+        auto dtype_str = metadata.substr(dtype_pos + 6, metadata.find(",", dtype_pos) - (dtype_pos + 6));
+        auto device_str = metadata.substr(device_pos + 7, metadata.find(",", device_pos) - (device_pos + 7));
+        auto shape_str = metadata.substr(shape_pos + 6, metadata.find(")", shape_pos) - (shape_pos + 6));
+
+        eScalarType dtype = string_to_scalar_type(dtype_str);
+        Device device = Device::from_string(device_str);
+        std::vector<i64> sizes;
+        size_t start = 0;
+        while (true) {
+            size_t comma_pos = shape_str.find(",", start);
+            if (comma_pos == std::string::npos) {
+                sizes.push_back(std::stoll(shape_str.substr(start)));
+                break;
+            }
+            sizes.push_back(std::stoll(shape_str.substr(start, comma_pos - start)));
+            start = comma_pos + 1;
+        }
+
+        return {TensorOptions(device).dtype(dtype), sizes};
+    }
+
     std::string statistics_string() const {
         std::string ret = metadata_string();
         ret += "\n\t min=" + std::to_string(_base.min().item<double>());
@@ -428,6 +460,8 @@ public:
     inline Tensor std() const { return Tensor(hat::std(_base)); }
 
     inline Tensor median() const { return Tensor(hat::median(_base)); }
+
+    inline Tensor neg() const { return Tensor(_base.neg()); }
 
     inline Tensor norm(const Scalar& p=2) const { return Tensor(_base.norm(p.to_torch())); }
     inline Tensor norm(const Opt<Scalar>& p, ArrayRef<i64> dims, bool keepdim = false) const {

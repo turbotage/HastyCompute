@@ -25,10 +25,11 @@ set(_grpc_install "${CMAKE_CURRENT_BINARY_DIR}/_deps/grpc-install")
 
 ExternalProject_Add(grpc_external
     GIT_REPOSITORY       "https://github.com/grpc/grpc.git"
-    GIT_TAG              v1.76.0
+    GIT_TAG              v1.80.0
     GIT_SUBMODULES_RECURSE TRUE
     GIT_SHALLOW          FALSE
     GIT_PROGRESS         TRUE
+    UPDATE_DISCONNECTED  TRUE
 
     SOURCE_DIR  "${_grpc_src}"
     BINARY_DIR  "${_grpc_build}"
@@ -65,7 +66,7 @@ ExternalProject_Add(grpc_external
         -Dprotobuf_INSTALL=ON
         -Dutf8_range_ENABLE_INSTALL=ON
 
-    BUILD_COMMAND ${CMAKE_COMMAND} --build "${_grpc_build}" --parallel 8
+    BUILD_COMMAND ${CMAKE_COMMAND} --build "${_grpc_build}" --parallel ${_CPU_THREADS}
 
     BUILD_BYPRODUCTS
         "${_grpc_install}/lib/libgrpc++.so"
@@ -75,7 +76,8 @@ ExternalProject_Add(grpc_external
         "${_grpc_install}/bin/protoc"
 
     STAMP_DIR  "${CMAKE_CURRENT_BINARY_DIR}/_deps/grpc-stamp"
-    LOG_CONFIGURE TRUE LOG_BUILD TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
+    USES_TERMINAL_BUILD  TRUE
+    LOG_CONFIGURE TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
 )
 
 # Expose install paths for ExternalLibTorch (included after this file)

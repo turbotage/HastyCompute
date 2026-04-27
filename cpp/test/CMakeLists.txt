@@ -14,6 +14,14 @@ set_target_properties(HastyTest PROPERTIES
 target_link_libraries(HastyTest PRIVATE HastyCompute::HastyCompute)
 install(TARGETS HastyTest RUNTIME DESTINATION bin)
 
+# <================== Hasty Server Test =================>
+add_executable(HastyServerTest "src/hasty_server.cpp")
+target_compile_features(HastyServerTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
+set_target_properties(HastyServerTest PROPERTIES
+	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
+target_link_libraries(HastyServerTest PRIVATE HastyCompute::HastyCompute)
+install(TARGETS HastyServerTest RUNTIME DESTINATION bin)
+
 # <================== Hasty Data Test ==================>
 add_executable(HastyDataTest "src/hasty_data_test.cpp")
 target_compile_features(HastyDataTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)

@@ -307,6 +307,25 @@ export struct Device {
         }
     }
 
+    static Device from_string(const std::string& s) {
+        if (s == "cpu") {
+            return Device(eDeviceType::CPU, device_alias::CPU);
+        } else if (s.rfind("cuda:", 0) == 0) {
+            std::string index_str = s.substr(5);
+            try {
+                int idx = std::stoi(index_str);
+                if (idx < 0 || idx >= device_alias::MAX_CUDA_DEVICES) {
+                    throw std::out_of_range("CUDA device index out of range");
+                }
+                return Device(eDeviceType::CUDA, static_cast<DeviceIndex>(idx));
+            } catch (const std::exception& e) {
+                throw std::invalid_argument("Invalid CUDA device string: " + s);
+            }
+        } else {
+            throw std::invalid_argument("Unknown device string: " + s);
+        }
+    }
+
 };
 
 static_assert(sizeof(Device) == 2,

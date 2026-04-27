@@ -54,6 +54,8 @@ target_sources(HastyCompute
         "src/fft/toeplitz_transform.cpp"
         "src/io/io_hdf5_impl.cpp"
         "src/linalg/linalg_impl.cpp"
+        "src/server/cmd_registry_impl.cpp"
+        "src/server/generic_value_bank_impl.cpp"
         "src/server/grpc_server_impl.cpp"
         "src/viz/viz.cpp"
         "src/wrapper/vkfft.cpp"
@@ -109,6 +111,7 @@ target_sources(HastyCompute
 # protobuf), and finufft before ExternalLibTorch (finufft enables CUDA language).
 include(FetchContent)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+cmake_host_system_information(RESULT _CPU_THREADS QUERY NUMBER_OF_LOGICAL_CORES)
 
 include(cmake/battery_embed.cmake)
 include(cmake/cuda.cmake)

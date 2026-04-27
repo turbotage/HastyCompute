@@ -61,7 +61,7 @@ ExternalProject_Add(petsc_external
             "PATH=${_psc_cuda_root}/bin:$ENV{PATH}"
             "PETSC_DIR=${PETSC_SRC_DIR}"
             "PETSC_ARCH=${_PETSC_ARCH}"
-        make -j4 all
+        make -j${_CPU_THREADS} all
 
     INSTALL_COMMAND
         ${CMAKE_COMMAND} -E env
@@ -77,7 +77,8 @@ ExternalProject_Add(petsc_external
         "${PETSC_INSTALL_DIR}/include/petsc.h"
 
     STAMP_DIR  "${CMAKE_CURRENT_BINARY_DIR}/_deps/petsc-stamp"
-    LOG_CONFIGURE TRUE LOG_BUILD TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
+    USES_TERMINAL_BUILD  TRUE
+    LOG_CONFIGURE TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
 )
 
 ExternalProject_Add(slepc_external
@@ -104,7 +105,7 @@ ExternalProject_Add(slepc_external
             "PATH=${_psc_cuda_root}/bin:$ENV{PATH}"
             "SLEPC_DIR=${SLEPC_SRC_DIR}"
             "PETSC_DIR=${PETSC_INSTALL_DIR}"
-        make -j4
+        make -j${_CPU_THREADS}
 
     INSTALL_COMMAND
         ${CMAKE_COMMAND} -E env
@@ -118,7 +119,8 @@ ExternalProject_Add(slepc_external
         "${SLEPC_INSTALL_DIR}/include/slepceps.h"
 
     STAMP_DIR  "${CMAKE_CURRENT_BINARY_DIR}/_deps/slepc-stamp"
-    LOG_CONFIGURE TRUE LOG_BUILD TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
+    USES_TERMINAL_BUILD  TRUE
+    LOG_CONFIGURE TRUE LOG_INSTALL TRUE LOG_OUTPUT_ON_FAILURE TRUE
 )
 
 # ── IMPORTED targets ──────────────────────────────────────────────────────────

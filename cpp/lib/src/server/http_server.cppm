@@ -1,7 +1,7 @@
 module;
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT 0
-#define CPPHTTPLIB_ZLIB_SUPPORT    0
+#undef CPPHTTPLIB_OPENSSL_SUPPORT
+#undef CPPHTTPLIB_ZLIB_SUPPORT
 #include <httplib.h>
 
 #include <grpcpp/grpcpp.h>

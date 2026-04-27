@@ -14,6 +14,19 @@ export using CommandFn = std::function<
 
 export class CommandRegistry {
 public:
+
+    CommandRegistry() = default;
+
+    CommandRegistry(
+        bool base_arithmetic,
+        bool base_creation,
+        bool base_reduction,
+        bool base_comparison,
+        bool base_logical,
+        bool base_bitwise,
+        bool base_fft
+    );
+
     void register_command(std::int32_t id, std::string name, CommandFn fn) {
         _commands.emplace(id, Entry{ std::move(name), std::move(fn) });
     }
@@ -35,6 +48,9 @@ private:
     struct Entry { std::string name; CommandFn fn; };
     std::unordered_map<std::int32_t, Entry> _commands;
 };
+
+
+export extern CommandRegistry global_command_registry;
 
 
 }

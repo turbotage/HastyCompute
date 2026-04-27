@@ -12,7 +12,7 @@
 
 include(ExternalProject)
 
-set(_TORCH_GIT_TAG "main")
+set(_TORCH_GIT_TAG "v2.11.0")
 
 set(LIBTORCH_SRC_DIR     "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-src")
 set(LIBTORCH_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-build")
@@ -51,6 +51,7 @@ ExternalProject_Add(libtorch_external
     GIT_SUBMODULES_RECURSE TRUE
     GIT_PROGRESS         TRUE
     GIT_SHALLOW          FALSE
+    UPDATE_DISCONNECTED  TRUE
 
     SOURCE_DIR  "${LIBTORCH_SRC_DIR}"
     BINARY_DIR  "${LIBTORCH_BUILD_DIR}"
@@ -115,7 +116,7 @@ ExternalProject_Add(libtorch_external
         -DUSE_CUDA=ON
 
     BUILD_COMMAND
-        ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel 8
+        ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel ${_CPU_THREADS}
 
     # Strip LibTorch's bundled protobuf headers from the install tree.
     # LibTorch's .so files have protobuf baked in internally; the public C++ API
@@ -134,8 +135,8 @@ ExternalProject_Add(libtorch_external
         "${LIBTORCH_INSTALL_DIR}/lib/libc10_cuda.so"
 
     STAMP_DIR  "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-stamp"
+    USES_TERMINAL_BUILD  TRUE
     LOG_CONFIGURE        TRUE
-    LOG_BUILD            TRUE
     LOG_INSTALL          TRUE
     LOG_OUTPUT_ON_FAILURE TRUE
 )

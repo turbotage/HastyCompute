@@ -38,6 +38,14 @@
             "stopOnEntry": false,
         },
         {
+            "name": "(lldb-dap) HastyServer",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyServer",
+            "args": [],
+            "stopOnEntry": false,
+        },
+        {
             "name": "(lldb-dap) HastyLinalgTest",
             "type": "lldb-dap",
             "request": "launch",

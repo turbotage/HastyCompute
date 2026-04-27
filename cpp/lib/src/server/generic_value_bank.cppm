@@ -84,3 +84,9 @@ private:
 };
 
 }
+
+namespace hasty {
+
+    export extern GenericValueBank global_generic_value_bank;
+
+}
