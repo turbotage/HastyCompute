@@ -9,8 +9,8 @@ UPtr<HttpServer>        default_http_server;
 
 void start_default_servers(
     Opt<Vec<Pair<std::string, CommandFn>>> optional_extra_commands,
-    u16 grpc_port = 50051,
-    u16 http_port = 8080
+    u16 grpc_port,
+    u16 http_port
 ) {
     if (default_grpc_server_handle || default_http_server)
         throw std::runtime_error("Default servers already running");

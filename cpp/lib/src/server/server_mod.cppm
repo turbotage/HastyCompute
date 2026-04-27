@@ -14,7 +14,11 @@ namespace server {
 export extern SPtr<GrpcServerHandle>  default_grpc_server_handle;
 export extern UPtr<HttpServer>        default_http_server;    
 
-export void start_default_servers(std::optional<std::pair<std::string, CommandFn>> optional_extra_commands = std::nullopt);
+export void start_default_servers(
+    Opt<Vec<Pair<std::string, CommandFn>>> optional_extra_commands = std::nullopt,
+    u16 grpc_port = 50051,
+    u16 http_port = 8080
+);
 
 }
 }

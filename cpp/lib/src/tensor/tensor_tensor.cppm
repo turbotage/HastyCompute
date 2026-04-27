@@ -280,7 +280,8 @@ public:
 
         auto dtype_str = metadata.substr(dtype_pos + 6, metadata.find(",", dtype_pos) - (dtype_pos + 6));
         auto device_str = metadata.substr(device_pos + 7, metadata.find(",", device_pos) - (device_pos + 7));
-        auto shape_str = metadata.substr(shape_pos + 6, metadata.find(")", shape_pos) - (shape_pos + 6));
+        // "shape=(4,4)" — skip "shape=(" (7 chars) so shape_str = "4,4"
+        auto shape_str = metadata.substr(shape_pos + 7, metadata.find(")", shape_pos) - (shape_pos + 7));
 
         eScalarType dtype = string_to_scalar_type(dtype_str);
         Device device = Device::from_string(device_str);
