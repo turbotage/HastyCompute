@@ -5,6 +5,7 @@ import hasty_util_mod;
 import hasty_generic_value_mod;
 
 namespace hasty {
+namespace server {
 
 export class GenericValueBank {
 public:
@@ -84,9 +85,12 @@ private:
 };
 
 }
+}
 
 namespace hasty {
+namespace server {
 
     export extern GenericValueBank global_generic_value_bank;
 
+}
 }

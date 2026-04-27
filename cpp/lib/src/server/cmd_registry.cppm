@@ -6,6 +6,7 @@ import hasty_tensor_mod;
 import hasty_generic_value_mod;
 
 namespace hasty {
+namespace server {
 
 export using CommandFn = std::function<
             std::pair<std::string, std::vector<hasty::GenericValue>>(
@@ -26,6 +27,22 @@ public:
         bool base_bitwise,
         bool base_fft
     );
+
+    
+    std::int32_t highest_command_id() const {
+        if (_commands.empty()) return 0;
+        return std::max_element(
+            _commands.begin(), _commands.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; }
+        )->first;
+    }
+
+    void register_commands(const Vec<Pair<std::string, CommandFn>>& cmds) {
+        std::int32_t next_id = highest_command_id();
+        for (const auto& [name, fn] : cmds) {
+            register_command(++next_id, name, fn);
+        }
+    }
 
     void register_command(std::int32_t id, std::string name, CommandFn fn) {
         _commands.emplace(id, Entry{ std::move(name), std::move(fn) });
@@ -53,4 +70,5 @@ private:
 export extern CommandRegistry global_command_registry;
 
 
+}
 }

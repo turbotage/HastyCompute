@@ -33,7 +33,7 @@ hasty::Uuid to_uuid_proto(const std::array<std::uint8_t, 16>& uuid) {
 
 class HastyServiceImpl final : public hasty::HastyService::Service {
 public:
-    HastyServiceImpl(hasty::GenericValueBank& bank, hasty::CommandRegistry& registry)
+    HastyServiceImpl(hasty::server::GenericValueBank& bank, hasty::server::CommandRegistry& registry)
         : _bank(bank), _registry(registry) {}
 
     grpc::Status PushValue(
@@ -204,8 +204,8 @@ public:
     }
 
 private:
-    hasty::GenericValueBank&  _bank;
-    hasty::CommandRegistry&   _registry;
+    hasty::server::GenericValueBank&  _bank;
+    hasty::server::CommandRegistry&   _registry;
 };
 
 // ---------------------------------------------------------------------------
@@ -213,6 +213,7 @@ private:
 // ---------------------------------------------------------------------------
 
 namespace hasty {
+namespace server {
 
 struct GrpcServerHandle::Impl {
     std::unique_ptr<HastyServiceImpl> service;
@@ -232,12 +233,12 @@ const std::string& GrpcServerHandle::address() const { return _impl->address; }
 // start_server
 // ---------------------------------------------------------------------------
 
-hasty::GrpcServerHandle hasty::start_grpc_server(
-    hasty::GenericValueBank& bank,
-    hasty::CommandRegistry& registry,
+GrpcServerHandle start_grpc_server(
+    GenericValueBank& bank,
+    CommandRegistry& registry,
     const std::string& address)
 {
-    hasty::GrpcServerHandle handle;
+    GrpcServerHandle handle;
     handle._impl = std::make_unique<GrpcServerHandle::Impl>();
     handle._impl->service = std::make_unique<HastyServiceImpl>(bank, registry);
 
@@ -261,4 +262,5 @@ hasty::GrpcServerHandle hasty::start_grpc_server(
 }
 
 
+}
 }

@@ -75,4 +75,7 @@ namespace hasty {
     export template<typename T, std::size_t N>
     using Arr = std::array<T, N>;
 
+    export template<typename T, typename U>
+    using Pair = std::pair<T, U>;
+
 }

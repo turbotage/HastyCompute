@@ -14,6 +14,7 @@ import hasty_util_mod;
 import :grpc_server;
 
 namespace hasty {
+namespace server {
 
 // ── gRPC-web framing ─────────────────────────────────────────────────────────
 //
@@ -183,17 +184,19 @@ export class HttpServer {
     HttpGrpcProxy   _proxy;
     int             _port;
     std::thread     _thread;
+    SPtr<GrpcServerHandle> _grpc_handle;
 
 public:
     // port        — HTTP listen port (e.g. 8080)
     // static_root — path to plotting_website/ directory
     // grpc_handle — running gRPC server; HttpServer creates a loopback channel to it
-    HttpServer(int port, std::string static_root, GrpcServerHandle& grpc_handle)
+    HttpServer(int port, std::string static_root, SPtr<GrpcServerHandle> grpc_handle)
         : _static_root(std::move(static_root))
         , _proxy(grpc::CreateChannel(
-              loopback_address(grpc_handle.address()),
+              loopback_address(grpc_handle->address()),
               grpc::InsecureChannelCredentials()))
-        , _port(port)
+        , _port(port),
+        _grpc_handle(std::move(grpc_handle))
     {
         setup_routes();
     }
@@ -260,4 +263,5 @@ private:
     }
 };
 
-} // namespace hasty
+}
+}

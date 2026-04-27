@@ -57,6 +57,7 @@ target_sources(HastyCompute
         "src/server/cmd_registry_impl.cpp"
         "src/server/generic_value_bank_impl.cpp"
         "src/server/grpc_server_impl.cpp"
+        "src/server/server_mod_impl.cpp"
         "src/viz/viz.cpp"
         "src/wrapper/vkfft.cpp"
 )

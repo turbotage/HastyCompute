@@ -13,6 +13,7 @@ import :generic_value_bank;
 
 
 namespace hasty {
+namespace server {
 
 export class GrpcServerHandle {
 public:
@@ -43,5 +44,6 @@ export GrpcServerHandle start_grpc_server(
     const std::string& address = "0.0.0.0:50051");
 
 
+}
 }
 

@@ -3,6 +3,7 @@ module;
 module hasty_server_mod;
 
 namespace hasty {
+namespace server {
 
 CommandRegistry::CommandRegistry(
     bool base_arithmetic,
@@ -106,8 +107,10 @@ CommandRegistry::CommandRegistry(
 }
 
 }
+}
 
 namespace hasty {
+namespace server {
 
     CommandRegistry global_command_registry(
         true,   // base_arithmetic
@@ -119,4 +122,5 @@ namespace hasty {
         true    // base_fft
     );
 
+}
 }

@@ -7,33 +7,8 @@ import hasty_fft_mod;
 import hasty_generic_value_mod;
 import hasty_server_mod;
 import hasty_io_mod;
-import hasty_server_mod;
 import hasty_viz_mod;
 
-void server_test() {
-    std::cout << "Starting server..." << std::endl;
-
-    hasty::GenericValueBank bank;
-    hasty::CommandRegistry registry;
-
-    // function_id 0: element-wise tensor add
-    registry.register_command(0, "add",
-        [](const std::string&, std::vector<hasty::GenericValue> inputs)
-            -> std::pair<std::string, std::vector<hasty::GenericValue>>
-        {
-            if (inputs.size() != 2 || !inputs[0].is_tensor() || !inputs[1].is_tensor())
-                throw std::runtime_error("add: requires 2 tensor inputs");
-            return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().add(inputs[1].as_tensor()))});
-        });
-
-    auto handle = start_grpc_server(bank, registry, "0.0.0.0:50051");
-    //auto handle = start_server(bank, registry, "unix:///tmp/hasty.sock");
-
-    // Signal readiness to any waiting test runner
-    std::cout << "READY" << std::endl;
-
-    handle.wait();
-}
 
 void test_toeplitz_multiplication_3D(hasty::ArrayRef<hasty::i64> im_size, double rtol = 1e-5, double atol = 1e-3)
 {
