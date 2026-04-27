@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Image Slicer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <a class="home-link" href="../">HastyEdit</a>
+            <span class="sep">/</span>
+            <span class="title">Ortho Slicer</span>
+            <span id="position-info" class="position-info">(t=0, e=0, z=0, y=0, x=0)</span>
+            <span id="perf-stats" class="perf-stats">fill: — ms | uploads: —</span>
+            <button id="cursor-toggle" class="hdr-btn" title="Toggle crosshair (C)">Cursor: ON</button>
+            <label for="colormap-select" class="hdr-label">Colormap:</label>
+            <select id="colormap-select" class="hdr-select">
+                <option value="0">Gray</option>
+                <option value="1">Viridis</option>
+                <option value="2">Plasma</option>
+                <option value="3">Hot</option>
+                <option value="4">Cool</option>
+            </select>
+            <span id="status-msg" class="status-msg">Generating phantom…</span>
+        </header>
+        <div id="viewport-grid">
+            <div class="viewport" id="axial-vp">
+                <span class="vp-label">Axial (Z)</span>
+                <canvas id="axial-canvas"></canvas>
+                <canvas id="axial-overlay" class="overlay"></canvas>
+            </div>
+            <div class="viewport" id="sagittal-vp">
+                <span class="vp-label">Sagittal (X)</span>
+                <canvas id="sagittal-canvas"></canvas>
+                <canvas id="sagittal-overlay" class="overlay"></canvas>
+            </div>
+            <div class="viewport" id="coronal-vp">
+                <span class="vp-label">Coronal (Y)</span>
+                <canvas id="coronal-canvas"></canvas>
+                <canvas id="coronal-overlay" class="overlay"></canvas>
+            </div>
+            <div class="viewport" id="extra-vp">
+                <span class="vp-label">Extra Dims — E (→) × T (↓)</span>
+                <canvas id="extra-canvas"></canvas>
+                <canvas id="extra-overlay" class="overlay"></canvas>
+            </div>
+        </div>
+    </div>
+    <div id="error-overlay"></div>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

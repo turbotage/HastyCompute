@@ -427,7 +427,7 @@ def main():
         # Krylov (Lanczos) decomposition — no random noise, monotone in L
         # Weighted by bin occupancy so high-density bins dominate the SVD
         Omega_sub, Upsilon_hist = phi_lowrank_krylov(
-            fwd, adj, hist['n_hist'], L,
+            fwd, adj, hist['n_hist'], K_sub, L,
             dtype=torch.complex64, device=device,
             weights=hist['bin_weights'],
         )

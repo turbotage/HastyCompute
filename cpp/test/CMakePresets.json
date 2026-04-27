@@ -10,10 +10,13 @@
         {
             "name": "MainConfigClang-Linux",
             "inherits": ["CommonClangSettings"],
-            "binaryDir": "${sourceDir}/../../out/build/lib-${presetName}",
+            "binaryDir": "${sourceDir}/../../out/build/test-${presetName}",
             "environment": {
+                "CUDA_ROOT": "/usr/local/cuda-13.0"
             },
             "cacheVariables": {
+                "CMAKE_CUDA_COMPILER": "$env{CUDA_ROOT}/bin/nvcc",
+                "CUDAToolkit_ROOT": "$env{CUDA_ROOT}"
             }
         },
         {
@@ -32,6 +35,5 @@
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         }
-
     ]
 }

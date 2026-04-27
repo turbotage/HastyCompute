@@ -2,13 +2,13 @@ module;
 
 export module mri_mod:forward;
 
-import tensor_mod;
 import hasty_util_mod;
+import hasty_tensor_mod;
 
 namespace hasty {
 namespace mri {
 
-Tensor forward(
+export Tensor forward(
     const Tensor& magnetization, 
     const Tensor& sensitivity_maps, 
     const Tensor& rate_map,

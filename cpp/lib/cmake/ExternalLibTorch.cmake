@@ -1,0 +1,178 @@
+# cpp/lib/cmake/ExternalLibTorch.cmake
+#
+# Builds PyTorch C++ libraries from source as an ExternalProject.
+# Included by cpp/lib/CMakeLists.txt, which means all cmake variables
+# (CMAKE_CXX_COMPILER, CMAKE_CUDA_COMPILER, CMAKE_LINKER, etc.) come directly
+# from the lib preset via CommonPresets.json — no hardcoded paths here.
+#
+# After include() the following are set for use in CMakeLists.txt:
+#   TORCH_LIBRARIES        — IMPORTED target names for target_link_libraries
+#   TORCH_INCLUDE_DIRS     — include paths (for PRIVATE compile includes)
+#   TORCH_INSTALL_PREFIX   — root of the install tree (for configure_package_config_file)
+
+include(ExternalProject)
+
+set(_TORCH_GIT_TAG "main")
+
+set(LIBTORCH_SRC_DIR     "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-src")
+set(LIBTORCH_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-build")
+set(LIBTORCH_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-install")
+
+# Convert CMAKE_CUDA_ARCHITECTURES integer list (e.g. "89;90") to PyTorch's
+# dot-notation list (e.g. "8.9 9.0"). cmake uses "89", PyTorch expects "8.9".
+set(_torch_arch_list "")
+foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    string(LENGTH "${_arch}" _len)
+    math(EXPR _minor_start "${_len} - 1")
+    string(SUBSTRING "${_arch}" 0 ${_minor_start} _major)
+    string(SUBSTRING "${_arch}" ${_minor_start} 1 _minor)
+    list(APPEND _torch_arch_list "${_major}.${_minor}")
+endforeach()
+string(REPLACE ";" " " _torch_cuda_arch_list "${_torch_arch_list}")
+
+# Derive CUDA root from CMAKE_CUDA_COMPILER (set by the lib preset)
+get_filename_component(_torch_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+get_filename_component(_torch_cuda_root "${_torch_cuda_bin}" DIRECTORY)
+
+# PyTorch's core C++ internals conditionally include python_headers.h even with
+# BUILD_PYTHON=OFF.  Find Python3 dev headers and forward them so the build
+# doesn't fail with 'Python.h file not found'.
+find_package(Python3 COMPONENTS Interpreter Development QUIET)
+if(NOT Python3_FOUND)
+    message(FATAL_ERROR "Python3 with Development component required to build LibTorch "
+        "(needed for Python.h even when BUILD_PYTHON=OFF)")
+endif()
+
+ExternalProject_Add(libtorch_external
+    DEPENDS grpc_external   # uses grpc_external's installed protobuf
+
+    GIT_REPOSITORY       "https://github.com/pytorch/pytorch.git"
+    GIT_TAG              "${_TORCH_GIT_TAG}"
+    GIT_SUBMODULES_RECURSE TRUE
+    GIT_PROGRESS         TRUE
+    GIT_SHALLOW          FALSE
+
+    SOURCE_DIR  "${LIBTORCH_SRC_DIR}"
+    BINARY_DIR  "${LIBTORCH_BUILD_DIR}"
+    INSTALL_DIR "${LIBTORCH_INSTALL_DIR}"
+
+    CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBTORCH_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=Release
+
+        # All compiler/toolchain settings flow from the lib preset variables.
+        # Change the toolchain in CommonPresets.json and it propagates here.
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        "-DCMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN=${CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN}"
+        "-DCMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN=${CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN}"
+        -DCMAKE_LINKER=${CMAKE_LINKER}
+        "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
+        "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+
+        # CUDA — libc++ is not allowed by CUDA on x86; libstdc++ only
+        -DCMAKE_CUDA_COMPILER=${CMAKE_CUDA_COMPILER}
+        -DCMAKE_CUDA_HOST_COMPILER=${CMAKE_CUDA_HOST_COMPILER}
+        "-DCMAKE_CUDA_FLAGS=${CMAKE_CUDA_FLAGS}"
+        "-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}"
+        # PyTorch's arch-selection uses dot notation ("8.9"), cmake uses integers ("89").
+        # _torch_cuda_arch_list is derived above from CMAKE_CUDA_ARCHITECTURES.
+        "-DTORCH_CUDA_ARCH_LIST=${_torch_cuda_arch_list}"
+        -DCUDAToolkit_ROOT=${_torch_cuda_root}
+
+        # Use the protobuf already built by grpc_external — one protobuf, no duplication.
+        # GRPC_PROTOBUF_DIR is set by ExternalGRPC.cmake (included before this file).
+        -DUSE_SYSTEM_PROTOBUF=ON
+        "-DProtobuf_DIR=${GRPC_PROTOBUF_DIR}"
+
+        # Python headers needed for internal C++ dispatch even with BUILD_PYTHON=OFF
+        "-DPython3_EXECUTABLE=${Python3_EXECUTABLE}"
+        "-DPython3_INCLUDE_DIRS=${Python3_INCLUDE_DIRS}"
+        "-DPython3_LIBRARIES=${Python3_LIBRARIES}"
+        "-DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
+
+        # Build only the C++ library — no Python, no tests, no benchmarks
+        -DBUILD_PYTHON=OFF
+        -DUSE_NUMPY=OFF
+        -DBUILD_TEST=OFF
+        -DBUILD_SHARED_LIBS=ON
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        # clang-22 in C++23 mode flags __COUNTER__ as a C2y extension; suppress it
+        # so third-party headers inside PyTorch don't fail with -Werror
+        "-DCMAKE_CXX_FLAGS=-Wno-c2y-extensions"
+
+        # Disable unused features to reduce build time
+        -DUSE_DISTRIBUTED=OFF
+        -DUSE_MPI=OFF
+        -DUSE_KINETO=OFF
+        -DUSE_FBGEMM=OFF
+        -DUSE_NNPACK=OFF
+        -DUSE_QNNPACK=OFF
+        -DUSE_XNNPACK=OFF
+        -DUSE_PYTORCH_QNNPACK=OFF
+        -DBUILD_CAFFE2=ON
+        -DUSE_OPENMP=ON
+        -DUSE_CUDA=ON
+
+    BUILD_COMMAND
+        ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel 8
+
+    # Strip LibTorch's bundled protobuf headers from the install tree.
+    # LibTorch's .so files have protobuf baked in internally; the public C++ API
+    # (torch/torch.h, torch/jit.h, etc.) does not expose protobuf types.
+    # Removing these headers ensures HastyCompute sees only gRPC's protobuf
+    # (grpc-install/include/google/) and avoids PROTOBUF_VERSION redefinition errors.
+    INSTALL_COMMAND
+        ${CMAKE_COMMAND} --install "${LIBTORCH_BUILD_DIR}" --prefix "${LIBTORCH_INSTALL_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${LIBTORCH_INSTALL_DIR}/include/google"
+
+    BUILD_BYPRODUCTS
+        "${LIBTORCH_INSTALL_DIR}/lib/libtorch.so"
+        "${LIBTORCH_INSTALL_DIR}/lib/libtorch_cpu.so"
+        "${LIBTORCH_INSTALL_DIR}/lib/libtorch_cuda.so"
+        "${LIBTORCH_INSTALL_DIR}/lib/libc10.so"
+        "${LIBTORCH_INSTALL_DIR}/lib/libc10_cuda.so"
+
+    STAMP_DIR  "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-stamp"
+    LOG_CONFIGURE        TRUE
+    LOG_BUILD            TRUE
+    LOG_INSTALL          TRUE
+    LOG_OUTPUT_ON_FAILURE TRUE
+)
+
+# ── IMPORTED targets ──────────────────────────────────────────────────────────
+# cmake 4.x validates INTERFACE_INCLUDE_DIRECTORIES at configure time.
+# Pre-creating the install directories is the documented ExternalProject pattern.
+file(MAKE_DIRECTORY "${LIBTORCH_INSTALL_DIR}/include")
+file(MAKE_DIRECTORY "${LIBTORCH_INSTALL_DIR}/include/torch/csrc/api/include")
+
+foreach(_lib torch_cpu torch_cuda c10 c10_cuda)
+    add_library(Torch::${_lib} SHARED IMPORTED GLOBAL)
+    add_dependencies(Torch::${_lib} libtorch_external)
+    set_target_properties(Torch::${_lib} PROPERTIES
+        IMPORTED_LOCATION "${LIBTORCH_INSTALL_DIR}/lib/lib${_lib}.so"
+    )
+endforeach()
+
+add_library(Torch::torch SHARED IMPORTED GLOBAL)
+add_dependencies(Torch::torch libtorch_external)
+set_target_properties(Torch::torch PROPERTIES
+    IMPORTED_LOCATION             "${LIBTORCH_INSTALL_DIR}/lib/libtorch.so"
+    INTERFACE_INCLUDE_DIRECTORIES
+        "${LIBTORCH_INSTALL_DIR}/include;${LIBTORCH_INSTALL_DIR}/include/torch/csrc/api/include"
+    INTERFACE_LINK_LIBRARIES
+        "Torch::torch_cpu;Torch::torch_cuda;Torch::c10;Torch::c10_cuda"
+    INTERFACE_COMPILE_DEFINITIONS "_GLIBCXX_USE_CXX11_ABI=1"
+)
+
+# Variables used by CMakeLists.txt (include dirs, RPATH DIRECTORIES, config file)
+set(TORCH_LIBRARIES      "Torch::torch"                               CACHE INTERNAL "")
+set(TORCH_INCLUDE_DIRS
+    "${LIBTORCH_INSTALL_DIR}/include"
+    "${LIBTORCH_INSTALL_DIR}/include/torch/csrc/api/include"          CACHE INTERNAL "")
+set(TORCH_INSTALL_PREFIX "${LIBTORCH_INSTALL_DIR}"                    CACHE INTERNAL "")
+
+target_link_libraries(HastyCompute PRIVATE $<BUILD_INTERFACE:${TORCH_LIBRARIES}>)
+
+# Torch .so files are copied into the install tree by HastyCompute's
+# RUNTIME_DEPENDENCIES — no explicit install(TARGETS) needed here.

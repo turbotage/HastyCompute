@@ -38,9 +38,10 @@ message ExecuteCommand {
     repeated Uuid   input_ids   = 3;
 }
 message ExecuteAck {
-    bool           success     = 1;
-    string         error_msg   = 2;
-    repeated Uuid  output_ids  = 3;
+    bool           success      = 1;
+    string         error_msg    = 2;
+    string         msg          = 3;
+    repeated Uuid  output_ids   = 4;
 }
 
 service HastyService {

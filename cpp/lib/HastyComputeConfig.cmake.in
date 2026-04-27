@@ -5,35 +5,27 @@ find_dependency(CUDAToolkit REQUIRED)
 
 include("${CMAKE_CURRENT_LIST_DIR}/HastyComputeTargets.cmake")
 
-# Torch shared libraries — installed alongside libHastyCompute.so
+# Torch headers — templates in HastyCompute modules expose torch types so
+# consumers need them on the include path without calling find_package(Torch).
+# Baked in at install time from TORCH_INCLUDE_DIRS.
+set_property(TARGET HastyCompute::HastyCompute APPEND PROPERTY
+    INTERFACE_INCLUDE_DIRECTORIES "@TORCH_INCLUDE_DIRS@")
+
+# Torch shared libraries — RUNTIME_DEPENDENCIES copies them into the install
+# lib dir alongside libHastyCompute.so, so consumers get a self-contained
+# package without needing to know the original LibTorch prefix.
 foreach(_dep torch_cpu torch_cuda torch c10 c10_cuda)
     find_library(_dep_path ${_dep}
-        PATHS "${PACKAGE_PREFIX_DIR}/lib"
+        PATHS
+            "${PACKAGE_PREFIX_DIR}/lib"
+            "@TORCH_INSTALL_PREFIX@/lib"
         NO_DEFAULT_PATH
     )
     if(_dep_path)
         set_property(TARGET HastyCompute::HastyCompute APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES "${_dep_path}")
-    endif()
-    unset(_dep_path CACHE)
-endforeach()
-
-foreach(_dep cufinufft finufft)
-    find_library(_dep_path ${_dep}
-        PATHS "${PACKAGE_PREFIX_DIR}/lib" NO_DEFAULT_PATH)
-    if(_dep_path)
         set_property(TARGET HastyCompute::HastyCompute APPEND PROPERTY
-            INTERFACE_LINK_LIBRARIES "${_dep_path}")
-    endif()
-    unset(_dep_path CACHE)
-endforeach()
-
-foreach(_dep cudart cufft)
-    find_library(_dep_path ${_dep}
-        PATHS "${CUDAToolkit_LIBRARY_DIR}" NO_DEFAULT_PATH)
-    if(_dep_path)
-        set_property(TARGET HastyCompute::HastyCompute APPEND PROPERTY
-            INTERFACE_LINK_LIBRARIES "${_dep_path}")
+            IMPORTED_CXX_MODULES_LINK_LIBRARIES "${_dep_path}")
     endif()
     unset(_dep_path CACHE)
 endforeach()

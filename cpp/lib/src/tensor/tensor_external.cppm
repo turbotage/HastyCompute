@@ -156,6 +156,16 @@ namespace hasty {
         return Tensor(hat::view_as_complex(t.to_torch()));
     }
 
+    export Tensor mm(const Tensor& a, const Tensor& b)
+    {
+        return Tensor(hat::mm(a.to_torch(), b.to_torch()));
+    }
+
+    export Tensor mv(const Tensor& mat, const Tensor& vec)
+    {
+        return Tensor(hat::mv(mat.to_torch(), vec.to_torch()));
+    }
+
     export bool allclose(const Tensor& a, const Tensor& b, double rtol = 1e-05, double atol = 1e-08, bool equal_nan = false)
     {
         return hat::allclose(a.to_torch(), b.to_torch(), rtol, atol, equal_nan);

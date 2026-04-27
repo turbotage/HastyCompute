@@ -7,10 +7,14 @@ import hasty_util_mod;
 import hasty_tensor_mod;
 import hasty_threading_mod;
 
+export import :slice;
+
 constexpr hasty::i64 SERIALIZE_CHUNK_SIZE = 2 * 1024 * 1024;
 constexpr hasty::i64 DESERIALIZE_CHUNK_SIZE = 32 * 1024 * 1024;
 
 namespace hasty {
+
+
 
 export class GenericValue {
 public:
@@ -63,6 +67,10 @@ public:
         return m_type == eType::TENSOR;
     }
 
+    Tensor& as_tensor() {
+        return std::get<Tensor>(m_data);
+    }
+
     const Tensor& as_tensor() const {
         return std::get<Tensor>(m_data);
     }
@@ -112,6 +120,26 @@ public:
 
     const std::string& as_string() const {
         return std::get<std::string>(m_data);
+    }
+
+    Tensor operator[](const TensorIndex& idx) const & {
+        if (!is_tensor()) {
+            throw std::runtime_error("Not a tensor");
+        }
+        const auto& tensor = as_tensor();
+
+        // Return the indexed element as a new Tensor containing a scalar
+        return tensor[idx];
+    }
+
+    Tensor::IndexProxy<1> operator[](const TensorIndex& idx) & {
+        if (!is_tensor()) {
+            throw std::runtime_error("Not a tensor");
+        }
+        auto& tensor = as_tensor();
+
+        // Return the indexed element as a new GenericValue containing a scalar tensor
+        return tensor[idx];
     }
 
     const GenericValue& operator[](const std::string& key) const {
@@ -308,6 +336,78 @@ public:
         return as_tensor().metadata_string();
     }
 
+    GenericValue fetch_slice(const std::string& slice_info) const
+    {
+        if (slice_info.empty()) throw std::runtime_error("slice_info cannot be empty for fetch_slice");
+        auto steps = slice::parse_steps(slice_info);
+        if (steps.empty()) throw std::runtime_error("No steps parsed from slice_info");
+
+        GenericValue _tmp;
+        const GenericValue* cur = this;
+        for (const auto& step : steps) {
+            std::visit(Overloaded{
+                [&](const slice::DictStep& s) {
+                    if (!cur->is_dict())
+                        throw std::runtime_error("gv_slice: DictStep applied to non-dict GV");
+                    cur = &(*cur)[s.key];
+                },
+                [&](const slice::VecStep& s) {
+                    if (!cur->is_vector() && !cur->is_tuple())
+                        throw std::runtime_error("gv_slice: VecStep applied to non-vector/non-tuple GV");
+                    cur = &(*cur)[s.index];
+                },
+                [&](const slice::TensorStep& s) {
+                    if (!cur->is_tensor())
+                        throw std::runtime_error("gv_slice: TensorStep applied to non-tensor GV");
+                    Tensor t = cur->as_tensor().index(s.indices);
+                    _tmp = std::move(GenericValue(std::move(t)));
+                    cur = &_tmp;
+                },
+            }, step);
+        }
+        return *cur;
+    }
+
+    void write_slice(const std::string& slice_info, GenericValue value)
+    {
+        if (slice_info.empty()) throw std::runtime_error("slice_info cannot be empty for write_slice");
+        auto steps = slice::parse_steps(slice_info);
+        if (steps.empty()) throw std::runtime_error("No steps parsed from slice_info");
+
+        // Navigate to the parent of the last step
+        GenericValue* cur = this;
+        for (std::size_t i = 0; i + 1 < steps.size(); ++i) {
+            std::visit(Overloaded{
+                [&](const slice::DictStep& s)  { cur = &(*cur)[s.key]; },
+                [&](const slice::VecStep& s)   { cur = &(*cur)[s.index]; },
+                [&](const slice::TensorStep& s) {
+                    // Intermediate tensor step: materialise slice as new GV in place
+                    // so subsequent steps can navigate it.  This is unusual but valid.
+                    throw std::runtime_error(
+                        "gv_slice: intermediate TensorStep in write path is not supported; "
+                        "only the final step may be a tensor index");
+                },
+            }, steps[i]);
+        }
+        // Apply final step as write
+        std::visit(Overloaded{
+            [&](const slice::DictStep& s) {
+                (*cur)[s.key] = std::move(value);
+            },
+            [&](const slice::VecStep& s) {
+                (*cur)[s.index] = std::move(value);
+            },
+            [&](const slice::TensorStep& s) {
+                if (!cur->is_tensor())
+                    throw std::runtime_error("gv_slice: TensorStep applied to non-tensor GV");
+                if (!value.is_tensor())
+                    throw std::runtime_error("gv_slice: cannot assign non-tensor to tensor slice");
+                // Use the public index_put_ that takes ArrayRef<TensorIndex>
+                const_cast<Tensor&>(cur->as_tensor()).index_put_(s.indices, value.as_tensor());
+            },
+        }, steps.back());
+
+    }
 
 public:
 

@@ -4,7 +4,6 @@ module;
 #include <torch/torch.h>
 #include <torch/jit.h>
 #include <torch/script.h>
-#include <torch/extension.h>
 #include <torch/library.h>
 #include <c10/cuda/CUDACachingAllocator.h>
 #include "c10/cuda/CUDAStream.h"
@@ -91,6 +90,8 @@ export namespace hat {
     using at::arange;
     using at::view_as_complex;
     using at::allclose;
+    using at::mm;
+    using at::mv;
 
 
 

@@ -30,13 +30,10 @@ hasty::Uuid to_uuid_proto(const std::array<std::uint8_t, 16>& uuid) {
 
 } // anonymous namespace
 
-// ---------------------------------------------------------------------------
-// HastyServiceImpl
-// ---------------------------------------------------------------------------
 
 class HastyServiceImpl final : public hasty::HastyService::Service {
 public:
-    HastyServiceImpl(GenericValueBank& bank, CommandRegistry& registry)
+    HastyServiceImpl(hasty::GenericValueBank& bank, hasty::CommandRegistry& registry)
         : _bank(bank), _registry(registry) {}
 
     grpc::Status PushValue(
@@ -47,7 +44,7 @@ public:
         hasty::threadsafe_stream stream;
 
         auto fut = std::async(std::launch::async, [&]() -> std::array<std::uint8_t, 16> {
-            return _bank.push(hasty::GenericValue::deserialize(stream));
+            return _bank.push_value(hasty::GenericValue::deserialize(stream));
         });
 
         hasty::DataChunk chunk;
@@ -70,13 +67,26 @@ public:
         const hasty::FetchRequest* request,
         grpc::ServerWriter<hasty::DataChunk>* writer) override
     {
-        auto opt = _bank.fetch(uuid_key(request->id()));
-        if (!opt)
+        auto uuid = uuid_key(request->id());
+        if (!_bank.contains(uuid)) {
             return grpc::Status(grpc::StatusCode::NOT_FOUND, "UUID not found in bank");
+        }
+
+        hasty::GenericValue value;
+        auto slice_info = request->slice_info();
+        if (slice_info.empty()) {
+            value = std::move(_bank.fetch_value(uuid));
+        } else {
+            try {
+                value = std::move(_bank.fetch_value(uuid, slice_info));
+            } catch (const std::exception& e) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, e.what());
+            }
+        }
 
         hasty::threadsafe_stream stream;
 
-        auto fut = std::async(std::launch::async, [&stream, value = std::move(*opt)]() mutable {
+        auto fut = std::async(std::launch::async, [&stream, value = std::move(value)]() mutable {
             hasty::GenericValue::serialize(std::move(value), stream);
             stream.set_finished();
         });
@@ -111,16 +121,21 @@ public:
         }
 
         auto key = uuid_key(msg.header().id());
-        if (!_bank.fetch(key)) {
+        if (!_bank.contains(key)) {
             response->set_success(false);
             response->set_error_msg("UUID not found in bank");
             return grpc::Status::OK;
         }
 
+        const std::string slice_info = msg.header().slice_info();
         hasty::threadsafe_stream stream;
 
-        auto fut = std::async(std::launch::async, [&stream, key, this]() {
-            _bank.store(key, hasty::GenericValue::deserialize(stream));
+        auto fut = std::async(std::launch::async, [&stream, key, slice_info, this]() {
+            if (slice_info.empty()) {
+                _bank.write_value(key, hasty::GenericValue::deserialize(stream));
+            } else {
+                _bank.write_value(key, slice_info, hasty::GenericValue::deserialize(stream));
+            }
         });
 
         while (reader->Read(&msg)) {
@@ -146,7 +161,7 @@ public:
         const hasty::Uuid* request,
         hasty::WriteAck* response) override
     {
-        if (_bank.remove(uuid_key(*request))) {
+        if (_bank.delete_value(uuid_key(*request))) {
             response->set_success(true);
         } else {
             response->set_success(false);
@@ -164,20 +179,22 @@ public:
         inputs.reserve(request->input_ids_size());
 
         for (const auto& uuid_proto : request->input_ids()) {
-            auto opt = _bank.fetch(uuid_key(uuid_proto));
-            if (!opt) {
+            auto uuid = uuid_key(uuid_proto);
+            if (!_bank.contains(uuid)) {
                 response->set_success(false);
-                response->set_error_msg("Input UUID not found in bank");
+                response->set_error_msg("Input UUID not found in bank: " + uuid);
                 return grpc::Status::OK;
             }
-            inputs.push_back(std::move(*opt));
+            const auto& opt = _bank.fetch_value(uuid);
+            inputs.push_back(opt);
         }
 
         try {
-            auto outputs = _registry.execute(
+            auto [msg, outputs] = _registry.execute(
                 request->function_id(), request->options(), std::move(inputs));
             for (auto& out : outputs)
-                *response->add_output_ids() = to_uuid_proto(_bank.push(std::move(out)));
+                *response->add_output_ids() = to_uuid_proto(_bank.push_value(std::move(out)));
+            response->set_msg(msg);
             response->set_success(true);
         } catch (const std::exception& e) {
             response->set_success(false);
@@ -187,37 +204,41 @@ public:
     }
 
 private:
-    GenericValueBank&  _bank;
-    CommandRegistry&   _registry;
+    hasty::GenericValueBank&  _bank;
+    hasty::CommandRegistry&   _registry;
 };
 
 // ---------------------------------------------------------------------------
 // ServerHandle::Impl + method definitions
 // ---------------------------------------------------------------------------
 
-struct ServerHandle::Impl {
+namespace hasty {
+
+struct GrpcServerHandle::Impl {
     std::unique_ptr<HastyServiceImpl> service;
     std::unique_ptr<grpc::Server>     server;
+    std::string                       address;
 };
 
-ServerHandle::~ServerHandle() = default;
-ServerHandle::ServerHandle(ServerHandle&&) noexcept = default;
-ServerHandle& ServerHandle::operator=(ServerHandle&&) noexcept = default;
+GrpcServerHandle::~GrpcServerHandle() = default;
+GrpcServerHandle::GrpcServerHandle(GrpcServerHandle&&) noexcept = default;
+GrpcServerHandle& GrpcServerHandle::operator=(GrpcServerHandle&&) noexcept = default;
 
-void ServerHandle::wait()     { _impl->server->Wait(); }
-void ServerHandle::shutdown() { _impl->server->Shutdown(); }
+void GrpcServerHandle::wait()               { _impl->server->Wait(); }
+void GrpcServerHandle::shutdown()           { _impl->server->Shutdown(); }
+const std::string& GrpcServerHandle::address() const { return _impl->address; }
 
 // ---------------------------------------------------------------------------
 // start_server
 // ---------------------------------------------------------------------------
 
-ServerHandle start_server(
-    GenericValueBank& bank,
-    CommandRegistry& registry,
+hasty::GrpcServerHandle hasty::start_grpc_server(
+    hasty::GenericValueBank& bank,
+    hasty::CommandRegistry& registry,
     const std::string& address)
 {
-    ServerHandle handle;
-    handle._impl = std::make_unique<ServerHandle::Impl>();
+    hasty::GrpcServerHandle handle;
+    handle._impl = std::make_unique<GrpcServerHandle::Impl>();
     handle._impl->service = std::make_unique<HastyServiceImpl>(bank, registry);
 
     grpc::ServerBuilder builder;
@@ -233,7 +254,11 @@ ServerHandle start_server(
     builder.AddChannelArgument("grpc.http2.bdp_probe", 0);  // no BDP pings; windows are fixed
     */
         
-    handle._impl->server = builder.BuildAndStart();
+    handle._impl->server  = builder.BuildAndStart();
+    handle._impl->address = address;
 
     return std::move(handle);
+}
+
+
 }

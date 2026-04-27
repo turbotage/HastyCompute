@@ -132,4 +132,7 @@ constexpr bool is_specialization_v = is_specialization<T, Template>::value;
 export template<class... T>
 constexpr bool always_false = false;
 
+export template<class... Ts>
+struct Overloaded : Ts... { using Ts::operator()...; };
+
 }

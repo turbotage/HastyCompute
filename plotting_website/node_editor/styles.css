@@ -1,0 +1,139 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0e0e11;
+    color: #d0d8e4;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#shell {
+    display: grid;
+    grid-template-rows: 38px 1fr;
+    grid-template-columns: 190px 1fr;
+    height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.8rem;
+    height: 38px;
+    background: #0a0a0d;
+    border-bottom: 1px solid #1e2330;
+}
+
+.home-link {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #4a7a9a;
+    text-decoration: none;
+    letter-spacing: 0.06em;
+}
+.home-link:hover { color: #7ab4d8; }
+
+.sep { color: #2a3a4a; font-size: 0.9rem; }
+
+.title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #9ab8d0;
+    letter-spacing: 0.04em;
+}
+
+.header-spacer { flex: 1; }
+
+.header-actions { display: flex; gap: 0.4rem; }
+
+.hdr-btn {
+    background: #141820;
+    border: 1px solid #2a3548;
+    color: #9ab8d0;
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+.hdr-btn:hover { background: #1e2840; border-color: #4a78a0; }
+.hdr-btn.run   { border-color: #2a6040; color: #60c090; }
+.hdr-btn.run:hover { background: #0e2018; border-color: #40a070; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+#sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    background: #0a0c10;
+    border-right: 1px solid #1a2030;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #3a5068;
+    text-transform: uppercase;
+    border-bottom: 1px solid #151c28;
+}
+
+.node-group-label {
+    padding: 0.4rem 0.7rem 0.2rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #2a4860;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.node-entry {
+    padding: 0.28rem 0.9rem;
+    font-size: 0.76rem;
+    color: #7090b0;
+    cursor: grab;
+    border-left: 2px solid transparent;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    user-select: none;
+}
+.node-entry:hover {
+    background: #131c2a;
+    color: #a8cce0;
+    border-left-color: #3a7aaa;
+}
+
+/* ── Canvas area ─────────────────────────────────────────── */
+main {
+    grid-column: 2;
+    grid-row: 2;
+    position: relative;
+    overflow: hidden;
+    background: #0a0c10;
+}
+
+#graph-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Litegraph theme overrides ───────────────────────────── */
+.litegraph.litecontextmenu {
+    background: #141820 !important;
+    border: 1px solid #2a3548 !important;
+    color: #a0b8d0 !important;
+}
+.litegraph.litecontextmenu .litemenu-entry:hover {
+    background: #1e2840 !important;
+}

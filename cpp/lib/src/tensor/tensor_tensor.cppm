@@ -223,6 +223,14 @@ public:
         return Tensor(_base.index(tind));
     }
 
+    /** Runtime index_put_: writes src into the region selected by indices. */
+    inline void index_put_(ArrayRef<TensorIndex> indices, const Tensor& src) {
+        std::vector<hat::indexing::TensorIndex> tind;
+        tind.reserve(indices.size());
+        for (const auto& idx : indices) tind.push_back(idx.to_torch());
+        _base.index_put_(tind, src._base);
+    }
+
     inline static Tensor from_blob(void* data, ArrayRef<i64> sizes, eScalarType dtype, Device device) {
         return Tensor(hat::from_blob(data, sizes.to_torch(), TensorOptions(device).dtype(dtype).to_torch()));
     }

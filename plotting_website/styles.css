@@ -5,165 +5,88 @@
 }
 
 body {
-    background: #111;
-    color: #ddd;
+    background: #0e0e11;
+    color: #d0d8e4;
     font-family: 'Segoe UI', Arial, sans-serif;
     height: 100vh;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
 }
 
-#app {
+#shell {
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
 
-/* ── Header ─────────────────────────────────────────────── */
 header {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
-    padding: 0.45rem 1rem;
-    background: #0d0d0d;
-    border-bottom: 1px solid #2a2a2a;
+    padding: 0 1.2rem;
+    height: 42px;
+    background: #0a0a0d;
+    border-bottom: 1px solid #1e2330;
     flex-shrink: 0;
-    height: 36px;
 }
 
 .title {
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 700;
-    color: #b0c4d8;
-    letter-spacing: 0.04em;
-}
-
-.position-info {
-    font-size: 0.78rem;
-    font-family: 'Consolas', monospace;
-    color: #6a9fcc;
-}
-
-.perf-stats {
-    font-size: 0.72rem;
-    font-family: 'Consolas', monospace;
-    color: #88b870;
-    background: rgba(0, 0, 0, 0.35);
-    padding: 1px 8px;
-    border-radius: 3px;
-}
-
-.hdr-label {
-    font-size: 0.78rem;
-    color: #8899aa;
-}
-
-.hdr-select {
-    background: #1e2530;
-    color: #d0d8e0;
-    border: 1px solid #3a4a5a;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 0.78rem;
-    cursor: pointer;
-}
-
-.hdr-select:hover {
-    border-color: #5a8aaa;
-}
-
-.status-msg {
-    font-size: 0.78rem;
-    color: #777;
-    margin-left: auto;
-}
-
-/* ── Viewport grid ──────────────────────────────────────── */
-#viewport-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 2px;
-    flex: 1;
-    min-height: 0;
-    background: #1e1e1e;
-}
-
-.viewport {
-    position: relative;
-    background: #080808;
-    overflow: hidden;
-    display: flex;
-    align-items: stretch;
-}
-
-.vp-label {
-    position: absolute;
-    top: 6px;
-    left: 8px;
-    z-index: 2;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #88aacc;
-    background: rgba(0, 0, 0, 0.55);
-    padding: 2px 7px;
-    border-radius: 3px;
-    pointer-events: none;
-    user-select: none;
-}
-
-canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-/* WebGPU canvas — receives pointer events */
-canvas:not(.overlay) {
-    cursor: crosshair;
-}
-
-/* 2-D crosshair overlay — sits on top, transparent to events */
-canvas.overlay {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
-}
-
-/* Header cursor-toggle button */
-.hdr-btn {
-    font-size: 0.72rem;
-    padding: 2px 9px;
-    background: #1e2d3d;
+    letter-spacing: 0.08em;
     color: #7ab4d8;
-    border: 1px solid #2e4a62;
-    border-radius: 3px;
-    cursor: pointer;
-    user-select: none;
 }
-.hdr-btn:hover { background: #243650; }
 
-/* ── Error overlay ──────────────────────────────────────── */
-#error-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 999;
-    background: rgba(0, 0, 0, 0.88);
-    color: #ff7070;
-    font-size: 1.1rem;
+main {
+    display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
-    padding: 3rem;
+    flex: 1;
 }
 
-#error-overlay.visible {
+/* ── Tool grid ───────────────────────────────────────────── */
+.tool-grid {
     display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tool-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    width: 160px;
+    padding: 2rem 1rem;
+    background: #141820;
+    border: 1px solid #242c3a;
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, background 0.15s;
+    cursor: pointer;
+    user-select: none;
+}
+
+.tool-card:hover {
+    background: #1a2232;
+    border-color: #3a6090;
+}
+
+.tool-icon {
+    font-size: 2rem;
+    color: #5a9abc;
+}
+
+.tool-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #c8d8e8;
+    letter-spacing: 0.03em;
+}
+
+.tool-desc {
+    font-size: 0.72rem;
+    color: #5a6a7a;
+    text-align: center;
+    line-height: 1.35;
 }

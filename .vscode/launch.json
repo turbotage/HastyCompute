@@ -38,6 +38,22 @@
             "stopOnEntry": false,
         },
         {
+            "name": "(lldb-dap) HastyLinalgTest",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyLinalgTest",
+            "args": [],
+            "stopOnEntry": false,
+        },
+        {
+            "name": "(lldb-dap) HastyDataTest",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyDataTest",
+            "args": [],
+            "stopOnEntry": false,
+        },
+        {
             "name": "(lldb-dap) HastyVkFFTTest",
             "type": "lldb-dap",
             "request": "launch",

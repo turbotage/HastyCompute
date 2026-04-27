@@ -5,18 +5,12 @@
         "minor": 2,
         "patch": 1
     },
-    "include": [
-    ],
+    "include": [],
     "configurePresets": [
-        {
-            "name": "MainConfigClang",
-            "hidden": true,
-            "inherits": []
-        },
         {
             "name": "BaseDebug",
             "hidden": true,
-            "inherits": ["MainConfigClang"],
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/Config-ClangDebug-Linux",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -25,7 +19,7 @@
         {
             "name": "BaseRelWithDebInfo",
             "hidden": true,
-            "inherits": ["MainConfigClang"],
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/Config-ClangRelWithDebInfo-Linux",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -36,7 +30,7 @@
             "displayName": "Config-ClangDebug-Linux-Full",
             "inherits": ["BaseDebug"],
             "cacheVariables": {
-                "HASTY_BUILD_TARGETS": "lib;server;test"
+                "HASTY_BUILD_TARGETS": "lib;test"
             }
         },
         {
@@ -45,14 +39,6 @@
             "inherits": ["BaseDebug"],
             "cacheVariables": {
                 "HASTY_BUILD_TARGETS": "lib"
-            }
-        },
-        {
-            "name": "Config-ClangDebug-Linux-Server",
-            "displayName": "Config-ClangDebug-Linux-Server",
-            "inherits": ["BaseDebug"],
-            "cacheVariables": {
-                "HASTY_BUILD_TARGETS": "lib;server"
             }
         },
         {
@@ -68,7 +54,7 @@
             "displayName": "Config-ClangRelWithDebInfo-Linux-Full",
             "inherits": ["BaseRelWithDebInfo"],
             "cacheVariables": {
-                "HASTY_BUILD_TARGETS": "lib;server;test"
+                "HASTY_BUILD_TARGETS": "lib;test"
             }
         },
         {
@@ -77,14 +63,6 @@
             "inherits": ["BaseRelWithDebInfo"],
             "cacheVariables": {
                 "HASTY_BUILD_TARGETS": "lib"
-            }
-        },
-        {
-            "name": "Config-ClangRelWithDebInfo-Linux-Server",
-            "displayName": "Config-ClangRelWithDebInfo-Linux-Server",
-            "inherits": ["BaseRelWithDebInfo"],
-            "cacheVariables": {
-                "HASTY_BUILD_TARGETS": "lib;server"
             }
         },
         {

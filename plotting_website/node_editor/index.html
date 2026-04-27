@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HastyEdit — Node Editor</title>
+    <link rel="stylesheet" href="lib/litegraph.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="shell">
+        <header>
+            <a class="home-link" href="../">HastyEdit</a>
+            <span class="sep">/</span>
+            <span class="title">Node Editor</span>
+            <div class="header-spacer"></div>
+            <div class="header-actions">
+                <button id="btn-run"     class="hdr-btn run">&#9654; Run</button>
+                <button id="btn-clear"   class="hdr-btn">Clear</button>
+                <button id="btn-save"    class="hdr-btn">Save</button>
+                <button id="btn-load"    class="hdr-btn">Load</button>
+            </div>
+        </header>
+        <div id="sidebar">
+            <div class="sidebar-header">Nodes</div>
+            <div id="node-list"></div>
+        </div>
+        <main>
+            <canvas id="graph-canvas"></canvas>
+        </main>
+    </div>
+    <!-- litegraph requires a global, not an ES module -->
+    <script src="lib/litegraph.js"></script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

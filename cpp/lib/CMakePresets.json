@@ -12,26 +12,14 @@
             "inherits": ["CommonClangSettings"],
             "binaryDir": "${sourceDir}/../../out/build/lib-${presetName}",
             "environment": {
-                "LIBTORCH_PATH": "$env{MY_INSTALL_PATH}/LibTorch",
-                "HIGHFIVE_PATH": "$env{MY_INSTALL_PATH}/HighFive",
-                "CUDA_ROOT": "/usr/local/cuda-13.0",
-                "VCPKG_ROOT": "/home/turbotage/Documents/GitHub/vcpkg",
-                "CUDAHOSTCXX": "/usr/bin/clang++-18",
-                "CONDA_ENV_PATH": "/home/turbotage/miniconda3/envs/py313c++pkgs",
-                "CONDA_SITE_PKG_PATH": "$env{CONDA_ENV_PATH}/lib/python3.13/site-packages"
+                "CUDA_ROOT": "/usr/local/cuda-13.0"
             },
             "cacheVariables": {
                 "CMAKE_CUDA_ARCHITECTURES": "89",
                 "CMAKE_CUDA_HOST_COMPILER": "/usr/bin/clang++-22",
                 "CMAKE_CUDA_COMPILER": "$env{CUDA_ROOT}/bin/nvcc",
                 "CMAKE_CUDA_FLAGS": "-allow-unsupported-compiler",
-                "CUDAToolkit_ROOT": "$env{CUDA_ROOT}/bin/",
-                "pybind11_DIR": "$env{CONDA_SITE_PKG_PATH}/pybind11/share/cmake/pybind11",
-                "Python3_ROOT_DIR": "$env{CONDA_ENV_PATH}",
-                "CMAKE_PREFIX_PATH": {
-                    "type": "FILEPATH",
-                    "value": "$env{LIBTORCH_PATH};$env{HIGHFIVE_PATH}"
-                }
+                "CUDAToolkit_ROOT": "$env{CUDA_ROOT}"
             }
         },
         {
@@ -50,6 +38,5 @@
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         }
-
     ]
 }
