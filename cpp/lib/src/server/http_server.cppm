@@ -1,6 +1,6 @@
 module;
 
-#undef CPPHTTPLIB_OPENSSL_SUPPORT
+#define CPPHTTPLIB_OPENSSL_SUPPORT
 #undef CPPHTTPLIB_ZLIB_SUPPORT
 #include <httplib.h>
 
@@ -179,8 +179,8 @@ private:
 //   3. Static file mount — last, catches everything else
 
 export class HttpServer {
-    httplib::Server _srv;
-    std::string     _static_root;
+    httplib::SSLServer _srv;
+    std::string        _static_root;
     HttpGrpcProxy   _proxy;
     int             _port;
     std::thread     _thread;
@@ -190,18 +190,22 @@ public:
     // port        — HTTP listen port (e.g. 8080)
     // static_root — path to plotting_website/ directory
     // grpc_handle — running gRPC server; HttpServer creates a loopback channel to it
-    HttpServer(int port, std::string static_root, SPtr<GrpcServerHandle> grpc_handle)
-        : _static_root(std::move(static_root))
+    HttpServer(int port, std::string static_root, SPtr<GrpcServerHandle> grpc_handle,
+               std::string cert_path, std::string key_path)
+        : _srv(cert_path.c_str(), key_path.c_str())
+        , _static_root(std::move(static_root))
         , _proxy(grpc::CreateChannel(
               loopback_address(grpc_handle->address()),
               grpc::InsecureChannelCredentials()))
-        , _port(port),
-        _grpc_handle(std::move(grpc_handle))
+        , _port(port)
+        , _grpc_handle(std::move(grpc_handle))
     {
         setup_routes();
     }
 
     void start() {
+        if (!_srv.is_valid())
+            throw std::runtime_error("HttpServer: SSLServer is not valid — check cert/key paths");
         _thread = std::thread([this] { _srv.listen("0.0.0.0", _port); });
     }
 

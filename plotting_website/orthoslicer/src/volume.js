@@ -163,6 +163,8 @@ export class LazyVolume {
     /** @param {number[]} shape [T, E, Z, Y, X] */
     constructor(shape) {
         this.shape = shape;
+        this.dtype = 'f32';
+        this.comprepConfig = null;
     }
 
     get T() { return this.shape[0]; }
@@ -318,5 +320,84 @@ export class LazyVolume {
             }
         }
         return slice;
+    }
+}
+
+// ─── RemoteVolume ─────────────────────────────────────────────────────────────
+
+/**
+ * RemoteVolume — same slice API as LazyVolume but fetches slices on demand
+ * from the gRPC server using a UUID.  Slices are cached after first fetch.
+ * Returns zeros synchronously on a cache miss; calls onUpdate() when data
+ * arrives so the renderer can re-render with real values.
+ *
+ * shape is normalised to 5D [T, E, Z, Y, X] (1s prepended if shorter).
+ */
+export class RemoteVolume {
+    constructor(uuid16, shape, options = {}) {
+        const s = shape.slice();
+        while (s.length < 5) s.unshift(1);
+        this.shape         = s;
+        this._uuid         = uuid16;
+        this._cache        = new Map();
+        this._pending      = new Set();
+        this.dtype         = options.dtype         ?? 'f32';
+        this.comprepConfig = options.comprepConfig ?? null;
+        /** Set by caller after renderer is created. */
+        this.onUpdate = null;
+    }
+
+    get T() { return this.shape[0]; }
+    get E() { return this.shape[1]; }
+    get Z() { return this.shape[2]; }
+    get Y() { return this.shape[3]; }
+    get X() { return this.shape[4]; }
+
+    _zeros(n) {
+        return this.dtype === 'i16' ? new Uint16Array(n) : new Float32Array(n);
+    }
+
+    _fetch(key, sliceInfo) {
+        if (this._pending.has(key)) return;
+        this._pending.add(key);
+        import('../../node_editor/src/grpc_client.js').then(async ({ fetchSliceData }) => {
+            try {
+                const { data } = await fetchSliceData(this._uuid, sliceInfo);
+                this._cache.set(key, data);
+                if (this.onUpdate) this.onUpdate();
+            } catch (e) {
+                console.error('RemoteVolume fetch error', key, e);
+            } finally {
+                this._pending.delete(key);
+            }
+        });
+    }
+
+    getAxialSlice(t, e, z) {
+        const key = `ax:${t},${e},${z}`;
+        if (this._cache.has(key)) return this._cache.get(key);
+        this._fetch(key, `[${t},${e},${z},:,:]`);
+        return this._zeros(this.Y * this.X);
+    }
+
+    getSagittalSlice(t, e, x) {
+        const key = `sg:${t},${e},${x}`;
+        if (this._cache.has(key)) return this._cache.get(key);
+        this._fetch(key, `[${t},${e},:,:,${x}]`);
+        return this._zeros(this.Z * this.Y);
+    }
+
+    getCoronalSlice(t, e, y) {
+        const key = `co:${t},${e},${y}`;
+        if (this._cache.has(key)) return this._cache.get(key);
+        this._fetch(key, `[${t},${e},:,${y},:]`);
+        return this._zeros(this.Z * this.X);
+    }
+
+    getExtraSlice(z, y, x) {
+        const key = `ex:${z},${y},${x}`;
+        if (this._cache.has(key)) return this._cache.get(key);
+        this._fetch(key, `[:,:,${z},${y},${x}]`);
+        return this._zeros(this.T * this.E);
     }
 }

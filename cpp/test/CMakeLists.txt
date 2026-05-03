@@ -20,7 +20,19 @@ target_compile_features(HastyServerTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
 set_target_properties(HastyServerTest PROPERTIES
 	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
 target_link_libraries(HastyServerTest PRIVATE HastyCompute::HastyCompute)
+add_custom_command(TARGET HastyServerTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../certs/cert.pem"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../certs/key.pem"
+        "$<TARGET_FILE_DIR:HastyServerTest>"
+    COMMENT "Copying TLS cert and key to binary directory"
+)
 install(TARGETS HastyServerTest RUNTIME DESTINATION bin)
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../certs/cert.pem"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../certs/key.pem"
+    DESTINATION bin
+)
 
 # <================== Hasty Data Test ==================>
 add_executable(HastyDataTest "src/hasty_data_test.cpp")

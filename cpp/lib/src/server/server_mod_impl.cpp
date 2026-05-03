@@ -19,13 +19,20 @@ void start_default_servers(
         global_command_registry.register_commands(*optional_extra_commands);
     }
 
+    namespace fs = std::filesystem;
+    fs::path bin_dir = fs::canonical("/proc/self/exe").parent_path();
+    std::string cert_path = (bin_dir / "cert.pem").string();
+    std::string key_path  = (bin_dir / "key.pem").string();
+
     default_grpc_server_handle = std::make_shared<GrpcServerHandle>(
         start_grpc_server(global_generic_value_bank, global_command_registry, "0.0.0.0:" + std::to_string(grpc_port)));
 
     default_http_server = std::make_unique<HttpServer>(
         http_port,
         "/home/turbotage/Documents/GitHub/HastyCompute/plotting_website",
-        default_grpc_server_handle);
+        default_grpc_server_handle,
+        std::move(cert_path),
+        std::move(key_path));
     default_http_server->start();
 }
 

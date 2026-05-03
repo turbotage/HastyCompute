@@ -1,6 +1,7 @@
-import { LazyVolume } from './volume.js';
+import { LazyVolume, RemoteVolume } from './volume.js';
 import { Renderer }   from './renderer.js';
 import { CACHE_DEPTH, CACHE_TE } from './renderer.js';
+import { hexToUuid, fetchMetaString, initCommandIds } from '../../node_editor/src/grpc_client.js';
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
@@ -18,16 +19,33 @@ async function init() {
     const device = await adapter.requestDevice();
     device.lost.then(info => showError(`GPU device lost: ${info.message}`));
 
-    // ── Build lazy volume (no pre-allocation — slices computed on demand) ─────
-    // Shape: T=8, E=3, Z=400, Y=400, X=400
-    // Full array would be ~6 GB; LazyVolume uses zero memory for the data.
-    const shape = [8, 3, 400, 400, 400];
-    const volume = new LazyVolume(shape);
-    setStatus(`LazyVolume ${shape.join('×')} — TE cache slots: ${CACHE_TE}, spatial depth: ${CACHE_DEPTH}`);
+    // ── Resolve command IDs from server ──────────────────────────────────────
+    await initCommandIds();
+
+    // ── Build volume ──────────────────────────────────────────────────────────
+    const params    = new URLSearchParams(window.location.search);
+    const uuidHex   = params.get('uuid');
+    const configStr = params.get('config');
+    const comprepConfig = configStr ? JSON.parse(decodeURIComponent(configStr)) : null;
+    let volume;
+    if (uuidHex) {
+        const uuid16 = hexToUuid(uuidHex);
+        const meta   = await fetchMetaString(uuid16);
+        if (!meta) { showError('Could not fetch tensor metadata for UUID: ' + uuidHex); return; }
+        volume = new RemoteVolume(uuid16, meta.shape, { dtype: meta.dtype, comprepConfig });
+        setStatus(`Remote tensor ${volume.shape.join('×')} [${meta.dtype}] — fetching slices on demand`);
+    } else {
+        const shape = [8, 3, 400, 400, 400];
+        volume = new LazyVolume(shape);
+        setStatus(`LazyVolume ${shape.join('×')} — TE cache slots: ${CACHE_TE}, spatial depth: ${CACHE_DEPTH}`);
+    }
     await nextFrame();
 
     // ── Create renderer ───────────────────────────────────────────────────────
     const renderer = new Renderer(device, volume);
+    if (volume instanceof RemoteVolume) {
+        volume.onUpdate = () => { renderer.invalidateCache(); renderer.setPosition({...renderer.pos}); };
+    }
 
     // ── Attach canvases ───────────────────────────────────────────────────────
     const viewIds = [

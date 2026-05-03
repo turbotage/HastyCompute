@@ -46,6 +46,32 @@ function f32ToF16Array(src) {
     return dst;
 }
 
+// ─── normalizeComprepConfig ───────────────────────────────────────────────────
+//
+// Converts a raw comprep JSON config (from URL or user input) into the flat
+// numeric object used by ViewState.writeUniforms.  All fields have defaults
+// matching the C++ compress_ui16_config defaults.
+
+function normalizeComprepConfig(cfg = {}) {
+    const modeMap = { linear: 0, gamma: 1, log: 2 };
+    const a      = cfg.a      ?? 0.0;
+    const b      = cfg.b      ?? 1.0;
+    const clampa = cfg.clampa ?? a;
+    const clampb = cfg.clampb ?? b;
+    const focus  = cfg.focus  ?? 1.0;
+    const t0     = (1.0 - focus) * 0.5;
+    const t1     = 1.0 - t0;
+    return {
+        a, b, clampa, clampb, t0, t1,
+        left_mode:   modeMap[cfg.left_mode   ?? 'linear'] ?? 0,
+        right_mode:  modeMap[cfg.right_mode  ?? 'linear'] ?? 0,
+        left_gamma:  cfg.left_gamma  ?? 1.0,
+        right_gamma: cfg.right_gamma ?? 1.0,
+        left_logc:   cfg.left_logc   ?? 1.0,
+        right_logc:  cfg.right_logc  ?? 1.0,
+    };
+}
+
 // ─── CacheTracker — ring-buffer sliding-window cache ─────────────────────────
 //
 // Maps physical slice indices → GPU texture array layers via a ring buffer.
@@ -283,6 +309,141 @@ fn fs_main(in : VOut) -> @location(0) vec4f {
 }
 `;
 
+// ─── COMPREP_SHADER ───────────────────────────────────────────────────────────
+//
+// Renders a u16-quantised comprep tensor (r16uint → texture_2d_array<u32>).
+// Uniforms (80 bytes = 20 × 4):
+//   u32  slice_layer, tex_width, tex_height, colormap
+//   f32  window_min, window_max, a, b, clampa, clampb, t0, t1
+//   u32  left_mode, right_mode   (0=linear 1=gamma 2=log)
+//   f32  left_gamma, right_gamma, left_logc, right_logc, _pad0, _pad1
+//
+// u16 value 0..65535 → y=[0,1] → piecewise inverse tone-map → physical x
+// → window/level → colormap
+
+const COMPREP_SHADER = /* wgsl */`
+
+struct Uniforms {
+    slice_layer  : u32,
+    tex_width    : u32,
+    tex_height   : u32,
+    colormap     : u32,
+    window_min   : f32,
+    window_max   : f32,
+    a            : f32,
+    b            : f32,
+    clampa       : f32,
+    clampb       : f32,
+    t0           : f32,
+    t1           : f32,
+    left_mode    : u32,
+    right_mode   : u32,
+    left_gamma   : f32,
+    right_gamma  : f32,
+    left_logc    : f32,
+    right_logc   : f32,
+    _pad0        : f32,
+    _pad1        : f32,
+};
+
+@group(0) @binding(0) var<uniform> u   : Uniforms;
+@group(0) @binding(1) var          tex : texture_2d_array<u32>;
+
+struct VOut {
+    @builtin(position) pos : vec4f,
+    @location(0)       uv  : vec2f,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi : u32) -> VOut {
+    var pos = array<vec2f, 6>(
+        vec2f(-1.0, -1.0), vec2f( 1.0, -1.0), vec2f( 1.0,  1.0),
+        vec2f(-1.0, -1.0), vec2f( 1.0,  1.0), vec2f(-1.0,  1.0)
+    );
+    var uvs = array<vec2f, 6>(
+        vec2f(0.0, 1.0), vec2f(1.0, 1.0), vec2f(1.0, 0.0),
+        vec2f(0.0, 1.0), vec2f(1.0, 0.0), vec2f(0.0, 0.0)
+    );
+    var out : VOut;
+    out.pos = vec4f(pos[vi], 0.0, 1.0);
+    out.uv  = uvs[vi];
+    return out;
+}
+
+fn cm_gray_c(t: f32) -> vec3f { return vec3f(t, t, t); }
+fn cm_viridis_c(t: f32) -> vec3f {
+    let c0 = vec3f( 0.27773, 0.00541, 0.33410);
+    let c1 = vec3f( 0.10509, 1.40461, 1.38459);
+    let c2 = vec3f(-0.33086, 0.21485, 0.09510);
+    let c3 = vec3f(-4.63423,-5.79910,-19.33244);
+    let c4 = vec3f( 6.22827,14.17993, 56.69055);
+    let c5 = vec3f( 4.77638,-13.74515,-65.35303);
+    let c6 = vec3f(-5.43546, 4.64585, 26.31244);
+    return clamp(c0+t*(c1+t*(c2+t*(c3+t*(c4+t*(c5+t*c6))))), vec3f(0.0), vec3f(1.0));
+}
+fn cm_plasma_c(t: f32) -> vec3f {
+    let c0 = vec3f( 0.05873, 0.02334, 0.54334);
+    let c1 = vec3f( 2.17651, 0.23838, 0.75396);
+    let c2 = vec3f(-2.68946,-7.45585, 3.11080);
+    let c3 = vec3f( 6.13035,42.34619,-28.51885);
+    let c4 = vec3f(-11.10744,-82.66631, 60.13985);
+    let c5 = vec3f(10.02307, 71.41362,-54.07219);
+    let c6 = vec3f(-3.65871,-22.93153, 18.19191);
+    return clamp(c0+t*(c1+t*(c2+t*(c3+t*(c4+t*(c5+t*c6))))), vec3f(0.0), vec3f(1.0));
+}
+fn cm_hot_c(t: f32) -> vec3f {
+    return clamp(vec3f(t*3.0, t*3.0-1.0, t*3.0-2.0), vec3f(0.0), vec3f(1.0));
+}
+fn cm_cool_c(t: f32) -> vec3f { return vec3f(t, 1.0-t, 1.0); }
+fn apply_colormap_c(v: f32, cm: u32) -> vec3f {
+    if cm == 1u { return cm_viridis_c(v); }
+    if cm == 2u { return cm_plasma_c(v);  }
+    if cm == 3u { return cm_hot_c(v);     }
+    if cm == 4u { return cm_cool_c(v);    }
+    return cm_gray_c(v);
+}
+
+// Inverse of shaping applied per region:
+//   linear: identity
+//   gamma:  forward=pow(u,1/γ)  →  inverse=pow(u,γ)
+//   log:    forward=log1p(u*c)/log(1+c)  →  inverse=(exp(u*log(1+c))-1)/c
+fn inv_shape(uv: f32, mode: u32, gamma: f32, logc: f32) -> f32 {
+    if mode == 1u { return pow(max(uv, 0.0), gamma); }
+    if mode == 2u {
+        let c = max(logc, 1e-6);
+        return (exp(uv * log(1.0 + c)) - 1.0) / c;
+    }
+    return uv;
+}
+
+@fragment
+fn fs_main(in : VOut) -> @location(0) vec4f {
+    let px  = min(u32(in.uv.x * f32(u.tex_width)),  u.tex_width  - 1u);
+    let py  = min(u32(in.uv.y * f32(u.tex_height)), u.tex_height - 1u);
+    let raw = textureLoad(tex, vec2i(i32(px), i32(py)), i32(u.slice_layer), 0).r;
+    let y   = f32(raw) / 65535.0;
+
+    var x : f32;
+    if y < u.t0 && u.t0 > 0.0 {
+        // LEFT region  y ∈ [0, t0]  →  x ∈ [clampa, a]
+        let uv = inv_shape(y / u.t0, u.left_mode, u.left_gamma, u.left_logc);
+        x = uv * (u.a - u.clampa) + u.clampa;
+    } else if y > u.t1 && u.t1 < 1.0 {
+        // RIGHT region  y ∈ [t1, 1]  →  x ∈ [b, clampb]
+        let uv = inv_shape((y - u.t1) / (1.0 - u.t1), u.right_mode, u.right_gamma, u.right_logc);
+        x = uv * (u.clampb - u.b) + u.b;
+    } else {
+        // MIDDLE region  y ∈ [t0, t1]  →  x ∈ [a, b]
+        let span = u.t1 - u.t0;
+        let uv   = select((y - u.t0) / span, 0.0, span < 1e-6);
+        x = uv * (u.b - u.a) + u.a;
+    }
+
+    let v = clamp((x - u.window_min) / (u.window_max - u.window_min), 0.0, 1.0);
+    return vec4f(apply_colormap_c(v, u.colormap), 1.0);
+}
+`;
+
 // ─── ViewState ────────────────────────────────────────────────────────────────
 
 /**
@@ -299,13 +460,17 @@ class ViewState {
      * @param {number}            texWidth   texture width  (columns)
      * @param {number}            texHeight  texture height (rows)
      * @param {number}            numLayers  array depth; default = CACHE_DEPTH
+     * @param {'float'|'comprep'} mode       'float' = r16float, 'comprep' = r16uint + inverse shader
+     * @param {object|null}       comprepParams  normalised comprep config (required when mode='comprep')
      */
-    constructor(device, canvas, label, texWidth, texHeight, numLayers = CACHE_DEPTH) {
-        this.device    = device;
-        this.label     = label;
-        this.texWidth  = texWidth;
-        this.texHeight = texHeight;
-        this.numLayers = numLayers;
+    constructor(device, canvas, label, texWidth, texHeight, numLayers = CACHE_DEPTH, mode = 'float', comprepParams = null) {
+        this.device         = device;
+        this.label          = label;
+        this.texWidth       = texWidth;
+        this.texHeight      = texHeight;
+        this.numLayers      = numLayers;
+        this.mode           = mode;
+        this.comprepParams  = comprepParams;
 
         /** GPU layer index to display; updated by Renderer before each draw. */
         this.currentLayer = 0;
@@ -326,14 +491,14 @@ class ViewState {
         this.cacheTex = device.createTexture({
             label: `cache-${label}`,
             size: { width: texWidth, height: texHeight, depthOrArrayLayers: numLayers },
-            format: 'r16float',
+            format: mode === 'comprep' ? 'r16uint' : 'r16float',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
 
         // ── Shader module ────────────────────────────────────────────────────
         const shaderModule = device.createShaderModule({
             label: `shader-${label}`,
-            code: SLICE_SHADER,
+            code: mode === 'comprep' ? COMPREP_SHADER : SLICE_SHADER,
         });
 
         // ── Bind group layout ────────────────────────────────────────────────
@@ -349,7 +514,7 @@ class ViewState {
                     binding: 1,
                     visibility: GPUShaderStage.FRAGMENT,
                     texture: {
-                        sampleType:    'unfilterable-float',
+                        sampleType:    mode === 'comprep' ? 'uint' : 'unfilterable-float',
                         viewDimension: '2d-array',
                         multisampled:  false,
                     },
@@ -370,10 +535,11 @@ class ViewState {
             primitive: { topology: 'triangle-list' },
         });
 
-        // ── Uniform buffer (32 bytes = 8 × u32/f32) ──────────────────────────
+        // ── Uniform buffer ────────────────────────────────────────────────────
+        // float mode: 32 bytes (8 × 4).  comprep mode: 80 bytes (20 × 4).
         this.uniformBuf = device.createBuffer({
             label: `uniform-${label}`,
-            size:  32,
+            size:  mode === 'comprep' ? 80 : 32,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
@@ -396,16 +562,17 @@ class ViewState {
     }
 
     /**
-     * Upload one texture array layer from a Float32Array.
-     * The data is converted to float16 (r16float) before upload.
-     * @param {number}      layer  0 .. numLayers-1
-     * @param {Float32Array} data  length = texWidth * texHeight
+     * Upload one texture array layer.
+     * Float32Array is converted to float16; Uint16Array is uploaded as-is
+     * (used for both r16float-with-f16-bits and r16uint comprep data).
+     * @param {number}                     layer  0 .. numLayers-1
+     * @param {Float32Array|Uint16Array}   data   length = texWidth * texHeight
      */
     uploadLayer(layer, data) {
-        const f16 = f32ToF16Array(data);
+        const bytes = data instanceof Uint16Array ? data : f32ToF16Array(data);
         this.device.queue.writeTexture(
             { texture: this.cacheTex, origin: { x: 0, y: 0, z: layer } },
-            f16,
+            bytes,
             { bytesPerRow: this.texWidth * 2, rowsPerImage: this.texHeight },
             { width: this.texWidth, height: this.texHeight, depthOrArrayLayers: 1 },
         );
@@ -419,16 +586,43 @@ class ViewState {
      * @param {number} colormap   0=Gray 1=Viridis 2=Plasma 3=Hot 4=Cool
      */
     writeUniforms(layer, windowMin, windowMax, colormap) {
-        const buf = new ArrayBuffer(32);
-        const u32 = new Uint32Array(buf);
-        const f32 = new Float32Array(buf);
-        u32[0] = layer;
-        u32[1] = this.texWidth;
-        u32[2] = this.texHeight;
-        u32[3] = colormap | 0;
-        f32[4] = windowMin;
-        f32[5] = windowMax;
-        this.device.queue.writeBuffer(this.uniformBuf, 0, buf);
+        if (this.mode === 'comprep') {
+            const p   = this.comprepParams;
+            const buf = new ArrayBuffer(80);
+            const u32 = new Uint32Array(buf);
+            const f32 = new Float32Array(buf);
+            u32[0]  = layer;
+            u32[1]  = this.texWidth;
+            u32[2]  = this.texHeight;
+            u32[3]  = colormap | 0;
+            f32[4]  = windowMin;
+            f32[5]  = windowMax;
+            f32[6]  = p.a;
+            f32[7]  = p.b;
+            f32[8]  = p.clampa;
+            f32[9]  = p.clampb;
+            f32[10] = p.t0;
+            f32[11] = p.t1;
+            u32[12] = p.left_mode;
+            u32[13] = p.right_mode;
+            f32[14] = p.left_gamma;
+            f32[15] = p.right_gamma;
+            f32[16] = p.left_logc;
+            f32[17] = p.right_logc;
+            // f32[18] = 0; f32[19] = 0; (already zeroed)
+            this.device.queue.writeBuffer(this.uniformBuf, 0, buf);
+        } else {
+            const buf = new ArrayBuffer(32);
+            const u32 = new Uint32Array(buf);
+            const f32 = new Float32Array(buf);
+            u32[0] = layer;
+            u32[1] = this.texWidth;
+            u32[2] = this.texHeight;
+            u32[3] = colormap | 0;
+            f32[4] = windowMin;
+            f32[5] = windowMax;
+            this.device.queue.writeBuffer(this.uniformBuf, 0, buf);
+        }
     }
 
     destroy() {
@@ -480,6 +674,13 @@ export class Renderer {
         this._extraInitialized = false;
         /** @type {{ uploadCount: number, fillMs: number }} */
         this.lastStats = { uploadCount: 0, fillMs: 0 };
+
+        // Determine rendering mode from volume dtype.
+        // 'i16' = compress_ui16_config output → inverse tone-map shader + r16uint texture.
+        this._mode          = volume.dtype === 'i16' ? 'comprep' : 'float';
+        this._comprepParams = this._mode === 'comprep'
+            ? normalizeComprepConfig(volume.comprepConfig ?? {})
+            : null;
     }
 
     // ── Canvas attachment ─────────────────────────────────────────────────────
@@ -503,7 +704,7 @@ export class Renderer {
         };
         if (!dimMap[key]) throw new Error(`Unknown view key: ${key}`);
         const [tw, th, nl] = dimMap[key];
-        this._views.set(key, new ViewState(this.device, canvas, key, tw, th, nl));
+        this._views.set(key, new ViewState(this.device, canvas, key, tw, th, nl, this._mode, this._comprepParams));
     }
 
     // ── Smart cache management ────────────────────────────────────────────────
@@ -623,6 +824,21 @@ export class Renderer {
         }
 
         device.queue.submit([encoder.finish()]);
+    }
+
+    /**
+     * Invalidate all TE slot caches so the next setPosition() call re-uploads
+     * all slices from the volume.  Use this when the volume's underlying data
+     * has changed (e.g. RemoteVolume received new fetched slices).
+     */
+    invalidateCache() {
+        for (const [, view] of this._views) {
+            view.teRing._map.clear();
+            view.teRing._slots.fill(null);
+            view.teRing._nextEvict = 0;
+            view.spatialTrackers.fill(null);
+        }
+        this._extraInitialized = false;
     }
 
     destroy() {

@@ -7,7 +7,6 @@ import hasty_generic_value_mod;
 
 
 int main() {
-
     hasty::server::start_default_servers();
 
     while (true) {

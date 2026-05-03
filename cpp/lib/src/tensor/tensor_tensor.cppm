@@ -633,6 +633,59 @@ public:
         return *this;
     }
 
+    Tensor logical_and(const Tensor& other) const {
+        return Tensor(_base.logical_and(other._base));
+    }
+    Tensor& logical_and_(const Tensor& other) {
+        _base.logical_and_(other._base);
+        return *this;
+    }
+    Tensor logical_and(const Scalar& other) const {
+        return Tensor(_base.logical_and(hat::scalar_tensor(other.to_torch(), _base.options())));
+    }
+    Tensor& logical_and_(const Scalar& other) {
+        _base.logical_and_(hat::scalar_tensor(other.to_torch(), _base.options()));
+        return *this;
+    }
+
+    Tensor logical_or(const Tensor& other) const {
+        return Tensor(_base.logical_or(other._base));
+    }
+    Tensor& logical_or_(const Tensor& other) {
+        _base.logical_or_(other._base);
+        return *this;
+    }
+    Tensor logical_or(const Scalar& other) const {
+        return Tensor(_base.logical_or(hat::scalar_tensor(other.to_torch(), _base.options())));
+    }
+    Tensor& logical_or_(const Scalar& other) {
+        _base.logical_or_(hat::scalar_tensor(other.to_torch(), _base.options()));
+        return *this;
+    }
+
+    Tensor logical_xor(const Tensor& other) const {
+        return Tensor(_base.logical_xor(other._base));
+    }
+    Tensor& logical_xor_(const Tensor& other) {
+        _base.logical_xor_(other._base);
+        return *this;
+    }
+    Tensor logical_xor(const Scalar& other) const {
+        return Tensor(_base.logical_xor(hat::scalar_tensor(other.to_torch(), _base.options())));
+    }
+    Tensor& logical_xor_(const Scalar& other) {
+        _base.logical_xor_(hat::scalar_tensor(other.to_torch(), _base.options()));
+        return *this;
+    }
+
+    Tensor logical_not() const {
+        return Tensor(_base.logical_not());
+    }
+    Tensor& logical_not_() {
+        _base.logical_not_();
+        return *this;
+    }
+
     inline Tensor sin() const { return Tensor(_base.sin()); }
     inline Tensor& sin_() { _base.sin_(); return *this; }
 
@@ -657,6 +710,14 @@ public:
     inline Tensor log() const { return Tensor(_base.log()); }
     inline Tensor& log_() { _base.log_(); return *this; }
 
+    inline Tensor lt(const Tensor& other) const { return Tensor(_base.lt(other._base)); }
+    inline Tensor lt(const Scalar& other) const { return Tensor(_base.lt(other.to_torch())); }
+
+    inline Tensor gt(const Tensor& other) const { return Tensor(_base.gt(other._base)); }
+    inline Tensor gt(const Scalar& other) const { return Tensor(_base.gt(other.to_torch())); }
+
+    inline Tensor round() const { return Tensor(_base.round()); }
+    inline Tensor& round_() { _base.round_(); return *this; }
 
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 

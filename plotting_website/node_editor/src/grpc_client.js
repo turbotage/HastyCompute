@@ -228,6 +228,43 @@ export async function fetchRaw(uuid16) {
     return out;
 }
 
+/**
+ * Fetch a float32 slice of a tensor using Python-style slice notation.
+ * sliceInfo examples: "[0,0,z,:,:]"  "[t,e,:,:,x]"  "[:,:,z,y,x]"
+ *
+ * @param {Uint8Array} uuid16
+ * @param {string}     sliceInfo
+ * @returns {Promise<Float32Array>}
+ */
+export async function fetchSliceData(uuid16, sliceInfo) {
+    const frames = await grpcPost('hasty.HastyService/FetchValue', buildFetchRequest(uuid16, sliceInfo));
+    const parts  = frames.map(f => decodeDataChunk(f));
+    const total  = parts.reduce((s, a) => s + a.length, 0);
+    const raw    = new Uint8Array(total);
+    let off = 0;
+    for (const p of parts) { raw.set(p, off); off += p.length; }
+    if (raw.length < 17 || raw[0] !== 1) throw new Error('Response is not a tensor');
+    const dv         = new DataView(raw.buffer, raw.byteOffset + 1);
+    const scalarType = dv.getUint8(1);
+    const dtype      = _SCALAR_DTYPE[scalarType] ?? `scalar(${scalarType})`;
+    const ndim       = dv.getUint8(2);
+    const totalElem  = Number(dv.getBigInt64(8, true));
+    const dataOff    = 16 + ndim * 8;  // byte offset within dv to first element
+    if (dtype === 'f16' || dtype === 'i16') {
+        // 2-byte elements — copy to aligned Uint16Array (preserves raw LE bytes)
+        const byteBase = 1 + dataOff;
+        const u16 = new Uint16Array(totalElem);
+        new Uint8Array(u16.buffer).set(
+            new Uint8Array(raw.buffer, raw.byteOffset + byteBase, totalElem * 2));
+        return { data: u16, dtype };
+    }
+    // Default: read as f32 (handles f32; other types fall back)
+    const f32 = new Float32Array(totalElem);
+    for (let i = 0; i < totalElem; i++)
+        f32[i] = dv.getFloat32(dataOff + i * 4, true);
+    return { data: f32, dtype: 'f32' };
+}
+
 // ATen scalar_type index → hasty dtype string (matches tensor_background.cppm)
 const _SCALAR_DTYPE = {
     0:'u8', 1:'i8', 2:'i16', 3:'i32', 4:'i64',
@@ -296,20 +333,101 @@ export function hexToUuid(hex) {
 }
 
 /**
- * Integer command IDs — must match the C++ CommandRegistry construction order
- * in cpp/lib/src/server/cmd_registry_impl.cpp.
+ * Fetch tensor metadata (dtype, shape, device) for a UUID by executing the
+ * get_gv_metadata_string command (ID 0).  This fetches only a small string
+ * from the server — never downloads the tensor data itself.
  *
- * base_arithmetic: add(0) sub(1) mult(2) div(3) neg(4) abs(5)
- * base_creation:   rand(6) zeros(7) ones(8)
+ * @param {Uint8Array} uuid16
+ * @returns {Promise<{device: string, dtype: string, shape: number[]} | null>}
  */
-export const COMMAND_IDS = {
-    add:   0,
-    sub:   1,
-    mult:  2,
-    div:   3,
-    neg:   4,
-    abs:   5,
-    rand:  6,
-    zeros: 7,
-    ones:  8,
-};
+export async function fetchMetaString(uuid16) {
+    try {
+        // execute(0, [uuid16]) → output UUID containing a STRING GV
+        const outIds = await execute(COMMAND_IDS.get_gv_metadata_string, [uuid16]);
+        if (!outIds.length) return null;
+        const raw = await fetchRaw(outIds[0]);
+        // STRING wire format: tag(u8=5) | length(u64 LE) | utf-8 bytes
+        if (!raw || raw.length < 9 || raw[0] !== 5) return null;
+        const dv  = new DataView(raw.buffer, raw.byteOffset + 1);
+        const len = Number(dv.getBigUint64(0, true));
+        const str = new TextDecoder().decode(raw.subarray(9, 9 + len));
+        // Parse "Tensor[dtype=f32,device=cpu,shape=(4,4)]"
+        const dtypeM  = str.match(/dtype=([^,\]]+)/);
+        const deviceM = str.match(/device=([^,\]]+)/);
+        const shapeM  = str.match(/shape=\(([^)]+)\)/);
+        if (!dtypeM || !deviceM || !shapeM) return null;
+        const shape = shapeM[1].split(',').map(Number);
+        return { dtype: dtypeM[1], device: deviceM[1], shape };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Fetch all registered command IDs from the server and populate COMMAND_IDS.
+ * Must be called once at startup before any other commands are used.
+ * Uses command ID 0 (get_available_commands) which is always fixed.
+ *
+ * @returns {Promise<void>}
+ */
+export async function initCommandIds() {
+    // execute(0, []) → N output UUIDs, one STRING GV per command
+    const outIds = await execute(0, []);
+    const strings = await Promise.all(outIds.map(async id => {
+        try {
+            const raw = await fetchRaw(id);
+            // STRING wire: tag(u8=5) | length(u64 LE) | utf-8 bytes
+            if (!raw || raw.length < 9 || raw[0] !== 5) return null;
+            const dv  = new DataView(raw.buffer, raw.byteOffset + 1);
+            const len = Number(dv.getBigUint64(0, true));
+            return new TextDecoder().decode(raw.subarray(9, 9 + len));
+        } catch { return null; }
+    }));
+    for (const s of strings) {
+        if (!s) continue;
+        const colon = s.indexOf(':');
+        if (colon < 0) continue;
+        COMMAND_IDS[s.slice(colon + 1)] = parseInt(s.slice(0, colon), 10);
+    }
+}
+
+/**
+ * Upload a serialized GenericValue to the server via the PushValue streaming RPC.
+ * The server deserializes the bytes, stores the value in the global bank, and
+ * returns a UUID.
+ *
+ * @param {Uint8Array} gvBytes   Raw GenericValue wire bytes (tag + header + data)
+ * @returns {Promise<Uint8Array>}  16-byte UUID Uint8Array
+ */
+export async function uploadValue(gvBytes) {
+    const CHUNK = 1 * 1024 * 1024; // 1 MB per gRPC message
+    const frames = [];
+    for (let off = 0; off < gvBytes.length; off += CHUNK) {
+        const slice = gvBytes.subarray(off, Math.min(off + CHUNK, gvBytes.length));
+        // DataChunk { bytes data = 1; }
+        frames.push(makeGrpcFrame(encodeLenField(1, slice)));
+    }
+    // Concatenate all frames into a single HTTP body (client-streaming via proxy)
+    const body = concatBytes(...frames);
+    const resp = await fetch(`${BASE_URL}/hasty.HastyService/PushValue`, {
+        method:  'POST',
+        headers: {
+            'Content-Type': 'application/grpc-web+proto',
+            'x-grpc-web':   '1',
+        },
+        body,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} calling PushValue`);
+    const respFrames = parseGrpcFrames(new Uint8Array(await resp.arrayBuffer()));
+    if (!respFrames.length) throw new Error('Empty PushValue response');
+    // Response: Uuid { bytes value = 1; }
+    const uuidBytes = decodeProto(respFrames[0]).get(1)?.[0];
+    if (!uuidBytes || uuidBytes.length !== 16) throw new Error('PushValue: invalid UUID response');
+    return uuidBytes;
+}
+
+/**
+ * Integer command IDs — populated at runtime by initCommandIds().
+ * Do not use until initCommandIds() has resolved.
+ */
+export const COMMAND_IDS = {};

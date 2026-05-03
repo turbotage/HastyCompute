@@ -15,7 +15,73 @@ CommandRegistry::CommandRegistry(
     bool base_fft
 )
 {
-    i32 command_counter = 0;
+    register_command(0, "get_available_commands", 
+        [this](const std::string&, std::vector<hasty::GenericValue>)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            std::vector<hasty::GenericValue> cmds;
+            cmds.reserve(_commands.size());
+            for (const auto& [id, cmd] : _commands) {
+                cmds.emplace_back(std::to_string(id) + ":" + cmd.name);
+            }
+            return std::make_pair(std::string(""), std::move(cmds));
+        });
+
+    i32 command_counter = 1;
+
+    register_command(command_counter++, "get_gv_metadata_string",
+        [](const std::string& options, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1)
+                throw std::runtime_error("get_gv_metadata_string: requires exactly 1 input");
+
+            return std::make_pair(
+                std::string(""), 
+                std::vector<hasty::GenericValue>{
+                    inputs[0].metadata_string()
+                });
+        });
+
+    register_command(command_counter++, "get_gv_unfolded_metadata_string",
+        [](const std::string& options, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1)
+                throw std::runtime_error("get_gv_unfolded_metadata_string: requires exactly 1 input");
+
+            return std::make_pair(
+                std::string(""), 
+                std::vector<hasty::GenericValue>{
+                    inputs[0].unfolded_metadata_string()
+                });
+        });
+
+    register_command(command_counter++, "to", 
+        [](const std::string& options, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1 || !inputs[0].is_tensor())
+                throw std::runtime_error("to: requires exactly 1 tensor input");
+
+            auto t = inputs[0].as_tensor();
+            auto [topts, shape] = Tensor::from_metadata_string(options);
+            return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(t.to(topts))});
+        });
+
+    register_command(command_counter++, "compress_ui16_config",
+        [](const std::string& options, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1 || !inputs[0].is_tensor())
+                throw std::runtime_error("compress_ui16_config: requires exactly 1 tensor input");
+
+            auto t = inputs[0].as_tensor();
+            auto cfg = comprep::string_to_config(options);
+            auto q = comprep::compress_ui16_config(t, cfg);
+            return std::make_pair("", std::vector<hasty::GenericValue>{hasty::GenericValue(std::move(q))});
+        });
+
     if (base_arithmetic) {
         register_command(command_counter++, "add",
             [](const std::string&, std::vector<hasty::GenericValue> inputs)
@@ -69,6 +135,60 @@ CommandRegistry::CommandRegistry(
                 if (inputs.size() != 1 || !inputs[0].is_tensor())
                     throw std::runtime_error("abs: requires 1 tensor input");
                 return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().abs())});
+            });
+
+        register_command(command_counter++, "sign",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("sign: requires 1 tensor input");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().sign())});
+            });
+
+        register_command(command_counter++, "max",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("max: requires 2 tensor inputs");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().max())});
+            });
+
+        register_command(command_counter++, "min",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("min: requires 2 tensor inputs");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().min())});
+            });
+
+        register_command(command_counter++, "mean",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("mean: requires 2 tensor inputs");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().mean())});
+            });
+
+        register_command(command_counter++, "std",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("std: requires 2 tensor inputs");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().std())});
+            });
+
+        register_command(command_counter++, "statistics_string",
+            [](const std::string&, std::vector<hasty::GenericValue> inputs)
+                -> std::pair<std::string, std::vector<hasty::GenericValue>>
+            {
+                if (inputs.size() != 1 || !inputs[0].is_tensor())
+                    throw std::runtime_error("statistics: requires 1 tensor input");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().statistics_string())});
             });
     }
 

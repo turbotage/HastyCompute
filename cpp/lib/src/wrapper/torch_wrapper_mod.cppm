@@ -92,6 +92,11 @@ export namespace hat {
     using at::allclose;
     using at::mm;
     using at::mv;
+    using at::clamp;
+    using at::log1p;
+    using at::pow;
+    using at::where;
+
 
 
 
