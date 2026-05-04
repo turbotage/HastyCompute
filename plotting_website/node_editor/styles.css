@@ -65,8 +65,10 @@ header {
     transition: background 0.12s, border-color 0.12s;
 }
 .hdr-btn:hover { background: #1e2840; border-color: #4a78a0; }
-.hdr-btn.run   { border-color: #2a6040; color: #60c090; }
+.hdr-btn.run      { border-color: #2a6040; color: #60c090; }
 .hdr-btn.run:hover { background: #0e2018; border-color: #40a070; }
+.hdr-btn.danger   { border-color: #602030; color: #c06070; }
+.hdr-btn.danger:hover { background: #200a10; border-color: #a04050; }
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 #sidebar {

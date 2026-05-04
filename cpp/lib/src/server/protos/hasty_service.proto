@@ -44,6 +44,18 @@ message ExecuteAck {
     repeated Uuid  output_ids   = 4;
 }
 
+message BankQueryMessage {
+    int32          query_type   = 1;
+    string         msg          = 2;
+}
+
+message BankQueryAck {
+    bool           success      = 1;
+    string         error_msg    = 2;
+    string         msg          = 3;
+    repeated Uuid  ids_in_bank  = 4;
+}
+
 service HastyService {
     // Upload a serialized GenericValue → assigned UUID
     rpc PushValue   (stream DataChunk)    returns (Uuid);
@@ -53,6 +65,9 @@ service HastyService {
 
     // Write to an existing GenericValue in the bank (or a slice of it)
     rpc WriteValue  (stream WriteMessage) returns (WriteAck);
+
+    // Used to query things about the bank, for instance currently populated uuids etc
+    rpc BankQuery   (BankQueryMessage)    returns (BankQueryAck);
 
     // Execute a function on bank values, results stored back in bank
     rpc Execute     (ExecuteCommand)      returns (ExecuteAck);

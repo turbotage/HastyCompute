@@ -17,6 +17,7 @@
 import { runGraph }                               from './node_runner.js';
 import { execute, fetchMeta, fetchMetaString,
          fetchSliceData, fetchRaw, uploadValue,
+         bankQuery, deleteValue, fetchGVMetadata,
          initCommandIds, uuidToHex,
          hexToUuid, COMMAND_IDS }                 from './grpc_client.js';
 
@@ -215,7 +216,7 @@ function buildTensorWireFormat(shape, dtype, data) {
     out[1] = 0;           // device_type = CPU
     out[2] = scalarType;
     out[3] = ndim;
-    out[4] = 0;           // device_index
+    out[4] = 0xFF;        // device_index = -1 (CPU alias)
     // out[5..8] = 0 (padding, already zeroed)
     dv.setBigInt64(9,  BigInt(totalElem), true); // total_elements at raw[9]
     for (let i = 0; i < ndim; i++) {
@@ -586,21 +587,41 @@ function registerNodes() {
         }
         async executeAsync([uuid, config]) {
             if (uuid && !config) {
-                const meta = await fetchMeta(uuid);
-                if (meta && (meta.dtype === 'f32' || meta.dtype === 'f64' || meta.dtype === 'f16')) {
-                    const [minIds, maxIds] = await Promise.all([
-                        execute(COMMAND_IDS.min, [uuid]),
-                        execute(COMMAND_IDS.max, [uuid]),
-                    ]);
-                    const [minRes, maxRes] = await Promise.all([
-                        fetchSliceData(minIds[0], ''),
-                        fetchSliceData(maxIds[0], ''),
-                    ]);
-                    const cfg = { a: minRes.data[0], b: maxRes.data[0] };
-                    const compressed = await execute(COMMAND_IDS.compress_ui16_config, [uuid], JSON.stringify(cfg));
-                    this._uuid        = compressed[0];
-                    this._wiredConfig = cfg;
-                    return [this._uuid];
+                // fetchMetaString: metadata only, no tensor download, cleans temp
+                const meta = await fetchMetaString(uuid);
+                if (meta) {
+                    const AUTOCOMPRESS = new Set(['f32','f64','f16','i8','u8','i16','i32','i64']);
+                    if (AUTOCOMPRESS.has(meta.dtype)) {
+                        // Convert everything to f32 first:
+                        // - fetchSliceData only correctly reads f32 scalars
+                        // - compress_ui16_config needs float arithmetic
+                        // - min/max on non-f32 returns wrong dtype scalar
+                        let workUuid  = uuid;
+                        let f32TempId = null;
+                        if (meta.dtype !== 'f32') {
+                            const opts = makeTensorOptions('f32', meta.device, meta.shape.join(','));
+                            const convIds = await execute(COMMAND_IDS.to, [uuid], opts);
+                            if (convIds[0]) { workUuid = convIds[0]; f32TempId = convIds[0]; }
+                        }
+
+                        const [minIds, maxIds] = await Promise.all([
+                            execute(COMMAND_IDS.min, [workUuid]),
+                            execute(COMMAND_IDS.max, [workUuid]),
+                        ]);
+                        const [minRes, maxRes] = await Promise.all([
+                            fetchSliceData(minIds[0], ''),
+                            fetchSliceData(maxIds[0], ''),
+                        ]);
+                        [...minIds, ...maxIds].forEach(id => deleteValue(id).catch(() => {}));
+
+                        const cfg = { a: minRes.data[0], b: maxRes.data[0] };
+                        const compressed = await execute(COMMAND_IDS.compress_ui16_config, [workUuid], JSON.stringify(cfg));
+                        if (f32TempId) deleteValue(f32TempId).catch(() => {});
+
+                        this._uuid        = compressed[0];
+                        this._wiredConfig = cfg;
+                        return [this._uuid];
+                    }
                 }
             }
             if (uuid)   this._uuid        = uuid;
@@ -659,6 +680,11 @@ function registerNodes() {
                 this._pendingFile = null;
 
                 const { shape, dtype, data } = await parseNifti(file);
+                // Pad shape to 5D (T,E,Z,Y,X) with leading 1s.
+                // RemoteVolume always slices with [t,e,z,:,:] — a 3D tensor
+                // would get INVALID_ARGUMENT on the server for those 5 indices.
+                // Raw bytes are C-order contiguous, so prepending 1s is safe.
+                while (shape.length < 5) shape.unshift(1);
                 const wireBytes = buildTensorWireFormat(shape, dtype, data);
                 const uuid      = await uploadValue(wireBytes);
                 this._uuid      = uuid;
@@ -858,6 +884,92 @@ function setupToolbar(graph, lgCanvas) {
         };
         inp.click();
     });
+
+    const btnBankMeta = document.getElementById("btn-bank-meta");
+    btnBankMeta.addEventListener("click", async () => {
+        btnBankMeta.disabled    = true;
+        btnBankMeta.textContent = 'Loading…';
+        try {
+            const { success, error_msg, uuids } = await bankQuery(0);
+            if (!success) { alert('BankQuery failed: ' + error_msg); return; }
+            const entries = await Promise.all(uuids.map(async uuid => {
+                const hex  = uuidToHex(uuid);
+                const meta = await fetchGVMetadata(uuid);
+                return { uuid: hex, meta };
+            }));
+            showBankModal(entries);
+        } catch (e) {
+            alert('Bank meta error: ' + e.message);
+        } finally {
+            btnBankMeta.disabled    = false;
+            btnBankMeta.textContent = 'Bank Meta';
+        }
+    });
+
+    const btnBankClear = document.getElementById("btn-bank-clear");
+    btnBankClear.addEventListener("click", async () => {
+        if (!confirm('Delete ALL values from the server bank? This cannot be undone.')) return;
+        btnBankClear.disabled    = true;
+        btnBankClear.textContent = 'Clearing…';
+        try {
+            const { success, error_msg, uuids } = await bankQuery(0);
+            if (!success) { alert('BankQuery failed: ' + error_msg); return; }
+            await Promise.all(uuids.map(uuid => deleteValue(uuid)));
+        } catch (e) {
+            alert('Clear bank error: ' + e.message);
+        } finally {
+            btnBankClear.disabled    = false;
+            btnBankClear.textContent = 'Clear Bank';
+        }
+    });
+}
+
+function showBankModal(entries) {
+    document.getElementById('bank-modal-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bank-modal-overlay';
+    Object.assign(overlay.style, {
+        position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.65)',
+        zIndex: '1000', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+        background: '#0e1218', border: '1px solid #2a3548', borderRadius: '6px',
+        padding: '1rem', maxWidth: '80vw', maxHeight: '80vh',
+        display: 'flex', flexDirection: 'column', gap: '0.5rem',
+        minWidth: '520px',
+    });
+
+    const hdr = document.createElement('div');
+    Object.assign(hdr.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
+    const ttl = document.createElement('span');
+    Object.assign(ttl.style, { color: '#9ab8d0', fontSize: '0.85rem', fontWeight: '600' });
+    ttl.textContent = `Bank Contents  (${entries.length} value${entries.length !== 1 ? 's' : ''})`;
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    Object.assign(closeBtn.style, {
+        background: 'none', border: 'none', color: '#7090b0',
+        fontSize: '1.2rem', cursor: 'pointer', lineHeight: '1',
+    });
+    closeBtn.onclick = () => overlay.remove();
+    hdr.appendChild(ttl);
+    hdr.appendChild(closeBtn);
+
+    const pre = document.createElement('pre');
+    Object.assign(pre.style, {
+        overflow: 'auto', color: '#a0c8e0', fontSize: '0.72rem',
+        fontFamily: 'monospace', background: '#080a0e',
+        padding: '0.7rem', borderRadius: '4px', maxHeight: '65vh',
+    });
+    pre.textContent = JSON.stringify(entries, null, 2);
+
+    box.appendChild(hdr);
+    box.appendChild(pre);
+    overlay.appendChild(box);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
 }
 
 // -- Init ---------------------------------------------------------------------

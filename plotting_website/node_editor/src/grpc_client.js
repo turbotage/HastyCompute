@@ -175,6 +175,28 @@ function parseGrpcFrames(bytes) {
     return frames;
 }
 
+/** Extract grpc-status and grpc-message from a trailer frame, or null if none found. */
+function parseGrpcTrailer(bytes) {
+    let i = 0;
+    while (i + 5 <= bytes.length) {
+        const flags = bytes[i];
+        const len   = (bytes[i+1] << 24) | (bytes[i+2] << 16) | (bytes[i+3] << 8) | bytes[i+4];
+        i += 5;
+        if (i + len > bytes.length) break;
+        if (flags & 0x80) {
+            const trailer = _DEC.decode(bytes.slice(i, i + len));
+            const statusM = trailer.match(/grpc-status:(\d+)/);
+            const msgM    = trailer.match(/grpc-message:([^\r\n]*)/);
+            return {
+                status: statusM ? parseInt(statusM[1], 10) : -1,
+                message: msgM ? decodeURIComponent(msgM[1].trim()) : trailer.trim(),
+            };
+        }
+        i += len;
+    }
+    return null;
+}
+
 // ── HTTP transport ────────────────────────────────────────────────────────────
 
 async function grpcPost(method, protoBytes) {
@@ -187,7 +209,14 @@ async function grpcPost(method, protoBytes) {
         body: makeGrpcFrame(protoBytes),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} calling /${method}`);
-    return parseGrpcFrames(new Uint8Array(await resp.arrayBuffer()));
+    const bytes  = new Uint8Array(await resp.arrayBuffer());
+    const frames = parseGrpcFrames(bytes);
+    // Check trailer for gRPC-level errors even when data frames exist.
+    const trailer = parseGrpcTrailer(bytes);
+    if (trailer && trailer.status !== 0) {
+        throw new Error(`gRPC error from ${method} (status ${trailer.status}): ${trailer.message}`);
+    }
+    return frames;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -332,32 +361,51 @@ export function hexToUuid(hex) {
     return out;
 }
 
+/** Read a STRING GenericValue from raw bytes; returns the decoded string or null. */
+function _parseRawString(raw) {
+    if (!raw || raw.length < 9 || raw[0] !== 5) return null;
+    const dv  = new DataView(raw.buffer, raw.byteOffset + 1);
+    const len = Number(dv.getBigUint64(0, true));
+    return _DEC.decode(raw.subarray(9, 9 + len));
+}
+
 /**
- * Fetch tensor metadata (dtype, shape, device) for a UUID by executing the
- * get_gv_metadata_string command (ID 0).  This fetches only a small string
- * from the server — never downloads the tensor data itself.
+ * Execute get_gv_metadata_string on uuid16, read the result string, then
+ * immediately delete the temp from the bank.  Never leaves a dangling entry.
+ *
+ * @param {Uint8Array} uuid16
+ * @returns {Promise<string|null>}  Raw metadata string, e.g. "Tensor[dtype=f32,...]"
+ */
+export async function fetchGVMetadata(uuid16) {
+    let tempId;
+    try {
+        const outIds = await execute(COMMAND_IDS.get_gv_metadata_string, [uuid16]);
+        if (!outIds.length) return null;
+        tempId = outIds[0];
+        return _parseRawString(await fetchRaw(tempId));
+    } catch {
+        return null;
+    } finally {
+        if (tempId) deleteValue(tempId).catch(() => {});
+    }
+}
+
+/**
+ * Fetch tensor metadata (dtype, shape, device) for a UUID.
+ * Deletes the temp metadata string from the bank immediately after reading.
  *
  * @param {Uint8Array} uuid16
  * @returns {Promise<{device: string, dtype: string, shape: number[]} | null>}
  */
 export async function fetchMetaString(uuid16) {
     try {
-        // execute(0, [uuid16]) → output UUID containing a STRING GV
-        const outIds = await execute(COMMAND_IDS.get_gv_metadata_string, [uuid16]);
-        if (!outIds.length) return null;
-        const raw = await fetchRaw(outIds[0]);
-        // STRING wire format: tag(u8=5) | length(u64 LE) | utf-8 bytes
-        if (!raw || raw.length < 9 || raw[0] !== 5) return null;
-        const dv  = new DataView(raw.buffer, raw.byteOffset + 1);
-        const len = Number(dv.getBigUint64(0, true));
-        const str = new TextDecoder().decode(raw.subarray(9, 9 + len));
-        // Parse "Tensor[dtype=f32,device=cpu,shape=(4,4)]"
+        const str = await fetchGVMetadata(uuid16);
+        if (!str) return null;
         const dtypeM  = str.match(/dtype=([^,\]]+)/);
         const deviceM = str.match(/device=([^,\]]+)/);
         const shapeM  = str.match(/shape=\(([^)]+)\)/);
         if (!dtypeM || !deviceM || !shapeM) return null;
-        const shape = shapeM[1].split(',').map(Number);
-        return { dtype: dtypeM[1], device: deviceM[1], shape };
+        return { dtype: dtypeM[1], device: deviceM[1], shape: shapeM[1].split(',').map(Number) };
     } catch {
         return null;
     }
@@ -365,24 +413,17 @@ export async function fetchMetaString(uuid16) {
 
 /**
  * Fetch all registered command IDs from the server and populate COMMAND_IDS.
- * Must be called once at startup before any other commands are used.
- * Uses command ID 0 (get_available_commands) which is always fixed.
+ * Deletes all temporary string entries from the bank after reading.
  *
  * @returns {Promise<void>}
  */
 export async function initCommandIds() {
-    // execute(0, []) → N output UUIDs, one STRING GV per command
     const outIds = await execute(0, []);
     const strings = await Promise.all(outIds.map(async id => {
-        try {
-            const raw = await fetchRaw(id);
-            // STRING wire: tag(u8=5) | length(u64 LE) | utf-8 bytes
-            if (!raw || raw.length < 9 || raw[0] !== 5) return null;
-            const dv  = new DataView(raw.buffer, raw.byteOffset + 1);
-            const len = Number(dv.getBigUint64(0, true));
-            return new TextDecoder().decode(raw.subarray(9, 9 + len));
-        } catch { return null; }
+        try { return _parseRawString(await fetchRaw(id)); } catch { return null; }
     }));
+    // Delete all temp command-string entries from the bank.
+    await Promise.all(outIds.map(id => deleteValue(id).catch(() => {})));
     for (const s of strings) {
         if (!s) continue;
         const colon = s.indexOf(':');
@@ -418,12 +459,56 @@ export async function uploadValue(gvBytes) {
         body,
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} calling PushValue`);
-    const respFrames = parseGrpcFrames(new Uint8Array(await resp.arrayBuffer()));
-    if (!respFrames.length) throw new Error('Empty PushValue response');
+    const respBytes  = new Uint8Array(await resp.arrayBuffer());
+    const respFrames = parseGrpcFrames(respBytes);
+    if (!respFrames.length) {
+        const trailer = parseGrpcTrailer(respBytes);
+        const msg = trailer?.message || 'empty response';
+        throw new Error(`PushValue gRPC error (status ${trailer?.status ?? '?'}): ${msg}`);
+    }
     // Response: Uuid { bytes value = 1; }
     const uuidBytes = decodeProto(respFrames[0]).get(1)?.[0];
     if (!uuidBytes || uuidBytes.length !== 16) throw new Error('PushValue: invalid UUID response');
     return uuidBytes;
+}
+
+/**
+ * Query the bank (unary).
+ * queryType 0 = LIST_UUIDS → returns all UUIDs currently in the bank.
+ *
+ * @param {number} queryType
+ * @returns {Promise<{success: boolean, error_msg: string, uuids: Uint8Array[]}>}
+ */
+export async function bankQuery(queryType = 0) {
+    // BankQueryMessage { int32 query_type = 1; }
+    const reqBytes = encodeVarField(1, queryType);
+    const frames   = await grpcPost('hasty.HastyService/BankQuery', reqBytes);
+    if (!frames.length) return { success: false, error_msg: 'No response', uuids: [] };
+    // BankQueryAck { bool success = 1; string error_msg = 2; repeated Uuid ids_in_bank = 4; }
+    const f = decodeProto(frames[0]);
+    return {
+        success:   !!(f.get(1)?.[0] ?? 0),
+        error_msg: f.has(2) ? _DEC.decode(f.get(2)[0]) : '',
+        uuids:     (f.get(4) ?? []).map(b => decodeProto(b).get(1)?.[0]).filter(Boolean),
+    };
+}
+
+/**
+ * Delete a value from the bank by UUID.
+ *
+ * @param {Uint8Array} uuid16
+ * @returns {Promise<{success: boolean, error_msg: string}>}
+ */
+export async function deleteValue(uuid16) {
+    // Request: Uuid { bytes value = 1; }
+    const frames = await grpcPost('hasty.HastyService/DeleteValue', encodeUuid(uuid16));
+    if (!frames.length) return { success: false, error_msg: 'No response' };
+    // Response: WriteAck { bool success = 1; string error_msg = 2; }
+    const f = decodeProto(frames[0]);
+    return {
+        success:   !!(f.get(1)?.[0] ?? 0),
+        error_msg: f.has(2) ? _DEC.decode(f.get(2)[0]) : '',
+    };
 }
 
 /**

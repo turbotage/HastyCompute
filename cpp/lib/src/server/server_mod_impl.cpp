@@ -25,7 +25,7 @@ void start_default_servers(
     std::string key_path  = (bin_dir / "key.pem").string();
 
     default_grpc_server_handle = std::make_shared<GrpcServerHandle>(
-        start_grpc_server(global_generic_value_bank, global_command_registry, "0.0.0.0:" + std::to_string(grpc_port)));
+        start_grpc_server(global_generic_value_bank, global_command_registry, "0.0.0.0:" + std::to_string(grpc_port), std::cout, std::nullopt));
 
     default_http_server = std::make_unique<HttpServer>(
         http_port,

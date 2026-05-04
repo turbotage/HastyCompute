@@ -719,6 +719,9 @@ public:
     inline Tensor round() const { return Tensor(_base.round()); }
     inline Tensor& round_() { _base.round_(); return *this; }
 
+    inline Tensor sgn() const { return Tensor(_base.sgn()); }
+    inline Tensor& sgn_() { _base.sgn_(); return *this; }
+
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 
     inline Tensor transpose(i32 dim0, i32 dim1) const { return Tensor(_base.transpose(dim0, dim1)); }

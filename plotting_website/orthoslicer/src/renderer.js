@@ -666,8 +666,6 @@ export class Renderer {
         /** @type {Map<string, ViewState>} */
         this._views = new Map();
 
-        this.windowMin = 0.0;
-        this.windowMax = 1.0;
         /** 0=Gray 1=Viridis 2=Plasma 3=Hot 4=Cool */
         this.colormap  = 0;
 
@@ -681,6 +679,17 @@ export class Renderer {
         this._comprepParams = this._mode === 'comprep'
             ? normalizeComprepConfig(volume.comprepConfig ?? {})
             : null;
+
+        // In comprep mode the inverse tone-map produces values in [a, b].
+        // Default the window to [a, b] so the full dynamic range is visible.
+        // In float mode keep [0, 1] as the conventional normalised default.
+        if (this._mode === 'comprep' && this._comprepParams) {
+            this.windowMin = this._comprepParams.a;
+            this.windowMax = this._comprepParams.b;
+        } else {
+            this.windowMin = 0.0;
+            this.windowMax = 1.0;
+        }
     }
 
     // ── Canvas attachment ─────────────────────────────────────────────────────

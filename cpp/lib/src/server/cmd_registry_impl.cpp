@@ -137,13 +137,13 @@ CommandRegistry::CommandRegistry(
                 return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().abs())});
             });
 
-        register_command(command_counter++, "sign",
+        register_command(command_counter++, "sgn",
             [](const std::string&, std::vector<hasty::GenericValue> inputs)
                 -> std::pair<std::string, std::vector<hasty::GenericValue>>
             {
                 if (inputs.size() != 1 || !inputs[0].is_tensor())
-                    throw std::runtime_error("sign: requires 1 tensor input");
-                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().sign())});
+                    throw std::runtime_error("sgn: requires 1 tensor input");
+                return std::make_pair(std::string(""), std::vector<hasty::GenericValue>{hasty::GenericValue(inputs[0].as_tensor().sgn())});
             });
 
         register_command(command_counter++, "max",

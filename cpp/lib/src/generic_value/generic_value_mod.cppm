@@ -451,16 +451,26 @@ private:
         stream.write({static_cast<u8>(GenericValue::eType::NONE)});
     }
 
-    static void serialize_tensor(const Tensor& tensor, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE) 
+    static void serialize_tensor(const Tensor& tensor, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE)
     {
+        // Ensure tensor is contiguous before reading raw bytes via data_ptr.
+        // Sliced views (e.g. sagittal/coronal from a 5-D tensor) are non-contiguous
+        // and would yield wrong bytes if read linearly.
+        const Tensor* src = &tensor;
+        Tensor contiguous_copy;
+        if (!tensor.is_contiguous()) {
+            contiguous_copy = tensor.contiguous();
+            src = &contiguous_copy;
+        }
+
         // First write a header with the tensor metadata
         SerializedTensorHeader header;
-        auto device = tensor.device();
+        auto device = src->device();
         header.device_type = static_cast<u8>(device.type);
-        header.scalar_type = static_cast<u8>(tensor.scalar_type());
-        header.ndim = static_cast<u8>(tensor.sizes().size());
+        header.scalar_type = static_cast<u8>(src->scalar_type());
+        header.ndim = static_cast<u8>(src->sizes().size());
         header.device_index = device.has_index() ? device.index : -1;
-        header.total_elements = tensor.numel();
+        header.total_elements = src->numel();
 
         // Write type and the header
         {
@@ -472,15 +482,15 @@ private:
 
         // Write the shape
         {
-            const auto& sizes = tensor.sizes();
+            const auto& sizes = src->sizes();
             std::vector<u8> shape_bytes(sizeof(i64) * header.ndim);
             std::memcpy(shape_bytes.data(), sizes.data(), sizeof(i64) * header.ndim);
             stream.write(std::move(shape_bytes));
         }
 
         // Then write the raw tensor data
-        const u8* data_ptr = tensor.cast_const_data_ptr<u8>();
-        i64 bytes_per_element = scalar_type_size(tensor.scalar_type());
+        const u8* data_ptr = src->cast_const_data_ptr<u8>();
+        i64 bytes_per_element = scalar_type_size(src->scalar_type());
         i64 total_bytes = header.total_elements * bytes_per_element;
 
         i64 bytes_written = 0;

@@ -96,6 +96,7 @@ export namespace hat {
     using at::log1p;
     using at::pow;
     using at::where;
+    using at::sgn;
 
 
 

@@ -78,6 +78,16 @@ public:
         return _bank.erase(key) > 0;
     }
 
+    std::vector<std::string> list_keys() const {
+        std::shared_lock lock(_mutex);
+        std::vector<std::string> keys;
+        keys.reserve(_bank.size());
+        for (const auto& [key, _] : _bank) {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
 private:
 
     mutable std::shared_mutex _mutex;

@@ -16,6 +16,14 @@ import hasty_threading_mod;
 // UUID helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// BankQuery types
+// ---------------------------------------------------------------------------
+
+enum class BankQueryType : std::int32_t {
+    LIST_UUIDS = 0,
+};
+
 namespace {
 
 std::string uuid_key(const hasty::Uuid& proto) {
@@ -156,20 +164,6 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status DeleteValue(
-        grpc::ServerContext*,
-        const hasty::Uuid* request,
-        hasty::WriteAck* response) override
-    {
-        if (_bank.delete_value(uuid_key(*request))) {
-            response->set_success(true);
-        } else {
-            response->set_success(false);
-            response->set_error_msg("UUID not found in bank");
-        }
-        return grpc::Status::OK;
-    }
-
     grpc::Status Execute(
         grpc::ServerContext*,
         const hasty::ExecuteCommand* request,
@@ -196,6 +190,49 @@ public:
                 *response->add_output_ids() = to_uuid_proto(_bank.push_value(std::move(out)));
             response->set_msg(msg);
             response->set_success(true);
+        } catch (const std::exception& e) {
+            response->set_success(false);
+            response->set_error_msg(e.what());
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status DeleteValue(
+        grpc::ServerContext*,
+        const hasty::Uuid* request,
+        hasty::WriteAck* response) override
+    {
+        if (_bank.delete_value(uuid_key(*request))) {
+            response->set_success(true);
+        } else {
+            response->set_success(false);
+            response->set_error_msg("UUID not found in bank");
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status BankQuery(
+        grpc::ServerContext*,
+        const hasty::BankQueryMessage* request,
+        hasty::BankQueryAck* response) override
+    {
+        try {
+            switch (static_cast<BankQueryType>(request->query_type())) {
+            case BankQueryType::LIST_UUIDS: {
+                auto keys = _bank.list_keys();
+                for (const auto& key : keys) {
+                    hasty::Uuid* uuid = response->add_ids_in_bank();
+                    uuid->set_value(key);
+                }
+                response->set_success(true);
+                break;
+            }
+            default:
+                response->set_success(false);
+                response->set_error_msg("Unknown query_type: " +
+                    std::to_string(request->query_type()));
+                break;
+            }
         } catch (const std::exception& e) {
             response->set_success(false);
             response->set_error_msg(e.what());
@@ -236,7 +273,10 @@ const std::string& GrpcServerHandle::address() const { return _impl->address; }
 GrpcServerHandle start_grpc_server(
     GenericValueBank& bank,
     CommandRegistry& registry,
-    const std::string& address)
+    const std::string& address,
+    OptRefW<std::ostream> log_stream,
+    OptRefW<std::ostream> internal_log_stream
+    )
 {
     GrpcServerHandle handle;
     handle._impl = std::make_unique<GrpcServerHandle::Impl>();
@@ -255,8 +295,21 @@ GrpcServerHandle start_grpc_server(
     builder.AddChannelArgument("grpc.http2.bdp_probe", 0);  // no BDP pings; windows are fixed
     */
         
+    if (internal_log_stream) {
+        builder.SetOption(grpc::MakeChannelArgumentOption(
+            "grpc.internal_log_stream", &(*internal_log_stream)));
+    }
+
+    if (log_stream) {
+        (*log_stream).get() << "Starting gRPC server on " << address << "..." << std::endl;
+    }
+
     handle._impl->server  = builder.BuildAndStart();
     handle._impl->address = address;
+
+    if (log_stream) {
+        (*log_stream).get() << "gRPC server started on " << address << std::endl;
+    }
 
     return std::move(handle);
 }
