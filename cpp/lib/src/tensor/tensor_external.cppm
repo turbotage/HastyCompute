@@ -181,6 +181,14 @@ export bool allclose(const Tensor& a, const Tensor& b, double rtol = 1e-05, doub
     return hat::allclose(a.to_torch(), b.to_torch(), rtol, atol, equal_nan);
 }
 
+// Returns {unique_values [M], inverse_indices [N]}
+// inverse_indices[i] gives the index into unique_values for input element i.
+export std::pair<Tensor, Tensor> unique_with_inverse(const Tensor& t, bool sorted = true)
+{
+    auto [u, inv, _cnt] = hat::_unique2(t.to_torch(), sorted, true, false);
+    return {Tensor(u), Tensor(inv)};
+}
+
 // fftn — wraps torch::fft::fftn; dims lifetime is caller's responsibility (ArrayRef is non-owning)
 export Tensor fftn(
     const Tensor&         t,

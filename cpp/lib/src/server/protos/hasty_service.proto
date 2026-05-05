@@ -8,70 +8,151 @@ message Uuid { bytes value = 1; }
 // Raw serialized GenericValue bytes
 message DataChunk { bytes data = 1; }
 
-// Fetch a GenericValue (or slice) from the bank
-message FetchRequest {
-    Uuid   id         = 1;
-    string slice_info = 2; // empty = full value
+
+
+
+// <============================= PUSH VALUE =============================>
+message PushResponse {
+    bool    success         = 1;
+    string  msg             = 2;
+    Uuid    id              = 3;
+};
+
+
+// <============================= READ VALUES ============================>
+message ReadRequest {
+    Uuid    id              = 1;
+    string  slice_info      = 2; // empty = full value
 }
 
+message ReadResponseHeader {
+    bool    success         = 1;
+    string  msg             = 2;
+};
+
+message ReadResponse {
+    oneof payload {
+        ReadResponseHeader header = 1;
+        DataChunk          data   = 2;
+    }
+};
+
+
+
+
+// <======================= WRITE VALUES =============================>
 // First message in a WriteValue stream carries the target ID and slice info,
 // subsequent messages carry data chunks
-message WriteHeader {
+message WriteRequestHeader {
     Uuid   id         = 1;
     string slice_info = 2; // empty = full overwrite
 }
-message WriteMessage {
+message WriteRequest {
     oneof payload {
-        WriteHeader header = 1;
+        WriteRequestHeader header = 1;
         DataChunk   data   = 2;
     }
 }
-message WriteAck {
+message WriteResponse {
     bool   success   = 1;
     string error_msg = 2;
 }
 
+
+
+// <========================= EXECUTE ==================================>
 // Execute a function on values in the bank
-message ExecuteCommand {
+message ExecuteCommandRequest {
     int32           function_id = 1;
     string          options     = 2; // parsed later
     repeated Uuid   input_ids   = 3;
 }
-message ExecuteAck {
+message ExecuteCommandResponse {
     bool           success      = 1;
     string         error_msg    = 2;
     string         msg          = 3;
     repeated Uuid  output_ids   = 4;
 }
 
-message BankQueryMessage {
+// <============================ BANK QUERY ====================================>
+message BankQueryRequest {
     int32          query_type   = 1;
     string         msg          = 2;
 }
 
-message BankQueryAck {
+message BankQueryResponse {
     bool           success      = 1;
     string         error_msg    = 2;
     string         msg          = 3;
     repeated Uuid  ids_in_bank  = 4;
 }
 
+// <============================ DELETE VALUE ===========================>
+message DeleteResponse {
+    bool success                = 1;
+    string msg                  = 2;
+};
+
+// <=========================== METADATA ============================>
+// Read request
+message MetadataReadRequest {
+    Uuid id                     = 1;
+};
+
+message MetadataReadResponse {
+    bool success                = 1;
+    string msg                  = 2;
+    string metadata_string      = 3;
+};
+// Write request
+message MetadataWriteRequest {
+    Uuid id                     = 1;
+    string metadata_string      = 2;
+};
+
+message MetadataWriteResponse {
+    bool success                = 1;
+    string msg                  = 2;
+};
+// Delete request
+message MetadataDeleteRequest {
+    Uuid id                     = 1;
+};
+
+message MetadataDeleteResponse {
+    bool success                = 1;
+    string msg                  = 2;
+}
+
+
 service HastyService {
     // Upload a serialized GenericValue → assigned UUID
-    rpc PushValue   (stream DataChunk)    returns (Uuid);
+    rpc Push            (stream DataChunk)          returns (PushResponse);
 
     // Download a GenericValue (or slice) by UUID
-    rpc FetchValue  (FetchRequest)        returns (stream DataChunk);
+    rpc Read            (ReadRequest)               returns (stream ReadResponse);
 
     // Write to an existing GenericValue in the bank (or a slice of it)
-    rpc WriteValue  (stream WriteMessage) returns (WriteAck);
+    rpc Write           (stream WriteRequest)       returns (WriteResponse);
 
     // Used to query things about the bank, for instance currently populated uuids etc
-    rpc BankQuery   (BankQueryMessage)    returns (BankQueryAck);
+    rpc BankQuery       (BankQueryRequest)          returns (BankQueryResponse);
 
     // Execute a function on bank values, results stored back in bank
-    rpc Execute     (ExecuteCommand)      returns (ExecuteAck);
+    rpc ExecuteCommand  (ExecuteCommandRequest)     returns (ExecuteCommandResponse);
 
     // Remove a value from the bank, freeing its memory
-    rpc DeleteValue (Uuid)               returns (WriteAck);
+    rpc Delete          (Uuid)                      returns (DeleteResponse);
+
+
+    // Fetch metadata about a GenericValue if it exists
+    rpc ReadMetadata   (MetadataReadRequest)        returns (MetadataReadResponse);
+    // Push metadata onto a GenericValue if it exists
+    rpc WriteMetadata  (MetadataWriteRequest)       returns (MetadataWriteResponse);
+    // Delete metadata of GenericValue if it exists
+    rpc DeleteMetadata (MetadataDeleteRequest)      returns (MetadataDeleteResponse);
+
+
+
+
 }

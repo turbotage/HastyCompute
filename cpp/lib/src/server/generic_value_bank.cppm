@@ -88,10 +88,30 @@ public:
         return keys;
     }
 
+    std::optional<std::string> read_metadata(const std::string& key) const {
+        std::shared_lock lock(_mutex);
+        auto it = _metadata.find(key);
+        if (it == _metadata.end()) return std::nullopt;
+        return it->second;
+    }
+
+    void write_metadata(const std::string& key, std::string value) {
+        std::unique_lock lock(_mutex);
+        if (!_bank.contains(key))
+            throw std::runtime_error("Key not found in GenericValueBank: " + key);
+        _metadata[key] = std::move(value);
+    }
+
+    bool delete_metadata(const std::string& key) {
+        std::unique_lock lock(_mutex);
+        return _metadata.erase(key) > 0;
+    }
+
 private:
 
     mutable std::shared_mutex _mutex;
     std::unordered_map<std::string, hasty::GenericValue> _bank;
+    std::unordered_map<std::string, std::string> _metadata;
 };
 
 }

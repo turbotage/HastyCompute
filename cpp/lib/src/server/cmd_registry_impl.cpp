@@ -82,6 +82,33 @@ CommandRegistry::CommandRegistry(
             return std::make_pair("", std::vector<hasty::GenericValue>{hasty::GenericValue(std::move(q))});
         });
 
+    register_command(command_counter++, "decompress_ui16_config",
+        [](const std::string& options, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1 || !inputs[0].is_tensor())
+                throw std::runtime_error("decompress_ui16_config: requires exactly 1 tensor input");
+
+            auto t = inputs[0].as_tensor();
+            auto cfg = comprep::string_to_config(options);
+            auto out = comprep::decompress_ui16_config(t, cfg);
+            return std::make_pair("", std::vector<hasty::GenericValue>{hasty::GenericValue(std::move(out))});
+        });
+
+    register_command(command_counter++, "compress_ui16_default",
+        [](const std::string&, std::vector<hasty::GenericValue> inputs)
+            -> std::pair<std::string, std::vector<hasty::GenericValue>>
+        {
+            if (inputs.size() != 1 || !inputs[0].is_tensor())
+                throw std::runtime_error("compress_ui16_default: requires exactly 1 tensor input");
+
+            auto t = inputs[0].as_tensor();
+            auto [compressed, cfg] = comprep::compress_ui16_default(t);
+            return std::make_pair(
+                comprep::config_to_string(cfg),
+                std::vector<hasty::GenericValue>{hasty::GenericValue(std::move(compressed))});
+        });
+
     if (base_arithmetic) {
         register_command(command_counter++, "add",
             [](const std::string&, std::vector<hasty::GenericValue> inputs)

@@ -72,9 +72,11 @@ target_sources(HastyCompute
         "src/io/io_blosc.cppm"
         "src/io/io_hdf5.cppm"
         "src/io/io_mod.cppm"
+        "src/io/io_nifti.cppm"
         "src/linalg/linalg_mod.cppm"
         "src/mri/forward.cppm"
         "src/mri/mri_mod.cppm"
+        "src/mri/off_fourier_interpolators.cppm"
         "src/nvrtc/nvrtc_mod.cppm"
         "src/server/cmd_registry.cppm"
         "src/server/generic_value_bank.cppm"
@@ -127,6 +129,7 @@ include(cmake/httplib.cmake)
 include(cmake/ExternalGRPC.cmake)  # builds gRPC + installs protobuf; sets GRPC_INSTALL_DIR
 include(cmake/ExternalLibTorch.cmake)  # reuses GRPC_PROTOBUF_DIR; depends on grpc_external
 include(cmake/hdf5.cmake)
+include(cmake/nifti.cmake)
 include(cmake/ExternalPETSc.cmake)
 
 # ── Public include dirs ───────────────────────────────────────────────────────
@@ -164,6 +167,27 @@ add_custom_command(TARGET HastyCompute POST_BUILD
     COMMENT "Copying wavelet models to build directory"
 )
 
+# Locate MKL runtime library directory (needed by LibTorch at runtime).
+# Searches: MKLROOT env var, Intel oneAPI standard path, conda prefix.
+find_path(_mkl_lib_dir
+    NAMES libmkl_core.so
+    HINTS
+        "$ENV{MKLROOT}/lib"
+        "/opt/intel/oneapi/mkl/latest/lib"
+        "/opt/intel/oneapi/mkl/2025.3/lib"
+        "/opt/intel/oneapi/mkl/2025.2/lib"
+        "/opt/intel/oneapi/mkl/2025.1/lib"
+        "/opt/intel/oneapi/mkl/2024.2/lib"
+        "$ENV{CONDA_PREFIX}/lib"
+        "/usr/lib/x86_64-linux-gnu"
+    NO_DEFAULT_PATH
+)
+if(_mkl_lib_dir)
+    message(STATUS "MKL lib dir: ${_mkl_lib_dir}")
+else()
+    message(WARNING "MKL lib dir not found — libmkl_*.so files may be absent from install")
+endif()
+
 install(TARGETS HastyCompute EXPORT HastyComputeTargets
     RUNTIME_DEPENDENCIES
         PRE_EXCLUDE_REGEXES
@@ -179,6 +203,7 @@ install(TARGETS HastyCompute EXPORT HastyComputeTargets
             "$<TARGET_FILE_DIR:cufinufft>"
             "${TORCH_INSTALL_PREFIX}/lib"
             "${GRPC_INSTALL_DIR}/lib"
+            $<$<BOOL:${_mkl_lib_dir}>:${_mkl_lib_dir}>
     LIBRARY  DESTINATION lib
     ARCHIVE  DESTINATION lib
     RUNTIME  DESTINATION bin
@@ -194,6 +219,19 @@ install(EXPORT HastyComputeTargets
 )
 
 install(FILES "${NVRTC_PATH}" "${CUDART_PATH}" DESTINATION lib)
+
+# MKL VML dispatch libs are dlopen'd at runtime — not in the link graph,
+# so RUNTIME_DEPENDENCIES misses them. Copy all libmkl_vml_* explicitly.
+if(_mkl_lib_dir)
+    install(CODE "
+        file(GLOB _mkl_runtime_libs LIST_DIRECTORIES false
+            \"${_mkl_lib_dir}/libmkl_*.so*\")
+        foreach(_lib IN LISTS _mkl_runtime_libs)
+            file(INSTALL \"\${_lib}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/lib\"
+                FOLLOW_SYMLINK_CHAIN)
+        endforeach()
+    ")
+endif()
 
 install(DIRECTORY ${HASTY_DATA_FOLDER}/models
     DESTINATION .

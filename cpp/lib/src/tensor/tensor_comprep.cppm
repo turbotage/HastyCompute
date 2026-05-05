@@ -136,11 +136,105 @@ export Tensor compress_ui16_config(const Tensor& x, const Config& cfg) {
     auto y = y_mid;
     y = where(left_mask,  y_left,  y);
     y = where(right_mask, y_right, y);
-    
+
     // ---- quantize ----
     auto q = quantize_to_u16(y);
-    
+
     return q;
+}
+
+
+
+export Tensor decompress_ui16_config(const Tensor& q, const Config& cfg) {
+    double a = getd(cfg, "a", 0.0);
+    double b = getd(cfg, "b", 1.0);
+    double clampa = getd(cfg, "clampa", a);
+    double clampb = getd(cfg, "clampb", b);
+    double focus  = getd(cfg, "focus", 1.0);
+
+    std::string left_mode  = gets(cfg, "left_mode",  "linear");
+    std::string right_mode = gets(cfg, "right_mode", "linear");
+
+    double left_gamma  = getd(cfg, "left_gamma",  1.0);
+    double right_gamma = getd(cfg, "right_gamma", 1.0);
+    double left_logc   = getd(cfg, "left_logc",   1.0);
+    double right_logc  = getd(cfg, "right_logc",  1.0);
+
+    double t0 = (1.0 - focus) * 0.5;
+    double t1 = 1.0 - t0;
+
+    // Dequantize u16 → [0,1] float
+    auto y = q.to(TensorOptions().dtype(eScalarType::Float)).div(65535.0);
+
+    auto left_mask  = y.lt(t0);
+    auto right_mask = y.gt(t1);
+
+    // MIDDLE
+    auto u_mid  = y.sub(t0).div(t1 - t0);
+    auto result = u_mid.mul(b - a).add(a);
+
+    // LEFT
+    if (t0 > 0.0 && a > clampa) {
+        auto u_left_shaped = y.div(t0);
+        Tensor u_left;
+        if (left_mode == "gamma") {
+            u_left = pow(u_left_shaped, left_gamma);
+        } else if (left_mode == "log") {
+            u_left = expm1(u_left_shaped.mul(std::log1p(left_logc))).div(left_logc);
+        } else {
+            u_left = u_left_shaped;
+        }
+        result = where(left_mask, u_left.mul(a - clampa).add(clampa), result);
+    }
+
+    // RIGHT
+    if (t1 < 1.0 && clampb > b) {
+        auto u_right_shaped = y.sub(t1).div(1.0 - t1);
+        Tensor u_right;
+        if (right_mode == "gamma") {
+            u_right = pow(u_right_shaped, right_gamma);
+        } else if (right_mode == "log") {
+            u_right = expm1(u_right_shaped.mul(std::log1p(right_logc))).div(right_logc);
+        } else {
+            u_right = u_right_shaped;
+        }
+        result = where(right_mask, u_right.mul(clampb - b).add(b), result);
+    }
+
+    return result;
+}
+
+
+
+export std::pair<Tensor, Config> compress_ui16_default(const Tensor& x) {
+    auto xf   = x.to(TensorOptions().dtype(eScalarType::Float));
+    auto flat = xf.flatten();
+
+    double xmin = flat.min().item<float>();
+    double xmax = flat.max().item<float>();
+
+    double q01 = xmin;
+    double q99 = xmax;
+
+    if (xmax > xmin) {
+        q01 = flat.quantile(0.01).item<float>();
+        q99 = flat.quantile(0.99).item<float>();
+        if (q01 >= q99) { q01 = xmin; q99 = xmax; }
+    } else {
+        q99 = xmin + 1.0;
+        xmax = q99;
+    }
+
+    Config cfg;
+    cfg["a"]          = q01;
+    cfg["b"]          = q99;
+    cfg["clampa"]     = xmin;
+    cfg["clampb"]     = xmax;
+    cfg["focus"]      = 1.0;
+    cfg["left_mode"]  = std::string("linear");
+    cfg["right_mode"] = std::string("linear");
+
+    return { compress_ui16_config(xf, cfg), cfg };
 }
 
 

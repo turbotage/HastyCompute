@@ -12,14 +12,6 @@ import hasty_tensor_mod;
 import hasty_generic_value_mod;
 import hasty_threading_mod;
 
-// ---------------------------------------------------------------------------
-// UUID helpers
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// BankQuery types
-// ---------------------------------------------------------------------------
-
 enum class BankQueryType : std::int32_t {
     LIST_UUIDS = 0,
 };
@@ -44,10 +36,10 @@ public:
     HastyServiceImpl(hasty::server::GenericValueBank& bank, hasty::server::CommandRegistry& registry)
         : _bank(bank), _registry(registry) {}
 
-    grpc::Status PushValue(
+    grpc::Status Push(
         grpc::ServerContext*,
         grpc::ServerReader<hasty::DataChunk>* reader,
-        hasty::Uuid* response) override
+        hasty::PushResponse* response) override
     {
         hasty::threadsafe_stream stream;
 
@@ -63,30 +55,41 @@ public:
         stream.set_finished();
 
         try {
-            *response = to_uuid_proto(fut.get());
+            *response->mutable_id() = to_uuid_proto(fut.get());
+            response->set_success(true);
             return grpc::Status::OK;
         } catch (const std::exception& e) {
-            return grpc::Status(grpc::StatusCode::INTERNAL, e.what());
+            response->set_success(false);
+            response->set_msg(e.what());
+            return grpc::Status::OK;
         }
     }
 
-    grpc::Status FetchValue(
+    grpc::Status Read(
         grpc::ServerContext*,
-        const hasty::FetchRequest* request,
-        grpc::ServerWriter<hasty::DataChunk>* writer) override
+        const hasty::ReadRequest* request,
+        grpc::ServerWriter<hasty::ReadResponse>* writer) override
     {
         auto uuid = uuid_key(request->id());
         if (!_bank.contains(uuid)) {
-            return grpc::Status(grpc::StatusCode::NOT_FOUND, "UUID not found in bank");
+            hasty::ReadResponse err;
+            err.mutable_header()->set_success(false);
+            err.mutable_header()->set_msg("UUID not found in bank");
+            writer->Write(err);
+            return grpc::Status::OK;
         }
 
+        hasty::ReadResponse hdr;
+        hdr.mutable_header()->set_success(true);
+        writer->Write(hdr);
+
         hasty::GenericValue value;
-        auto slice_info = request->slice_info();
+        const auto& slice_info = request->slice_info();
         if (slice_info.empty()) {
-            value = std::move(_bank.fetch_value(uuid));
+            value = _bank.fetch_value(uuid);
         } else {
             try {
-                value = std::move(_bank.fetch_value(uuid, slice_info));
+                value = _bank.fetch_value(uuid, slice_info);
             } catch (const std::exception& e) {
                 return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, e.what());
             }
@@ -103,12 +106,12 @@ public:
             try {
                 auto data = stream.read_chunk_blocking(std::chrono::milliseconds(100));
                 if (!data.empty()) {
-                    hasty::DataChunk dc;
-                    dc.set_data(data.data(), data.size());
-                    writer->Write(dc);
+                    hasty::ReadResponse resp;
+                    resp.mutable_data()->set_data(data.data(), data.size());
+                    writer->Write(resp);
                 }
             } catch (const std::runtime_error&) {
-                // timeout — loop again, is_finished() exits when done
+                // timeout — loop again
             }
         }
 
@@ -116,15 +119,15 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status WriteValue(
+    grpc::Status Write(
         grpc::ServerContext*,
-        grpc::ServerReader<hasty::WriteMessage>* reader,
-        hasty::WriteAck* response) override
+        grpc::ServerReader<hasty::WriteRequest>* reader,
+        hasty::WriteResponse* response) override
     {
-        hasty::WriteMessage msg;
+        hasty::WriteRequest msg;
         if (!reader->Read(&msg) || !msg.has_header()) {
             response->set_success(false);
-            response->set_error_msg("First message must be WriteHeader");
+            response->set_error_msg("First message must be WriteRequestHeader");
             return grpc::Status::OK;
         }
 
@@ -164,10 +167,10 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status Execute(
+    grpc::Status ExecuteCommand(
         grpc::ServerContext*,
-        const hasty::ExecuteCommand* request,
-        hasty::ExecuteAck* response) override
+        const hasty::ExecuteCommandRequest* request,
+        hasty::ExecuteCommandResponse* response) override
     {
         std::vector<hasty::GenericValue> inputs;
         inputs.reserve(request->input_ids_size());
@@ -179,8 +182,7 @@ public:
                 response->set_error_msg("Input UUID not found in bank: " + uuid);
                 return grpc::Status::OK;
             }
-            const auto& opt = _bank.fetch_value(uuid);
-            inputs.push_back(opt);
+            inputs.push_back(_bank.fetch_value(uuid));
         }
 
         try {
@@ -197,24 +199,10 @@ public:
         return grpc::Status::OK;
     }
 
-    grpc::Status DeleteValue(
-        grpc::ServerContext*,
-        const hasty::Uuid* request,
-        hasty::WriteAck* response) override
-    {
-        if (_bank.delete_value(uuid_key(*request))) {
-            response->set_success(true);
-        } else {
-            response->set_success(false);
-            response->set_error_msg("UUID not found in bank");
-        }
-        return grpc::Status::OK;
-    }
-
     grpc::Status BankQuery(
         grpc::ServerContext*,
-        const hasty::BankQueryMessage* request,
-        hasty::BankQueryAck* response) override
+        const hasty::BankQueryRequest* request,
+        hasty::BankQueryResponse* response) override
     {
         try {
             switch (static_cast<BankQueryType>(request->query_type())) {
@@ -236,6 +224,67 @@ public:
         } catch (const std::exception& e) {
             response->set_success(false);
             response->set_error_msg(e.what());
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status Delete(
+        grpc::ServerContext*,
+        const hasty::Uuid* request,
+        hasty::DeleteResponse* response) override
+    {
+        if (_bank.delete_value(uuid_key(*request))) {
+            response->set_success(true);
+        } else {
+            response->set_success(false);
+            response->set_msg("UUID not found in bank");
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ReadMetadata(
+        grpc::ServerContext*,
+        const hasty::MetadataReadRequest* request,
+        hasty::MetadataReadResponse* response) override
+    {
+        auto key = uuid_key(request->id());
+        auto opt = _bank.read_metadata(key);
+        if (opt) {
+            response->set_success(true);
+            response->set_metadata_string(*opt);
+        } else {
+            response->set_success(false);
+            response->set_msg("No metadata for UUID");
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status WriteMetadata(
+        grpc::ServerContext*,
+        const hasty::MetadataWriteRequest* request,
+        hasty::MetadataWriteResponse* response) override
+    {
+        auto key = uuid_key(request->id());
+        try {
+            _bank.write_metadata(key, request->metadata_string());
+            response->set_success(true);
+        } catch (const std::exception& e) {
+            response->set_success(false);
+            response->set_msg(e.what());
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status DeleteMetadata(
+        grpc::ServerContext*,
+        const hasty::MetadataDeleteRequest* request,
+        hasty::MetadataDeleteResponse* response) override
+    {
+        if (_bank.delete_metadata(uuid_key(*request))) {
+            response->set_success(true);
+        } else {
+            response->set_success(false);
+            response->set_msg("No metadata for UUID");
         }
         return grpc::Status::OK;
     }
@@ -288,13 +337,7 @@ GrpcServerHandle start_grpc_server(
     builder.SetMaxReceiveMessageSize(-1);
     builder.SetMaxSendMessageSize(-1);
     builder.AddChannelArgument("grpc.http2.initial_window_size",
-                            128 * 1024 * 1024);   // already there
-    /*
-    builder.AddChannelArgument("grpc.http2.initial_connection_window_size",
-    128 * 1024 * 1024);   // connection-level window (push direction)
-    builder.AddChannelArgument("grpc.http2.bdp_probe", 0);  // no BDP pings; windows are fixed
-    */
-        
+                            128 * 1024 * 1024);
     if (internal_log_stream) {
         builder.SetOption(grpc::MakeChannelArgumentOption(
             "grpc.internal_log_stream", &(*internal_log_stream)));

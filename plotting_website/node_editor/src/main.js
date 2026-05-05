@@ -15,9 +15,11 @@
  */
 
 import { runGraph }                               from './node_runner.js';
-import { execute, fetchMeta, fetchMetaString,
+import { execute, executeWithMsg, fetchMeta, fetchMetaString,
          fetchSliceData, fetchRaw, uploadValue,
          bankQuery, deleteValue, fetchGVMetadata,
+         readMetadata, writeMetadata, deleteMetadata,
+         compressUi16Default, decompressUi16,
          initCommandIds, uuidToHex,
          hexToUuid, COMMAND_IDS }                 from './grpc_client.js';
 

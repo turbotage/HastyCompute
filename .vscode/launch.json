@@ -62,6 +62,14 @@
             "stopOnEntry": false,
         },
         {
+            "name": "(lldb-dap) HastyNonFourierInterpTest",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyNonFourierInterpTest",
+            "args": [],
+            "stopOnEntry": false,
+        },
+        {
             "name": "(lldb-dap) HastyVkFFTTest",
             "type": "lldb-dap",
             "request": "launch",

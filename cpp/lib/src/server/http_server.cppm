@@ -215,6 +215,7 @@ public:
     }
 
     bool is_running() const { return _srv.is_running(); }
+    int  port()       const { return _port; }
 
 private:
     // Replace "0.0.0.0" in the gRPC listen address with "localhost" so the

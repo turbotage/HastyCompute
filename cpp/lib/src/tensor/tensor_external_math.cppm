@@ -26,5 +26,10 @@ export Tensor exp(const Tensor& t)
     return Tensor(hat::exp(t.to_torch()));
 }
 
+export Tensor expm1(const Tensor& t)
+{
+    return Tensor(hat::expm1(t.to_torch()));
+}
+
 
 }

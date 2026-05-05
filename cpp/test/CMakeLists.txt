@@ -50,6 +50,14 @@ set_target_properties(HastyLinalgTest PROPERTIES
 target_link_libraries(HastyLinalgTest PRIVATE HastyCompute::HastyCompute)
 install(TARGETS HastyLinalgTest RUNTIME DESTINATION bin)
 
+# <================== Non-Fourier Interpolator Test ==================>
+add_executable(HastyNonFourierInterpTest "src/non_fourier_interp_test.cpp")
+target_compile_features(HastyNonFourierInterpTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
+set_target_properties(HastyNonFourierInterpTest PROPERTIES
+	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
+target_link_libraries(HastyNonFourierInterpTest PRIVATE HastyCompute::HastyCompute)
+install(TARGETS HastyNonFourierInterpTest RUNTIME DESTINATION bin)
+
 # <================== VkFFT Test ==================>
 add_executable(HastyVkFFTTest "src/vkfft_test.cpp")
 target_compile_features(HastyVkFFTTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)

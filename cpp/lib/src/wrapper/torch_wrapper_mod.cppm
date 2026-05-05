@@ -97,7 +97,8 @@ export namespace hat {
     using at::pow;
     using at::where;
     using at::sgn;
-
+    using at::_unique2;
+    using at::expm1;
 
 
 

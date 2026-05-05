@@ -283,6 +283,13 @@ export struct Device {
         return index != device_alias::CPU;
     }
 
+    inline bool operator==(const Device& other) const noexcept {
+        return type == other.type && index == other.index;
+    }
+    inline bool operator!=(const Device& other) const noexcept {
+        return !(*this == other);
+    }
+
     inline hat::Device torch_device() const {
         if (type == eDeviceType::CPU) {
             return hat::Device(hat::DeviceType::CPU);

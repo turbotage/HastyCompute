@@ -434,6 +434,21 @@ public:
 
     inline Tensor view_as(const Tensor& other) const { return Tensor(_base.view_as(other._base)); }
 
+    inline Tensor reshape(ArrayRef<i64> sizes) const { return Tensor(_base.reshape(sizes.to_torch())); }
+
+    inline Tensor expand(ArrayRef<i64> sizes) const { return Tensor(_base.expand(sizes.to_torch())); }
+
+    inline Tensor cumsum(i64 dim) const { return Tensor(_base.cumsum(dim)); }
+
+    inline Tensor cumsum(i64 dim, eScalarType dtype) const {
+        return Tensor(_base.cumsum(dim, scalartype::to_torch(dtype)));
+    }
+
+    inline Tensor& scatter_add_(i64 dim, const Tensor& index, const Tensor& src) {
+        _base.scatter_add_(dim, index._base, src._base);
+        return *this;
+    }
+
     inline Tensor flip(ArrayRef<i64> dims) const { return Tensor(_base.flip(dims.to_torch())); }
 
     inline Tensor narrow(i64 dim, i64 start, i64 length) const { return Tensor(_base.narrow(dim, start, length)); }
@@ -458,9 +473,14 @@ public:
 
     inline Tensor mean() const { return Tensor(hat::mean(_base)); }
 
+    inline Tensor sum() const { return Tensor(_base.sum()); }
+    inline Tensor sum(i64 dim, bool keepdim = false) const { return Tensor(_base.sum(dim, keepdim)); }
+
     inline Tensor std() const { return Tensor(hat::std(_base)); }
 
     inline Tensor median() const { return Tensor(hat::median(_base)); }
+
+    inline Tensor quantile(double q) const { return Tensor(_base.quantile(q)); }
 
     inline Tensor neg() const { return Tensor(_base.neg()); }
 

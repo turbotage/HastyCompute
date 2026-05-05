@@ -16,45 +16,21 @@ import hasty_generic_value_mod;
 namespace hasty {
 namespace viz {
 
-export class VizCache {
-public:
-    
-    enum class PlotType : u16 {
-        Orthoslicer
-    };
 
-    std::tuple<PlotType, std::string, GenericValue> pop_back() {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_cache.empty()) {
-            throw std::runtime_error("VizCache is empty");
-        }
-        auto item = m_cache.back();
-        m_cache.pop_back();
-        return item;
-    }
-
-    void push_back(PlotType type, std::string name, GenericValue data) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_cache.emplace_back(type, std::move(name), std::move(data));
-    }
-
-private:
-    std::mutex m_mutex;
-    std::vector<std::tuple<PlotType, std::string, GenericValue>> m_cache;
-
-};
-
-export extern VizCache global_viz_cache;
 
 struct OrthoslicerOptions {
     std::string volumename;
+    std::optional<comprep::Config> comprep_config = std::nullopt;
 };
 
-export void orthoslicer(Tensor volume, const OrthoslicerOptions& options)
-{
-    auto uuid = generate_uuid();
-    global_viz_cache.push_back(VizCache::PlotType::Orthoslicer, options.volumename, GenericValue(std::move(volume)));
-}
+export void orthoslicer(Tensor volume, const OrthoslicerOptions& options);
+
+
+
+
+
+
+
 
 export template<typename T>
 struct DefaultLinePlotsOptions {

@@ -14,6 +14,9 @@ public:
 
     Scalar() noexcept : m_tag(Tag::HAS_i) { v.i = 0; }
 
+    Scalar(const Scalar& other) noexcept : m_tag(other.m_tag), v(other.v) {}
+    Scalar(Scalar&& other) noexcept : m_tag(other.m_tag), v(other.v) {}
+
     ~Scalar() = default;
 
     Scalar(i8 vv) noexcept : m_tag(Tag::HAS_i) { v.i = static_cast<i64>(vv); }
