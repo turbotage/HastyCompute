@@ -96,9 +96,15 @@ export namespace hat {
     using at::log1p;
     using at::pow;
     using at::where;
-    using at::sgn;
+    using at::isnan;
+    using at::max_pool3d;
+    using at::conv1d;
+    using at::conv2d;
+    using at::conv3d;
+    using at::rsub;
     using at::_unique2;
     using at::expm1;
+    using at::convolution;
 
 
 

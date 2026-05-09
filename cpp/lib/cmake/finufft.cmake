@@ -6,7 +6,7 @@ set(FINUFFT_STATIC_LINKING  OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     finufft
     GIT_REPOSITORY https://github.com/flatironinstitute/finufft.git
-    GIT_TAG        v2.5.0
+    GIT_TAG        v2.5.1
 )
 FetchContent_MakeAvailable(finufft)
 
@@ -17,6 +17,7 @@ FetchContent_MakeAvailable(finufft)
 foreach(_tgt finufft cufinufft)
     if(TARGET ${_tgt})
         set_property(TARGET ${_tgt} PROPERTY INTERFACE_COMPILE_OPTIONS "")
+
         get_target_property(_iface ${_tgt} INTERFACE_LINK_LIBRARIES)
         if(_iface)
             set(_clean "")

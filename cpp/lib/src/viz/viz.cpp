@@ -6,19 +6,20 @@ module;
 
 module hasty_viz_mod;
 
+import std;
 import hasty_tensor_mod;
 import hasty_server_mod;
 
 namespace hasty {
 namespace viz {
 
-void orthoslicer(Tensor volume, const OrthoslicerOptions& options)
+void orthoslicer(Tensor volume, const OrthoslicerOptions& options, bool halt_for_input, bool plot_locally)
 {
     if (!hasty::server::default_grpc_server_handle || !hasty::server::default_http_server) {
         hasty::server::start_default_servers();
     }
 
-    auto uuid = global_generic_value_bank.push_value(GenericValue(std::move(volume)));
+    auto uuid = hasty::server::global_generic_value_bank.push_value(GenericValue(std::move(volume)));
 
     // Store metadata for potential retrieval
     nlohmann::json opts_json;
@@ -27,7 +28,7 @@ void orthoslicer(Tensor volume, const OrthoslicerOptions& options)
         opts_json["comprep_config"] = comprep::config_to_string(options.comprep_config.value());
     }
     std::string key(reinterpret_cast<const char*>(uuid.data()), 16);
-    global_generic_value_bank.write_metadata(key, opts_json.dump());
+    hasty::server::global_generic_value_bank.write_metadata(key, opts_json.dump());
 
     // Build 32-char hex UUID string
     static constexpr char hex_chars[] = "0123456789abcdef";
@@ -58,7 +59,15 @@ void orthoslicer(Tensor volume, const OrthoslicerOptions& options)
         url += "&config=" + encoded;
     }
 
-    std::system(("xdg-open \"" + url + "\" &").c_str());
+    if (plot_locally) {
+        std::system(("xdg-open \"" + url + "\" &").c_str());
+    } else {
+        std::cout << "Orthoslicer URL: " << url << std::endl;
+    }
+    if (halt_for_input) {
+        std::cout << "Press Enter to continue..." << std::flush;
+        std::cin.get();
+    }
 }
 
 

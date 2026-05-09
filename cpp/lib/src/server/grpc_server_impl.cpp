@@ -280,7 +280,7 @@ public:
         const hasty::MetadataDeleteRequest* request,
         hasty::MetadataDeleteResponse* response) override
     {
-        if (_bank.delete_metadata(uuid_key(*request))) {
+        if (_bank.delete_metadata(uuid_key(request->id()))) {
             response->set_success(true);
         } else {
             response->set_success(false);

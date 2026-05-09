@@ -7,3 +7,9 @@
 #define DATA_RELATIVE_PATH "@DATA_RELATIVE_PATH@"
 
 #define HASTY_DATA_DIR "@HASTY_DATA_FOLDER@"
+
+// Debug builds: absolute build-tree paths → used directly.
+// Release builds: relative paths from exe dir → resolved at runtime via exe_dir().
+//   exe layout: bin/<exe>  .venv/bin/python  python/scripts/
+#define HASTY_VENV_PYTHON "@HASTY_VENV_PYTHON@"
+#define HASTY_SCRIPTS_DIR "@HASTY_SCRIPTS_DIR@"

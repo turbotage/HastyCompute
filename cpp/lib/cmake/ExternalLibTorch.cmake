@@ -5,6 +5,18 @@
 # (CMAKE_CXX_COMPILER, CMAKE_CUDA_COMPILER, CMAKE_LINKER, etc.) come directly
 # from the lib preset via CommonPresets.json — no hardcoded paths here.
 #
+# Compiler split (critical for ABI correctness):
+#   CMAKE_CXX_COMPILER  = Clang  (same as HastyCompute — avoids pure-GCC runtime issues)
+#   CMAKE_CUDA_COMPILER = NVCC   (PyTorch is full of NVCC-isms; Clang-as-CUDA fails)
+#   CMAKE_CUDA_HOST_COMPILER = GCC-15  (NVCC uses this for host code in .cu files)
+#
+# Why this split fixes the ntsr4__T0 ABI mismatch:
+#   NVCC's cudafe++ renames std → __T0 in .cu template SFINAE params.
+#   With Clang as host, that becomes ntsr4__T0 in libtorch_cuda.so.
+#   With GCC as host, GCC mangles __T0 consistently as ntsr3std.
+#   libtorch_cpu.so (Clang) and libtorch_cuda.so (NVCC+GCC) both emit ntsr3std.
+#   HastyCompute (Clang) also emits ntsr3std → everything links.
+#
 # After include() the following are set for use in CMakeLists.txt:
 #   TORCH_LIBRARIES        — IMPORTED target names for target_link_libraries
 #   TORCH_INCLUDE_DIRS     — include paths (for PRIVATE compile includes)
@@ -18,6 +30,13 @@ set(LIBTORCH_SRC_DIR     "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-src")
 set(LIBTORCH_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-build")
 set(LIBTORCH_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-install")
 
+# CUDA compiler for LibTorch is always NVCC (not the project's Clang CUDA compiler).
+set(_torch_nvcc "${CUDAToolkit_ROOT}/bin/nvcc")
+# NVCC host compiler — taken from CMAKE_CUDA_HOST_COMPILER (set in the preset).
+# This is the GCC that handles cudafe++ output; changing the preset value here
+# automatically propagates to LibTorch.
+set(_torch_cuda_host_cxx "${CMAKE_CUDA_HOST_COMPILER}")
+
 # Convert CMAKE_CUDA_ARCHITECTURES integer list (e.g. "89;90") to PyTorch's
 # dot-notation list (e.g. "8.9 9.0"). cmake uses "89", PyTorch expects "8.9".
 set(_torch_arch_list "")
@@ -30,9 +49,13 @@ foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
 endforeach()
 string(REPLACE ";" " " _torch_cuda_arch_list "${_torch_arch_list}")
 
-# Derive CUDA root from CMAKE_CUDA_COMPILER (set by the lib preset)
-get_filename_component(_torch_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
-get_filename_component(_torch_cuda_root "${_torch_cuda_bin}" DIRECTORY)
+# Derive CUDA root from CUDAToolkit_ROOT (set in the preset).
+if(DEFINED CUDAToolkit_ROOT AND NOT CUDAToolkit_ROOT STREQUAL "")
+    set(_torch_cuda_root "${CUDAToolkit_ROOT}")
+else()
+    get_filename_component(_torch_cuda_bin "${_torch_nvcc}" DIRECTORY)
+    get_filename_component(_torch_cuda_root "${_torch_cuda_bin}" DIRECTORY)
+endif()
 
 # PyTorch's core C++ internals conditionally include python_headers.h even with
 # BUILD_PYTHON=OFF.  Find Python3 dev headers and forward them so the build
@@ -61,28 +84,29 @@ ExternalProject_Add(libtorch_external
         -DCMAKE_INSTALL_PREFIX=${LIBTORCH_INSTALL_DIR}
         -DCMAKE_BUILD_TYPE=Release
 
-        # All compiler/toolchain settings flow from the lib preset variables.
-        # Change the toolchain in CommonPresets.json and it propagates here.
+        # C/C++ compiler: Clang with GCC-15 sysroot, same as HastyCompute.
+        # This avoids ABI/runtime issues that arise with pure-GCC LibTorch + Clang app.
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         "-DCMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN=${CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN}"
         "-DCMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN=${CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN}"
-        -DCMAKE_LINKER=${CMAKE_LINKER}
-        "-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
-        "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+        # No linker flags: GCC-15 (NVCC host) rejects -fuse-ld=lld-22 and
+        # full-path -fuse-ld forms. Let LibTorch use default linker (ld.bfd).
+        # CMAKE_LINKER not forwarded — NVCC device-link uses its own rules.
 
-        # CUDA — libc++ is not allowed by CUDA on x86; libstdc++ only
-        -DCMAKE_CUDA_COMPILER=${CMAKE_CUDA_COMPILER}
-        -DCMAKE_CUDA_HOST_COMPILER=${CMAKE_CUDA_HOST_COMPILER}
-        "-DCMAKE_CUDA_FLAGS=${CMAKE_CUDA_FLAGS}"
+        # CUDA compiler: NVCC (not Clang). PyTorch adds -Xfatbin and other NVCC-only
+        # flags; Clang as CUDA compiler rejects them. NVCC handles them natively.
+        -DCMAKE_CUDA_COMPILER=${_torch_nvcc}
+        # Host compiler for NVCC's .cu compilation: GCC-15.
+        # cudafe++ renames template params, but GCC mangles them consistently as ntsr3std.
+        -DCMAKE_CUDA_HOST_COMPILER=${_torch_cuda_host_cxx}
+        # GCC-15 may exceed NVCC's tested host compiler range; allow it.
+        "-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler"
         "-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}"
-        # PyTorch's arch-selection uses dot notation ("8.9"), cmake uses integers ("89").
-        # _torch_cuda_arch_list is derived above from CMAKE_CUDA_ARCHITECTURES.
         "-DTORCH_CUDA_ARCH_LIST=${_torch_cuda_arch_list}"
         -DCUDAToolkit_ROOT=${_torch_cuda_root}
 
         # Use the protobuf already built by grpc_external — one protobuf, no duplication.
-        # GRPC_PROTOBUF_DIR is set by ExternalGRPC.cmake (included before this file).
         -DUSE_SYSTEM_PROTOBUF=ON
         "-DProtobuf_DIR=${GRPC_PROTOBUF_DIR}"
 
@@ -119,10 +143,6 @@ ExternalProject_Add(libtorch_external
         ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel ${_CPU_THREADS}
 
     # Strip LibTorch's bundled protobuf headers from the install tree.
-    # LibTorch's .so files have protobuf baked in internally; the public C++ API
-    # (torch/torch.h, torch/jit.h, etc.) does not expose protobuf types.
-    # Removing these headers ensures HastyCompute sees only gRPC's protobuf
-    # (grpc-install/include/google/) and avoids PROTOBUF_VERSION redefinition errors.
     INSTALL_COMMAND
         ${CMAKE_COMMAND} --install "${LIBTORCH_BUILD_DIR}" --prefix "${LIBTORCH_INSTALL_DIR}"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${LIBTORCH_INSTALL_DIR}/include/google"

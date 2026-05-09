@@ -5,6 +5,10 @@ import std;
 import hasty_util_mod;
 import hasty_tensor_mod;
 import hasty_linalg_mod;
+import hasty_io_mod;
+import hasty_viz_mod;
+import hasty_server_mod;
+import hasty_python_mod;
 import mri_mod;
 
 struct Problem {
@@ -251,7 +255,95 @@ static bool test_approx(hasty::i64 n_dim, hasty::i64 n_spokes, hasty::i64 n_samp
 
 int main()
 {
-    
+    bool show_locally = true;
+
+    std::string nifti_dir = "/home/turbotage/Documents/GitHub/HastyData/downloads/traveling_heads_7t/TH2_data_ES_s1/upload_ES/ES_20181008/subject1/";
+
+    hasty::io::nifti::NiftiImage b0 = hasty::io::nifti::read_nifti(nifti_dir + "b0fieldHZ.nii.gz");
+    hasty::io::nifti::NiftiImage pd = hasty::io::nifti::read_nifti(nifti_dir + "gre_qsm_mag.nii.gz");
+
+    auto mask = hasty::io::nifti::transform_nifti_data(pd);
+
+    auto mask_mean = mask.mean();
+    auto mask_std = mask.std();
+
+    std::cout << "mask mean: " << mask_mean.item<hasty::f32>() << "\n";
+    std::cout << "mask std: " << mask_std.item<hasty::f32>() << "\n";
+
+    // Diagnostic: print min/max and fraction of voxels above mean so we can
+    // check whether the boolean mask is inverted relative to expectations.
+    try {
+        auto mask_min = mask.min().item<hasty::f32>();
+        auto mask_max = mask.max().item<hasty::f32>();
+        auto total_elems = mask.numel();
+        std::cout << "mask min: " << mask_min << "  max: " << mask_max << "\n";
+        std::cout << "total elems: " << total_elems << "\n";
+    } catch (...) { }
+
+    mask = mask > (mask_mean);
+
+    try {
+        auto total = mask.numel();
+        auto n_true = mask.to(hasty::eScalarType::Long).sum().item<hasty::i64>();
+        std::cout << "mask true count: " << n_true << " / " << total
+                  << " (" << (100.0 * n_true / (double)total) << "% )\n";
+    } catch (...) { }
+
+    hasty::viz::orthoslicer(mask, {"mask", std::nullopt}, false, show_locally);
+
+    mask = mask.to(hasty::Device{hasty::eDeviceType::CUDA, 0});
+
+    mask = mask_erode(std::move(mask), 2, {0});
+    mask = mask_erode(std::move(mask), 2, {0});
+
+    mask = mask_dilate(std::move(mask), 4, {0});
+    mask = mask_dilate(std::move(mask), 4, {0});
+    mask = mask_dilate(std::move(mask), 4, {0});
+    mask = mask_dilate(std::move(mask), 4, {0});
+
+    mask = mask_erode(std::move(mask), 4, {0});
+    mask = mask_erode(std::move(mask), 4, {0});
+
+    mask = mask.cpu();
+
+    hasty::viz::orthoslicer(mask, {"mask_dilated", std::nullopt}, false, show_locally);
+
+
+    // Push both volumes to the gRPC bank with NIfTI header metadata.
+    auto b0_uuid = hasty::python::push_nifti_image(b0, "b0");
+    auto pd_uuid = hasty::python::push_nifti_image(pd, "pd");
+
+    // Register pd onto b0's grid via Python/ANTs.
+    // Pass --debug-port=5678 as third argument to enable Python debugger attach.
+    auto result = hasty::python::run_script(
+        hasty::python::scripts_dir() + "/register_nifti.py",
+        {
+            "--fixed="        + hasty::python::uuid_to_hex(b0_uuid),
+            "--moving="       + hasty::python::uuid_to_hex(pd_uuid),
+            "--transform=Rigid",   // same-session, cross-modality: rigid only
+        }
+        // set debug=true, debug_port=5678 to pause for Python debugger:
+        // , /*debug=*/true, /*debug_port=*/5678
+    );
+
+    if (result.exit_code != 0) {
+        std::cerr << "Registration failed (exit " << result.exit_code << ")\n";
+        return 1;
+    }
+
+    // Fetch registered volume back and display it.
+    // The script printed the output UUID hex on stdout.
+    std::string reg_uuid_hex = result.output_uuids.at(0);
+
+    hasty::viz::orthoslicer(b0.data, {"b0", std::nullopt}, false, show_locally);
+    hasty::viz::orthoslicer(pd.data, {"pd_original", std::nullopt}, false, show_locally);
+
+    // Fetch registered tensor from bank for visualisation.
+    auto reg_uuid_arr = hasty::python::hex_to_uuid_array(reg_uuid_hex);
+    std::string reg_key(reinterpret_cast<const char*>(reg_uuid_arr.data()), 16);
+    hasty::Tensor reg_tensor = hasty::server::global_generic_value_bank
+                                   .fetch_value(reg_key).as_tensor();
+    hasty::viz::orthoslicer(reg_tensor, {"b0_registered_to_pd", std::nullopt}, true, show_locally);
 
     std::cout << "=====================================================\n"
               << "  off-Fourier interpolator accuracy test\n"

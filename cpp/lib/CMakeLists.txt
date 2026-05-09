@@ -6,17 +6,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 
-# CUDA device code needs this flag when the host compiler is clang > 21
-add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>)
+# NVCC with GCC host may exceed NVCC's tested host compiler version range
+add_compile_options($<$<COMPILE_LANG_AND_ID:CUDA,NVCC>:-allow-unsupported-compiler>)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
-        -ftemplate-backtrace-limit=5
-        -fdiagnostics-show-template-tree
-        -fcolor-diagnostics
-        -fdiagnostics-format=vi
+        $<$<COMPILE_LANGUAGE:CXX>:-ftemplate-backtrace-limit=5>
+        $<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-show-template-tree>
+        $<$<COMPILE_LANGUAGE:CXX>:-fcolor-diagnostics>
+        $<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-format=vi>
     )
 endif()
+
+# CMAKE_EXE_LINKER_FLAGS from CommonPresets (e.g. -fuse-ld=lld-22) is Clang-only
+# syntax that GCC-15 (NVCC host compiler) rejects during CUDA ABI detection.
+# Clear the global flags here; lld is applied per-target below using CMAKE_LINKER.
+set(CMAKE_EXE_LINKER_FLAGS    "" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS "" CACHE STRING "" FORCE)
 
 # ── Primary target ────────────────────────────────────────────────────────────
 add_library(HastyCompute SHARED)
@@ -34,6 +40,15 @@ set_target_properties(HastyCompute PROPERTIES
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(HastyCompute PRIVATE -ftime-trace)
+endif()
+
+# Apply lld to HastyCompute C++ link steps only, derived from CMAKE_LINKER (preset).
+# LINK_LANGUAGE:CXX guard prevents the flag from reaching GCC-15 CUDA host links.
+if(CMAKE_LINKER)
+    get_filename_component(_linker_name "${CMAKE_LINKER}" NAME)
+    target_link_options(HastyCompute PRIVATE
+        $<$<LINK_LANGUAGE:CXX>:-fuse-ld=${_linker_name}>
+    )
 endif()
 
 target_compile_definitions(HastyCompute
@@ -78,6 +93,8 @@ target_sources(HastyCompute
         "src/mri/mri_mod.cppm"
         "src/mri/off_fourier_interpolators.cppm"
         "src/nvrtc/nvrtc_mod.cppm"
+        "src/python/nifti_and_registration.cppm"
+        "src/python/python_mod.cppm"
         "src/server/cmd_registry.cppm"
         "src/server/generic_value_bank.cppm"
         "src/server/grpc_server.cppm"
@@ -90,6 +107,7 @@ target_sources(HastyCompute
         "src/tensor/tensor_external_math.cppm"
         "src/tensor/tensor_external.cppm"
         "src/tensor/tensor_json.cppm"
+        "src/tensor/tensor_masking.cppm"
         "src/tensor/tensor_mod.cppm"
         "src/tensor/tensor_scalar.cppm"
         "src/tensor/tensor_tensor.cppm"
@@ -131,6 +149,7 @@ include(cmake/ExternalLibTorch.cmake)  # reuses GRPC_PROTOBUF_DIR; depends on gr
 include(cmake/hdf5.cmake)
 include(cmake/nifti.cmake)
 include(cmake/ExternalPETSc.cmake)
+include(cmake/venv.cmake)
 
 # ── Public include dirs ───────────────────────────────────────────────────────
 target_include_directories(HastyCompute
@@ -151,6 +170,18 @@ include(CMakePackageConfigHelpers)
 
 if(NOT DEFINED HASTY_DATA_FOLDER OR HASTY_DATA_FOLDER STREQUAL "")
     set(HASTY_DATA_FOLDER "${CMAKE_SOURCE_DIR}/../../../HastyData")
+endif()
+
+set(HASTY_SCRIPTS_DIR "${CMAKE_SOURCE_DIR}/../../python/scripts")
+
+# Debug builds bake absolute build-tree paths; release bakes install-relative paths.
+# C++ resolves relative paths at runtime via exe_dir() (see python_mod.cppm).
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
+    set(HASTY_VENV_PYTHON "${CMAKE_BINARY_DIR}/.venv/bin/python")
+    # HASTY_SCRIPTS_DIR already points to source tree — correct for debug
+else()
+    set(HASTY_VENV_PYTHON "../.venv/bin/python")
+    set(HASTY_SCRIPTS_DIR "../python/scripts")
 endif()
 
 configure_file(
@@ -262,3 +293,8 @@ install(FILES
 )
 
 install(CODE "file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/share/finufft/examples\")")
+
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/../../python/scripts/"
+    DESTINATION "python/scripts"
+    FILES_MATCHING PATTERN "*.py"
+)

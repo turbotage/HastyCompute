@@ -41,10 +41,6 @@ export Config string_to_config(const std::string& s) {
 }
 
 
-
-
-
-
 inline double getd(const Config& cfg, const std::string& key, double def) {
     auto it = cfg.find(key);
     if (it == cfg.end()) return def;
@@ -207,7 +203,37 @@ export Tensor decompress_ui16_config(const Tensor& q, const Config& cfg) {
 
 
 export std::pair<Tensor, Config> compress_ui16_default(const Tensor& x) {
+    // If the tensor is already an integer/bool type of 16 bits or smaller
+    // we can map it directly to the u16 representation without the
+    // expensive float -> quantile -> u16 pipeline. This avoids a
+    // pointless round-trip for masks and small-int images.
+    auto st = x.scalar_type();
+    if (st == scalar_alias::b8 || st == scalar_alias::u8 || st == scalar_alias::i8 || st == scalar_alias::i16) {
+        Tensor q;
+        Config cfg;
+        if (st == scalar_alias::b8) {
+            // bool 0/1 -> 0/65535
+            q = x.to(TensorOptions().dtype(eScalarType::Int)).mul(65535).to(TensorOptions().dtype(eScalarType::Short));
+            cfg["a"] = 0.0; cfg["b"] = 1.0; cfg["clampa"] = 0.0; cfg["clampb"] = 1.0; cfg["focus"] = 1.0;
+        } else if (st == scalar_alias::u8) {
+            // unsigned 0..255 -> 0..65535 (multiply by 257)
+            q = x.to(TensorOptions().dtype(eScalarType::Int)).mul(257).to(TensorOptions().dtype(eScalarType::Short));
+            cfg["a"] = 0.0; cfg["b"] = 255.0; cfg["clampa"] = 0.0; cfg["clampb"] = 255.0; cfg["focus"] = 1.0;
+        } else if (st == scalar_alias::i8) {
+            // signed -128..127 -> 0..65535 via (v + 128) * 257
+            q = x.to(TensorOptions().dtype(eScalarType::Int)).add(128).mul(257).to(TensorOptions().dtype(eScalarType::Short));
+            cfg["a"] = -128.0; cfg["b"] = 127.0; cfg["clampa"] = -128.0; cfg["clampb"] = 127.0; cfg["focus"] = 1.0;
+        } else { // i16
+            // signed -32768..32767 -> 0..65535 via +32768
+            q = x.to(TensorOptions().dtype(eScalarType::Int)).add(32768).to(TensorOptions().dtype(eScalarType::Short));
+            cfg["a"] = -32768.0; cfg["b"] = 32767.0; cfg["clampa"] = -32768.0; cfg["clampb"] = 32767.0; cfg["focus"] = 1.0;
+        }
+        return { q, cfg };
+    }
+
     auto xf   = x.to(TensorOptions().dtype(eScalarType::Float));
+    // Replace NaN (e.g. ANTs background fill) with 0 before computing statistics.
+    xf = where(isnan(xf), zeros_like(xf), xf);
     auto flat = xf.flatten();
 
     double xmin = flat.min().item<float>();
@@ -217,8 +243,19 @@ export std::pair<Tensor, Config> compress_ui16_default(const Tensor& x) {
     double q99 = xmax;
 
     if (xmax > xmin) {
-        q01 = flat.quantile(0.01).item<float>();
-        q99 = flat.quantile(0.99).item<float>();
+        // Subsample for quantile: sorting 100M+ elements is expensive/crash-prone.
+        // Take at most 1M evenly-spaced samples (uniform coverage, fast).
+        constexpr i64 MAX_QUANT_ELEMS = 1000000;
+        Tensor sample = flat;
+        if (flat.numel() > MAX_QUANT_ELEMS) {
+            i64 step = flat.numel() / MAX_QUANT_ELEMS;
+            sample = flat.narrow(0, 0, (flat.numel() / step) * step)
+                         .reshape({-1, step})
+                         .select(1, 0)
+                         .contiguous();
+        }
+        q01 = sample.quantile(0.01).item<float>();
+        q99 = sample.quantile(0.99).item<float>();
         if (q01 >= q99) { q01 = xmin; q99 = xmax; }
     } else {
         q99 = xmin + 1.0;

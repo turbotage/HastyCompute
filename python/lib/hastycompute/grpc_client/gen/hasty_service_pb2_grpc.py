@@ -5,7 +5,7 @@ import warnings
 
 from . import hasty_service_pb2 as hasty__service__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -34,66 +34,114 @@ class HastyServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.PushValue = channel.stream_unary(
-                '/hasty.HastyService/PushValue',
+        self.Push = channel.stream_unary(
+                '/hasty.HastyService/Push',
                 request_serializer=hasty__service__pb2.DataChunk.SerializeToString,
-                response_deserializer=hasty__service__pb2.Uuid.FromString,
+                response_deserializer=hasty__service__pb2.PushResponse.FromString,
                 _registered_method=True)
-        self.FetchValue = channel.unary_stream(
-                '/hasty.HastyService/FetchValue',
-                request_serializer=hasty__service__pb2.FetchRequest.SerializeToString,
-                response_deserializer=hasty__service__pb2.DataChunk.FromString,
+        self.Read = channel.unary_stream(
+                '/hasty.HastyService/Read',
+                request_serializer=hasty__service__pb2.ReadRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.ReadResponse.FromString,
                 _registered_method=True)
-        self.WriteValue = channel.stream_unary(
-                '/hasty.HastyService/WriteValue',
-                request_serializer=hasty__service__pb2.WriteMessage.SerializeToString,
-                response_deserializer=hasty__service__pb2.WriteAck.FromString,
+        self.Write = channel.stream_unary(
+                '/hasty.HastyService/Write',
+                request_serializer=hasty__service__pb2.WriteRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.WriteResponse.FromString,
                 _registered_method=True)
-        self.Execute = channel.unary_unary(
-                '/hasty.HastyService/Execute',
-                request_serializer=hasty__service__pb2.ExecuteCommand.SerializeToString,
-                response_deserializer=hasty__service__pb2.ExecuteAck.FromString,
+        self.BankQuery = channel.unary_unary(
+                '/hasty.HastyService/BankQuery',
+                request_serializer=hasty__service__pb2.BankQueryRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.BankQueryResponse.FromString,
                 _registered_method=True)
-        self.DeleteValue = channel.unary_unary(
-                '/hasty.HastyService/DeleteValue',
+        self.ExecuteCommand = channel.unary_unary(
+                '/hasty.HastyService/ExecuteCommand',
+                request_serializer=hasty__service__pb2.ExecuteCommandRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.ExecuteCommandResponse.FromString,
+                _registered_method=True)
+        self.Delete = channel.unary_unary(
+                '/hasty.HastyService/Delete',
                 request_serializer=hasty__service__pb2.Uuid.SerializeToString,
-                response_deserializer=hasty__service__pb2.WriteAck.FromString,
+                response_deserializer=hasty__service__pb2.DeleteResponse.FromString,
+                _registered_method=True)
+        self.ReadMetadata = channel.unary_unary(
+                '/hasty.HastyService/ReadMetadata',
+                request_serializer=hasty__service__pb2.MetadataReadRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.MetadataReadResponse.FromString,
+                _registered_method=True)
+        self.WriteMetadata = channel.unary_unary(
+                '/hasty.HastyService/WriteMetadata',
+                request_serializer=hasty__service__pb2.MetadataWriteRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.MetadataWriteResponse.FromString,
+                _registered_method=True)
+        self.DeleteMetadata = channel.unary_unary(
+                '/hasty.HastyService/DeleteMetadata',
+                request_serializer=hasty__service__pb2.MetadataDeleteRequest.SerializeToString,
+                response_deserializer=hasty__service__pb2.MetadataDeleteResponse.FromString,
                 _registered_method=True)
 
 
 class HastyServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def PushValue(self, request_iterator, context):
+    def Push(self, request_iterator, context):
         """Upload a serialized GenericValue → assigned UUID
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def FetchValue(self, request, context):
+    def Read(self, request, context):
         """Download a GenericValue (or slice) by UUID
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def WriteValue(self, request_iterator, context):
+    def Write(self, request_iterator, context):
         """Write to an existing GenericValue in the bank (or a slice of it)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Execute(self, request, context):
+    def BankQuery(self, request, context):
+        """Used to query things about the bank, for instance currently populated uuids etc
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ExecuteCommand(self, request, context):
         """Execute a function on bank values, results stored back in bank
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteValue(self, request, context):
+    def Delete(self, request, context):
         """Remove a value from the bank, freeing its memory
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReadMetadata(self, request, context):
+        """Fetch metadata about a GenericValue if it exists
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WriteMetadata(self, request, context):
+        """Push metadata onto a GenericValue if it exists
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteMetadata(self, request, context):
+        """Delete metadata of GenericValue if it exists
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -102,30 +150,50 @@ class HastyServiceServicer(object):
 
 def add_HastyServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'PushValue': grpc.stream_unary_rpc_method_handler(
-                    servicer.PushValue,
+            'Push': grpc.stream_unary_rpc_method_handler(
+                    servicer.Push,
                     request_deserializer=hasty__service__pb2.DataChunk.FromString,
-                    response_serializer=hasty__service__pb2.Uuid.SerializeToString,
+                    response_serializer=hasty__service__pb2.PushResponse.SerializeToString,
             ),
-            'FetchValue': grpc.unary_stream_rpc_method_handler(
-                    servicer.FetchValue,
-                    request_deserializer=hasty__service__pb2.FetchRequest.FromString,
-                    response_serializer=hasty__service__pb2.DataChunk.SerializeToString,
+            'Read': grpc.unary_stream_rpc_method_handler(
+                    servicer.Read,
+                    request_deserializer=hasty__service__pb2.ReadRequest.FromString,
+                    response_serializer=hasty__service__pb2.ReadResponse.SerializeToString,
             ),
-            'WriteValue': grpc.stream_unary_rpc_method_handler(
-                    servicer.WriteValue,
-                    request_deserializer=hasty__service__pb2.WriteMessage.FromString,
-                    response_serializer=hasty__service__pb2.WriteAck.SerializeToString,
+            'Write': grpc.stream_unary_rpc_method_handler(
+                    servicer.Write,
+                    request_deserializer=hasty__service__pb2.WriteRequest.FromString,
+                    response_serializer=hasty__service__pb2.WriteResponse.SerializeToString,
             ),
-            'Execute': grpc.unary_unary_rpc_method_handler(
-                    servicer.Execute,
-                    request_deserializer=hasty__service__pb2.ExecuteCommand.FromString,
-                    response_serializer=hasty__service__pb2.ExecuteAck.SerializeToString,
+            'BankQuery': grpc.unary_unary_rpc_method_handler(
+                    servicer.BankQuery,
+                    request_deserializer=hasty__service__pb2.BankQueryRequest.FromString,
+                    response_serializer=hasty__service__pb2.BankQueryResponse.SerializeToString,
             ),
-            'DeleteValue': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteValue,
+            'ExecuteCommand': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExecuteCommand,
+                    request_deserializer=hasty__service__pb2.ExecuteCommandRequest.FromString,
+                    response_serializer=hasty__service__pb2.ExecuteCommandResponse.SerializeToString,
+            ),
+            'Delete': grpc.unary_unary_rpc_method_handler(
+                    servicer.Delete,
                     request_deserializer=hasty__service__pb2.Uuid.FromString,
-                    response_serializer=hasty__service__pb2.WriteAck.SerializeToString,
+                    response_serializer=hasty__service__pb2.DeleteResponse.SerializeToString,
+            ),
+            'ReadMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReadMetadata,
+                    request_deserializer=hasty__service__pb2.MetadataReadRequest.FromString,
+                    response_serializer=hasty__service__pb2.MetadataReadResponse.SerializeToString,
+            ),
+            'WriteMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.WriteMetadata,
+                    request_deserializer=hasty__service__pb2.MetadataWriteRequest.FromString,
+                    response_serializer=hasty__service__pb2.MetadataWriteResponse.SerializeToString,
+            ),
+            'DeleteMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteMetadata,
+                    request_deserializer=hasty__service__pb2.MetadataDeleteRequest.FromString,
+                    response_serializer=hasty__service__pb2.MetadataDeleteResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -139,7 +207,7 @@ class HastyService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def PushValue(request_iterator,
+    def Push(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -152,9 +220,9 @@ class HastyService(object):
         return grpc.experimental.stream_unary(
             request_iterator,
             target,
-            '/hasty.HastyService/PushValue',
+            '/hasty.HastyService/Push',
             hasty__service__pb2.DataChunk.SerializeToString,
-            hasty__service__pb2.Uuid.FromString,
+            hasty__service__pb2.PushResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -166,7 +234,7 @@ class HastyService(object):
             _registered_method=True)
 
     @staticmethod
-    def FetchValue(request,
+    def Read(request,
             target,
             options=(),
             channel_credentials=None,
@@ -179,9 +247,9 @@ class HastyService(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/hasty.HastyService/FetchValue',
-            hasty__service__pb2.FetchRequest.SerializeToString,
-            hasty__service__pb2.DataChunk.FromString,
+            '/hasty.HastyService/Read',
+            hasty__service__pb2.ReadRequest.SerializeToString,
+            hasty__service__pb2.ReadResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -193,7 +261,7 @@ class HastyService(object):
             _registered_method=True)
 
     @staticmethod
-    def WriteValue(request_iterator,
+    def Write(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -206,9 +274,9 @@ class HastyService(object):
         return grpc.experimental.stream_unary(
             request_iterator,
             target,
-            '/hasty.HastyService/WriteValue',
-            hasty__service__pb2.WriteMessage.SerializeToString,
-            hasty__service__pb2.WriteAck.FromString,
+            '/hasty.HastyService/Write',
+            hasty__service__pb2.WriteRequest.SerializeToString,
+            hasty__service__pb2.WriteResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -220,7 +288,7 @@ class HastyService(object):
             _registered_method=True)
 
     @staticmethod
-    def Execute(request,
+    def BankQuery(request,
             target,
             options=(),
             channel_credentials=None,
@@ -233,9 +301,9 @@ class HastyService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hasty.HastyService/Execute',
-            hasty__service__pb2.ExecuteCommand.SerializeToString,
-            hasty__service__pb2.ExecuteAck.FromString,
+            '/hasty.HastyService/BankQuery',
+            hasty__service__pb2.BankQueryRequest.SerializeToString,
+            hasty__service__pb2.BankQueryResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -247,7 +315,7 @@ class HastyService(object):
             _registered_method=True)
 
     @staticmethod
-    def DeleteValue(request,
+    def ExecuteCommand(request,
             target,
             options=(),
             channel_credentials=None,
@@ -260,9 +328,117 @@ class HastyService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hasty.HastyService/DeleteValue',
+            '/hasty.HastyService/ExecuteCommand',
+            hasty__service__pb2.ExecuteCommandRequest.SerializeToString,
+            hasty__service__pb2.ExecuteCommandResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Delete(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hasty.HastyService/Delete',
             hasty__service__pb2.Uuid.SerializeToString,
-            hasty__service__pb2.WriteAck.FromString,
+            hasty__service__pb2.DeleteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReadMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hasty.HastyService/ReadMetadata',
+            hasty__service__pb2.MetadataReadRequest.SerializeToString,
+            hasty__service__pb2.MetadataReadResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WriteMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hasty.HastyService/WriteMetadata',
+            hasty__service__pb2.MetadataWriteRequest.SerializeToString,
+            hasty__service__pb2.MetadataWriteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hasty.HastyService/DeleteMetadata',
+            hasty__service__pb2.MetadataDeleteRequest.SerializeToString,
+            hasty__service__pb2.MetadataDeleteResponse.FromString,
             options,
             channel_credentials,
             insecure,

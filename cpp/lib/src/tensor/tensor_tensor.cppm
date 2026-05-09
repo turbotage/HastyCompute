@@ -50,6 +50,52 @@ public:
     inline Tensor& operator^=(const Tensor& other) { return bitwise_xor_(other); }
     inline Tensor& operator^=(const Scalar& other) { return bitwise_xor_(other); }
 
+    friend inline Tensor operator+(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.add(rhs._base)); }
+    friend inline Tensor operator+(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.add(rhs.to_torch())); }
+    friend inline Tensor operator+(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.add(lhs.to_torch())); }
+
+    friend inline Tensor operator-(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.sub(rhs._base)); }
+    friend inline Tensor operator-(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.sub(rhs.to_torch())); }
+    friend inline Tensor operator-(const Scalar& lhs, const Tensor& rhs) { return Tensor(hat::rsub(rhs._base, lhs.to_torch())); }
+
+    friend inline Tensor operator*(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.mul(rhs._base)); }
+    friend inline Tensor operator*(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.mul(rhs.to_torch())); }
+    friend inline Tensor operator*(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.mul(lhs.to_torch())); }
+
+    friend inline Tensor operator/(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.div(rhs._base)); }
+    friend inline Tensor operator/(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.div(rhs.to_torch())); }
+    friend inline Tensor operator/(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.reciprocal().mul(lhs.to_torch())); }
+
+    friend inline Tensor operator&(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.bitwise_and(rhs._base)); }
+    friend inline Tensor operator&(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.bitwise_and(rhs.to_torch())); }
+    friend inline Tensor operator&(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.bitwise_and(lhs.to_torch())); }
+
+    friend inline Tensor operator|(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.bitwise_or(rhs._base)); }
+    friend inline Tensor operator|(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.bitwise_or(rhs.to_torch())); }
+    friend inline Tensor operator|(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.bitwise_or(lhs.to_torch())); }
+
+    friend inline Tensor operator^(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.bitwise_xor(rhs._base)); }
+    friend inline Tensor operator^(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.bitwise_xor(rhs.to_torch())); }
+    friend inline Tensor operator^(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.bitwise_xor(lhs.to_torch())); }
+
+    friend inline Tensor operator<(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.lt(rhs._base)); }
+    friend inline Tensor operator<(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.lt(rhs.to_torch())); }
+    friend inline Tensor operator<(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.gt(lhs.to_torch())); }
+
+    friend inline Tensor operator<=(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.le(rhs._base)); }
+    friend inline Tensor operator<=(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.le(rhs.to_torch())); }
+    friend inline Tensor operator<=(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.ge(lhs.to_torch())); }
+
+    friend inline Tensor operator>(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.gt(rhs._base)); }
+    friend inline Tensor operator>(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.gt(rhs.to_torch())); }
+    friend inline Tensor operator>(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.lt(lhs.to_torch())); }
+
+    friend inline Tensor operator>=(const Tensor& lhs, const Tensor& rhs) { return Tensor(lhs._base.ge(rhs._base)); }
+    friend inline Tensor operator>=(const Tensor& lhs, const Scalar& rhs) { return Tensor(lhs._base.ge(rhs.to_torch())); }
+    friend inline Tensor operator>=(const Scalar& lhs, const Tensor& rhs) { return Tensor(rhs._base.le(lhs.to_torch())); }
+
+    
+
     template<is_tensor_type T>
     std::span<T> get_span() &{
         if (!_base.is_contiguous()) {
@@ -450,6 +496,8 @@ public:
     }
 
     inline Tensor flip(ArrayRef<i64> dims) const { return Tensor(_base.flip(dims.to_torch())); }
+
+    inline Tensor permute(ArrayRef<i64> dims) const { return Tensor(_base.permute(dims.to_torch())); }
 
     inline Tensor narrow(i64 dim, i64 start, i64 length) const { return Tensor(_base.narrow(dim, start, length)); }
 

@@ -332,9 +332,12 @@ export class LazyVolume {
  * arrives so the renderer can re-render with real values.
  *
  * shape is normalised to 5D [T, E, Z, Y, X] (1s prepended if shorter).
+ * Slice strings are built using the *original* tensor ndim so the server
+ * receives correct indexing regardless of how many leading dims were virtual.
  */
 export class RemoteVolume {
     constructor(uuid16, shape, options = {}) {
+        this._ndim         = shape.length;           // actual server-side ndim
         const s = shape.slice();
         while (s.length < 5) s.unshift(1);
         this.shape         = s;
@@ -357,6 +360,27 @@ export class RemoteVolume {
         return this.dtype === 'i16' ? new Uint16Array(n) : new Float32Array(n);
     }
 
+    /**
+     * Build a slice string for the server, dropping virtual leading dimensions
+     * so it matches the actual tensor ndim.
+     *
+     * Leading virtual dims (T and/or E) are dropped when ndim < 5 / < 4.
+     * The trailing spatial dims always map to the last ndim dims of the tensor.
+     *
+     * @param {number} t        time index
+     * @param {number} e        echo index
+     * @param {string} axial    full 5D axial part e.g. `${z},:,:`
+     * @param {string} sagittal full 5D sagittal part e.g. `${z},:,:,${x}`
+     * @param {string} coronal  full 5D coronal part
+     * @param {string} extra    full 5D extra part
+     */
+    _sliceStr(parts5d) {
+        // parts5d = [t, e, z_or_colon, y_or_colon, x_or_colon]
+        // Drop leading T and/or E when tensor doesn't have those dims.
+        const drop = 5 - this._ndim;
+        return '[' + parts5d.slice(drop).join(',') + ']';
+    }
+
     _fetch(key, sliceInfo) {
         if (this._pending.has(key)) return;
         this._pending.add(key);
@@ -376,28 +400,28 @@ export class RemoteVolume {
     getAxialSlice(t, e, z) {
         const key = `ax:${t},${e},${z}`;
         if (this._cache.has(key)) return this._cache.get(key);
-        this._fetch(key, `[${t},${e},${z},:,:]`);
+        this._fetch(key, this._sliceStr([t, e, z, ':', ':']));
         return this._zeros(this.Y * this.X);
     }
 
     getSagittalSlice(t, e, x) {
         const key = `sg:${t},${e},${x}`;
         if (this._cache.has(key)) return this._cache.get(key);
-        this._fetch(key, `[${t},${e},:,:,${x}]`);
+        this._fetch(key, this._sliceStr([t, e, ':', ':', x]));
         return this._zeros(this.Z * this.Y);
     }
 
     getCoronalSlice(t, e, y) {
         const key = `co:${t},${e},${y}`;
         if (this._cache.has(key)) return this._cache.get(key);
-        this._fetch(key, `[${t},${e},:,${y},:]`);
+        this._fetch(key, this._sliceStr([t, e, ':', y, ':']));
         return this._zeros(this.Z * this.X);
     }
 
     getExtraSlice(z, y, x) {
         const key = `ex:${z},${y},${x}`;
         if (this._cache.has(key)) return this._cache.get(key);
-        this._fetch(key, `[:,:,${z},${y},${x}]`);
+        this._fetch(key, this._sliceStr([':', ':', z, y, x]));
         return this._zeros(this.T * this.E);
     }
 }

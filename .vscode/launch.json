@@ -36,6 +36,7 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
         },
         {
             "name": "(lldb-dap) HastyServerTest",
@@ -44,6 +45,7 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyServerTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
         },
         {
             "name": "(lldb-dap) HastyLinalgTest",
@@ -52,6 +54,7 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyLinalgTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
         },
         {
             "name": "(lldb-dap) HastyDataTest",
@@ -60,6 +63,7 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyDataTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
         },
         {
             "name": "(lldb-dap) HastyNonFourierInterpTest",
@@ -68,6 +72,26 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyNonFourierInterpTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
+        },
+        {
+            // Start this ONCE before running the C++ program.
+            // VS Code listens on port 5678; each Python subprocess auto-connects
+            // when run_script(..., debug=true) is used. No manual attach needed.
+            // Breakpoints set on workspace source files work directly because
+            // scripts run from HASTY_SCRIPTS_DIR (source tree) and hastycompute
+            // is installed editable so debugpy sees real workspace paths.
+            "name": "Python: Listen for subprocess (debugpy)",
+            "type": "debugpy",
+            "request": "attach",
+            "listen": { "host": "localhost", "port": 5678 },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}/python",
+                    "remoteRoot": "${workspaceFolder}/python"
+                }
+            ],
+            "justMyCode": false,
         },
         {
             "name": "(lldb-dap) HastyVkFFTTest",
@@ -76,11 +100,13 @@
             "program": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/test-build/HastyVkFFTTest",
             "args": [],
             "stopOnEntry": false,
+            "console": "integratedTerminal",
         },
         {
             "name": "(lldb-dap) Attach HastyCompute",
             "type": "lldb-dap",
             "request": "attach",
+            "console": "integratedTerminal",
         },
     ]
 }

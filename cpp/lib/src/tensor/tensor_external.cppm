@@ -237,6 +237,27 @@ export Tensor ifftshift(const Tensor& t, Opt<ArrayRef<i64>> dims = nullopt)
     return Tensor(htorch::fft::ifftshift(t.to_torch(), dim_ref));
 }
 
+export Tensor isnan(const Tensor& t)
+{
+    return Tensor(hat::isnan(t.to_torch()));
+}
+
+// kernel_size, stride, padding, dilation: length-1 (broadcast) or length-3 [D,H,W].
+export Tensor max_pool3d(const Tensor& t,
+                         ArrayRef<i64> kernel_size,
+                         ArrayRef<i64> stride   = {},
+                         ArrayRef<i64> padding  = {0},
+                         ArrayRef<i64> dilation = {1},
+                         bool ceil_mode = false)
+{
+    return Tensor(hat::max_pool3d(t.to_torch(),
+        kernel_size.to_torch(),
+        stride.to_torch(),
+        padding.to_torch(),
+        dilation.to_torch(),
+        ceil_mode));
+}
+
 export Tensor compress_hermitian(const Tensor& t, i64 dim)
 {
     // T[k] = conj(T[N-k]) (joint over all dims).
@@ -286,6 +307,30 @@ export Tensor decompress_hermitian(const Tensor& t, i64 dim, i64 original_size)
     tail = tail.conj().clone();
 
     return cat({t, tail}, dim).contiguous();
+}
+
+// Unbiased N-D convolution dispatched by spatial rank (1, 2, or 3).
+// stride/padding/dilation must each have length == weight.dim() - 2.
+export Tensor convolution(
+    const Tensor& input,
+    const Tensor& weight,
+    ArrayRef<i64> stride,
+    ArrayRef<i64> padding,
+    ArrayRef<i64> dilation,
+    i64 groups = 1)
+{
+    std::optional<hat::Tensor> no_bias{};
+    i64 spatial_ndim = (i64)weight.sizes().size() - 2;
+    auto in = input.to_torch();
+    auto wt = weight.to_torch();
+    auto st = stride.to_torch();
+    auto pd = padding.to_torch();
+    auto dl = dilation.to_torch();
+    if (spatial_ndim == 1)
+        return Tensor(hat::conv1d(in, wt, no_bias, st, pd, dl, groups));
+    if (spatial_ndim == 2)
+        return Tensor(hat::conv2d(in, wt, no_bias, st, pd, dl, groups));
+    return Tensor(hat::conv3d(in, wt, no_bias, st, pd, dl, groups));
 }
 
 }

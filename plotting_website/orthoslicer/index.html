@@ -23,6 +23,11 @@
                 <option value="3">Hot</option>
                 <option value="4">Cool</option>
             </select>
+            <label for="win-min" class="hdr-label">Win min:</label>
+            <input id="win-min" type="number" class="hdr-input" value="0" step="any">
+            <label for="win-max" class="hdr-label">max:</label>
+            <input id="win-max" type="number" class="hdr-input" value="1" step="any">
+            <button id="auto-range-btn" class="hdr-btn" title="Auto window from last fetched slice">Auto</button>
             <span id="status-msg" class="status-msg">Generating phantom…</span>
         </header>
         <div id="viewport-grid">

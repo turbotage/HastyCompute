@@ -9,6 +9,7 @@ export import :concepts;
 export import :external_math;
 export import :external;
 export import :json;
+export import :masking;
 export import :scalar;
 export import :tensor;
 

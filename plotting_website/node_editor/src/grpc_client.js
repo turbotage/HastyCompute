@@ -300,6 +300,9 @@ export async function compressUi16Default(uuid16) {
     const { output_ids, msg } = await executeWithMsg(COMMAND_IDS.compress_ui16_default, [uuid16]);
     if (!output_ids.length) throw new Error('compress_ui16_default: no output');
     const config = msg ? JSON.parse(msg) : {};
+    // Track this intermediate UUID so the frontend can free it when the
+    // page/window is closed.
+    try { trackCreatedUuid(output_ids[0]); } catch {}
     return { compressedUuid: output_ids[0], config };
 }
 
@@ -378,9 +381,23 @@ export async function fetchSliceData(uuid16, sliceInfo) {
             new Uint8Array(raw.buffer, raw.byteOffset + byteBase, totalElem * 2));
         return { data: u16, dtype };
     }
+    // Boolean (b8) tensors are encoded as one byte per element. Convert to
+    // Float32Array of 0.0/1.0 so the renderer can upload as float textures.
+    if (dtype === 'b8') {
+        const byteBase = 1 + dataOff;
+        const u8view = new Uint8Array(raw.buffer, raw.byteOffset + byteBase, totalElem);
+        const f32 = new Float32Array(totalElem);
+        for (let i = 0; i < totalElem; ++i) f32[i] = u8view[i] ? 1.0 : 0.0;
+        return { data: f32, dtype: 'f32' };
+    }
     const f32 = new Float32Array(totalElem);
-    for (let i = 0; i < totalElem; i++)
-        f32[i] = dv.getFloat32(dataOff + i * 4, true);
+    if (dtype === 'f64') {
+        for (let i = 0; i < totalElem; i++)
+            f32[i] = dv.getFloat64(dataOff + i * 8, true);
+    } else {
+        for (let i = 0; i < totalElem; i++)
+            f32[i] = dv.getFloat32(dataOff + i * 4, true);
+    }
     return { data: f32, dtype: 'f32' };
 }
 
@@ -438,6 +455,39 @@ export function hexToUuid(hex) {
     for (let i = 0; i < 16; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     return out;
 }
+
+// Track created intermediate UUIDs in localStorage so we can attempt to
+// delete them when the user closes the page. Stored as array of 32-char hex
+// strings under key 'hasty_created_uuids'.
+function _getTrackedHex() {
+    try { return JSON.parse(localStorage.getItem('hasty_created_uuids') || '[]'); } catch { return []; }
+}
+function _saveTrackedHex(arr) {
+    try { localStorage.setItem('hasty_created_uuids', JSON.stringify(arr)); } catch {}
+}
+
+export function trackCreatedUuid(uuid16) {
+    const hex = uuidToHex(uuid16);
+    const arr = _getTrackedHex();
+    if (!arr.includes(hex)) { arr.push(hex); _saveTrackedHex(arr); }
+}
+
+export function untrackCreatedUuid(uuid16_or_hex) {
+    const hex = (uuid16_or_hex instanceof Uint8Array) ? uuidToHex(uuid16_or_hex) : String(uuid16_or_hex);
+    const arr = _getTrackedHex().filter(h => h !== hex);
+    _saveTrackedHex(arr);
+}
+
+// Attempt best-effort cleanup on unload. We don't await deletions because
+// unload handlers cannot reliably run async to completion; still this will
+// trigger a request in most browsers.
+window.addEventListener('unload', () => {
+    const arr = _getTrackedHex();
+    for (const hex of arr) {
+        try { deleteValue(hexToUuid(hex)).catch(() => {}); } catch { /* ignore */ }
+    }
+    try { localStorage.removeItem('hasty_created_uuids'); } catch {}
+});
 
 function _parseRawString(raw) {
     if (!raw || raw.length < 9 || raw[0] !== 5) return null;

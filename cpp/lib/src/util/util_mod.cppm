@@ -34,16 +34,44 @@ private:
 	T&& _obj;
 };
 
-export std::array<std::uint8_t, 16> generate_uuid() {
+export std::array<u8, 16> generate_uuid() {
 	static std::mutex mtx;
 	static std::mt19937_64 rng{std::random_device{}()};
-	static std::uniform_int_distribution<std::uint64_t> dist;
+	static std::uniform_int_distribution<u64> dist;
 	std::lock_guard lock(mtx);
-	std::array<std::uint8_t, 16> uuid;
+	std::array<u8, 16> uuid;
 	std::uint64_t a = dist(rng), b = dist(rng);
 	std::memcpy(uuid.data(),     &a, 8);
 	std::memcpy(uuid.data() + 8, &b, 8);
 	return uuid;
 }
+
+export std::string uuid_to_hex(const std::array<u8, 16>& uuid) {
+    static constexpr char hex_chars[] = "0123456789abcdef";
+    std::string out(32, '0');
+    for (int i = 0; i < 16; ++i) {
+        out[i * 2]     = hex_chars[(uuid[i] >> 4) & 0xF];
+        out[i * 2 + 1] = hex_chars[uuid[i] & 0xF];
+    }
+    return out;
+}
+
+export std::array<u8, 16> hex_to_uuid_array(const std::string& hex) {
+    if (hex.size() != 32)
+        throw std::runtime_error("[python] UUID hex string must be 32 chars");
+    std::array<u8, 16> out{};
+    for (int i = 0; i < 16; ++i) {
+        auto nibble = [](char c) -> u8 {
+            if (c >= '0' && c <= '9') return static_cast<u8>(c - '0');
+            if (c >= 'a' && c <= 'f') return static_cast<u8>(c - 'a' + 10);
+            if (c >= 'A' && c <= 'F') return static_cast<u8>(c - 'A' + 10);
+            throw std::runtime_error("[python] Invalid hex char");
+        };
+        out[i] = static_cast<u8>((nibble(hex[i*2]) << 4) | nibble(hex[i*2+1]));
+    }
+    return out;
+}
+
+
 
 }

@@ -20,9 +20,16 @@ set(PETSC_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/petsc-install")
 set(SLEPC_SRC_DIR     "${CMAKE_CURRENT_BINARY_DIR}/_deps/slepc-src")
 set(SLEPC_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/slepc-install")
 
-# Derive CUDA root from CMAKE_CUDA_COMPILER (set by the lib preset)
-get_filename_component(_psc_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
-get_filename_component(_psc_cuda_root "${_psc_cuda_bin}" DIRECTORY)
+# Derive CUDA root from CUDAToolkit_ROOT (set in the preset).
+# Do NOT derive from CMAKE_CUDA_COMPILER — when Clang is the CUDA compiler the
+# parent directory of clang++ is not the CUDA toolkit root.
+if(DEFINED CUDAToolkit_ROOT AND NOT CUDAToolkit_ROOT STREQUAL "")
+    set(_psc_cuda_root "${CUDAToolkit_ROOT}")
+else()
+    # Fallback: derive from CMAKE_CUDA_COMPILER (works when NVCC is the compiler)
+    get_filename_component(_psc_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+    get_filename_component(_psc_cuda_root "${_psc_cuda_bin}" DIRECTORY)
+endif()
 
 ExternalProject_Add(petsc_external
     GIT_REPOSITORY  "https://gitlab.com/petsc/petsc.git"

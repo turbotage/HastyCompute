@@ -5,6 +5,10 @@ set(HDF5_BUILD_CPP_LIB         OFF CACHE BOOL "" FORCE)
 set(HDF5_BUILD_HL_LIB          OFF CACHE BOOL "" FORCE)
 set(HDF5_ENABLE_Z_LIB_SUPPORT  OFF CACHE BOOL "" FORCE)
 set(HDF5_ENABLE_PLUGIN_SUPPORT OFF CACHE BOOL "" FORCE)
+# Force shared libs ON before FetchContent so hdf5-shared target is always created.
+# Some earlier FetchContent deps (e.g. blosc2/zlib-ng) leave BUILD_SHARED_LIBS in a
+# state that defeats HDF5's option() default of ON.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     hdf5

@@ -1,7 +1,10 @@
 import { LazyVolume, RemoteVolume } from './volume.js';
 import { Renderer }   from './renderer.js';
 import { CACHE_DEPTH, CACHE_TE } from './renderer.js';
-import { hexToUuid, fetchMetaString, initCommandIds } from '../../node_editor/src/grpc_client.js';
+import {
+    hexToUuid, fetchMetaString, initCommandIds,
+    deleteValue, compressUi16Default,
+} from '../../node_editor/src/grpc_client.js';
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
@@ -11,9 +14,11 @@ async function init() {
         showError('WebGPU is not supported in this browser.\nTry Chrome 113+ or Edge 113+.');
         return;
     }
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    let adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
     if (!adapter) {
-        showError('No suitable GPU adapter found.');
+        showError('No suitable GPU adapter found.\nOn Linux try: google-chrome --enable-features=Vulkan --enable-unsafe-webgpu');
         return;
     }
     const device = await adapter.requestDevice();
@@ -29,11 +34,36 @@ async function init() {
     const comprepConfig = configStr ? JSON.parse(decodeURIComponent(configStr)) : null;
     let volume;
     if (uuidHex) {
-        const uuid16 = hexToUuid(uuidHex);
-        const meta   = await fetchMetaString(uuid16);
+        let uuid16 = hexToUuid(uuidHex);
+        const meta = await fetchMetaString(uuid16);
         if (!meta) { showError('Could not fetch tensor metadata for UUID: ' + uuidHex); return; }
-        volume = new RemoteVolume(uuid16, meta.shape, { dtype: meta.dtype, comprepConfig });
-        setStatus(`Remote tensor ${volume.shape.join('×')} [${meta.dtype}] — fetching slices on demand`);
+
+        let resolvedUuid   = uuid16;
+        let resolvedDtype  = meta.dtype;
+        let resolvedConfig = comprepConfig;
+        let tempUuid       = null;  // UUID to delete on page unload
+
+        // Auto-comprep: delegate entirely to compress_ui16_default (C++ computes
+        // min/max and q01/q99 internally, returns config as JSON in msg).
+        const AUTOCOMPRESS = new Set(['f32', 'f64', 'f16', 'i8', 'u8', 'i16', 'i32', 'i64']);
+        if (!resolvedConfig && AUTOCOMPRESS.has(meta.dtype)) {
+            setStatus('Auto-compressing…');
+            const { compressedUuid, config } = await compressUi16Default(uuid16);
+            resolvedUuid   = compressedUuid;
+            resolvedDtype  = 'i16';
+            resolvedConfig = config;
+            tempUuid       = resolvedUuid;
+
+            document.getElementById('win-min').value = (config.a ?? 0).toFixed(4);
+            document.getElementById('win-max').value = (config.b ?? 1).toFixed(4);
+        }
+
+        window.addEventListener('unload', () => {
+            if (tempUuid) deleteValue(tempUuid).catch(() => {});
+        });
+
+        volume = new RemoteVolume(resolvedUuid, meta.shape, { dtype: resolvedDtype, comprepConfig: resolvedConfig });
+        setStatus(`Remote tensor ${meta.shape.join('×')} [${meta.dtype}${resolvedConfig ? ' → comprep' : ''}] — fetching slices on demand`);
     } else {
         const shape = [8, 3, 400, 400, 400];
         volume = new LazyVolume(shape);
@@ -65,7 +95,7 @@ async function init() {
     // ── Initial render (centre of volume) ────────────────────────────────────
     renderer.setPosition({
         t: 0,
-        e: 0,
+        e: Math.floor(volume.E / 2),
         z: Math.floor(volume.Z / 2),
         y: Math.floor(volume.Y / 2),
         x: Math.floor(volume.X / 2),
@@ -106,6 +136,35 @@ async function init() {
     document.getElementById('colormap-select').addEventListener('change', e => {
         renderer.colormap = parseInt(e.target.value, 10);
         renderer.render();
+    });
+
+    // ── Window / level ────────────────────────────────────────────────────────
+    document.getElementById('win-min').addEventListener('change', e => {
+        renderer.windowMin = parseFloat(e.target.value);
+        renderer.render();
+    });
+    document.getElementById('win-max').addEventListener('change', e => {
+        renderer.windowMax = parseFloat(e.target.value);
+        renderer.render();
+    });
+    document.getElementById('auto-range-btn').addEventListener('click', () => {
+        const cache = volume._cache;
+        if (!cache || cache.size === 0) return;
+        let mn = Infinity, mx = -Infinity;
+        for (const data of cache.values()) {
+            for (let i = 0; i < data.length; i++) {
+                const v = data[i];
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+            }
+        }
+        if (mn < mx) {
+            renderer.windowMin = mn;
+            renderer.windowMax = mx;
+            document.getElementById('win-min').value = mn.toFixed(4);
+            document.getElementById('win-max').value = mx.toFixed(4);
+            renderer.render();
+        }
     });
 
     // ── Mouse interaction ─────────────────────────────────────────────────────
@@ -320,5 +379,6 @@ function nextFrame() {
 
 init().catch(err => {
     console.error(err);
-    showError(`Initialisation failed:\n${err.message}`);
+    const msg = err.message ?? String(err);
+    showError(`Initialisation failed:\n${msg.slice(0, 300)}${msg.length > 300 ? '\n…(see console for full error)' : ''}`);
 });

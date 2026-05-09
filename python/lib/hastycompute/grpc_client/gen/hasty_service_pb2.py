@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13hasty_service.proto\x12\x05hasty\"\x15\n\x04Uuid\x12\r\n\x05value\x18\x01 \x01(\x0c\"\x19\n\tDataChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\";\n\x0c\x46\x65tchRequest\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\x12\x12\n\nslice_info\x18\x02 \x01(\t\":\n\x0bWriteHeader\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\x12\x12\n\nslice_info\x18\x02 \x01(\t\"a\n\x0cWriteMessage\x12$\n\x06header\x18\x01 \x01(\x0b\x32\x12.hasty.WriteHeaderH\x00\x12 \n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x10.hasty.DataChunkH\x00\x42\t\n\x07payload\".\n\x08WriteAck\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\terror_msg\x18\x02 \x01(\t\"V\n\x0e\x45xecuteCommand\x12\x13\n\x0b\x66unction_id\x18\x01 \x01(\x05\x12\x0f\n\x07options\x18\x02 \x01(\t\x12\x1e\n\tinput_ids\x18\x03 \x03(\x0b\x32\x0b.hasty.Uuid\"Q\n\nExecuteAck\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\terror_msg\x18\x02 \x01(\t\x12\x1f\n\noutput_ids\x18\x03 \x03(\x0b\x32\x0b.hasty.Uuid2\x8b\x02\n\x0cHastyService\x12,\n\tPushValue\x12\x10.hasty.DataChunk\x1a\x0b.hasty.Uuid(\x01\x12\x35\n\nFetchValue\x12\x13.hasty.FetchRequest\x1a\x10.hasty.DataChunk0\x01\x12\x34\n\nWriteValue\x12\x13.hasty.WriteMessage\x1a\x0f.hasty.WriteAck(\x01\x12\x33\n\x07\x45xecute\x12\x15.hasty.ExecuteCommand\x1a\x11.hasty.ExecuteAck\x12+\n\x0b\x44\x65leteValue\x12\x0b.hasty.Uuid\x1a\x0f.hasty.WriteAckb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13hasty_service.proto\x12\x05hasty\"\x15\n\x04Uuid\x12\r\n\x05value\x18\x01 \x01(\x0c\"\x19\n\tDataChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\"E\n\x0cPushResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t\x12\x17\n\x02id\x18\x03 \x01(\x0b\x32\x0b.hasty.Uuid\":\n\x0bReadRequest\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\x12\x12\n\nslice_info\x18\x02 \x01(\t\"2\n\x12ReadResponseHeader\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t\"h\n\x0cReadResponse\x12+\n\x06header\x18\x01 \x01(\x0b\x32\x19.hasty.ReadResponseHeaderH\x00\x12 \n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x10.hasty.DataChunkH\x00\x42\t\n\x07payload\"A\n\x12WriteRequestHeader\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\x12\x12\n\nslice_info\x18\x02 \x01(\t\"h\n\x0cWriteRequest\x12+\n\x06header\x18\x01 \x01(\x0b\x32\x19.hasty.WriteRequestHeaderH\x00\x12 \n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x10.hasty.DataChunkH\x00\x42\t\n\x07payload\"3\n\rWriteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\terror_msg\x18\x02 \x01(\t\"]\n\x15\x45xecuteCommandRequest\x12\x13\n\x0b\x66unction_id\x18\x01 \x01(\x05\x12\x0f\n\x07options\x18\x02 \x01(\t\x12\x1e\n\tinput_ids\x18\x03 \x03(\x0b\x32\x0b.hasty.Uuid\"j\n\x16\x45xecuteCommandResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\terror_msg\x18\x02 \x01(\t\x12\x0b\n\x03msg\x18\x03 \x01(\t\x12\x1f\n\noutput_ids\x18\x04 \x03(\x0b\x32\x0b.hasty.Uuid\"3\n\x10\x42\x61nkQueryRequest\x12\x12\n\nquery_type\x18\x01 \x01(\x05\x12\x0b\n\x03msg\x18\x02 \x01(\t\"f\n\x11\x42\x61nkQueryResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\terror_msg\x18\x02 \x01(\t\x12\x0b\n\x03msg\x18\x03 \x01(\t\x12 \n\x0bids_in_bank\x18\x04 \x03(\x0b\x32\x0b.hasty.Uuid\".\n\x0e\x44\x65leteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t\".\n\x13MetadataReadRequest\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\"M\n\x14MetadataReadResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t\x12\x17\n\x0fmetadata_string\x18\x03 \x01(\t\"H\n\x14MetadataWriteRequest\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\x12\x17\n\x0fmetadata_string\x18\x02 \x01(\t\"5\n\x15MetadataWriteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t\"0\n\x15MetadataDeleteRequest\x12\x17\n\x02id\x18\x01 \x01(\x0b\x32\x0b.hasty.Uuid\"6\n\x16MetadataDeleteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0b\n\x03msg\x18\x02 \x01(\t2\xc9\x04\n\x0cHastyService\x12/\n\x04Push\x12\x10.hasty.DataChunk\x1a\x13.hasty.PushResponse(\x01\x12\x31\n\x04Read\x12\x12.hasty.ReadRequest\x1a\x13.hasty.ReadResponse0\x01\x12\x34\n\x05Write\x12\x13.hasty.WriteRequest\x1a\x14.hasty.WriteResponse(\x01\x12>\n\tBankQuery\x12\x17.hasty.BankQueryRequest\x1a\x18.hasty.BankQueryResponse\x12M\n\x0e\x45xecuteCommand\x12\x1c.hasty.ExecuteCommandRequest\x1a\x1d.hasty.ExecuteCommandResponse\x12,\n\x06\x44\x65lete\x12\x0b.hasty.Uuid\x1a\x15.hasty.DeleteResponse\x12G\n\x0cReadMetadata\x12\x1a.hasty.MetadataReadRequest\x1a\x1b.hasty.MetadataReadResponse\x12J\n\rWriteMetadata\x12\x1b.hasty.MetadataWriteRequest\x1a\x1c.hasty.MetadataWriteResponse\x12M\n\x0e\x44\x65leteMetadata\x12\x1c.hasty.MetadataDeleteRequest\x1a\x1d.hasty.MetadataDeleteResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,18 +35,42 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_UUID']._serialized_end=51
   _globals['_DATACHUNK']._serialized_start=53
   _globals['_DATACHUNK']._serialized_end=78
-  _globals['_FETCHREQUEST']._serialized_start=80
-  _globals['_FETCHREQUEST']._serialized_end=139
-  _globals['_WRITEHEADER']._serialized_start=141
-  _globals['_WRITEHEADER']._serialized_end=199
-  _globals['_WRITEMESSAGE']._serialized_start=201
-  _globals['_WRITEMESSAGE']._serialized_end=298
-  _globals['_WRITEACK']._serialized_start=300
-  _globals['_WRITEACK']._serialized_end=346
-  _globals['_EXECUTECOMMAND']._serialized_start=348
-  _globals['_EXECUTECOMMAND']._serialized_end=434
-  _globals['_EXECUTEACK']._serialized_start=436
-  _globals['_EXECUTEACK']._serialized_end=517
-  _globals['_HASTYSERVICE']._serialized_start=520
-  _globals['_HASTYSERVICE']._serialized_end=787
+  _globals['_PUSHRESPONSE']._serialized_start=80
+  _globals['_PUSHRESPONSE']._serialized_end=149
+  _globals['_READREQUEST']._serialized_start=151
+  _globals['_READREQUEST']._serialized_end=209
+  _globals['_READRESPONSEHEADER']._serialized_start=211
+  _globals['_READRESPONSEHEADER']._serialized_end=261
+  _globals['_READRESPONSE']._serialized_start=263
+  _globals['_READRESPONSE']._serialized_end=367
+  _globals['_WRITEREQUESTHEADER']._serialized_start=369
+  _globals['_WRITEREQUESTHEADER']._serialized_end=434
+  _globals['_WRITEREQUEST']._serialized_start=436
+  _globals['_WRITEREQUEST']._serialized_end=540
+  _globals['_WRITERESPONSE']._serialized_start=542
+  _globals['_WRITERESPONSE']._serialized_end=593
+  _globals['_EXECUTECOMMANDREQUEST']._serialized_start=595
+  _globals['_EXECUTECOMMANDREQUEST']._serialized_end=688
+  _globals['_EXECUTECOMMANDRESPONSE']._serialized_start=690
+  _globals['_EXECUTECOMMANDRESPONSE']._serialized_end=796
+  _globals['_BANKQUERYREQUEST']._serialized_start=798
+  _globals['_BANKQUERYREQUEST']._serialized_end=849
+  _globals['_BANKQUERYRESPONSE']._serialized_start=851
+  _globals['_BANKQUERYRESPONSE']._serialized_end=953
+  _globals['_DELETERESPONSE']._serialized_start=955
+  _globals['_DELETERESPONSE']._serialized_end=1001
+  _globals['_METADATAREADREQUEST']._serialized_start=1003
+  _globals['_METADATAREADREQUEST']._serialized_end=1049
+  _globals['_METADATAREADRESPONSE']._serialized_start=1051
+  _globals['_METADATAREADRESPONSE']._serialized_end=1128
+  _globals['_METADATAWRITEREQUEST']._serialized_start=1130
+  _globals['_METADATAWRITEREQUEST']._serialized_end=1202
+  _globals['_METADATAWRITERESPONSE']._serialized_start=1204
+  _globals['_METADATAWRITERESPONSE']._serialized_end=1257
+  _globals['_METADATADELETEREQUEST']._serialized_start=1259
+  _globals['_METADATADELETEREQUEST']._serialized_end=1307
+  _globals['_METADATADELETERESPONSE']._serialized_start=1309
+  _globals['_METADATADELETERESPONSE']._serialized_end=1363
+  _globals['_HASTYSERVICE']._serialized_start=1366
+  _globals['_HASTYSERVICE']._serialized_end=1951
 # @@protoc_insertion_point(module_scope)

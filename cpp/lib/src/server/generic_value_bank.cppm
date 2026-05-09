@@ -15,7 +15,7 @@ public:
         return _bank.contains(key);
     }
 
-    std::array<std::uint8_t, 16> push_value(hasty::GenericValue value) {
+    std::array<u8, 16> push_value(hasty::GenericValue value) {
         auto uuid = hasty::generate_uuid();
         std::string key(reinterpret_cast<const char*>(uuid.data()), 16);
         std::unique_lock lock(_mutex);
@@ -23,7 +23,7 @@ public:
         return uuid;
     }
 
-    void push_value_with_key(const std::array<std::uint8_t, 16>& uuid, hasty::GenericValue value) {
+    void push_value_with_key(const std::array<u8, 16>& uuid, hasty::GenericValue value) {
         std::string key(reinterpret_cast<const char*>(uuid.data()), 16);
         std::unique_lock lock(_mutex);
         if (_bank.contains(key))

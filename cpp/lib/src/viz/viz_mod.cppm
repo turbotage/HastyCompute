@@ -23,11 +23,7 @@ struct OrthoslicerOptions {
     std::optional<comprep::Config> comprep_config = std::nullopt;
 };
 
-export void orthoslicer(Tensor volume, const OrthoslicerOptions& options);
-
-
-
-
+export void orthoslicer(Tensor volume, const OrthoslicerOptions& options, bool halt_for_input = false, bool plot_locally = false);
 
 
 

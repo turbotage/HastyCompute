@@ -16,8 +16,8 @@
             },
             "cacheVariables": {
                 "CMAKE_CUDA_ARCHITECTURES": "89",
-                "CMAKE_CUDA_HOST_COMPILER": "/usr/bin/clang++-22",
                 "CMAKE_CUDA_COMPILER": "$env{CUDA_ROOT}/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/opt/gcc-15/bin/g++",
                 "CMAKE_CUDA_FLAGS": "-allow-unsupported-compiler",
                 "CUDAToolkit_ROOT": "$env{CUDA_ROOT}"
             }
