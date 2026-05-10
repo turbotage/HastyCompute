@@ -203,6 +203,8 @@ public:
         setup_routes();
     }
 
+    ~HttpServer() { stop(); }
+
     void start() {
         if (!_srv.is_valid())
             throw std::runtime_error("HttpServer: SSLServer is not valid — check cert/key paths");

@@ -294,6 +294,22 @@ install(FILES
 
 install(CODE "file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/share/finufft/examples\")")
 
+# CUDA library compatibility symlinks.
+# PyTorch built against CUDA 13 runtime but lazy-loads libcublasLt.so.12 by name.
+# Create .so and .so.12 symlinks pointing to the actual .so.13 installed file.
+install(CODE "
+    file(GLOB _cublaslt \"\${CMAKE_INSTALL_PREFIX}/lib/libcublasLt.so.*.*.*\")
+    list(GET _cublaslt 0 _clt)
+    if(_clt)
+        get_filename_component(_clt_name \"\${_clt}\" NAME)
+        foreach(_link libcublasLt.so libcublasLt.so.12)
+            execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink
+                \"\${_clt_name}\"
+                \"\${CMAKE_INSTALL_PREFIX}/lib/\${_link}\")
+        endforeach()
+    endif()
+")
+
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/../../python/scripts/"
     DESTINATION "python/scripts"
     FILES_MATCHING PATTERN "*.py"

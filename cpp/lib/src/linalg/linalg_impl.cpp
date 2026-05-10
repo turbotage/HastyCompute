@@ -272,13 +272,15 @@ SVDResult operator_svd(const LinearOperator& op, i64 k, i64 ncv, i64 mpd)
 
     auto U_cd  = empty({m,     k_got}, TensorOptions{res_dev, eScalarType::ComplexDouble});
     auto Vh_cd = empty({k_got, n    }, TensorOptions{res_dev, eScalarType::ComplexDouble});
-    auto S_d   = empty({k_got       }, TensorOptions{res_dev, eScalarType::Double});
+    // S_d gathered on CPU first: PETSc sigma values are host scalars and
+    // mutable_data_ptr on a CUDA tensor would return a device pointer.
+    auto S_cpu = empty({k_got}, TensorOptions{Device{eDeviceType::CPU}, eScalarType::Double});
 
     // ── Extract converged triplets ────────────────────────────────────────────
     PetscVec u_vec, v_vec;
     PetscCallAbort(PETSC_COMM_SELF, MatCreateVecs(A, &v_vec, &u_vec));
 
-    auto* s_ptr = S_d.mutable_data_ptr<double>();
+    auto* s_ptr = S_cpu.mutable_data_ptr<double>();
     for (i64 i = 0; i < k_got; ++i) {
         PetscReal sigma;
         PetscCallAbort(PETSC_COMM_SELF,
@@ -288,6 +290,7 @@ SVDResult operator_svd(const LinearOperator& op, i64 k, i64 ncv, i64 mpd)
         detail::extract_triplet(u_vec, v_vec, i, m, n, U_cd, Vh_cd, on_gpu,
                                 on_gpu ? static_cast<i32>(op.device().index) : i32{-1});
     }
+    auto S_d = on_gpu ? S_cpu.to(res_dev) : S_cpu;
 
     VecDestroy(&u_vec);
     VecDestroy(&v_vec);

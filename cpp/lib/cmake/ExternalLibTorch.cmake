@@ -8,14 +8,17 @@
 # Compiler split (critical for ABI correctness):
 #   CMAKE_CXX_COMPILER  = Clang  (same as HastyCompute — avoids pure-GCC runtime issues)
 #   CMAKE_CUDA_COMPILER = NVCC   (PyTorch is full of NVCC-isms; Clang-as-CUDA fails)
-#   CMAKE_CUDA_HOST_COMPILER = GCC-15  (NVCC uses this for host code in .cu files)
+#   NVCC host compiler  = Clang  (PyTorch's default; set via cuda.cmake)
+#   CMAKE_CUDA_STANDARD = 20     (critical — see below)
 #
-# Why this split fixes the ntsr4__T0 ABI mismatch:
-#   NVCC's cudafe++ renames std → __T0 in .cu template SFINAE params.
-#   With Clang as host, that becomes ntsr4__T0 in libtorch_cuda.so.
-#   With GCC as host, GCC mangles __T0 consistently as ntsr3std.
-#   libtorch_cpu.so (Clang) and libtorch_cuda.so (NVCC+GCC) both emit ntsr3std.
-#   HastyCompute (Clang) also emits ntsr3std → everything links.
+# Why C++20 fixes the ABI mismatch (not GCC host):
+#   cudafe++ renames std → __T0 only in C++17 SFINAE template defaults (enable_if).
+#   In C++20, const_data_ptr uses a `requires` clause instead of enable_if.
+#   cudafe++ does NOT rename std→__T0 in requires clauses.
+#   So Clang sees real `std::is_const_v` → mangles as ntsr3std.
+#   libtorch_cpu.so (Clang C++20) and libtorch_cuda.so (NVCC+Clang C++20) both emit ntsr3std.
+#   HastyCompute (Clang C++23) also emits ntsr3std → everything links.
+#   GCC host + C++17 produced Li0E mangling (SFINAE) which mismatches libtorch_cpu C++20.
 #
 # After include() the following are set for use in CMakeLists.txt:
 #   TORCH_LIBRARIES        — IMPORTED target names for target_link_libraries
@@ -32,10 +35,12 @@ set(LIBTORCH_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-install")
 
 # CUDA compiler for LibTorch is always NVCC (not the project's Clang CUDA compiler).
 set(_torch_nvcc "${CUDAToolkit_ROOT}/bin/nvcc")
-# NVCC host compiler — taken from CMAKE_CUDA_HOST_COMPILER (set in the preset).
-# This is the GCC that handles cudafe++ output; changing the preset value here
-# automatically propagates to LibTorch.
-set(_torch_cuda_host_cxx "${CMAKE_CUDA_HOST_COMPILER}")
+# NVCC host compiler: Clang (PyTorch's default, set in cmake/public/cuda.cmake).
+# Do NOT pass CMAKE_CUDA_HOST_COMPILER here — if it's in the cmake cache PyTorch's
+# cuda.cmake guard (PatchLibTorch) skips the Clang assignment and the wrong host is used.
+if(NOT DEFINED HASTY_GCC_TOOLCHAIN OR HASTY_GCC_TOOLCHAIN STREQUAL "")
+    message(FATAL_ERROR "HASTY_GCC_TOOLCHAIN not set. Add it to CommonPresets.json environment and cacheVariables.")
+endif()
 
 # Convert CMAKE_CUDA_ARCHITECTURES integer list (e.g. "89;90") to PyTorch's
 # dot-notation list (e.g. "8.9 9.0"). cmake uses "89", PyTorch expects "8.9".
@@ -80,6 +85,14 @@ ExternalProject_Add(libtorch_external
     BINARY_DIR  "${LIBTORCH_BUILD_DIR}"
     INSTALL_DIR "${LIBTORCH_INSTALL_DIR}"
 
+    # Patch PyTorch's cmake/public/cuda.cmake to respect an explicit
+    # CMAKE_CUDA_HOST_COMPILER cache variable instead of always forcing Clang.
+    # See cmake/PatchLibTorch.cmake for details.
+    PATCH_COMMAND
+        ${CMAKE_COMMAND}
+            -DLIBTORCH_SRC_DIR=${LIBTORCH_SRC_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchLibTorch.cmake
+
     CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBTORCH_INSTALL_DIR}
         -DCMAKE_BUILD_TYPE=Release
@@ -97,10 +110,10 @@ ExternalProject_Add(libtorch_external
         # CUDA compiler: NVCC (not Clang). PyTorch adds -Xfatbin and other NVCC-only
         # flags; Clang as CUDA compiler rejects them. NVCC handles them natively.
         -DCMAKE_CUDA_COMPILER=${_torch_nvcc}
-        # Host compiler for NVCC's .cu compilation: GCC-15.
-        # cudafe++ renames template params, but GCC mangles them consistently as ntsr3std.
-        -DCMAKE_CUDA_HOST_COMPILER=${_torch_cuda_host_cxx}
-        # GCC-15 may exceed NVCC's tested host compiler range; allow it.
+        # C++20 is required: cudafe++ only renames std→__T0 in C++17 enable_if SFINAE
+        # defaults, NOT in C++20 requires clauses. With C++20, const_data_ptr uses requires,
+        # so Clang sees real std::is_const_v → ntsr3std, matching libtorch_cpu.so.
+        -DCMAKE_CUDA_STANDARD=20
         "-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler"
         "-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}"
         "-DTORCH_CUDA_ARCH_LIST=${_torch_cuda_arch_list}"
@@ -142,10 +155,15 @@ ExternalProject_Add(libtorch_external
     BUILD_COMMAND
         ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel ${_CPU_THREADS}
 
-    # Strip LibTorch's bundled protobuf headers from the install tree.
+    # Strip LibTorch's bundled protobuf headers; patch ntsr4__T0 ABI symbols.
     INSTALL_COMMAND
         ${CMAKE_COMMAND} --install "${LIBTORCH_BUILD_DIR}" --prefix "${LIBTORCH_INSTALL_DIR}"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${LIBTORCH_INSTALL_DIR}/include/google"
+        # Rename ntsr4__T0 → ntsr3std in libtorch_cuda.so so it matches
+        # libtorch_cpu.so (Clang) and HastyCompute (Clang) mangling.
+        COMMAND ${CMAKE_COMMAND}
+            -DLIBTORCH_INSTALL_DIR=${LIBTORCH_INSTALL_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchLibTorchInstall.cmake
 
     BUILD_BYPRODUCTS
         "${LIBTORCH_INSTALL_DIR}/lib/libtorch.so"

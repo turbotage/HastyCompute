@@ -8,16 +8,18 @@
 			"generator": "Ninja",
 			"environment": {
 				"CMAKE_BUILD_PARALLEL_LEVEL": "12",
-				"MY_INSTALL_PATH": "/home/turbotage/Documents/install"
+				"MY_INSTALL_PATH": "/home/turbotage/Documents/install",
+				"HASTY_GCC_TOOLCHAIN": "/opt/gcc-15"
 			},
 			"cacheVariables": {
+				"HASTY_GCC_TOOLCHAIN": "/opt/gcc-15",
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
 				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
 				"CMAKE_C_COMPILER": "/usr/bin/clang-22",
-				"CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN": "/opt/gcc-15",
-				"CMAKE_CXX_COMPILER": "/usr/local/bin/clang++-22-gcc15",
+				"CMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN": "$env{HASTY_GCC_TOOLCHAIN}",
+				"CMAKE_CXX_COMPILER": "${sourceDir}/../../scripts/clang++-22-gcc-toolchain",
 				"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "/usr/bin/clang-scan-deps-22",
-				"CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN": "/opt/gcc-15",
+				"CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN": "$env{HASTY_GCC_TOOLCHAIN}",
 				"CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld-22",
 				"CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=lld-22",
 				"CMAKE_LINKER": "/usr/bin/lld-22",

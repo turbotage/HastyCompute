@@ -71,3 +71,19 @@ target_include_directories(HastyVkFFTTest PRIVATE
 target_link_libraries(HastyVkFFTTest PRIVATE
 	CUDA::cudart CUDA::cuda_driver CUDA::nvrtc CUDA::cufft)
 install(TARGETS HastyVkFFTTest RUNTIME DESTINATION bin)
+
+# Generate LD_LIBRARY_PATH wrapper scripts for all test executables.
+# dlopen from within system shared libs (e.g. cuDNN) does not inherit the
+# binary's RUNPATH, so install/lib must be set via LD_LIBRARY_PATH.
+foreach(_test HastyNonFourierInterpTest HastyVkFFTTest)
+    set(_wrapper "${CMAKE_CURRENT_BINARY_DIR}/${_test}.sh")
+    file(GENERATE OUTPUT "${_wrapper}" CONTENT
+"#!/usr/bin/env bash
+SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"
+INSTALL_LIB=\"\${SCRIPT_DIR}/../install/lib\"
+exec env LD_LIBRARY_PATH=\"\${INSTALL_LIB}\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}\" \
+    \"\${SCRIPT_DIR}/${_test}\" \"\$@\"
+"
+        FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+    )
+endforeach()

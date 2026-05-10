@@ -68,6 +68,10 @@ ExternalProject_Add(grpc_external
 
     BUILD_COMMAND ${CMAKE_COMMAND} --build "${_grpc_build}" --parallel ${_CPU_THREADS}
 
+    # Explicit --prefix overrides whatever CMAKE_INSTALL_PREFIX was baked into
+    # cmake_install.cmake at configure time (e.g. /usr/local from a stale cache).
+    INSTALL_COMMAND ${CMAKE_COMMAND} --install "${_grpc_build}" --prefix "${_grpc_install}"
+
     BUILD_BYPRODUCTS
         "${_grpc_install}/lib/libgrpc++.so"
         "${_grpc_install}/lib/libgrpc.so"

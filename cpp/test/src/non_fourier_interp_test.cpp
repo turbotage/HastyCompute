@@ -255,7 +255,7 @@ static bool test_approx(hasty::i64 n_dim, hasty::i64 n_spokes, hasty::i64 n_samp
 
 int main()
 {
-    bool show_locally = true;
+    bool show_locally = false;
 
     std::string nifti_dir = "/home/turbotage/Documents/GitHub/HastyData/downloads/traveling_heads_7t/TH2_data_ES_s1/upload_ES/ES_20181008/subject1/";
 

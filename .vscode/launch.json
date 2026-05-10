@@ -37,6 +37,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             "name": "(lldb-dap) HastyServerTest",
@@ -46,6 +47,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             "name": "(lldb-dap) HastyLinalgTest",
@@ -55,6 +57,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             "name": "(lldb-dap) HastyDataTest",
@@ -64,6 +67,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             "name": "(lldb-dap) HastyNonFourierInterpTest",
@@ -73,6 +77,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             // Start this ONCE before running the C++ program.
@@ -101,6 +106,7 @@
             "args": [],
             "stopOnEntry": false,
             "console": "integratedTerminal",
+            "env": { "LD_LIBRARY_PATH": "${workspaceFolder}/out/build/Config-ClangDebug-Linux/install/lib" }
         },
         {
             "name": "(lldb-dap) Attach HastyCompute",
