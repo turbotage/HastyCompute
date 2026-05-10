@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Clang C++ compiler wrapper that uses GCC toolchain from HASTY_GCC_TOOLCHAIN.
+# Set HASTY_GCC_TOOLCHAIN in CommonPresets.json environment to switch GCC version.
+exec /usr/bin/clang++-22 --gcc-toolchain="${HASTY_GCC_TOOLCHAIN}" "$@"
