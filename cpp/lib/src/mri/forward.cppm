@@ -9,6 +9,19 @@ import hasty_tensor_mod;
 namespace hasty {
 namespace mri {
 
+// Computes the exact MRI forward signal at M paired (k, t) samples:
+//
+//   S[c, m] = Σ_n  coil[c,n] · ρ[n] · exp(-z[n]·t[m])
+//             · Π_q exp(i · b_q[n] · α_q[m])
+//             · exp(-2πi · k[m] · r[n])
+//
+// kspace_trajectory [M, sdim] and timestamps [M] must have the same M (paired).
+// nonlin_gradient_waveforms [Q, M]: accumulated NL gradient encoding per sample.
+// Returns [C, M].
+//
+// Memory: O(n_chunk × batch_size) working memory per iteration.
+// Reduce batch_size or n_chunk if GPU memory is tight.
+
 export Tensor forward_exact(
     const Tensor& magnetization,
     const Tensor& sensitivity_maps,
@@ -17,22 +30,23 @@ export Tensor forward_exact(
     const Tensor& kspace_trajectory,
     const Tensor& nonlin_gradient_waveforms,
     const Tensor& nonlin_gradient_basis,
-    bool apply_ratemap  = true,
-    bool apply_nonlin   = true,
-    i64  k_batch_size   = 64,
-    i64  t_batch_size   = 0
+    bool apply_ratemap = true,
+    bool apply_nonlin  = true,
+    i64  batch_size    = 8,     // paired samples per iteration
+    i64  n_chunk       = 1<<17  // voxels per inner N-loop (memory control)
 ) {
     using namespace std::numbers;
 
     const i64    sdim   = magnetization.ndimension();
     const i64    C      = sensitivity_maps.size(0);
     const i64    N      = magnetization.numel();
-    const i64    K      = kspace_trajectory.size(0);
-    const i64    T      = timestamps.size(0);
+    const i64    M      = timestamps.size(0);
     const i64    Q      = nonlin_gradient_waveforms.size(0);
     const Device device = magnetization.device();
 
-    if (t_batch_size <= 0) t_batch_size = T;
+    if (kspace_trajectory.size(0) != M)
+        throw std::invalid_argument(
+            "kspace_trajectory and timestamps must have the same length M (paired samples)");
 
     auto chk_device = [&](const Tensor& t, std::string_view name) {
         if (t.device() != device)
@@ -70,11 +84,11 @@ export Tensor forward_exact(
         if (rate_map.size(i) != magnetization.size(i))
             throw std::invalid_argument("rate_map shape must match magnetization");
     if (timestamps.ndimension() != 1)
-        throw std::invalid_argument("timestamps must be 1-D");
+        throw std::invalid_argument("timestamps must be 1-D [M]");
     if (kspace_trajectory.ndimension() != 2 || kspace_trajectory.size(1) != sdim)
-        throw std::invalid_argument("kspace_trajectory must be [K, sdim]");
-    if (nonlin_gradient_waveforms.ndimension() != 2 || nonlin_gradient_waveforms.size(1) != T)
-        throw std::invalid_argument("nonlin_gradient_waveforms must be [Q, T]");
+        throw std::invalid_argument("kspace_trajectory must be [M, sdim]");
+    if (nonlin_gradient_waveforms.ndimension() != 2 || nonlin_gradient_waveforms.size(1) != M)
+        throw std::invalid_argument("nonlin_gradient_waveforms must be [Q, M]");
     if (nonlin_gradient_basis.ndimension() != sdim + 1)
         throw std::invalid_argument("nonlin_gradient_basis must have ndim == magnetization.ndim + 1");
     if (nonlin_gradient_basis.size(0) != Q)
@@ -90,6 +104,7 @@ export Tensor forward_exact(
     const Scalar neg_2pi_i = Scalar(std::complex<f32>(0.0f, -2.0f * (f32)pi_v<f64>));
     const Scalar pos_i     = Scalar(std::complex<f32>(0.0f,  1.0f));
 
+    // Build normalised voxel coordinates r [N, sdim]
     std::vector<i64> sp_sizes(sdim);
     for (i64 i = 0; i < sdim; ++i) sp_sizes[i] = magnetization.size(i);
 
@@ -99,7 +114,6 @@ export Tensor forward_exact(
         sp_strides[i] = sp_strides[i + 1] * sp_sizes[i + 1];
 
     const Tensor n_idx = arange(N, opts_l);
-
     std::vector<Tensor> r_cols;
     r_cols.reserve(sdim);
     for (i64 i = 0; i < sdim; ++i) {
@@ -108,55 +122,62 @@ export Tensor forward_exact(
         Tensor idx_i = n_idx.div(Scalar(sp_strides[i])).remainder(Scalar(n)).to(eScalarType::Long);
         r_cols.push_back(g.index_select(0, idx_i));
     }
-    const Tensor r = stack(r_cols, 1).contiguous();
+    const Tensor r = stack(r_cols, 1).contiguous();  // [N, sdim]
 
     const Tensor mag_flat   = magnetization.flatten().to(eScalarType::ComplexFloat);
     const Tensor rate_flat  = rate_map.flatten();
     const Tensor coil_flat  = sensitivity_maps.reshape({C, N});
-    const Tensor spatial_wt = coil_flat.mul(mag_flat.unsqueeze(0));
+    const Tensor spatial_wt = coil_flat.mul(mag_flat.unsqueeze(0));  // [C, N]
     const Tensor nl_fields  = nonlin_gradient_basis.reshape({Q, N});
-    const Tensor nl_alpha   = nonlin_gradient_waveforms;
+    const Tensor nl_alpha   = nonlin_gradient_waveforms;             // [Q, M]
 
-    Tensor signal = zeros({C, K, T}, opts_c);
+    Tensor signal = zeros({C, M}, opts_c);
 
-    for (i64 t0 = 0; t0 < T; t0 += t_batch_size) {
-        const i64    tB  = std::min(t_batch_size, T - t0);
-        const Tensor t_b = timestamps.narrow(0, t0, tB);
+    // Outer loop: batch over M paired samples
+    for (i64 m0 = 0; m0 < M; m0 += batch_size) {
+        const i64    mB   = std::min(batch_size, M - m0);
+        const Tensor t_mb = timestamps.narrow(0, m0, mB).to(eScalarType::ComplexFloat);    // [mB]
+        const Tensor k_mb = kspace_trajectory.narrow(0, m0, mB).to(eScalarType::ComplexFloat); // [mB, sdim]
 
-        Tensor time_phase;
-        if (apply_ratemap) {
-            // exp(-z(r) * t)  where z is the complex ratemap (T2 decay + B0 dephasing)
-            time_phase = rate_flat.unsqueeze(1)
-                                  .mul(t_b.to(eScalarType::ComplexFloat).unsqueeze(0))
-                                  .mul(Scalar(-1.0f))
-                                  .exp();
-        } else {
-            time_phase = ones({N, tB}, opts_c);
-        }
+        // Inner loop: chunk over N voxels to bound working memory to O(nB × mB)
+        for (i64 n0 = 0; n0 < N; n0 += n_chunk) {
+            const i64 nB = std::min(n_chunk, N - n0);
 
-        if (apply_nonlin) {
-            for (i64 q = 0; q < Q; ++q) {
-                time_phase = time_phase.mul(
-                    nl_fields.select(0, q).to(eScalarType::ComplexFloat)
+            // time_phase [nB, mB]: exp(-z[n]·t[m]) · Π_q exp(i·b_q[n]·α_q[m])
+            Tensor tp;
+            if (apply_ratemap) {
+                tp = rate_flat.narrow(0, n0, nB)
                               .unsqueeze(1)
-                              .mul(nl_alpha.select(0, q).narrow(0, t0, tB)
-                                          .to(eScalarType::ComplexFloat).unsqueeze(0))
-                              .mul(pos_i)
-                              .exp()
-                );
+                              .mul(t_mb.unsqueeze(0))
+                              .mul(Scalar(-1.0f))
+                              .exp();
+            } else {
+                tp = ones({nB, mB}, opts_c);
             }
-        }
+            if (apply_nonlin) {
+                for (i64 q = 0; q < Q; ++q) {
+                    tp = tp.mul(
+                        nl_fields.select(0, q).narrow(0, n0, nB)
+                                  .to(eScalarType::ComplexFloat).unsqueeze(1)
+                        .mul(nl_alpha.select(0, q).narrow(0, m0, mB)
+                                     .to(eScalarType::ComplexFloat).unsqueeze(0))
+                        .mul(pos_i).exp()
+                    );
+                }
+            }
 
-        for (i64 k0 = 0; k0 < K; k0 += k_batch_size) {
-            const i64    kB        = std::min(k_batch_size, K - k0);
-            const Tensor k_b       = kspace_trajectory.narrow(0, k0, kB).to(eScalarType::ComplexFloat);
-            const Tensor dft_phase = mm(k_b, r.to(eScalarType::ComplexFloat).transpose(0, 1))
-                                       .mul(neg_2pi_i)
-                                       .exp();
+            // dft_phase [mB, nB]: exp(-2πi · k[m] · r[n])
+            const Tensor dp = mm(k_mb,
+                                 r.narrow(0, n0, nB).to(eScalarType::ComplexFloat).transpose(0, 1))
+                                .mul(neg_2pi_i).exp();
 
+            // S[c, m0:m0+mB] += (dp[m,n] · tp[n,m] · wt[c,n]) summed over n
+            // = (dp ⊙ tp^T ⊙ wt[c].unsqueeze(0)).sum(dim=1)
             for (i64 c = 0; c < C; ++c) {
-                signal.select(0, c).narrow(0, k0, kB).narrow(1, t0, tB).copy_(
-                    mm(dft_phase.mul(spatial_wt.select(0, c).unsqueeze(0)), time_phase)
+                signal.select(0, c).narrow(0, m0, mB).add_(
+                    dp.mul(tp.transpose(0, 1))
+                      .mul(spatial_wt.select(0, c).narrow(0, n0, nB).unsqueeze(0))
+                      .sum(1)
                 );
             }
         }

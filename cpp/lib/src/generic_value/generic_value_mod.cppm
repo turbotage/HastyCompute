@@ -453,19 +453,24 @@ private:
 
     static void serialize_tensor(const Tensor& tensor, threadsafe_stream& stream, i64 chunk_size = SERIALIZE_CHUNK_SIZE)
     {
-        // Ensure tensor is contiguous before reading raw bytes via data_ptr.
-        // Sliced views (e.g. sagittal/coronal from a 5-D tensor) are non-contiguous
-        // and would yield wrong bytes if read linearly.
+        // Ensure tensor is contiguous and on CPU before reading raw bytes via data_ptr.
+        // Non-contiguous views yield wrong bytes if read linearly.
+        // CUDA device pointers cannot be dereferenced from CPU (SIGSEGV).
         const Tensor* src = &tensor;
-        Tensor contiguous_copy;
-        if (!tensor.is_contiguous()) {
-            contiguous_copy = tensor.contiguous();
-            src = &contiguous_copy;
+        auto original_device = src->device();
+        
+        Tensor potential_copy;
+        if (src->device().type != eDeviceType::CPU) {
+            potential_copy = src->cpu().contiguous();
+            src = &potential_copy;
+        } else if (!tensor.is_contiguous()) {
+            potential_copy = tensor.contiguous();
+            src = &potential_copy;
         }
 
         // First write a header with the tensor metadata
         SerializedTensorHeader header;
-        auto device = src->device();
+        auto device = original_device;
         header.device_type = static_cast<u8>(device.type);
         header.scalar_type = static_cast<u8>(src->scalar_type());
         header.ndim = static_cast<u8>(src->sizes().size());

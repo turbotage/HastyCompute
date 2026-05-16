@@ -7,6 +7,13 @@ module;
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/generic/generic_stub.h>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+
 export module hasty_server_mod:http_server;
 
 import std;
@@ -15,6 +22,33 @@ import :grpc_server;
 
 namespace hasty {
 namespace server {
+
+// Simple port-in-use check for the HTTP server. Returns true if the TCP
+// port on the given host is already bound.
+static bool http_port_in_use(const std::string& host, int port) {
+    struct addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    std::string portstr = std::to_string(port);
+    struct addrinfo* res = nullptr;
+    if (getaddrinfo(host.c_str(), portstr.c_str(), &hints, &res) != 0) return false;
+    bool in_use = false;
+    for (struct addrinfo* rp = res; rp != nullptr; rp = rp->ai_next) {
+        int s = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (s == -1) continue;
+        int opt = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        if (::bind(s, rp->ai_addr, rp->ai_addrlen) == -1) {
+            if (errno == EADDRINUSE) { in_use = true; ::close(s); break; }
+            ::close(s); continue;
+        }
+        ::close(s);
+        in_use = false;
+        break;
+    }
+    freeaddrinfo(res);
+    return in_use;
+}
 
 // ── gRPC-web framing ─────────────────────────────────────────────────────────
 //
@@ -208,6 +242,11 @@ public:
     void start() {
         if (!_srv.is_valid())
             throw std::runtime_error("HttpServer: SSLServer is not valid — check cert/key paths");
+        // Check whether the port is already in use and emit a clear log
+        // message and exception if so (helps detect rogue servers).
+        if (http_port_in_use("0.0.0.0", _port)) {
+            throw std::runtime_error("HttpServer: port " + std::to_string(_port) + " is already in use");
+        }
         _thread = std::thread([this] { _srv.listen("0.0.0.0", _port); });
     }
 

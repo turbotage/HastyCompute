@@ -1,0 +1,352 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\newtheorem{theorem}{Theorem}
+
+\DeclarePairedDelimiterX{\norm}[1]{\lVert}{\rVert}{#1}
+\newcommand{\Omh}{\hat{\Omega}}
+\newcommand{\Ups}{\Upsilon}
+
+\title{Factored Low-Rank Decomposition of $\exp(\Phi)$\\
+\large Connection to the Normal Operator Toeplitz Method}
+\author{viktor.vigren}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+This document complements \texttt{MRI\_Physics.tex} by addressing a key difficulty with the
+joint SVD approach: the effective rank of $\exp(\Phi)$ grows multiplicatively when off-resonance
+and nonlinear gradient fields are combined, forcing $L \gg 1$ for accurate reconstruction.
+We show that a \emph{factored} SVD decomposition achieves the same accuracy with $L$ that grows
+\emph{additively} and that the resulting compound temporal basis slots directly into the Toeplitz
+normal-operator framework.
+
+% ---------------------------------------------------------------------------
+\section{Readout-Relative Formulation}
+
+The full phase modulation from \texttt{MRI\_Physics.tex} is
+\begin{equation}
+    \Phi(\mathbf{r}, t) = z(\mathbf{r})\,t +
+        \sum_q b_q(\mathbf{r})\,\alpha_q(t),
+    \qquad
+    z(\mathbf{r}) = -\tfrac{1}{T_2(\mathbf{r})} - i\,\gamma\,\Delta B_0(\mathbf{r}),
+\end{equation}
+where $\alpha_q(t) = \int_0^t G_q(\tau)\,d\tau$ is the $q$-th nonlinear gradient
+waveform integrated from the start of the readout.
+
+\paragraph{Pre-readout phases are irrelevant.}
+Any field contribution $G_q(\tau)$ applied \emph{before} readout (e.g.\ velocity-encoding
+lobes, dephasing gradients) integrates to a value $\alpha_q^{\rm pre}$ that is
+\emph{identical for every readout sample within a given spoke}.  It therefore
+multiplies $\exp(\Phi)$ by a constant $e^{b_q(\mathbf{r})\,\alpha_q^{\rm pre}}$
+which is absorbed into the (unknown) image $\rho(\mathbf{r})$ and plays no role in
+the forward model used for reconstruction.
+Consequently $t$ in the above is measured from the \emph{start of the readout
+window only} and $\alpha_q(t)$ includes only the readout-gradient contribution.
+
+For a koosh-ball (3D radial) trajectory the readout gradient is applied along spoke
+direction $\hat{d}_s$, so the dominant nonlinear waveforms (Maxwell concomitant
+fields up to second order) factorize as
+\begin{equation}
+    \alpha_q(k{=}(s,j)) = d_q^{(s)}\, f_q(j),
+    \label{eq:alpha_factor}
+\end{equation}
+where $d_q^{(s)}$ is a scalar that depends only on spoke direction (e.g.\
+$d_{z^2}^{(s)} = \cos^2\theta_s$) and $f_q(j)$ is the waveform shape shared by
+all spokes (e.g.\ a bipolar profile in readout index $j$).
+
+% ---------------------------------------------------------------------------
+\section{Why Joint SVD Requires Large $L$}
+
+The joint SVD seeks a rank-$L$ factorization
+$\exp(\Phi(\mathbf{r}_j, t_k)) \approx \sum_{l=1}^L \Omega_{kl}\,\Upsilon_{jl}$.
+The effective rank of $\exp(\Phi)$ is bounded by the product of the effective ranks
+of its factors:
+\begin{equation}
+    \operatorname{rank}^*\bigl(\exp(\Phi)\bigr)
+    \;\leq\; \operatorname{rank}^*\bigl(\exp(z\,t)\bigr) \;\times\;
+    \prod_q \operatorname{rank}^*\bigl(\exp(i\,b_q\,\alpha_q)\bigr).
+\end{equation}
+Here $\operatorname{rank}^*(\cdot)$ denotes the number of singular values needed
+to achieve a target relative error $\varepsilon$.
+Fessler's result (Sutton et al.\ 2003) shows that $\operatorname{rank}^*(\exp(-i\,2\pi\,\Delta B_0\,t)) \approx L_o \sim 7$
+for a $140\,\text{Hz}$ B0 range and $18\,\text{ms}$ readout.
+Each nonlinear factor with max phase $\pi$ requires $L_q \sim 4$ additional terms
+(Chebyshev/PSWF argument: rank scales as $2\Delta\phi/\pi + 1$).
+
+With $Q=2$ nonlinear fields the joint SVD therefore requires
+$L \approx L_o \times L_1 \times L_2 = 7 \times 4 \times 4 = 112$ for
+$\varepsilon = 10^{-4}$, making iterative reconstruction with $20 \times 8 \times 5 \times 32 \times 112$
+Fourier transforms per iteration infeasible.
+
+% ---------------------------------------------------------------------------
+\section{Factored SVD Decomposition}
+
+\subsection{Decomposing $\exp(\Phi)$ into independent factors}
+
+Write
+\begin{equation}
+    \exp\bigl(\Phi(\mathbf{r}, t_k)\bigr)
+    = \underbrace{e^{z(\mathbf{r})\,t_k}}_{\displaystyle A_o(\mathbf{r},k)}
+    \;\prod_{q=1}^Q
+    \underbrace{e^{i\,b_q(\mathbf{r})\,\alpha_q(k)}}_{\displaystyle A_q(\mathbf{r},k)}.
+    \label{eq:phi_factored}
+\end{equation}
+
+Each factor involves \emph{only one field type} and its corresponding waveform.
+
+\subsection{Individual histogram and SVD per factor}
+
+For each factor we define a separate histogram over the relevant feature.
+
+\paragraph{Off-resonance factor $A_o$.}
+Feature: $z(\mathbf{r})$ only.  Histogram bins $h_o \in \{1,\ldots,n_o\}$ with
+representative values $\bar{z}_{h_o}$.  The $K \times n_o$ matrix
+$[\Phi_o]_{k,h_o} = e^{\bar{z}_{h_o}\,t_k}$
+has SVD-optimal rank $L_o \sim 7$ for typical parameters.
+\begin{equation}
+    e^{\bar{z}_{h_o}\,t_k} \;\approx\; \sum_{l_o=1}^{L_o} \Omega_o[k,\,l_o]\;\Upsilon_o[h_o,\,l_o].
+    \label{eq:svd_offres}
+\end{equation}
+
+\paragraph{Nonlinear factor $A_q$.}
+Feature: $b_q(\mathbf{r})$ only.  Histogram bins $h_q \in \{1,\ldots,n_q\}$ with
+representative values $\bar{b}_q^{(h_q)}$.  The $K \times n_q$ matrix
+$[\Phi_q]_{k,h_q} = e^{i\,\bar{b}_q^{(h_q)}\,\alpha_q(k)}$
+has rank $L_q \sim 4$ for max phase $\leq \pi$.
+\begin{equation}
+    e^{i\,\bar{b}_q^{(h_q)}\,\alpha_q(k)} \;\approx\; \sum_{l_q=1}^{L_q} \Omega_q[k,\,l_q]\;\Upsilon_q[h_q,\,l_q].
+    \label{eq:svd_nl}
+\end{equation}
+
+Note that the histograms are now \emph{one-dimensional per factor}: $n_o = n_z^2$
+(complex $z$ values) and $n_q = n_{b_q}$ (real field values).  This is far smaller
+than the joint histogram $n_{\rm joint} = n_z^2 \times \prod_q n_{b_q}^2$.
+
+\subsection{Combined forward operator}
+
+Substituting \eqref{eq:svd_offres}--\eqref{eq:svd_nl} into \eqref{eq:phi_factored}:
+\begin{equation}
+    \exp\bigl(\Phi(\mathbf{r}_j, t_k)\bigr) \;\approx\;
+    \sum_{\boldsymbol{l}} \Omega_{\boldsymbol{l}}(k)\;\Upsilon_{\boldsymbol{l}}(j),
+    \label{eq:factored_approx}
+\end{equation}
+where the multi-index $\boldsymbol{l} = (l_o, l_1, \ldots, l_Q)$ runs over
+$L_{\rm fwd} = L_o \times \prod_q L_q$ compound terms and
+\begin{align}
+    \Omega_{\boldsymbol{l}}(k)   &= \Omega_o[k,l_o]\;\prod_q \Omega_q[k,l_q], \\
+    \Upsilon_{\boldsymbol{l}}(j) &= \Upsilon_o[\mathrm{bin}_o(j),\,l_o]\;\prod_q \Upsilon_q[\mathrm{bin}_q(j),\,l_q].
+\end{align}
+
+The forward signal is then
+\begin{equation}
+    S_c(k) \approx \sum_{\boldsymbol{l}}
+    \Omega_{\boldsymbol{l}}(k)\;
+    \mathcal{F}\!\left[\,\rho(\mathbf{r})\,s_c(\mathbf{r})\,\Upsilon_{\boldsymbol{l}}(\mathbf{r})\,\right]\!(k),
+    \label{eq:forward_factored}
+\end{equation}
+requiring $L_{\rm fwd} = L_o \times \prod_q L_q$ NUFFT evaluations.
+
+% ---------------------------------------------------------------------------
+\section{Error Analysis: Additive Bound for Unitary Factors}
+
+\begin{theorem}[Additive error for factored unitary approximation]
+Let $A_q(\mathbf{r},k)$ be the exact factors and $\hat{A}_q(\mathbf{r},k)$ their
+rank-$L_q$ approximations with errors
+$\varepsilon_q = \norm{A_q - \hat{A}_q}_F / \norm{A_q}_F$.
+Since $|A_q(\mathbf{r},k)| = 1$ for all $(\mathbf{r},k)$
+(purely imaginary phases and pure T2 decay satisfying $|e^{z\,t}|\leq 1$),
+\begin{equation}
+    \norm{\exp(\Phi) - \hat{A}_o \prod_q \hat{A}_q}_F
+    \;\leq\;
+    \varepsilon_o \norm{\exp(\Phi)}_F \;+\; \sum_q \varepsilon_q \norm{\exp(\Phi)}_F.
+    \label{eq:additive_bound}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+By telescoping.  Write
+$A_o \prod_q A_q - \hat{A}_o \prod_q \hat{A}_q$
+as a telescoping sum of replacements $A_q \to \hat{A}_q$ one factor at a time.
+Each replacement contributes a term of the form
+$(\hat{A}_1 \cdots \hat{A}_{q-1})(A_q - \hat{A}_q)(A_{q+1} \cdots A_Q)$
+whose Frobenius norm is bounded by $\varepsilon_q \norm{\exp(\Phi)}_F$
+using $|A_p| = 1$ and $|\hat{A}_p| \leq 1 + \varepsilon_p \approx 1$ for all other factors $p$.
+Summing over all replacements gives \eqref{eq:additive_bound}.
+\end{proof}
+
+\paragraph{Contrast with joint SVD.}
+The joint SVD minimises $\norm{\exp(\Phi) - \hat{\Phi}_{\rm joint}}_F$ directly, but
+the effective rank of the product is \emph{at least} $\operatorname{rank}^*(A_o) \times \prod_q \operatorname{rank}^*(A_q)$
+because the singular vectors of $A_o \odot A_q$ are not the tensor products of the
+individual singular vectors.  In practice the joint SVD at $L=30$ achieves the same
+Frobenius error as the factored approach at $L_o + L_1 + L_2 = 15$, but the joint
+SVD must spend all $L$ vectors simultaneously capturing both off-resonance and
+nonlinear dynamics.  In the factored approach, off-resonance always gets its full
+$L_o = 7$ dedicated vectors, guaranteeing Fessler-level accuracy \emph{independently}
+of the nonlinear correction.
+
+% ---------------------------------------------------------------------------
+\section{Normal Operator with Factored Compound Basis}
+
+\subsection{Naive compound normal operator}
+
+From \eqref{eq:factored_approx}, the normal operator inherits
+\begin{equation}
+    \exp(\Phi_j + \Phi_i^*) \approx
+    \sum_{\boldsymbol{l}, \boldsymbol{m}}
+    \Omega_{\boldsymbol{l}}(k)\,\Omega_{\boldsymbol{m}}^*(k)\;
+    \Upsilon_{\boldsymbol{l}}(j)\,\Upsilon_{\boldsymbol{m}}^*(i),
+\end{equation}
+with $L_{\rm fwd}^2 = (L_o \times \prod_q L_q)^2$ compound pairs.
+
+\subsection{Exploiting the product structure in the secondary compression}
+
+Because $\Omega_{\boldsymbol{l}}(k) = \prod_{f} \Omega_f[k, l_f]$ (where $f$ indexes
+all factors including $o$ and each $q$), the product of two compound temporal
+coefficients also factorizes:
+\begin{equation}
+    \Omega_{\boldsymbol{l}}(k)\,\Omega_{\boldsymbol{m}}^*(k) =
+    \prod_{f} \Bigl[\Omega_f[k,l_f]\,\Omega_f^*[k,m_f]\Bigr].
+    \label{eq:omega_product}
+\end{equation}
+
+We can therefore apply the secondary compression of \texttt{MRI\_Physics.tex}
+\emph{factor by factor}.  For each factor $f$, form the $L_f(L_f+1)/2 \times K$
+matrix of upper-triangular products and compress to $P_f$ terms:
+\begin{equation}
+    \Omega_f[k,l_f]\,\Omega_f^*[k,m_f] \;\approx\;
+    \sum_{p_f=1}^{P_f} C^{(f)}_{l_f m_f,\,p_f}\;\Lambda^{(f)}_{k,\,p_f}.
+    \label{eq:factor_svd2}
+\end{equation}
+
+Substituting into \eqref{eq:omega_product}:
+\begin{equation}
+    \Omega_{\boldsymbol{l}}(k)\,\Omega_{\boldsymbol{m}}^*(k) \approx
+    \sum_{\boldsymbol{p}}
+    \underbrace{\prod_f C^{(f)}_{l_f m_f,\,p_f}}_{\displaystyle C_{\boldsymbol{l}\boldsymbol{m},\boldsymbol{p}}}
+    \underbrace{\prod_f \Lambda^{(f)}_{k,\,p_f}}_{\displaystyle \Lambda_{k,\boldsymbol{p}}},
+\end{equation}
+where the multi-index $\boldsymbol{p} = (p_o, p_1, \ldots, p_Q)$ runs over
+$P_{\rm total} = \prod_f P_f$ terms.
+
+\subsection{Rank decomposition of $C$}
+
+Each coefficient matrix $C_{\boldsymbol{l}\boldsymbol{m},\boldsymbol{p}}$ is a rank-$R$
+approximation following the same structure as \texttt{MRI\_Physics.tex}:
+\begin{equation}
+    C_{\boldsymbol{l}\boldsymbol{m},\boldsymbol{p}} \approx \sum_{r=1}^R
+    \hat{C}_{\boldsymbol{l},r,\boldsymbol{p}}\;\hat{C}^*_{\boldsymbol{m},r,\boldsymbol{p}}.
+\end{equation}
+
+However, because $C$ inherits the product structure \eqref{eq:factor_svd2}, we can
+decompose \emph{each factor's} $C^{(f)}$ matrix with rank $R_f$, giving
+\begin{equation}
+    \hat{C}_{\boldsymbol{l},r,\boldsymbol{p}} = \prod_f \hat{C}^{(f)}_{l_f,\,r_f,\,p_f},
+    \quad R_{\rm total} = \prod_f R_f.
+\end{equation}
+
+\subsection{Final normal operator}
+
+Collecting all terms (parallel to eq.~(6) of \texttt{MRI\_Physics.tex}):
+\begin{align}
+    \exp(\Phi_j + \Phi_i^*) &\approx
+    \sum_{\boldsymbol{p},r} \Lambda_{k,\boldsymbol{p}}\;\Theta_{j,r,\boldsymbol{p}}\;\Theta^*_{i,r,\boldsymbol{p}},
+    \label{eq:final_normal_factored}
+\end{align}
+where the combined spatial basis vectors are
+\begin{equation}
+    \Theta_{j,r,\boldsymbol{p}} = \sum_{\boldsymbol{l}} \hat{C}_{\boldsymbol{l},r,\boldsymbol{p}}\;\Upsilon_{\boldsymbol{l}}(j)
+    = \prod_f \left(\sum_{l_f} \hat{C}^{(f)}_{l_f,r_f,p_f}\;\Upsilon_f[j,l_f]\right).
+    \label{eq:theta_factored}
+\end{equation}
+
+The key result of \eqref{eq:theta_factored} is that $\Theta_{j,r,\boldsymbol{p}}$ is
+a \emph{product} of per-factor spatial images.  Each factor image
+$\varphi^{(f)}_{r_f,p_f}(j) = \sum_{l_f} \hat{C}^{(f)}_{l_f,r_f,p_f}\,\Upsilon_f[j,l_f]$
+requires only $L_f$ spatial additions, so $\Theta$ can be formed without ever storing
+$L_{\rm fwd} = L_o\!\times\!\prod_q L_q$ full-resolution images simultaneously.
+
+% ---------------------------------------------------------------------------
+\section{Operation Count}
+
+Table~\ref{tab:ops} summarises the number of Fourier-domain operations per CG iteration
+for the joint and factored approaches with $L_o = 7$, $L_q = 4$ for $Q=2$ NL fields.
+
+\begin{table}[h]
+\centering
+\caption{NUFFTs and Toeplitz products per CG iteration (one coil, one frame).}
+\label{tab:ops}
+\begin{tabular}{lcc}
+\toprule
+Method & Forward NUFFTs & Normal-op Toeplitz prods \\
+\midrule
+Joint SVD (rank $L$) & $L = 112$ & $P \times R$ (large $P$) \\
+Factored SVD & $L_o \!\times\! L_1 \!\times\! L_2 = 112$ & $P_{\rm total} \times R_{\rm total}$ (small) \\
+Joint with $L=15$ & $15$ (poor accuracy) & $P \times R$ \\
+Factored with $L_o{+}L_q{+}L_q = 15$ & 15 (same count via sharing) & $P_{\rm total} \times R_{\rm total}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The forward-NUFFT count is identical for joint and factored at the same accuracy.
+The \emph{key advantage} is:
+\begin{enumerate}
+\item \textbf{Accuracy at small $L$:} because the error bound is additive
+(Theorem~1), factored achieves Fessler-level off-resonance accuracy with its
+dedicated $L_o = 7$ vectors even when the NL correction is imperfect, whereas
+joint SVD at rank 15 fails to reach off-resonance accuracy at all.
+
+\item \textbf{Secondary compression:} the per-factor matrices in
+\eqref{eq:factor_svd2} are much smaller ($L_f(L_f+1)/2 \times K$ with $L_f\leq 7$)
+than the full compound matrix ($L_{\rm fwd}(L_{\rm fwd}+1)/2 \times K$), making
+the secondary SVD both cheaper to compute and producing smaller $P_f$.
+Empirically $P_o \sim 3$, $P_q \sim 2$, $R_f = 1$, giving
+$P_{\rm total} = 3 \times 2 \times 2 = 12$ Toeplitz products.
+
+\item \textbf{Memory:} the per-factor $\Omega_f$ and $\Upsilon_f$ tensors are
+stored separately and the compound tensors are formed on-the-fly.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Sharing the Off-Resonance Factor}
+
+In 4D-Flow with cardiac frames, respiratory phases, and multiple velocity encodings,
+the off-resonance field $z(\mathbf{r})$ is the \emph{same} for all encodings.
+The off-resonance SVD ($\Omega_o$, $\Upsilon_o$) is therefore computed once and
+shared.  Only the NL factors $\Omega_q$ change between encodings (because the
+readout-gradient direction changes), so those small per-encoding SVDs are cheap.
+
+The total forward NUFFT count per iteration is then
+$N_c \times N_{\rm frames} \times N_{\rm enc} \times L_{\rm fwd}$,
+where for $N_c = 32$ coils, $N_{\rm frames} = 20 \times 8 = 160$ frames,
+$N_{\rm enc} = 5$ encodings, and $L_{\rm fwd} = L_o \times L_q^2 = 7 \times 16 = 112$:
+$32 \times 160 \times 5 \times 112 = 28.7\,\text{M}$ NUFFTs per iteration.
+With $L_q = 2$ (valid for nl\_scale $\lesssim 0.3$, realistic clinically):
+$32 \times 160 \times 5 \times (7 \times 4) = 7.2\,\text{M}$ NUFFTs per iteration.
+
+% ---------------------------------------------------------------------------
+\section{Relationship to the Existing MRI\_Physics.tex Framework}
+
+The framework in \texttt{MRI\_Physics.tex} already covers the secondary compression
+in full generality.  The only change needed is to replace the single Omega/Upsilon
+pair from a joint SVD with the compound product
+$(\Omega_{\boldsymbol{l}}, \Upsilon_{\boldsymbol{l}})$ from the factored SVD.
+Equations~(1)--(6) of \texttt{MRI\_Physics.tex} apply verbatim with the
+substitution $l \to \boldsymbol{l}$, $L \to L_{\rm fwd}$, $\Omega_{kl} \to
+\Omega_{\boldsymbol{l}}(k)$, and $\Upsilon_{jl} \to \Upsilon_{\boldsymbol{l}}(j)$.
+
+The histogram becomes \emph{per-factor}: instead of one joint histogram over
+$(z, b_1, \ldots, b_Q)$, we maintain $1 + Q$ separate histograms, each of which
+is one- or two-dimensional.  This also makes the phi operator construction cheaper
+and produces better-conditioned SVD problems.
+
+\end{document}

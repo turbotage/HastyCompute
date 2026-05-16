@@ -107,6 +107,22 @@ public:
         return _metadata.erase(key) > 0;
     }
 
+    void clear_all_values() {
+        std::unique_lock lock(_mutex);
+        _bank.clear();
+    }
+
+    void clear_all_metadata() {
+        std::unique_lock lock(_mutex);
+        _metadata.clear();
+    }
+
+    void clear_all() {
+        std::unique_lock lock(_mutex);
+        _bank.clear();
+        _metadata.clear();
+    }
+
 private:
 
     mutable std::shared_mutex _mutex;

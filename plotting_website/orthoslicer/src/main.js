@@ -1,9 +1,9 @@
 import { LazyVolume, RemoteVolume } from './volume.js';
-import { Renderer }   from './renderer.js';
+import { Renderer, normalizeComprepConfig }   from './renderer.js';
 import { CACHE_DEPTH, CACHE_TE } from './renderer.js';
 import {
     hexToUuid, fetchMetaString, initCommandIds,
-    deleteValue, compressUi16Default,
+    deleteValue, compressUi16Default, execute, fetchRaw, COMMAND_IDS,
 } from '../../node_editor/src/grpc_client.js';
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -30,11 +30,13 @@ async function init() {
     // ── Build volume ──────────────────────────────────────────────────────────
     const params    = new URLSearchParams(window.location.search);
     const uuidHex   = params.get('uuid');
+    let originalUuid = null;
     const configStr = params.get('config');
     const comprepConfig = configStr ? JSON.parse(decodeURIComponent(configStr)) : null;
     let volume;
     if (uuidHex) {
         let uuid16 = hexToUuid(uuidHex);
+        originalUuid = uuid16;
         const meta = await fetchMetaString(uuid16);
         if (!meta) { showError('Could not fetch tensor metadata for UUID: ' + uuidHex); return; }
 
@@ -104,6 +106,15 @@ async function init() {
     updateStatsUI(renderer.lastStats);
     setStatus('Ready');
 
+    // Fetch full-volume statistics once (non-compressed units) for remote tensors.
+    if (originalUuid) {
+        try {
+            await fetchAndDisplayStatistics(originalUuid);
+        } catch (e) {
+            console.warn('Failed to fetch statistics:', e);
+        }
+    }
+
     // ── Cursor state ──────────────────────────────────────────────────────────
     let showCursor = true;
     const cursorBtn = document.getElementById('cursor-toggle');
@@ -151,11 +162,21 @@ async function init() {
         const cache = volume._cache;
         if (!cache || cache.size === 0) return;
         let mn = Infinity, mx = -Infinity;
+        const isComprep = (volume.dtype === 'i16');
+        const normCfg = isComprep ? normalizeComprepConfig(volume.comprepConfig ?? {}) : null;
         for (const data of cache.values()) {
-            for (let i = 0; i < data.length; i++) {
-                const v = data[i];
-                if (v < mn) mn = v;
-                if (v > mx) mx = v;
+            if (isComprep) {
+                for (let i = 0; i < data.length; i++) {
+                    const v = inverseToneMapU16(data[i], normCfg);
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                }
+            } else {
+                for (let i = 0; i < data.length; i++) {
+                    const v = data[i];
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                }
             }
         }
         if (mn < mx) {
@@ -166,6 +187,104 @@ async function init() {
             renderer.render();
         }
     });
+
+    // Info UI helpers: voxel value and basic cached-stats (non-compressed units)
+    function inverseToneMapU16(u16, p) {
+        // p is normalized comprep params from normalizeComprepConfig
+        if (!p) return u16 / 65535.0;
+        const y = u16 / 65535.0;
+        const t0 = p.t0, t1 = p.t1;
+        function inv_shape(uv, mode, gamma, logc) {
+            if (mode === 1) return Math.pow(Math.max(uv, 0.0), gamma);
+            if (mode === 2) {
+                const c = Math.max(logc, 1e-6);
+                return (Math.exp(uv * Math.log(1.0 + c)) - 1.0) / c;
+            }
+            return uv;
+        }
+        let x;
+        if (y < t0 && t0 > 0.0) {
+            const uv = inv_shape(y / t0, p.left_mode, p.left_gamma, p.left_logc);
+            x = uv * (p.a - p.clampa) + p.clampa;
+        } else if (y > t1 && t1 < 1.0) {
+            const uv = inv_shape((y - t1) / (1.0 - t1), p.right_mode, p.right_gamma, p.right_logc);
+            x = uv * (p.clampb - p.b) + p.b;
+        } else {
+            const span = t1 - t0;
+            const uv = span < 1e-6 ? 0.0 : (y - t0) / span;
+            x = uv * (p.b - p.a) + p.a;
+        }
+        return x;
+    }
+
+    function updateVoxelValueUI(pos, show) {
+        const el = document.getElementById('voxel-value');
+        if (!el) return;
+        if (!show) { el.textContent = 'Value: —'; return; }
+        // Only show a value if the exact axial slice is present in the JS cache.
+        // RemoteVolume.getAxialSlice() returns zeros on cache-miss which would
+        // otherwise mislead the UI — prefer an explicit "—" until the slice
+        // has arrived.
+        const key = `ax:${pos.t},${pos.e},${pos.z}`;
+        if (!volume._cache || !volume._cache.has(key)) {
+            el.textContent = 'Value: —';
+            return;
+        }
+        const slice = volume._cache.get(key);
+        const idx = pos.y * volume.X + pos.x;
+        let val = slice[idx] ?? 0;
+        if (volume.dtype === 'i16') {
+            const p = normalizeComprepConfig(volume.comprepConfig ?? {});
+            val = inverseToneMapU16(val, p);
+        }
+        el.textContent = `Value: ${val.toFixed(4)}`;
+    }
+
+    function updateImageStatsUI() {
+        // Intentionally left blank. Full-volume statistics are fetched once
+        // via gRPC and displayed by `fetchAndDisplayStatistics` to avoid
+        // repeated expensive computations on mouse move.
+    }
+
+    // Parse a GenericValue string raw response (same format used in grpc_client).
+    function parseGVStringRaw(raw) {
+        if (!raw || raw.length < 9 || raw[0] !== 5) return null;
+        const dv = new DataView(raw.buffer, raw.byteOffset + 1);
+        const len = Number(dv.getBigUint64(0, true));
+        return new TextDecoder().decode(raw.subarray(9, 9 + len));
+    }
+
+    async function fetchAndDisplayStatistics(uuid16) {
+        if (!uuid16) return;
+        if (!('statistics_string' in COMMAND_IDS)) {
+            // COMMAND_IDS is in grpc_client; if not available, skip.
+            // Try to refer to it dynamically to avoid import cycle.
+        }
+        try {
+            const outIds = await execute(COMMAND_IDS.statistics_string, [uuid16]);
+            if (!outIds || outIds.length === 0) throw new Error('No output from statistics_string');
+            const tmp = outIds[0];
+            const raw = await fetchRaw(tmp);
+            const s = parseGVStringRaw(raw) ?? '';
+            try { deleteValue(tmp).catch(() => {}); } catch {}
+            // Parse numbers from the statistics string.
+            const m = { min: '—', max: '—', mean: '—', std: '—' };
+            const minM = s.match(/min=([^\n]+)/);
+            const maxM = s.match(/max=([^\n]+)/);
+            const meanM = s.match(/mean=([^\n]+)/);
+            const stdM = s.match(/std=([^\n]+)/);
+            if (minM) m.min = parseFloat(minM[1]).toFixed(4);
+            if (maxM) m.max = parseFloat(maxM[1]).toFixed(4);
+            if (meanM) m.mean = parseFloat(meanM[1]).toFixed(4);
+            if (stdM) m.std = parseFloat(stdM[1]).toFixed(4);
+            const el = document.getElementById('image-stats');
+            if (el) el.textContent = `min: ${m.min} max: ${m.max} mean: ${m.mean} std: ${m.std}`;
+        } catch (e) {
+            const el = document.getElementById('image-stats');
+            if (el) el.textContent = 'min: — max: — mean: — std: —';
+            throw e;
+        }
+    }
 
     // ── Mouse interaction ─────────────────────────────────────────────────────
     setupInteraction(renderer, volume, drawAllCursors);
@@ -231,6 +350,7 @@ function setupInteraction(renderer, volume, drawAllCursors) {
         renderer.setPosition(fn(nx, ny));
         updatePositionUI(renderer.pos);
         updateStatsUI(renderer.lastStats);
+        updateImageStatsUI();
         drawAllCursors();
     }
 
@@ -240,7 +360,19 @@ function setupInteraction(renderer, volume, drawAllCursors) {
             if (e.button !== 0) return;
             activeView = { canvas, fn };
             handleMove(e, canvas, fn);
+            updateVoxelValueUI(renderer.pos, true);
             e.preventDefault();  // prevent text selection while dragging
+        });
+
+        // Throttled mousemove to update voxel value while left button pressed.
+        canvas.addEventListener('mousemove', e => {
+            if (!(e.buttons & 1)) return; // only when left button held
+            const now = performance.now();
+            const last = canvas._lastValTime || 0;
+            if (now - last < 250) return;
+            canvas._lastValTime = now;
+            // If dragging, position already updated via global mousemove; just show value.
+            updateVoxelValueUI(renderer.pos, true);
         });
     }
 
@@ -251,6 +383,15 @@ function setupInteraction(renderer, volume, drawAllCursors) {
 
     document.addEventListener('mouseup', e => {
         if (e.button === 0) activeView = null;
+        // Stop any polling and hide the voxel value display.
+        for (const { id } of views) {
+            const canvas = document.getElementById(id);
+            if (canvas && typeof canvas._voxelPollId === 'number') {
+                clearInterval(canvas._voxelPollId);
+                canvas._voxelPollId = undefined;
+            }
+        }
+        updateVoxelValueUI(renderer.pos, false);
     });
 
     // Scroll wheel to step through the perpendicular axis.

@@ -34,7 +34,12 @@ private:
     std::unique_ptr<Impl> _impl;
 
     friend GrpcServerHandle start_grpc_server(
-        GenericValueBank&, CommandRegistry&, const std::string&, OptRefW<std::ostream>, OptRefW<std::ostream>);
+        GenericValueBank&, 
+        CommandRegistry&, 
+        const std::string&, 
+        UPtr<OStreamInterface>, 
+        UPtr<OStreamInterface>
+    );
 };
 
 
@@ -42,8 +47,8 @@ export GrpcServerHandle start_grpc_server(
     GenericValueBank& bank,
     CommandRegistry& registry,
     const std::string& address = "0.0.0.0:50051",
-    OptRefW<std::ostream> log_stream = std::nullopt,
-    OptRefW<std::ostream> internal_log_stream = std::nullopt
+    UPtr<OStreamInterface> log_stream = make_uptr<LogStream>("grpc.log"),
+    UPtr<OStreamInterface> internal_log_stream = make_uptr<LogStream>("internal_grpc.log")
 );
 
 

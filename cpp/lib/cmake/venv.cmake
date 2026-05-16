@@ -17,7 +17,7 @@ add_custom_command(
     COMMAND "${Python3_EXECUTABLE}" -m venv --copies "${HASTY_VENV_DIR}"
     COMMAND "${HASTY_VENV_DIR}/bin/pip" install --quiet --upgrade pip
     COMMAND "${HASTY_VENV_DIR}/bin/pip" install --quiet
-                setuptools grpcio grpcio-tools numpy torch antspyx debugpy
+                setuptools grpcio grpcio-tools numpy torch antspyx dipy debugpy
     COMMAND "${HASTY_VENV_DIR}/bin/pip" install --quiet -e "${HASTY_PYTHON_LIB_DIR}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${_VENV_STAMP}"
     DEPENDS "${HASTY_PYTHON_LIB_DIR}/pyproject.toml"

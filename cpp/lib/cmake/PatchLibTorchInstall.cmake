@@ -1,7 +1,8 @@
 # PatchLibTorchInstall.cmake
 # Called from ExternalLibTorch.cmake INSTALL_COMMAND after libtorch installs.
-# Patches libtorch_cuda.so: renames ntsr4__T0 → ntsr3std in .dynsym/.dynstr
-# and all related ELF sections (.dynamic, .gnu.version_r, .gnu.version_d).
+# Patches libtorch_cuda.so: renames sr4__T0 → sr3std in .dynsym/.dynstr
+# (covers both standalone and ntsr4__T0 → ntsr3std forms) in all related ELF
+# sections (.dynamic, .gnu.version_r, .gnu.version_d).
 #
 # Required variable (passed via -D):
 #   LIBTORCH_INSTALL_DIR  — root of the libtorch install tree

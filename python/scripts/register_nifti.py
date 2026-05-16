@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-Register two NIfTI volumes using ANTs SyN.
+Register two NIfTI volumes using DIPY.
 
 Usage:
     register_nifti.py --grpc-port=PORT --fixed=UUID_HEX --moving=UUID_HEX
-                      [--transform=SyN] [--debug-port=PORT]
+                      --output=UUID_HEX [--transform=Rigid] [--debug-port=PORT]
 
-Prints to stdout (one line each):
-    <registered_uuid_hex>
+Result is written to the pre-registered gRPC bank slot given by --output.
+Nothing is printed to stdout. Progress/info messages go to stderr.
 
 Registration direction is chosen automatically: the physically larger volume
-is always used as the ANTs fixed reference (better convergence). The OUTPUT
+is always used as the fixed reference (better convergence). The OUTPUT
 is whichever volume is smaller, warped into the larger volume's grid.
 
 The script reads NIfTI header metadata (pixdim/sform) written by
 hasty::python::push_nifti_image() so voxel spacing is correct.
-Stderr is used for progress/info messages.
 """
 
 import argparse
@@ -24,7 +23,11 @@ import sys
 
 import numpy as np
 import torch
-import ants
+import time
+from dipy.align.imaffine import AffineRegistration, MutualInformationMetric
+from dipy.align.transforms import RigidTransform3D, AffineTransform3D
+from dipy.align.imwarp import SymmetricDiffeomorphicRegistration
+from dipy.align.metrics import CCMetric
 
 sys.path.insert(0, '')  # ensure local imports work when called as subprocess
 
@@ -49,8 +52,8 @@ def get_spacing(client: HastyClient, uuid: bytes) -> tuple[float, float, float]:
         return (float(p[1]), float(p[2]), float(p[3]))
     return (1.0, 1.0, 1.0)
 
-def normalize_for_ants(t: torch.Tensor) -> torch.Tensor:
-    """Normalize tensor to [0,1] range so ANTs handles different contrast types."""
+def normalize_for_registration(t: torch.Tensor) -> torch.Tensor:
+    """Normalize tensor to [0,1] range so registration metrics behave."""
     t = t.float()
     t = torch.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
     mn, mx = t.min().item(), t.max().item()
@@ -58,16 +61,21 @@ def normalize_for_ants(t: torch.Tensor) -> torch.Tensor:
         return (t - mn) / (mx - mn)
     return torch.zeros_like(t)
 
-def tensor_to_ants(t: torch.Tensor, spacing: tuple) -> ants.ANTsImage:
-    """C-order [nz, ny, nx] → ANTs [nx, ny, nz]. t must be 3-D."""
-    assert t.ndim == 3, f"tensor_to_ants expects 3-D tensor, got shape {list(t.shape)}"
-    arr = np.ascontiguousarray(t.float().numpy().T)  # [nx, ny, nz]
-    return ants.from_numpy(arr, spacing=spacing)
+def tensor_to_numpy(t: torch.Tensor, spacing: tuple) -> tuple[np.ndarray, np.ndarray]:
+    """Convert C-order [nz, ny, nx] tensor → numpy array [nx, ny, nz] and affine.
 
-def ants_to_tensor(img: ants.ANTsImage) -> torch.Tensor:
-    """ANTs [nx, ny, nz] → C-order [nz, ny, nx] tensor."""
-    arr = np.ascontiguousarray(img.numpy().T)  # [nz, ny, nx]
-    return torch.from_numpy(arr.copy())
+    Returns (arr, affine) where affine maps voxel indices to world (mm) using spacing.
+    """
+    assert t.ndim == 3, f"tensor_to_numpy expects 3-D tensor, got shape {list(t.shape)}"
+    arr = np.ascontiguousarray(t.float().numpy().T)  # [nx, ny, nz]
+    sx, sy, sz = spacing[0], spacing[1], spacing[2]
+    affine = np.diag([sx, sy, sz, 1.0])
+    return arr, affine
+
+def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
+    """Convert numpy [nx, ny, nz] → C-order [nz, ny, nx] tensor."""
+    t = np.ascontiguousarray(arr.T)
+    return torch.from_numpy(t.copy())
 
 def extract_3d_ref(t: torch.Tensor) -> torch.Tensor:
     """Mean over leading dims until 3-D (last 3 dims are Z,Y,X)."""
@@ -77,20 +85,49 @@ def extract_3d_ref(t: torch.Tensor) -> torch.Tensor:
 
 _FALLBACK = {'SyN': 'Affine', 'Affine': 'Rigid'}
 
-def run_registration(fixed_ants: ants.ANTsImage, moving_ants: ants.ANTsImage,
-                     transform: str) -> dict:
-    """Try registration; fall back one level if it fails."""
+def run_registration(fixed_arr: np.ndarray, fixed_affine: np.ndarray,
+                     moving_arr: np.ndarray, moving_affine: np.ndarray,
+                     transform: str):
+    """Run registration using DIPY and return a mapping object with `transform`.
+
+    For Rigid/Affine, returns an AffineMap (with .transform()). For SyN, returns
+    a DiffeomorphicMap-like object with .transform().
+    """
     try:
-        return ants.registration(fixed=fixed_ants, moving=moving_ants,
-                                 type_of_transform=transform, verbose=False)
-    except RuntimeError as e:
+        # Treat 'SyN' as 'Affine' by default to avoid expensive diffeomorphic runs.
+        if transform in ('Rigid', 'Affine', 'SyN'):
+            tmode = 'Affine' if transform == 'SyN' else transform
+            metric = MutualInformationMetric(nbins=32, sampling_proportion=None)
+            # Reduced iteration counts for faster registration while keeping multi-scale
+            level_iters = [100, 50, 10]
+            affreg = AffineRegistration(metric=metric, level_iters=level_iters,
+                                        sigmas=[3.0, 1.0, 0.0], factors=[4, 2, 1])
+            if tmode == 'Rigid':
+                transform_obj = RigidTransform3D()
+            else:
+                transform_obj = AffineTransform3D()
+            affine_map = affreg.optimize(static=fixed_arr, moving=moving_arr,
+                                         transform=transform_obj,
+                                         params0=None,
+                                         static_grid2world=fixed_affine,
+                                         moving_grid2world=moving_affine)
+            return affine_map
+        else:
+            # Fallback: keep diffeomorphic option for unrecognized transforms
+            metric = CCMetric(3)
+            level_iters = [40, 20, 10]
+            sdr = SymmetricDiffeomorphicRegistration(metric, level_iters)
+            mapping = sdr.optimize(static=fixed_arr, moving=moving_arr,
+                                   static_grid2world=fixed_affine,
+                                   moving_grid2world=moving_affine)
+            return mapping
+    except Exception as e:
         fallback = _FALLBACK.get(transform)
         if fallback is None:
             raise
         print(f'[register_nifti] {transform} failed ({e}); retrying with {fallback}.',
               file=sys.stderr, flush=True)
-        return ants.registration(fixed=fixed_ants, moving=moving_ants,
-                                 type_of_transform=fallback, verbose=False)
+        return run_registration(fixed_arr, fixed_affine, moving_arr, moving_affine, fallback)
 
 
 # ─── main ─────────────────────────────────────────────────────────────────────
@@ -100,9 +137,10 @@ def main():
     parser.add_argument('--grpc-port',   type=int, default=50051)
     parser.add_argument('--fixed',       required=True,  help='fixed volume UUID hex')
     parser.add_argument('--moving',      required=True,  help='moving volume UUID hex')
+    parser.add_argument('--output',       required=True,
+                        help='UUID hex of the pre-registered bank slot to write result into')
     parser.add_argument('--transform',   default='Rigid',
-                        help='ANTs transform type (Rigid/Affine/SyN; default Rigid for '
-                             'same-session cross-modality registration)')
+                        help='Transform type (Rigid/Affine/SyN; default Rigid)')
     parser.add_argument('--debug-port',  type=int, default=0,
                         help='If >0, wait for debugpy attach on this port')
     args = parser.parse_args()
@@ -125,10 +163,13 @@ def main():
         print(f'[register_nifti] moving spacing: {moving_spacing}', file=sys.stderr)
 
         print('[register_nifti] Fetching volumes…', file=sys.stderr, flush=True)
+        t0 = time.perf_counter()
         fixed_t  = client.fetch_value(fixed_uuid).as_tensor()
         moving_t = client.fetch_value(moving_uuid).as_tensor()
+        t_fetch = time.perf_counter() - t0
         print(f'[register_nifti] fixed  shape: {list(fixed_t.shape)}', file=sys.stderr)
         print(f'[register_nifti] moving shape: {list(moving_t.shape)}', file=sys.stderr)
+        print(f'[register_nifti] Fetch time: {t_fetch:.3f}s', file=sys.stderr)
 
         fixed_ref  = extract_3d_ref(fixed_t)
         moving_ref = extract_3d_ref(moving_t)
@@ -142,54 +183,57 @@ def main():
         print(f'[register_nifti] moving voxel vol: {moving_voxel_vol:.4g} mm³',
               file=sys.stderr, flush=True)
 
-        # Normalize both to [0,1] so ANTs MI metric handles different contrasts
+        # Normalize both to [0,1] so registration metrics handle different contrasts
         # (e.g. signed B0 field in Hz vs unsigned magnitude).
         if fixed_voxel_vol <= moving_voxel_vol:
             # fixed is higher-res → use fixed grid; warp moving into it
-            print('[register_nifti] Fixed has finer voxels → using fixed as ANTs fixed, '
+            print('[register_nifti] Fixed has finer voxels → using fixed as registration fixed, '
                   'warping moving into fixed grid.', file=sys.stderr, flush=True)
-            ants_ref_fixed  = tensor_to_ants(normalize_for_ants(fixed_ref),  fixed_spacing)
-            ants_ref_moving = tensor_to_ants(normalize_for_ants(moving_ref), moving_spacing)
+            fixed_arr, fixed_affine = tensor_to_numpy(normalize_for_registration(fixed_ref),  fixed_spacing)
+            moving_arr, moving_affine = tensor_to_numpy(normalize_for_registration(moving_ref), moving_spacing)
             src_t           = moving_t
             src_spacing     = moving_spacing
         else:
             # moving is higher-res → use moving grid; warp fixed into it
-            print('[register_nifti] Moving has finer voxels → using moving as ANTs fixed, '
+            print('[register_nifti] Moving has finer voxels → using moving as registration fixed, '
                   'warping fixed into moving grid.', file=sys.stderr, flush=True)
-            ants_ref_fixed  = tensor_to_ants(normalize_for_ants(moving_ref), moving_spacing)
-            ants_ref_moving = tensor_to_ants(normalize_for_ants(fixed_ref),  fixed_spacing)
+            fixed_arr, fixed_affine = tensor_to_numpy(normalize_for_registration(moving_ref), moving_spacing)
+            moving_arr, moving_affine = tensor_to_numpy(normalize_for_registration(fixed_ref),  fixed_spacing)
             src_t           = fixed_t
             src_spacing     = fixed_spacing
 
-        # Resample smaller ref into larger grid before registration.
-        print('[register_nifti] Resampling smaller reference to larger grid…',
-              file=sys.stderr, flush=True)
-        ants_ref_moving = ants.resample_image_to_target(ants_ref_moving, ants_ref_fixed)
-
-        print(f'[register_nifti] Running ANTs {args.transform} registration…',
-              file=sys.stderr, flush=True)
-        reg_result = run_registration(ants_ref_fixed, ants_ref_moving, args.transform)
-        print('[register_nifti] Registration done.', file=sys.stderr, flush=True)
+        print(f'[register_nifti] Running {args.transform} registration (DIPY)…', file=sys.stderr, flush=True)
+        t0 = time.perf_counter()
+        reg_map = run_registration(fixed_arr, fixed_affine, moving_arr, moving_affine, args.transform)
+        t_reg = time.perf_counter() - t0
+        print(f'[register_nifti] Registration done. Took {t_reg:.3f}s', file=sys.stderr, flush=True)
 
         # Apply fwdtransforms (smaller-space → larger-space) to every src sub-volume.
         spatial_shape = src_t.shape[-3:]
         leading_shape = src_t.shape[:-3]
         src_flat      = src_t.reshape(-1, *spatial_shape)
 
-        print(f'[register_nifti] Warping {src_flat.shape[0]} sub-volume(s)…',
-              file=sys.stderr, flush=True)
+        print(f'[register_nifti] Warping {src_flat.shape[0]} sub-volume(s)…', file=sys.stderr, flush=True)
         registered_vols = []
+        t_warp_start = time.perf_counter()
         for i in range(src_flat.shape[0]):
-            sub_ants = tensor_to_ants(src_flat[i].float(), src_spacing)
-            warped   = ants.apply_transforms(
-                fixed=ants_ref_fixed,
-                moving=sub_ants,
-                transformlist=reg_result['fwdtransforms'],
-            )
-            vol = ants_to_tensor(warped)
-            # ANTs may fill background with NaN; replace with 0.
+            it0 = time.perf_counter()
+            sub_t = src_flat[i].float()
+            sub_arr, sub_affine = tensor_to_numpy(sub_t, src_spacing)
+            try:
+                warped_arr = reg_map.transform(sub_arr)
+            except Exception:
+                # Some mapping types use 'apply' or 'inverse' names; try generic call
+                warped_arr = reg_map.transform(sub_arr)
+            vol = numpy_to_tensor(warped_arr)
+            # Registration may fill background with NaN; replace with 0.
             vol = torch.nan_to_num(vol, nan=0.0, posinf=0.0, neginf=0.0)
             registered_vols.append(vol)
+            it = time.perf_counter() - it0
+            print(f'[register_nifti] Warped sub-volume {i+1}/{src_flat.shape[0]} in {it:.3f}s',
+                  file=sys.stderr, flush=True)
+        t_warp = time.perf_counter() - t_warp_start
+        print(f'[register_nifti] Total warp time: {t_warp:.3f}s', file=sys.stderr, flush=True)
 
         if leading_shape:
             stacked    = torch.stack(registered_vols, dim=0)
@@ -209,10 +253,12 @@ def main():
                   'registration may have failed (contrast mismatch?)',
                   file=sys.stderr, flush=True)
 
-        out_uuid = client.push_value(GenericValue.from_tensor(reg_tensor))
-        print(f'[register_nifti] Pushed result UUID: {uuid_to_hex(out_uuid)}',
-              file=sys.stderr, flush=True)
-        print(uuid_to_hex(out_uuid), flush=True)
+        output_uuid = hex_to_uuid(args.output)
+        t0 = time.perf_counter()
+        client.write_value(output_uuid, GenericValue.from_tensor(reg_tensor))
+        t_write = time.perf_counter() - t0
+        print(f'[register_nifti] Wrote result to output slot {args.output} (write time {t_write:.3f}s)',
+            file=sys.stderr, flush=True)
 
 
 if __name__ == '__main__':

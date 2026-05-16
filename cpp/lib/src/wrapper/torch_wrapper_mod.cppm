@@ -32,7 +32,6 @@ namespace c10 {
 
 export module hasty_torch_wrapper;
 
-
 //export using at::Tensor;
 //export using at::IntArrayRef;
 //export using at::TensorOptions;
@@ -105,7 +104,13 @@ export namespace hat {
     using at::_unique2;
     using at::expm1;
     using at::convolution;
-
+    using at::linalg_solve;
+    using at::linalg_ldl_factor;
+    using at::linalg_ldl_solve;
+    using at::linalg_cholesky;
+    using at::linalg_cholesky_out;
+    using at::linalg_lu;
+    using at::pinverse;
 
 
     namespace indexing {

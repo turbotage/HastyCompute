@@ -104,6 +104,7 @@ target_sources(HastyCompute
         "src/tensor/tensor_background.cppm"
         "src/tensor/tensor_comprep.cppm"
         "src/tensor/tensor_concepts.cppm"
+        "src/tensor/tensor_external_linalg.cppm"
         "src/tensor/tensor_external_math.cppm"
         "src/tensor/tensor_external.cppm"
         "src/tensor/tensor_json.cppm"
@@ -121,6 +122,7 @@ target_sources(HastyCompute
         "src/util/util_mod.cppm"
         "src/util/util_span.cppm"
         "src/util/util_str.cppm"
+        "src/util/util_stream.cppm"
         "src/util/util_typing.cppm"
         "src/viz/viz_mod.cppm"
         "src/wrapper/torch_wrapper_mod.cppm"
@@ -263,6 +265,26 @@ if(_mkl_lib_dir)
         endforeach()
     ")
 endif()
+
+# Patch libtorch_cuda.so in the DESTINATION after every install.
+# RUNTIME_DEPENDENCIES copies libtorch_cuda.so from the ExternalProject install
+# dir to CMAKE_INSTALL_PREFIX/lib on every cmake --install run.  The source is
+# patched by ExternalProject's INSTALL_COMMAND (runs once), but the destination
+# must be re-patched here so the deployed copy always has sr3std mangling.
+install(CODE "
+    set(_so \"\${CMAKE_INSTALL_PREFIX}/lib/libtorch_cuda.so\")
+    if(EXISTS \"\${_so}\")
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE}
+                \"${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch_libtorch_dynsym.py\"
+                \"\${_so}\"
+            RESULT_VARIABLE _r
+        )
+        if(_r)
+            message(WARNING \"libtorch_cuda.so ABI patch failed (exit \${_r})\")
+        endif()
+    endif()
+")
 
 install(DIRECTORY ${HASTY_DATA_FOLDER}/models
     DESTINATION .

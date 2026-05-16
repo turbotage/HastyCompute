@@ -28,12 +28,17 @@ The difference $\Delta B$ from the main magnetic field $B_0$ can be expressed li
     \Delta B(\mathbf{r}, t) = 
         \Delta B_0(\mathbf{r}) + \hspace{-4mm}
         \sum_{\beta \in \{x,y,z\}} \hspace{-4mm} G^0_\beta(t)r_\beta  + \hspace{-4mm}
-        \sum_{\substack{|l|,|m| \geq 0 \\ \beta \in \{x,y,z\}}} \hspace{-4mm} G^{lm}_\beta(t) R^m_l(\mathbf{r})
+        \sum_{\substack{|l|,|m| \geq 0 \\ \beta \in \{x,y,z\}}} \hspace{-4mm} G^{lm}_\beta(t) N^m_l(\mathbf{r})
 \end{equation}
-Where $R^m_l(\mathbf{r})$ are the solid harmonics, which can be expressed in terms of the spherical harmonics $Y^m_l(\mathbf{r})$ as
+Where $N^m_l(\mathbf{r})$ are scalar fields describing the non-linear spatial variations of the magnetic field,
+typically described either by the solid harmonics
 \begin{equation}
-    R^m_l(\mathbf{r}) = \norm{\mathbf{r}}^l Y^m_l(\mathbf{r}).
+    R^m_l(\mathbf{r}) = \norm{\mathbf{r}}^l Y^m_l(\mathbf{r}), \text{ for spherical harmonics } Y^m_l(\mathbf{r})
 \end{equation}
+or by the 
+
+
+
 In the ideal case, the higher order terms from the harmonics are zero, and only the linear terms $G^0_\beta(t)r_\beta$ remain.
 However, in practice there are always some higher order terms present, and the ideal gradient fields precsribed are the actual 
 gradient fields realized. The actual gradient waveforms can be modelled well by a convolution of the ideal gradient waveforms 
@@ -58,8 +63,8 @@ static magnetization in the linear gradient fields and form
 where
 \begin{align}
     \Phi(\mathbf{r}, t) &= 
-        -t/T_2(\mathbf{r}) - i\gamma\int_0^t \Delta B_0(\mathbf{r}) + 
-        \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} G^{lm}_\beta(\tau) R^m_l(\mathbf{r}) d\tau
+        -t/T_2(\mathbf{r}) - i\gamma\int_0^t \Delta B_0(\mathbf{r})d\tau + 
+        \sum_{\substack{|l|,|m| > 0 \\ \beta \in \{x,y,z\}}} N^m_l(\mathbf{r}) \int_0^t G^{lm}_\beta(\tau) d\tau
     \\
     \mathbf{k}(t) &= \gamma\int_0^t (G^0_x(\tau), G^0_y(\tau), G^0_z(\tau)) d\tau
 \end{align}

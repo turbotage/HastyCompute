@@ -118,6 +118,7 @@
     "cmake.cmakePath": "/snap/cmake/current/bin/cmake",
     "cmake.buildArgs": ["--verbose"],
     "lldb-dap.executable-path": "/usr/bin/lldb-dap-22",
+    "lldb-dap.logFolder": "/tmp/lldb-dap-logs",
     "clangd.arguments": [
         "--compile-commands-dir=${workspaceFolder}/out/build/Config-ClangDebug-Linux",
         "--query-driver=/usr/bin/clang++-*",

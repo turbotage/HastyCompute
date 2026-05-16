@@ -207,7 +207,8 @@ static void extract_triplet(PetscVec u_vec, PetscVec v_vec, i64 i, i64 m, i64 n,
 
 // ─── operator_svd ────────────────────────────────────────────────────────────
 
-SVDResult operator_svd(const LinearOperator& op, i64 k, i64 ncv, i64 mpd)
+SVDResult operator_svd(const LinearOperator& op, i64 k, i64 ncv, i64 mpd,
+                       double tol, i64 max_its)
 {
     detail::ensure_init();
 
@@ -258,6 +259,11 @@ SVDResult operator_svd(const LinearOperator& op, i64 k, i64 ncv, i64 mpd)
     PetscCallAbort(PETSC_COMM_SELF, SVDSetType(svd, SVDTRLANCZOS));
     PetscCallAbort(PETSC_COMM_SELF,
         SVDSetDimensions(svd, static_cast<PetscInt>(k), p_ncv, p_mpd));
+    if (tol > 0.0 || max_its > 0) {
+        PetscReal p_tol  = (tol > 0.0)  ? static_cast<PetscReal>(tol)     : PETSC_CURRENT;
+        PetscInt  p_maxit= (max_its > 0) ? static_cast<PetscInt>(max_its)  : PETSC_CURRENT;
+        PetscCallAbort(PETSC_COMM_SELF, SVDSetTolerances(svd, p_tol, p_maxit));
+    }
     PetscCallAbort(PETSC_COMM_SELF, SVDSetFromOptions(svd));
     PetscCallAbort(PETSC_COMM_SELF, SVDSolve(svd));
 

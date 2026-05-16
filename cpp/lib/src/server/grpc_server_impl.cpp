@@ -1,6 +1,8 @@
 module;
 
 #include <grpcpp/grpcpp.h>
+#include <absl/log/log_sink.h>
+#include <absl/log/log_sink_registry.h>
 #include "hasty_service.grpc.pb.h"
 #include "hasty_service.pb.h"
 
@@ -11,6 +13,13 @@ import hasty_util_mod;
 import hasty_tensor_mod;
 import hasty_generic_value_mod;
 import hasty_threading_mod;
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
 
 enum class BankQueryType : std::int32_t {
     LIST_UUIDS = 0,
@@ -28,7 +37,63 @@ hasty::Uuid to_uuid_proto(const std::array<std::uint8_t, 16>& uuid) {
     return proto;
 }
 
+// ── gRPC internal-log forwarding via absl::LogSink ──────────────────────────
+// Modern gRPC uses abseil logging — register a global LogSink to capture it.
+// We own both the sink and the OStreamInterface at module scope.
+
+class GrpcLogSink final : public absl::LogSink {
+public:
+    explicit GrpcLogSink(hasty::OStreamInterface& stream) : _stream(stream) {}
+
+    void Send(const absl::LogEntry& entry) override {
+        auto sv = entry.text_message_with_prefix_and_newline();
+        _stream << std::string(sv.data(), sv.size());
+    }
+    void Flush() override {}
+
+private:
+    hasty::OStreamInterface& _stream;
+};
+
+std::mutex                               s_grpc_log_mtx;
+std::unique_ptr<hasty::OStreamInterface> s_grpc_internal_log;
+std::unique_ptr<GrpcLogSink>             s_grpc_log_sink;
+
 } // anonymous namespace
+
+// Check whether a TCP port is already in use on the specified host:port.
+static bool is_port_in_use(const std::string& host, const std::string& port) {
+    struct addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo* res = nullptr;
+    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0) {
+        // Could not resolve — conservatively assume not in use.
+        return false;
+    }
+    bool in_use = false;
+    for (struct addrinfo* rp = res; rp != nullptr; rp = rp->ai_next) {
+        int s = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (s == -1) continue;
+        int opt = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        if (::bind(s, rp->ai_addr, rp->ai_addrlen) == -1) {
+            if (errno == EADDRINUSE) {
+                in_use = true;
+                ::close(s);
+                break;
+            }
+            ::close(s);
+            continue;
+        }
+        // Successfully bound — close and report not in use
+        ::close(s);
+        in_use = false;
+        break;
+    }
+    freeaddrinfo(res);
+    return in_use;
+}
 
 
 class HastyServiceImpl final : public hasty::HastyService::Service {
@@ -323,10 +388,23 @@ GrpcServerHandle start_grpc_server(
     GenericValueBank& bank,
     CommandRegistry& registry,
     const std::string& address,
-    OptRefW<std::ostream> log_stream,
-    OptRefW<std::ostream> internal_log_stream
+    UPtr<OStreamInterface> log_stream,
+    UPtr<OStreamInterface> internal_log_stream
     )
 {
+    // Register absl log sink so gRPC internal logs go to internal_log_stream.
+    {
+        std::lock_guard<std::mutex> lk(s_grpc_log_mtx);
+        if (s_grpc_log_sink) absl::RemoveLogSink(s_grpc_log_sink.get());
+        s_grpc_internal_log = std::move(internal_log_stream);
+        if (s_grpc_internal_log) {
+            s_grpc_log_sink = std::make_unique<GrpcLogSink>(*s_grpc_internal_log);
+            absl::AddLogSink(s_grpc_log_sink.get());
+        } else {
+            s_grpc_log_sink.reset();
+        }
+    }
+
     GrpcServerHandle handle;
     handle._impl = std::make_unique<GrpcServerHandle::Impl>();
     handle._impl->service = std::make_unique<HastyServiceImpl>(bank, registry);
@@ -337,24 +415,32 @@ GrpcServerHandle start_grpc_server(
     builder.SetMaxReceiveMessageSize(-1);
     builder.SetMaxSendMessageSize(-1);
     builder.AddChannelArgument("grpc.http2.initial_window_size",
-                            128 * 1024 * 1024);
-    if (internal_log_stream) {
-        builder.SetOption(grpc::MakeChannelArgumentOption(
-            "grpc.internal_log_stream", &(*internal_log_stream)));
-    }
+                               128 * 1024 * 1024);
 
-    if (log_stream) {
-        (*log_stream).get() << "Starting gRPC server on " << address << "..." << std::endl;
+    if (log_stream)
+        *log_stream << "Starting gRPC server on " + address + "...\n";
+    // Check whether the address:port is already in use and fail early with a
+    // clear message to the provided log stream. Address is expected as
+    // host:port (e.g. "0.0.0.0:50051").
+    auto pos = address.rfind(':');
+    if (pos != std::string::npos) {
+        std::string host = address.substr(0, pos);
+        std::string port = address.substr(pos + 1);
+        if (is_port_in_use(host.empty() ? "0.0.0.0" : host, port)) {
+            if (log_stream) {
+                *log_stream << "Port " + port + " appears to be in use; aborting gRPC server start.\n";
+            }
+            throw std::runtime_error("gRPC port " + port + " is already in use");
+        }
     }
 
     handle._impl->server  = builder.BuildAndStart();
     handle._impl->address = address;
 
-    if (log_stream) {
-        (*log_stream).get() << "gRPC server started on " << address << std::endl;
-    }
+    if (log_stream)
+        *log_stream << "gRPC server started on " + address + "\n";
 
-    return std::move(handle);
+    return handle;
 }
 
 

@@ -22,7 +22,7 @@ namespace python {
 
 export struct ScriptResult {
     int                      exit_code;
-    std::vector<std::string> output_uuids;  // hex strings (one per stdout line)
+    std::vector<std::string> output_uuids;  // hex strings — pre-registered output slot keys
     std::string              stderr_text;
 };
 
@@ -102,21 +102,38 @@ export std::array<u8, 16> hex_to_uuid_array(const std::string& hex) {
 
 // ─── run_script ──────────────────────────────────────────────────────────────
 
+// num_outputs: number of output values the script will produce.
+//   For each, a UUID slot is pre-registered in the global bank and passed as
+//   --output0=HEX (or --output=HEX for exactly one) so the script can write
+//   results via gRPC write_value rather than printing UUIDs to stdout.
+//   result.output_uuids is populated with those pre-known hex strings.
 export ScriptResult run_script(
     const std::string&              script_path,
-    const std::vector<std::string>& args       = {},
-    bool                            debug      = false,
-    int                             debug_port = 5678)
+    const std::vector<std::string>& args        = {},
+    int                             num_outputs = 0,
+    bool                            debug       = false,
+    int                             debug_port  = 5678)
 {
     if (!server::default_grpc_server_handle || !server::default_http_server)
         server::start_default_servers();
 
     int grpc_port = parse_port(server::default_grpc_server_handle->address());
 
-    auto base       = tmp_base();
-    auto out_path   = base.string() + "_out.txt";
-    auto err_path   = base.string() + "_err.txt";
-    auto exit_path  = base.string() + "_exit.txt";
+    // Pre-register output slots so Python can write results via gRPC.
+    std::vector<std::array<u8, 16>> output_uuids_raw;
+    std::vector<std::string>        output_hex;
+    output_uuids_raw.reserve(num_outputs);
+    output_hex.reserve(num_outputs);
+    for (int i = 0; i < num_outputs; ++i) {
+        auto uuid = hasty::generate_uuid();
+        hasty::server::global_generic_value_bank.push_value_with_key(uuid, hasty::GenericValue{});
+        output_uuids_raw.push_back(uuid);
+        output_hex.push_back(uuid_to_hex(uuid));
+    }
+
+    auto base      = tmp_base();
+    auto err_path  = base.string() + "_err.txt";
+    auto exit_path = base.string() + "_exit.txt";
 
     std::string cmd = "\"" + venv_python() + "\""
                     + " \"" + script_path + "\""
@@ -125,8 +142,14 @@ export ScriptResult run_script(
         cmd += " --debug-port=" + std::to_string(debug_port);
     for (const auto& a : args)
         cmd += " " + a;
-    // Redirect stdout/stderr to temp files; capture exit code via shell.
-    cmd += " >\"" + out_path + "\" 2>\"" + err_path + "\""
+    if (num_outputs == 1) {
+        cmd += " --output=" + output_hex[0];
+    } else {
+        for (int i = 0; i < num_outputs; ++i)
+            cmd += " --output" + std::to_string(i) + "=" + output_hex[i];
+    }
+    // Discard stdout; capture stderr and exit code.
+    cmd += " >/dev/null 2>\"" + err_path + "\""
          + "; echo $? >\"" + exit_path + "\"";
 
     if (debug) {
@@ -145,25 +168,24 @@ export ScriptResult run_script(
     else
         result.exit_code = -1;
 
-    // Read stdout — one UUID hex per line.
-    if (std::ifstream of{out_path}; of) {
-        for (std::string line; std::getline(of, line); ) {
-            line = trim(line);
-            if (!line.empty()) result.output_uuids.push_back(line);
-        }
-    }
-
     // Read stderr.
     if (std::ifstream ef{err_path}; ef)
         result.stderr_text.assign(std::istreambuf_iterator<char>(ef), {});
 
     // Cleanup temp files.
-    for (auto& p : {out_path, err_path, exit_path})
+    for (auto& p : {err_path, exit_path})
         std::filesystem::remove(p);
 
     if (result.exit_code != 0) {
         std::cerr << "[python::run_script] Script exited " << result.exit_code
                   << "\n--- stderr ---\n" << result.stderr_text << "--- end ---\n";
+        // Clean up pre-registered slots that Python never filled.
+        for (const auto& uuid : output_uuids_raw) {
+            std::string key(reinterpret_cast<const char*>(uuid.data()), 16);
+            hasty::server::global_generic_value_bank.delete_value(key);
+        }
+    } else {
+        result.output_uuids = std::move(output_hex);
     }
 
     return result;

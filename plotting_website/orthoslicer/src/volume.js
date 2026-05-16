@@ -390,7 +390,16 @@ export class RemoteVolume {
                 this._cache.set(key, data);
                 if (this.onUpdate) this.onUpdate();
             } catch (e) {
-                console.error('RemoteVolume fetch error', key, e);
+                // Avoid spamming the console when the UUID is missing in the bank.
+                const msg = (e && e.message) ? e.message : String(e);
+                if (msg.includes('UUID not found in bank')) {
+                    if (!this._missingUuidLogged) {
+                        console.warn('RemoteVolume: UUID not found in bank — will not retry fetches for this volume');
+                        this._missingUuidLogged = true;
+                    }
+                } else {
+                    console.error('RemoteVolume fetch error', key, e);
+                }
             } finally {
                 this._pending.delete(key);
             }

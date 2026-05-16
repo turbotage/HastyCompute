@@ -95,16 +95,17 @@ Tensor unprep_morph(Tensor t, const MorphPrep& prep)
     return t.permute(ArrayRef<i64>(inv));
 }
 
-// Build spherical convolution kernel [1,1,sz,...,sz] with 1.0 inside L2 ball.
-// Built on CPU then moved to target device.
-Tensor make_sphere_kernel(i64 radius, i64 spatial_ndim, Device dev)
+// offsets passed in — caller already has them, avoids recomputing.
+// kernel_sum = offsets.size() on CPU, no .item() GPU sync needed.
+Tensor make_sphere_kernel(
+    i64 radius, i64 spatial_ndim, Device dev,
+    const std::vector<std::vector<i64>>& offsets)
 {
     i64 sz = 2 * radius + 1;
     std::vector<i64> shape(spatial_ndim, sz);
     auto kernel = zeros(ArrayRef<i64>(shape), Opt<Device>{}, Opt<eScalarType>(eScalarType::Float));
-    auto one    = ones( ArrayRef<i64>({1}),  Opt<Device>{}, Opt<eScalarType>(eScalarType::Float));
+    auto one    = ones( ArrayRef<i64>({1}),   Opt<Device>{}, Opt<eScalarType>(eScalarType::Float));
 
-    auto offsets = sphere_offsets(radius, spatial_ndim);
     for (const auto& off : offsets) {
         std::vector<TensorIndex> idx;
         idx.reserve(spatial_ndim);
@@ -118,115 +119,162 @@ Tensor make_sphere_kernel(i64 radius, i64 spatial_ndim, Device dev)
     return kernel.reshape(ArrayRef<i64>(kern_shape)).to(dev);
 }
 
-// GPU-native dilation/erosion via single convolution with spherical kernel.
-// Dispatches to conv1d/2d/3d for spatial_ndim ≤ 3 via wrapped convolution().
-Tensor morph_conv(const Tensor& mask, i64 radius, i64 spatial_ndim, bool dilate)
+// Conv-based dilation/erosion for spatial_ndim <= 3.
+// Kernel and offsets built once, reused across n_iters — no redundant H2D or .item() syncs.
+Tensor morph_conv(const Tensor& mask, i64 radius, i64 spatial_ndim, bool dilate, i64 n_iters)
 {
-    auto kernel     = make_sphere_kernel(radius, spatial_ndim, mask.device());
-    i64  kernel_sum = static_cast<i64>(kernel.sum().item<float>() + 0.5f);
-
-    // [B, s0,...,sN-1] → [B, 1, s0,...,sN-1]
-    Tensor m = mask.to(eScalarType::Float).unsqueeze(1);
+    auto offsets    = sphere_offsets(radius, spatial_ndim);
+    auto kernel     = make_sphere_kernel(radius, spatial_ndim, mask.device(), offsets);
+    i64  kernel_sum = (i64)offsets.size(); // offsets.size() == number of 1s in kernel, no GPU sync
 
     std::vector<i64> stride(spatial_ndim, 1);
     std::vector<i64> padding(spatial_ndim, radius);
     std::vector<i64> dil(spatial_ndim, 1);
+    Scalar lo_thresh(0.5f);
+    Scalar hi_thresh(static_cast<float>(kernel_sum) - 0.5f);
 
-    Tensor out = convolution(
-        m, kernel,
-        ArrayRef<i64>(stride), ArrayRef<i64>(padding), ArrayRef<i64>(dil)
-    ).squeeze(1);
+    // [B, s...] → [B, 1, s...] for convolution; kept in this shape between iterations
+    Tensor cur = mask.to(eScalarType::Float).unsqueeze(1);
+    for (i64 i = 0; i < n_iters; ++i) {
+        Tensor conv_out = convolution(
+            cur, kernel,
+            ArrayRef<i64>(stride), ArrayRef<i64>(padding), ArrayRef<i64>(dil));
 
-    if (dilate)
-        return out > Scalar(0.5f);
-    else
-        return out >= Scalar(static_cast<float>(kernel_sum) - 0.5f);
-}
+        Tensor bool_out = dilate ? (conv_out > lo_thresh) : (conv_out >= hi_thresh);
 
-// Roll-based fallback for spatial_ndim > 3 (convolution doesn't support >3D).
-// Runs on the tensor's current device — no CPU transfer.
-Tensor morph_roll(const Tensor& mask, i64 radius, i64 spatial_ndim, bool dilate)
-{
-    Tensor m = dilate ? mask.to(eScalarType::Float)
-                      : mask.logical_not().to(eScalarType::Float);
-    auto result  = zeros_like(m);
-    auto offsets = sphere_offsets(radius, spatial_ndim);
-
-    for (const auto& off : offsets) {
-        std::vector<i64> shifts, dims;
-        for (i64 d = 0; d < spatial_ndim; ++d) {
-            if (off[d] != 0) {
-                shifts.push_back(off[d]);
-                dims.push_back(d + 1);
-            }
-        }
-
-        Tensor shifted = shifts.empty()
-            ? m
-            : m.roll(ArrayRef<i64>(shifts), ArrayRef<i64>(dims));
-
-        for (i64 d = 0; d < spatial_ndim; ++d) {
-            if (off[d] == 0) continue;
-            i64 dim = d + 1;
-            i64 sz = shifted.size(dim);
-            if (off[d] > 0)
-                shifted.narrow(dim, 0, off[d]).fill_(Scalar(0.0f));
-            else
-                shifted.narrow(dim, sz + off[d], -off[d]).fill_(Scalar(0.0f));
-        }
-
-        result = result + shifted;
+        if (i < n_iters - 1)
+            cur = bool_out.to(eScalarType::Float); // keep [B, 1, s...] for next conv
+        else
+            cur = bool_out.squeeze(1);             // [B, s...] bool on final iter
     }
-
-    Tensor out = result > Scalar(0.5f);
-    return dilate ? out : out.logical_not();
+    return cur;
 }
 
-Tensor dilate_impl(const Tensor& mask, i64 radius, i64 spatial_ndim)
+// Roll-based dilation/erosion for spatial_ndim > 3.
+// offsets computed once and reused across n_iters.
+// In-place result.add_() avoids per-offset tensor allocation.
+Tensor morph_roll(const Tensor& mask, i64 radius, i64 spatial_ndim, bool dilate, i64 n_iters)
 {
-    return spatial_ndim <= 3
-        ? morph_conv(mask, radius, spatial_ndim, true)
-        : morph_roll(mask, radius, spatial_ndim, true);
+    auto offsets = sphere_offsets(radius, spatial_ndim);
+    Tensor cur = mask;
+
+    for (i64 iter = 0; iter < n_iters; ++iter) {
+        Tensor m = dilate ? cur.to(eScalarType::Float)
+                          : cur.logical_not().to(eScalarType::Float);
+
+        auto result = zeros_like(m);
+        for (const auto& off : offsets) {
+            std::vector<i64> shifts, dims;
+            for (i64 d = 0; d < spatial_ndim; ++d) {
+                if (off[d] != 0) {
+                    shifts.push_back(off[d]);
+                    dims.push_back(d + 1);
+                }
+            }
+
+            Tensor shifted = shifts.empty()
+                ? m
+                : m.roll(ArrayRef<i64>(shifts), ArrayRef<i64>(dims));
+
+            for (i64 d = 0; d < spatial_ndim; ++d) {
+                if (off[d] == 0) continue;
+                i64 dim = d + 1;
+                i64 sz  = shifted.size(dim);
+                if (off[d] > 0)
+                    shifted.narrow(dim, 0, off[d]).fill_(Scalar(0.0f));
+                else
+                    shifted.narrow(dim, sz + off[d], -off[d]).fill_(Scalar(0.0f));
+            }
+
+            result.add_(shifted);
+        }
+
+        Tensor out = result > Scalar(0.5f);
+        cur = dilate ? out : out.logical_not();
+    }
+    return cur;
 }
 
-Tensor erode_impl(const Tensor& mask, i64 radius, i64 spatial_ndim)
+Tensor dilate_impl(const Tensor& mask, i64 radius, i64 spatial_ndim, i64 n_iters)
 {
     return spatial_ndim <= 3
-        ? morph_conv(mask, radius, spatial_ndim, false)
-        : morph_roll(mask, radius, spatial_ndim, false);
+        ? morph_conv(mask, radius, spatial_ndim, true,  n_iters)
+        : morph_roll(mask, radius, spatial_ndim, true,  n_iters);
+}
+
+Tensor erode_impl(const Tensor& mask, i64 radius, i64 spatial_ndim, i64 n_iters)
+{
+    return spatial_ndim <= 3
+        ? morph_conv(mask, radius, spatial_ndim, false, n_iters)
+        : morph_roll(mask, radius, spatial_ndim, false, n_iters);
 }
 
 } // namespace
 
-// Morphological dilation with spherical (L2) structuring element.
-// Uses GPU convolution for spatial_ndim ≤ 3; roll-based for higher dims.
-export Tensor mask_dilate(Tensor mask, i64 radius = 1, std::vector<i64> batch_dims = {})
+export Tensor ellipsoid_mask(
+    std::vector<i64>    shape,
+    std::vector<double> semiaxes,
+    std::vector<double> offset  = {},
+    TensorOptions       opts    = TensorOptions())
+{
+    i64 ndim = (i64)shape.size();
+    if ((i64)semiaxes.size() != ndim)
+        throw std::runtime_error("[ellipsoid_mask] shape and semiaxes must have same length");
+    if (!offset.empty() && (i64)offset.size() != ndim)
+        throw std::runtime_error("[ellipsoid_mask] offset must be empty or match ndim");
+
+    TensorOptions float_opts = opts.dtype(eScalarType::Float);
+
+    // Accumulate sum((coord_d / semiaxis_d)^2) via broadcasting — no full meshgrid
+    Tensor dist2 = zeros(ArrayRef<i64>({1}), float_opts);
+    for (i64 d = 0; d < ndim; ++d) {
+        double center = (shape[d] - 1) * 0.5 + (offset.empty() ? 0.0 : offset[d]);
+        Tensor coord = arange(shape[d], float_opts);
+        coord = (coord - Scalar(center)) / Scalar(semiaxes[d]);
+        coord = coord * coord;
+
+        std::vector<i64> view_shape(ndim, 1LL);
+        view_shape[d] = shape[d];
+        dist2 = dist2 + coord.view(ArrayRef<i64>(view_shape));
+    }
+
+    return dist2 <= Scalar(1.0f);
+}
+
+export Tensor mask_dilate(Tensor mask, i64 radius = 1, i64 n_iters = 1, std::vector<i64> batch_dims = {})
 {
     if (mask.scalar_type() != eScalarType::Bool)
         throw std::runtime_error("[mask_dilate] mask must be bool");
+    if (radius < 1)
+        throw std::runtime_error("[mask_dilate] radius must be >= 1");
+    if (n_iters < 1)
+        throw std::runtime_error("[mask_dilate] n_iters must be >= 1");
 
-    i64 ndim = mask.ndimension();
+    i64 ndim         = mask.ndimension();
     i64 spatial_ndim = ndim - (i64)batch_dims.size();
     if (spatial_ndim < 1)
         throw std::runtime_error("[mask_dilate] no spatial dims remaining after batch dims");
 
     auto prep = prep_morph(std::move(mask), batch_dims);
-    return unprep_morph(dilate_impl(prep.flat, radius, spatial_ndim), prep);
+    return unprep_morph(dilate_impl(prep.flat, radius, spatial_ndim, n_iters), prep);
 }
 
-// Morphological erosion with spherical (L2) structuring element.
-export Tensor mask_erode(Tensor mask, i64 radius = 1, std::vector<i64> batch_dims = {})
+export Tensor mask_erode(Tensor mask, i64 radius = 1, i64 n_iters = 1, std::vector<i64> batch_dims = {})
 {
     if (mask.scalar_type() != eScalarType::Bool)
         throw std::runtime_error("[mask_erode] mask must be bool");
+    if (radius < 1)
+        throw std::runtime_error("[mask_erode] radius must be >= 1");
+    if (n_iters < 1)
+        throw std::runtime_error("[mask_erode] n_iters must be >= 1");
 
-    i64 ndim = mask.ndimension();
+    i64 ndim         = mask.ndimension();
     i64 spatial_ndim = ndim - (i64)batch_dims.size();
     if (spatial_ndim < 1)
         throw std::runtime_error("[mask_erode] no spatial dims remaining after batch dims");
 
     auto prep = prep_morph(std::move(mask), batch_dims);
-    return unprep_morph(erode_impl(prep.flat, radius, spatial_ndim), prep);
+    return unprep_morph(erode_impl(prep.flat, radius, spatial_ndim, n_iters), prep);
 }
 
 }

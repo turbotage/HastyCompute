@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Patch libtorch_cuda.so: rename ntsr4__T0 → ntsr3std in .dynsym/.dynstr.
+Patch libtorch_cuda.so: rename sr4__T0 → sr3std in .dynsym/.dynstr.
+
+This covers both standalone occurrences (e.g. 'XsrIfIXsr4__T0E...')
+and the nt-prefixed form ntsr4__T0 → ntsr3std (sr4__T0 is a substring).
 
 Strategy: rebuild .dynstr with replacements (shorter strings), pad to original
 size, update .dynsym st_name AND .dynamic string-index entries using the same
@@ -11,8 +14,8 @@ import sys
 import struct
 from pathlib import Path
 
-OLD = b'ntsr4__T0'
-NEW = b'ntsr3std'
+OLD = b'sr4__T0'
+NEW = b'sr3std'
 
 # .dynamic tags whose d_val is an index into .dynstr
 DYNSTR_TAGS = {
@@ -72,27 +75,30 @@ def patch(path: str) -> int:
 
     old_dynstr = bytes(data[dynstr['sh_offset']:dynstr['sh_offset'] + dynstr['sh_size']])
 
-    # Build new .dynstr and old→new offset map
-    new_dynstr  = bytearray()
-    old_to_new  = {}
-
-    i = 0
-    while i < len(old_dynstr):
-        old_to_new[i] = len(new_dynstr)
-        try:
-            end = old_dynstr.index(0, i)
-        except ValueError:
-            end = len(old_dynstr)
-        s = old_dynstr[i:end].replace(OLD, NEW)
-        new_dynstr += s + b'\x00'
-        i = end + 1
-
+    # Build new .dynstr: replace ALL occurrences of OLD anywhere in the section
+    new_dynstr = bytearray(old_dynstr.replace(OLD, NEW))
     assert len(new_dynstr) <= len(old_dynstr), (
         f"New .dynstr ({len(new_dynstr)}) longer than old ({len(old_dynstr)})"
     )
     new_dynstr += b'\x00' * (len(old_dynstr) - len(new_dynstr))
 
     data[dynstr['sh_offset']:dynstr['sh_offset'] + dynstr['sh_size']] = new_dynstr
+
+    # Build mapping: old_offset → new_offset for ANY byte position.
+    # ELF suffix-sharing means .dynsym st_name can point mid-string, not only
+    # at string starts. The mapping: new_off = old_off - (# replacements before old_off).
+    delta = len(OLD) - len(NEW)
+    rep_positions = []
+    i = 0
+    while True:
+        i = old_dynstr.find(OLD, i)
+        if i == -1: break
+        rep_positions.append(i)
+        i += len(OLD)
+
+    def old_to_new_off(x):
+        count = sum(1 for p in rep_positions if p < x)
+        return x - count * delta
 
     # Update .dynsym st_name
     sym_size = dynsym['sh_entsize']
@@ -101,7 +107,7 @@ def patch(path: str) -> int:
     for j in range(n_syms):
         sym_off = dynsym['sh_offset'] + j * sym_size
         st_name = u32(sym_off)
-        new_name = old_to_new.get(st_name, st_name)
+        new_name = old_to_new_off(st_name)
         if new_name != st_name:
             put32(sym_off, new_name)
             updated_syms += 1
@@ -118,7 +124,7 @@ def patch(path: str) -> int:
                 break
             if d_tag in DYNSTR_TAGS:
                 d_val = u64(dyn_off + 8)
-                new_val = old_to_new.get(d_val, d_val)
+                new_val = old_to_new_off(d_val)
                 if new_val != d_val:
                     put64(dyn_off + 8, new_val)
                     updated_dyn += 1
@@ -134,7 +140,7 @@ def patch(path: str) -> int:
             vn_aux  = u32(off + 8)   # offset from off to first Vernaux
             vn_next = u32(off + 12)  # offset from off to next Verneed (0=last)
 
-            new_file = old_to_new.get(vn_file, vn_file)
+            new_file = old_to_new_off(vn_file)
             if new_file != vn_file:
                 put32(off + 4, new_file)
                 updated_ver += 1
@@ -144,7 +150,7 @@ def patch(path: str) -> int:
             for _ in range(vn_cnt):
                 vna_name = u32(aux_off + 8)   # index into .dynstr for version name
                 vna_next = u32(aux_off + 12)
-                new_name = old_to_new.get(vna_name, vna_name)
+                new_name = old_to_new_off(vna_name)
                 if new_name != vna_name:
                     put32(aux_off + 8, new_name)
                     updated_ver += 1
@@ -167,7 +173,7 @@ def patch(path: str) -> int:
             while True:
                 vda_name = u32(aux_off)
                 vda_next = u32(aux_off + 4)
-                new_name = old_to_new.get(vda_name, vda_name)
+                new_name = old_to_new_off(vda_name)
                 if new_name != vda_name:
                     put32(aux_off, new_name)
                     updated_ver += 1
@@ -190,5 +196,5 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <libtorch_cuda.so>")
         sys.exit(1)
-    n = patch(sys.argv[1])
-    sys.exit(0 if n > 0 else 1)
+    patch(sys.argv[1])
+    sys.exit(0)  # always succeed — 0 updates is fine (already patched)

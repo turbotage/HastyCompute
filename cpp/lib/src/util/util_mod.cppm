@@ -8,6 +8,7 @@ export import :idx;
 export import :meta;
 export import :span;
 export import :str;
+export import :stream;
 export import :typing;
 
 namespace hasty {

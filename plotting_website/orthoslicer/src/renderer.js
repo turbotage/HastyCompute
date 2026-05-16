@@ -52,7 +52,7 @@ function f32ToF16Array(src) {
 // numeric object used by ViewState.writeUniforms.  All fields have defaults
 // matching the C++ compress_ui16_config defaults.
 
-function normalizeComprepConfig(cfg = {}) {
+export function normalizeComprepConfig(cfg = {}) {
     const modeMap = { linear: 0, gamma: 1, log: 2 };
     const a      = cfg.a      ?? 0.0;
     const b      = cfg.b      ?? 1.0;

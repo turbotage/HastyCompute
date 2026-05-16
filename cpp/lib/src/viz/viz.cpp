@@ -60,7 +60,8 @@ void orthoslicer(Tensor volume, const OrthoslicerOptions& options, bool halt_for
     }
 
     if (plot_locally) {
-        std::system(("xdg-open \"" + url + "\" &").c_str());
+        // Detach launched browser fully so its stdout/stderr don't inherit our terminal.
+        std::system(("setsid xdg-open \"" + url + "\" >/dev/null 2>&1 < /dev/null &").c_str());
     } else {
         std::cout << "Orthoslicer URL: " << url << std::endl;
     }
