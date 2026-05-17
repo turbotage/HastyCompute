@@ -79,6 +79,7 @@ target_sources(HastyCompute
 
 target_sources(HastyCompute
     PUBLIC FILE_SET cxx_modules_public TYPE CXX_MODULES FILES
+        "src/fft/dft.cppm"
         "src/fft/fft_mod.cppm"
         "src/fft/nufft.cppm"
         "src/fft/toeplitz.cppm"

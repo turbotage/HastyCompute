@@ -565,62 +565,105 @@ static hasty::Tensor compute_nufft_bin_weights(
 
 // ── DFT + interpolants ───────────────────────────────────────────────────────
 //
-// Replaces the NUFFT with an exact direct DFT sum to isolate whether the 0.92
-// correlation comes from the NUFFT application or from SVD quality.
+// S_dft[k] = Σ_l Omega[k,l] · DFT(img_l, xi[k])
+//   img_l[n] = Upsilon[bin(n), l] · ρ[n]
 //
-// S_dft[k] = Σ_{n ∈ mask} ρ[n] · phi_approx[n,k] · exp(-2πi k·r[n])
-//
-// phi_approx[n,k] = Σ_l Upsilon[bin(n),l] · Omega[sub_k,l]
-// k = k_traj[sub_idx] in cycles/FOV,  r[n] = coords_flat[n] in [-0.5, 0.5]
-//
-// Only computed at sub_idx comparison points. Returns [1, n_sub].
+// Uses the unified hasty::fft::DFTConfig / dft convention:
+//   xi[k, d] = 2π k_d / N_d ∈ [−π, π]   →   same kernel as forward_exact.
+// Returns [1, n_sub].
 
 static hasty::Tensor approx_signal_dft(
-    const Problem& prob,
-    const hasty::Tensor& Omega,        // [K, L]
-    const hasty::Tensor& Upsilon,      // [n_hist, L]
-    const hasty::Tensor& voxel_to_bin, // [N_mask] long
-    const hasty::Tensor& mask_idx,     // [N_mask] long
-    const hasty::Tensor& sub_idx)      // [n_sub] long
+    const hasty::fft::DFTConfig& cfg,    // coords for N_mask masked voxels
+    const hasty::Tensor& Omega,           // [K, L]
+    const hasty::Tensor& Upsilon,         // [n_hist, L]
+    const hasty::Tensor& voxel_to_bin,   // [N_mask] long
+    const hasty::Tensor& rho_m,           // [N_mask] ComplexFloat
+    const hasty::Tensor& sub_idx,         // [n_sub] long
+    const hasty::Tensor& xi_sub)          // [n_sub, d] float ∈ [−π, π]
 {
     using namespace hasty;
-    using namespace std::numbers;
 
-    const i64    n_sub   = sub_idx.size(0);
-    const i64    N_mask  = mask_idx.size(0);
-    const Device dev     = prob.mag.device();
-    const float  pi_f    = (float)pi_v<f64>;
-    const i64    n_chunk = 1 << 14;  // 16 384 voxels per chunk → ~38 MB peak
+    const i64    L      = Omega.size(1);
+    const i64    N_mask = rho_m.size(0);
+    const Device dev    = rho_m.device();
+    const TensorOptions opts_c{dev, eScalarType::ComplexFloat};
 
+    auto omega_sub = Omega.index_select(0, sub_idx);   // [n_sub, L]
+    auto signal    = zeros({(i64)sub_idx.size(0)}, opts_c);
+
+    for (i64 l = 0; l < L; ++l) {
+        // img_l[n] = Upsilon[bin(n), l] × ρ[n]
+        auto ups_vox = Upsilon.select(1, l).index_select(0, voxel_to_bin);  // [N_mask]
+        auto img_l   = ups_vox.mul(rho_m);                                   // [N_mask]
+
+        auto F_l = fft::dft(cfg, img_l, xi_sub);   // [n_sub]
+        signal.add_(omega_sub.select(1, l).mul(F_l));
+    }
+
+    return signal.unsqueeze(0);  // [1, n_sub]
+}
+
+
+// ── Exact histogram DFT (no SVD) ─────────────────────────────────────────────
+//
+// S_hist_exact[k] = Σ_h exp(−z_h · t_k) · A_h(k)
+//                 = Σ_n ρ[n] · exp(−z_{bin(n)} · t_k) · exp(−i ξ_k · q_n)
+//
+// Uses the EXACT bin phi (no SVD decomposition) via the unified DFT convention.
+// Comparing this with S_approx_dft isolates the SVD approximation error in
+// signal space, bypassing the 80-voxel phi sampling bias:
+//   circ_corr(S_both, S_hist_exact) ≈ 1.0 → DFT convention correct
+//   circ_corr(S_hist_exact, S_approx_dft) ≈ 0.917 → SVD is the bottleneck
+//   circ_corr(S_hist_exact, S_approx_dft) ≈ 1.0 → Omega×Upsilon cancellation
+// Returns [1, n_sub].
+
+static hasty::Tensor exact_histogram_signal_dft(
+    const hasty::fft::DFTConfig& cfg,         // coords for N_mask masked voxels
+    const hasty::mri::HistogramResult& hist,
+    const hasty::Tensor& rho_m,               // [N_mask] ComplexFloat
+    const hasty::Tensor& t_sub,               // [n_sub] float timestamps
+    const hasty::Tensor& xi_sub)              // [n_sub, d] float ∈ [−π, π]
+{
+    using namespace hasty;
+
+    const i64    n_sub  = xi_sub.size(0);
+    const i64    N_mask = rho_m.size(0);
+    const Device dev    = rho_m.device();
     const TensorOptions opts_c{dev, eScalarType::ComplexFloat};
     const TensorOptions opts_f{dev, eScalarType::Float};
+    const i64 n_chunk = 1 << 14;
 
-    auto rho_m     = prob.mag_flat.index_select(0, mask_idx)
-                          .to(eScalarType::ComplexFloat);            // [N_mask]
-    auto k_sub     = prob.k_traj.index_select(0, sub_idx);          // [n_sub, 3]
-    auto omega_sub = Omega.index_select(0, sub_idx);                 // [n_sub, L]
+    auto z_h  = hist.z_map_hist.to(eScalarType::ComplexFloat);  // [n_hist]
+    auto t_cf = t_sub.to(eScalarType::ComplexFloat);              // [n_sub]
 
     auto signal = zeros({n_sub}, opts_c);
 
-    for (i64 n0 = 0; n0 < N_mask; n0 += n_chunk) {
-        const i64 nb     = std::min(n_chunk, N_mask - n0);
-        auto mask_b      = mask_idx.narrow(0, n0, nb);               // [nb]
-        auto rho_b       = rho_m.narrow(0, n0, nb);                  // [nb] complex
-        auto bins_b      = voxel_to_bin.narrow(0, n0, nb);           // [nb]
-        auto r_b         = prob.coords_flat.index_select(0, mask_b); // [nb, 3]
+    for (i64 m0 = 0; m0 < n_sub; m0 += cfg.batch_size) {
+        const i64 mB    = std::min(cfg.batch_size, n_sub - m0);
+        const Tensor xi_b = xi_sub.narrow(0, m0, mB);   // [mB, d]
+        const Tensor t_b  = t_cf.narrow(0, m0, mB);     // [mB]
+        auto sig_b = zeros({mB}, opts_c);
 
-        // phi_approx[nb, n_sub] = Upsilon[bins,:] @ Omega_sub.T
-        auto ups_b  = Upsilon.index_select(0, bins_b);               // [nb, L]
-        auto phi_b  = mm(ups_b, omega_sub.transpose(0, 1));          // [nb, n_sub]
+        for (i64 n0 = 0; n0 < N_mask; n0 += n_chunk) {
+            const i64 nB = std::min(n_chunk, N_mask - n0);
+            const Tensor q_b    = cfg.coords.narrow(0, n0, nB);          // [nB, d]
+            const Tensor rho_b  = rho_m.narrow(0, n0, nB);               // [nB]
+            const Tensor bins_b = hist.voxel_to_bin.narrow(0, n0, nB);   // [nB]
+            const Tensor z_b    = z_h.index_select(0, bins_b);           // [nB]
 
-        // DFT kernel: exp(-2πi k · r),  phase[nb, n_sub]
-        auto phase_b = r_b.mm(k_sub.transpose(0, 1))                 // [nb, n_sub]
-                          .mul(Scalar(-2.0f * pi_f));
-        auto kern_b  = view_as_complex(
-            stack({zeros({nb, n_sub}, opts_f), phase_b}, -1)
-                .contiguous()).exp();                                  // [nb, n_sub] complex
+            // phi_exact[mB, nB] = exp(−z_b[n] · t_b[m])
+            auto phi_b = (-z_b.unsqueeze(0).mul(t_b.unsqueeze(1))).exp();  // [mB, nB]
 
-        signal.add_(rho_b.unsqueeze(1).mul(phi_b).mul(kern_b).sum(0));
+            // DFT kernel[mB, nB] = exp(−i × xi_b @ q_b.T)
+            auto phase = mm(xi_b, q_b.transpose(0, 1));   // [mB, nB] float
+            auto kern  = view_as_complex(
+                stack({zeros({mB, nB}, opts_f), phase.neg()}, -1)
+                    .contiguous()).exp();                   // [mB, nB] complex
+
+            sig_b.add_(mv(phi_b.mul(kern), rho_b));       // [mB]
+        }
+
+        signal.narrow(0, m0, mB).copy_(sig_b);
     }
 
     return signal.unsqueeze(0);  // [1, n_sub]
@@ -706,6 +749,93 @@ static bool run_test(const Problem& prob,
               << "  (exact variants: " << std::fixed << std::setprecision(2)
               << exact_s << "s)\n";
 
+    // ── Quantization ceiling diagnostic ──────────────────────────────────────
+    // Replace each voxel's B0 with its histogram bin-mean B0, then run forward_exact.
+    // S_quantized = S_exact_hist (exact at histogram level, no SVD approximation).
+    //
+    // circ_corr(S_both, S_quantized):
+    //   ≈ 0.917 → bin width is the bottleneck (increase n_rate)
+    //   ≈ 1.000 → bin width is fine, error comes from SVD rank / Omega-Upsilon bug
+    {
+        const i64 nx = prob.mag.size(0);
+        const i64 ny = prob.mag.size(1);
+        const i64 nz = prob.mag.size(2);
+        const i64 Nq = prob.N;
+        const TensorOptions opts_fq = TensorOptions(prob.mag.device(), eScalarType::Float);
+
+        auto bin_z_r = hist.z_map_hist.real().index_select(0, hist.voxel_to_bin);
+        auto bin_z_i = hist.z_map_hist.imag().index_select(0, hist.voxel_to_bin);
+        auto z_qr = zeros({Nq}, opts_fq);
+        auto z_qi = zeros({Nq}, opts_fq);
+        z_qr.scatter_(0, hist.mask_idx, bin_z_r);
+        z_qi.scatter_(0, hist.mask_idx, bin_z_i);
+        auto z_quant_flat  = view_as_complex(stack({z_qr, z_qi}, 1).contiguous());
+        auto rate_map_quant = z_quant_flat.reshape({nx, ny, nz});
+
+        auto k_q  = prob.k_traj.index_select(0, sub_idx);
+        auto t_q  = prob.timestamps.index_select(0, sub_idx);
+        auto nl_q = prob.nl_waveforms.index_select(1, sub_idx);
+
+        auto S_quant = mri::forward_exact(
+            prob.mag, prob.sensitivity_maps, rate_map_quant,
+            t_q, k_q, nl_q, prob.nl_basis,
+            true, false, 8);  // [C, n_sub]
+
+        auto quant_r_tmp = S_quant.select(0,0).abs().cpu().contiguous();
+        auto quant_p_tmp = [&]() {
+            auto s1 = S_quant.select(0,0).cpu().contiguous();
+            auto re = s1.real().contiguous(); auto im = s1.imag().contiguous();
+            auto rv = re.spanning_view(); auto iv = im.spanning_view();
+            i64 M = rv.sizes[0];
+            std::vector<float> ph(M);
+            const float* rp = static_cast<const float*>(rv.data);
+            const float* ip = static_cast<const float*>(iv.data);
+            for (i64 i = 0; i < M; ++i) ph[i] = std::atan2(ip[i], rp[i]);
+            return Tensor::from_blob(ph.data(), {M}, eScalarType::Float,
+                                     Device{eDeviceType::CPU}).clone();
+        }();
+
+        // inline pearson / circ_corr (lambdas not yet defined)
+        auto quant_pear = [](const Tensor& a, const Tensor& b) -> float {
+            auto ad = a.to(eScalarType::Double); auto bd = b.to(eScalarType::Double);
+            double n=a.size(0), sa=ad.sum().item<double>(), sb=bd.sum().item<double>();
+            double sab=ad.mul(bd).sum().item<double>();
+            double sa2=ad.mul(ad).sum().item<double>(), sb2=bd.mul(bd).sum().item<double>();
+            double num=n*sab-sa*sb;
+            double den=std::sqrt(std::max(0.0,(n*sa2-sa*sa)*(n*sb2-sb*sb)));
+            return (float)(num/(den+1e-60));
+        };
+        auto quant_circ = [](const Tensor& pa, const Tensor& pb) -> float {
+            auto diff = pa.sub(pb).contiguous();
+            auto dv = diff.spanning_view(); i64 M = dv.sizes[0];
+            const float* d = static_cast<const float*>(dv.data);
+            double s=0.0; for(i64 i=0;i<M;++i) s+=std::cos(d[i]);
+            return (float)(s/M);
+        };
+
+        auto ref_m_tmp = S_both.select(0,0).abs().cpu().contiguous();
+        auto ref_p_tmp = [&]() {
+            auto s1 = S_both.select(0,0).cpu().contiguous();
+            auto re = s1.real().contiguous(); auto im = s1.imag().contiguous();
+            auto rv = re.spanning_view(); auto iv = im.spanning_view();
+            i64 M = rv.sizes[0];
+            std::vector<float> ph(M);
+            const float* rp = static_cast<const float*>(rv.data);
+            const float* ip = static_cast<const float*>(iv.data);
+            for (i64 i = 0; i < M; ++i) ph[i] = std::atan2(ip[i], rp[i]);
+            return Tensor::from_blob(ph.data(), {M}, eScalarType::Float,
+                                     Device{eDeviceType::CPU}).clone();
+        }();
+
+        float qpear = quant_pear(ref_m_tmp, quant_r_tmp);
+        float qcirc = quant_circ(ref_p_tmp, quant_p_tmp);
+        std::cout << "\n  ── Quantization ceiling (histogram bin-mean B0, exact forward) ──\n"
+                  << "  circ_corr(S_exact, S_quantized) = " << std::fixed << std::setprecision(4)
+                  << qcirc << "  |S| Pearson = " << qpear << "\n"
+                  << "  → If ≈ 0.917: bin width is the bottleneck (increase n_rate)\n"
+                  << "  → If ≈ 1.000: SVD rank is the bottleneck (increase L / check bug)\n\n";
+    }
+
     // [C,M] complex → [M] float magnitude on CPU
     auto to_mag = [](const Tensor& S) {
         return S.select(0, 0).abs().cpu().contiguous();
@@ -764,6 +894,54 @@ static bool run_test(const Problem& prob,
 
     auto ref_mag   = to_mag(S_both);
     auto ref_phase = to_phase(S_both);
+
+    // ── Unified DFT setup (function-scope variables used in L loop too) ───────
+    // xi_sub[j,d] = 2π k_d/N_d ∈ [-π,π] — same convention as cuFINUFFT.
+    // dft_cfg_m has coords for the N_mask masked voxels.
+    using namespace std::numbers;
+    const i64   gx  = prob.mag.size(0);
+    const i64   gy  = prob.mag.size(1);
+    const i64   gz  = prob.mag.size(2);
+    const float pif = (float)pi_v<f64>;
+    const TensorOptions opts_f_xi{prob.mag.device(), eScalarType::Float};
+
+    auto dft_cfg_full = fft::make_dft_config({gx, gy, gz}, /*batch_size=*/64,
+                                              prob.mag.device());
+    auto dft_cfg_m = dft_cfg_full;
+    dft_cfg_m.coords = dft_cfg_full.coords.index_select(0, hist.mask_idx);
+
+    auto k_sub_dft = prob.k_traj.index_select(0, sub_idx);  // [n_sub, 3]
+    auto xi_sub    = zeros({(i64)sub_idx.size(0), (i64)3}, opts_f_xi);
+    xi_sub.select(1,0).copy_(k_sub_dft.select(1,0).mul(Scalar(2.0f*pif/(float)gx)));
+    xi_sub.select(1,1).copy_(k_sub_dft.select(1,1).mul(Scalar(2.0f*pif/(float)gy)));
+    xi_sub.select(1,2).copy_(k_sub_dft.select(1,2).mul(Scalar(2.0f*pif/(float)gz)));
+    xi_sub = xi_sub.contiguous();
+
+    auto rho_m_dft = prob.mag_flat.index_select(0, hist.mask_idx)
+                                   .to(eScalarType::ComplexFloat);
+
+    // ── exact_histogram_signal_dft ────────────────────────────────────────────
+    // Exact bin-level signal via the unified DFT (no SVD).
+    //   circ_corr(S_both, S_hist_exact_dft) ≈ 1.0000 → DFT convention correct
+    //   circ_corr(S_both, S_hist_exact_dft) ≈ 0.917  → DFT convention DIFFERS
+    //   circ_corr(S_hist_exact_dft, S_approx_dft) ≈ 0.917 → SVD is the error
+    //   circ_corr(S_hist_exact_dft, S_approx_dft) ≈ 1.000 → something else
+    auto t0_he = std::chrono::steady_clock::now();
+    auto S_he_full = exact_histogram_signal_dft(
+        dft_cfg_m, hist, rho_m_dft,
+        prob.timestamps.index_select(0, sub_idx), xi_sub);
+    double he_s = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - t0_he).count();
+
+    auto mhe_pre = to_mag(S_he_full);
+    auto phe_pre = to_phase(S_he_full);
+    std::cout << "\n  ── exact_histogram_signal_dft (exact bin phi, no SVD) ──────────\n"
+              << "  circ_corr(S_both, S_hist_exact_dft) = " << std::fixed
+              << std::setprecision(4) << circ_corr(ref_phase, phe_pre)
+              << "  |S| Pearson = " << pearson(ref_mag, mhe_pre)
+              << "  (" << std::setprecision(2) << he_s << "s)\n"
+              << "  → 1.0000: DFT convention correct; SVD Omega×Upsilon is the bottleneck\n"
+              << "  → 0.9174: DFT convention in approx_signal_dft differs from forward_exact\n\n";
 
     std::cout << "\n  L   n_hist   phase_corr_err   status\n"
               << "  " << std::string(44, '-') << "\n";
@@ -855,12 +1033,12 @@ static bool run_test(const Problem& prob,
                   << "  " << std::scientific << std::setprecision(3) << err
                   << "  " << (pass ? "PASS" : "FAIL") << "\n";
 
-        // DFT + interpolants: exact DFT sum using the SVD Omega/Upsilon coefficients.
-        // If this correlates better than the NUFFT approx, the error is in the NUFFT.
-        // If it correlates equally, the error is in the SVD quality / histogram quantisation.
+        // DFT + interpolants: SVD Omega/Upsilon via unified DFT.
+        // circ_corr(S_hist_exact_dft, S_approx_dft) isolates SVD multiplication error.
         auto t0_dft = std::chrono::steady_clock::now();
         auto S_dft  = approx_signal_dft(
-            prob, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx, sub_idx);  // [1, n_sub]
+            dft_cfg_m, Omega, Upsilon, hist.voxel_to_bin,
+            rho_m_dft, sub_idx, xi_sub);  // [1, n_sub]
         double dft_s = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - t0_dft).count();
 
@@ -933,10 +1111,15 @@ static bool run_test(const Problem& prob,
         print_row("exact (off-res only)",  mo, po);
         print_row("exact (nonlin only)",   mn, pn);
         print_row("exact (pure DFT)",      mu, pu);
+        print_row("hist_exact_dft",        mhe_pre, phe_pre);
         print_row(approx_lbl,              ma, pa);
         print_row(dft_lbl,                 md, pd);
         print_row(nw_lbl,                  mnw, pnw);
         print_row(ts_lbl,                  mts, pts);
+        // Key diagnostic: circ_corr(S_hist_exact_dft, S_approx_dft)
+        // isolates whether SVD Omega×Upsilon multiplication causes the 0.9174
+        std::cout << "  circ_corr(hist_exact_dft, approx_dft) = " << std::fixed
+                  << std::setprecision(4) << circ_corr(phe_pre, pd) << "\n";
         std::cout << "  timing: SVD=" << std::fixed << std::setprecision(2) << svd_s
                   << "s  nufft_svd=" << nsvd_s
                   << "s  approx_nufft=" << approx_s
@@ -1317,7 +1500,7 @@ int main()
         mask = mask.cpu();
 
         auto not_mask = mask.logical_not();
-        pd[not_mask] = 0.0f;
+        pd[hasty::Slice(),not_mask] = 0.0f;
 
         hasty::viz::orthoslicer(mask, {"mask_dilated", std::nullopt}, false, show_locally);
 
@@ -1388,14 +1571,14 @@ int main()
             cuda0,
             1.0f,            // b0_scale
             3e-3f,           // te_start_s
-            0.001f);           // nl_scale  (1.0 → ±π rad peak z² phase)
+            0.00f);           // nl_scale  (1.0 → ±π rad peak z² phase)
 
         failures += !run_test(prob_real,
             300,                // n_sub
-            {4, 8, 50},             // joint L values (quick comparison)
-            4096, 1,            // n_rate, n_nl bins
+            {8,25},             // joint L values (quick comparison)
+            16000, 1,            // n_rate, n_nl bins
             "real_data full_res",
-            hasty::mri::eBinWeighting::FreqAwareLowrank,
+            hasty::mri::eBinWeighting::L1Mass,
             8,                  // Lo  (off-res SVD rank)
             3,                  // Lnl (NL SVD rank per field)
             show_fft_error_plots,
