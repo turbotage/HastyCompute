@@ -121,8 +121,95 @@ the feature vector
 \end{equation}
 Now, we can make a histogram of the feature vectors for all voxels in the support, and perform the approximations on the histogram bins instead of on the individual voxels.
 
+\section*{Normal Operator via Toeplitz Embedding}
 
+Given the approximation \eqref{eq:approx1}, the discretised forward operator for coil $c$ is
+\begin{equation}
+    (\mathbf{A}_c \boldsymbol{\rho})_k
+        = \sum_l \Omega_{kl}
+          \bigl[\mathbf{F}\,\mathrm{diag}(\Upsilon_l \odot s_c)\,\boldsymbol{\rho}\bigr]_k,
+\end{equation}
+where $\mathbf{F}$ is the NUFFT and $(\Upsilon_l)_j = \Upsilon_{jl}$.
+The adjoint is
+\begin{equation}
+    (\mathbf{A}_c^H \mathbf{s})_j
+        = s_c^*(\mathbf{r}_j)
+          \sum_l \Upsilon_{jl}^*\,\bigl[\mathbf{F}^H\,\mathrm{diag}(\Omega_l^*)\,\mathbf{s}\bigr]_j.
+\end{equation}
 
+\subsection*{Toeplitz structure}
+
+Define the PSF for k-space weights $w \in \mathbb{C}^K$ as the type-1 NUFFT
+\begin{equation}
+    h_w = \mathbf{F}_{\mathrm{adj}}(w), \qquad
+    (h_w)_n = \sum_k w_k\,e^{i\mathbf{k}(t_k)\cdot\mathbf{r}_n}.
+    \label{eq:psf_def}
+\end{equation}
+The Toeplitz application uses a zero-padded FFT of size $2N$ in each dimension:
+\begin{equation}
+    \bigl[\mathbf{F}^H\,\mathrm{diag}(w)\,\mathbf{F}\,f\bigr]
+        = h_w \star f
+        = \mathrm{IFFT}\!\bigl[\hat{H}_w \odot \mathrm{FFT}(f_{\mathrm{pad}})\bigr],
+    \label{eq:toeplitz_apply}
+\end{equation}
+where $\hat{H}_w = \mathrm{FFT}(h_{w,\mathrm{pad}})$ is precomputed once.
+
+\subsection*{$L^2$ Toeplitz approach}
+
+Using \eqref{eq:normal_op} directly:
+\begin{equation}
+    (\mathbf{A}_c^H\mathbf{A}_c\,\boldsymbol{\rho})_i
+        \approx \sum_{l_1=1}^L \sum_{l_2=1}^L
+            \Upsilon_{il_2}^*\;
+            \bigl(h_{l_1 l_2} \star (\Upsilon_{l_1} \odot s_c \odot \boldsymbol{\rho})\bigr)_i,
+    \label{eq:normal_op_Lsq}
+\end{equation}
+with one kernel per pair:
+\begin{equation}
+    h_{l_1 l_2} = \mathbf{F}_{\mathrm{adj}}(\Omega_{l_1} \odot \Omega_{l_2}^*).
+\end{equation}
+Setup cost: $L^2$ type-1 NUFFTs.
+Application cost per iteration: $L^2$ Toeplitz multiplications \eqref{eq:toeplitz_apply}.
+
+\subsection*{$P \times R$ Toeplitz approach (reduced)}
+
+Inserting \eqref{eq:final_approx_normal_op}:
+\begin{equation}
+    (\mathbf{A}_c^H\mathbf{A}_c\,\boldsymbol{\rho})_i
+        \approx \sum_{p=1}^P \sum_{r=1}^R
+            \Theta_{irp}^*\;
+            \bigl(h_p \star (\Theta_{rp} \odot \boldsymbol{\rho})\bigr)_i,
+    \label{eq:normal_op_PR}
+\end{equation}
+where $P$ distinct kernels (one per $p$):
+\begin{equation}
+    h_p = \mathbf{F}_{\mathrm{adj}}(\Lambda_p),
+\end{equation}
+and the combined spatial weights:
+\begin{equation}
+    \Theta_{jrp} = s_c(\mathbf{r}_j)\sum_{l=1}^L \hat{C}_{lrp}\,\Upsilon_{jl}.
+\end{equation}
+Setup cost: $P$ type-1 NUFFTs (independent of $L$).
+Application cost per iteration: $P \times R$ Toeplitz multiplications.
+With $R=1$ this is $P$ multiplications, and if $P \ll L^2$ we achieve a large speedup.
+
+\subsection*{Algorithm (setup)}
+\begin{enumerate}[label=\arabic*.]
+    \item Compute $\Omega \in \mathbb{C}^{K \times L}$, $\Upsilon \in \mathbb{C}^{N_{\mathrm{hist}} \times L}$ from SVD of $e^{\Phi}$.
+    \item Form the $\frac{L(L+1)}{2} \times K$ matrix of unique upper-triangular products $\Omega_{kl_1}\Omega_{kl_2}^*$.
+    \item Truncated SVD of rank $P$ $\Rightarrow$ $\boldsymbol{\Lambda} \in \mathbb{C}^{K \times P}$, coefficient matrices $\mathbf{C}_p \in \mathbb{C}^{L \times L}$.
+    \item Rank-$R$ SVD of each $\mathbf{C}_p$ $\Rightarrow$ $\hat{C}_{lrp}$.
+    \item $\Theta_{jrp} = \sum_l \hat{C}_{lrp}\,\Upsilon_{jl}$ scattered to full voxel grid.
+    \item $P$ Toeplitz kernels: $\hat{H}_p = \mathrm{FFT}\!\bigl[\mathbf{F}_{\mathrm{adj}}(\Lambda_p)_{\mathrm{pad}}\bigr]$.
+\end{enumerate}
+
+\subsection*{Normal operator application}
+\begin{equation}
+    (\mathbf{A}^H\mathbf{A}\,\boldsymbol{\rho})_i
+        = \sum_{p=1}^P \sum_{r=1}^R
+            \Theta_{irp}^*\;
+            \mathrm{IFFT}\!\bigl[\hat{H}_p \odot \mathrm{FFT}((\Theta_{rp} \odot \boldsymbol{\rho})_{\mathrm{pad}})\bigr]_i.
+\end{equation}
 
 
 \end{document}

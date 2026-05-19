@@ -277,10 +277,10 @@ static hasty::Tensor exact_signal_paired(
 // Caller selects the n_sub comparison samples via index_select.
 //
 // Coordinate convention — cuFINUFFT CMCL mode, sign=-1:
-//   NUFFT plan {nz,ny,nx}: Fortran-fastest k1=iz maps to C-order fastest iz.
+//   Plan {nx,ny,nz}: NufftPlan constructor reverse_copies → FINUFFT N1=nz (iz fastest = C-order fastest).
 //   coords[0]=kz (paired with k1=iz), coords[1]=ky, coords[2]=kx.
-//   DFTConfig uses centered coords (n - N/2), matching CMCL modes [-N/2, N/2-1].
-//   Both compute Σ_{ix,iy,iz} img[ix,iy,iz]·exp(-i·(kx·(ix-nx/2)+ky·(iy-ny/2)+kz·(iz-nz/2))).
+//   DFTConfig centered coords (n - N/2) match CMCL modes [-N/2, N/2-1].
+//   Both compute Σ img[ix,iy,iz]·exp(-i·(kx·(ix-nx/2)+ky·(iy-ny/2)+kz·(iz-nz/2))).
 
 static hasty::Tensor approx_signal_nufft(
     const Problem& prob,
@@ -319,8 +319,8 @@ static hasty::Tensor approx_signal_nufft(
 
     NufftOptions<cuda_t, f32, UTN> nufft_opts;
     nufft_opts.ntransf    = 1;
-    // Plan {nz,ny,nx}: Fortran-fastest dim (k1) = iz maps to C-order fastest (iz, stride 1).
-    NufftPlan<cuda_t, f32, 3, UTN> plan({nz, ny, nx}, nufft_opts);
+    // Plan {nx,ny,nz}: constructor reverse_copies to m_nmodes={nz,ny,nx}, so FINUFFT N1=nz (iz fastest).
+    NufftPlan<cuda_t, f32, 3, UTN> plan({nx, ny, nz}, nufft_opts);
     plan.setpts(coords);
 
     auto signal = zeros({K}, opts_c);
@@ -385,7 +385,7 @@ static hasty::Tensor compute_nufft_bin_weights(
 
     NufftOptions<cuda_t, f32, UTN> nufft_opts;
     nufft_opts.ntransf    = 1;
-    NufftPlan<cuda_t, f32, 3, UTN> plan({nz, ny, nx}, nufft_opts);
+    NufftPlan<cuda_t, f32, 3, UTN> plan({nx, ny, nz}, nufft_opts);
     plan.setpts(coords);
 
     auto weights = zeros({n_hist}, opts_f);
@@ -654,7 +654,7 @@ static bool run_test(const Problem& prob,
 
             NufftOptions<cuda_t, f32, UTN> nufft_opts_d;
             nufft_opts_d.ntransf    = 1;
-            NufftPlan<cuda_t, f32, 3, UTN> plan_d({nz_d, ny_d, nx_d}, nufft_opts_d);
+            NufftPlan<cuda_t, f32, 3, UTN> plan_d({nx_d, ny_d, nz_d}, nufft_opts_d);
             plan_d.setpts(coords_d);
 
             auto img_d = rho_flat.reshape({nx_d, ny_d, nz_d}).contiguous().unsqueeze(0);
@@ -667,7 +667,7 @@ static bool run_test(const Problem& prob,
                 auto dc_coords = zeros({3, 1}, opts_fd);  // all zeros = DC
                 NufftOptions<cuda_t, f32, UTN> dc_opts;
                 dc_opts.ntransf = 1;
-                NufftPlan<cuda_t, f32, 3, UTN> dc_plan({nz_d, ny_d, nx_d}, dc_opts);
+                NufftPlan<cuda_t, f32, 3, UTN> dc_plan({nx_d, ny_d, nz_d}, dc_opts);
                 dc_plan.setpts(dc_coords);
                 auto dc_out = zeros({1, 1}, opts_cd).contiguous();
                 dc_plan.execute(img_d, dc_out);
@@ -1334,8 +1334,8 @@ void nufft_dft_consistency_test()
         std::chrono::steady_clock::now() - t0_dft).count();
 
     // ── NUFFT ────────────────────────────────────────────────────────────────
-    // Plan {nz,ny,nx}: Fortran-fastest k1=iz maps to C-order fastest (iz, stride 1).
-    // coords[0]=kz, [1]=ky, [2]=kx.
+    // Plan {nx,ny,nz}: constructor reverse_copies → FINUFFT N1=nz (iz fastest = C-order fastest).
+    // coords[0]=kz (paired with k1=iz), [1]=ky, [2]=kx.
     auto coords = zeros({3, M}, opts_f);
     coords.select(0, 0).copy_(xi.select(1, 2));   // kz
     coords.select(0, 1).copy_(xi.select(1, 1));   // ky
@@ -1344,7 +1344,7 @@ void nufft_dft_consistency_test()
 
     NufftOptions<cuda_t, f32, UTN> nufft_opts;
     nufft_opts.ntransf = 1;
-    NufftPlan<cuda_t, f32, 3, UTN> plan({nz, ny, nx}, nufft_opts);
+    NufftPlan<cuda_t, f32, 3, UTN> plan({nx, ny, nz}, nufft_opts);
     plan.setpts(coords);
 
     auto img_batch   = img.unsqueeze(0).contiguous();   // [1, nx, ny, nz]
@@ -1358,7 +1358,7 @@ void nufft_dft_consistency_test()
     // ── DC sanity ────────────────────────────────────────────────────────────
     {
         auto dc_coords = zeros({3, 1}, opts_f);
-        NufftPlan<cuda_t, f32, 3, UTN> dc_plan({nz, ny, nx}, nufft_opts);
+        NufftPlan<cuda_t, f32, 3, UTN> dc_plan({nx, ny, nz}, nufft_opts);
         dc_plan.setpts(dc_coords);
         auto dc_out = zeros({1, 1}, opts_c).contiguous();
         dc_plan.execute(img_batch, dc_out);
@@ -1400,8 +1400,8 @@ void nufft_dft_consistency_test()
 int main()
 {
 
-    nufft_dft_consistency_test();
+    //nufft_dft_consistency_test();
 
-    // return non_fourier_interp_test();
-    return 0;
+    return non_fourier_interp_test();
+    //return 0;
 }
