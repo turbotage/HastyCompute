@@ -26,8 +26,6 @@ import torch
 import time
 from dipy.align.imaffine import AffineRegistration, MutualInformationMetric
 from dipy.align.transforms import RigidTransform3D, AffineTransform3D
-from dipy.align.imwarp import SymmetricDiffeomorphicRegistration
-from dipy.align.metrics import CCMetric
 
 sys.path.insert(0, '')  # ensure local imports work when called as subprocess
 
@@ -94,12 +92,12 @@ def run_registration(fixed_arr: np.ndarray, fixed_affine: np.ndarray,
     a DiffeomorphicMap-like object with .transform().
     """
     try:
-        # Treat 'SyN' as 'Affine' by default to avoid expensive diffeomorphic runs.
+        # Force Affine (or Rigid) only. Treat 'SyN' as 'Affine' to avoid expensive runs.
         if transform in ('Rigid', 'Affine', 'SyN'):
             tmode = 'Affine' if transform == 'SyN' else transform
             metric = MutualInformationMetric(nbins=32, sampling_proportion=None)
-            # Reduced iteration counts for faster registration while keeping multi-scale
-            level_iters = [100, 50, 10]
+            # Aggressively reduced iteration counts for speed
+            level_iters = [50, 25, 5]
             affreg = AffineRegistration(metric=metric, level_iters=level_iters,
                                         sigmas=[3.0, 1.0, 0.0], factors=[4, 2, 1])
             if tmode == 'Rigid':
@@ -112,22 +110,12 @@ def run_registration(fixed_arr: np.ndarray, fixed_affine: np.ndarray,
                                          static_grid2world=fixed_affine,
                                          moving_grid2world=moving_affine)
             return affine_map
-        else:
-            # Fallback: keep diffeomorphic option for unrecognized transforms
-            metric = CCMetric(3)
-            level_iters = [40, 20, 10]
-            sdr = SymmetricDiffeomorphicRegistration(metric, level_iters)
-            mapping = sdr.optimize(static=fixed_arr, moving=moving_arr,
-                                   static_grid2world=fixed_affine,
-                                   moving_grid2world=moving_affine)
-            return mapping
+        # If an unknown transform name is provided, raise an error (no fallback to SyN).
+        raise ValueError(f"Unknown transform '{transform}' - expected Rigid/Affine/SyN")
     except Exception as e:
-        fallback = _FALLBACK.get(transform)
-        if fallback is None:
-            raise
-        print(f'[register_nifti] {transform} failed ({e}); retrying with {fallback}.',
-              file=sys.stderr, flush=True)
-        return run_registration(fixed_arr, fixed_affine, moving_arr, moving_affine, fallback)
+        # Print diagnostic and re-raise so caller sees the failure immediately.
+        print(f'[register_nifti] {transform} failed ({e})', file=sys.stderr, flush=True)
+        raise
 
 
 # ─── main ─────────────────────────────────────────────────────────────────────

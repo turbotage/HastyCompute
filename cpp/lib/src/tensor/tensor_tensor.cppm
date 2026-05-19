@@ -498,6 +498,8 @@ public:
 
     inline Tensor quantile(double q) const { return Tensor(_base.quantile(q)); }
 
+    inline Tensor angle() const { return Tensor(_base.angle()); }
+
     inline Tensor neg() const { return Tensor(_base.neg()); }
 
     inline Tensor norm(const Scalar& p=2) const { return Tensor(_base.norm(p.to_torch())); }
