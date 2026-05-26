@@ -74,7 +74,9 @@ Considering a voxel discretization, we can express the operators as matrices by
     (\mathbf{A}^H_c)_{ik} &= s^*_C(\mathbf{r}_i)e^{\Phi^*(\mathbf{r}_i, t_k)} e^{i\mathbf{k}(t_k)\cdot\mathbf{r}_i} \\
     (\mathbf{A}^H_c\mathbf{A}_c)_{ij} &= \sum_k s_C(\mathbf{r}_j)s^*_C(\mathbf{r}_i)e^{\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)} e^{-i\mathbf{k}(t_k)\cdot(\mathbf{r}_j - \mathbf{r}_i)}
 \end{align*}
-Now, to get back a Fourier transform, and to enable the Toeplitz property in $\mathbf{A}^H_c\mathbf{A}_c$. We introduce 
+
+\section{Approximations for fast application of the normal operator}
+To get back a Fourier transform, and to enable the Toeplitz property in $\mathbf{A}^H_c\mathbf{A}_c$. We introduce 
 approximations
 \begin{align}
     \exp(\Phi(\mathbf{r}_j, t_k)) &\approx \sum_{l=0}^L \Omega_{kl} \Upsilon_{jl} \label{eq:approx1}
@@ -87,25 +89,251 @@ We begin with the naive multiplication
     \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) 
         \approx \sum_{l_1=0}^L \sum_{l_2=0}^L (\Omega_{kl_1} \Omega^*_{kl_2})(\Upsilon_{jl_1} \Upsilon^*_{il_2}) \label{eq:normal_op}
 \end{equation}
+
+\subsection{Choosing decompositions}
+\subsubsection{The exponential decomposition}
+
+Define $A^k_{ij} = \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) = g_{jk} g^*_{ik}$. Where we further
+defined $g_{jk} := \exp(\Phi(\mathbf{r}_j, t_k))$. 
+We seek a approximation of $A^k_{ij}$ of the form
+\begin{equation}
+    \hat{A}^k_{ij} = \sum_{p=0}^P \Lambda_{kp} \Theta_{jp} \Theta^*_{ip}
+\end{equation}
+We use the usual Frobenius norm and seek to minimize the loss
+\begin{equation}
+    \mathcal{L} = \sum_k \norm{A^k - \hat{A}^k}_F^2
+\end{equation}
+Using Wirtinger calculus, we can compute the gradient with respect to $\Theta_{jp}$ as
+\begin{equation}
+    \frac{\partial \mathcal{L}}{\partial \Theta_{jp}^*} = \sum_{k,i}\bigg(\sum_{p' = 0}^P \Lambda_{kp'} \Theta_{jp'} \Theta^*_{ip'} - A^k_{ij}\bigg)\Lambda_{kp}^* \Theta_{ip}
+\end{equation}
+and the gradient with respect to $\Lambda_{kp}$ as
+\begin{equation}
+    \frac{\partial \mathcal{L}}{\partial \Lambda_{kp}^*} = \sum_{j,i}\bigg(\sum_{p' = 0}^P \Lambda_{kp'} \Theta_{jp'} \Theta^*_{ip'} - A^k_{ij}\bigg)\Theta_{jp} \Theta^*_{ip}
+\end{equation}
+If we have orthogonality constraints on $\Theta_{jp}$, 
+\begin{equation}
+    \sum_j \Theta^*_{jp} \Theta_{jq} = \delta_{pq},
+\end{equation}
+then the gradients simplify.
+\begin{equation}
+\begin{split}
+    \frac{\partial \mathcal{L}}{\partial \Theta_{jp}^*} 
+    &= \sum_{k,i}\bigg(\sum_{p'=0}^P \Lambda_{kp'} \Theta_{jp'} \Theta^*_{ip'} - g_{jk} g^*_{ik}\bigg)\Lambda_{kp}^* \Theta_{ip} 
+    \\
+    &= \sum_k\sum_{p'=0}^P \Lambda_{kp'} \Lambda_{kp}^* \Theta_{jp'}\bigg(\sum_i \Theta^*_{ip'}\Theta_{ip}\bigg)
+      - \sum_k g_{jk}\Lambda_{kp}^* \sum_i g^*_{ik} \Theta_{ip} 
+    \\
+    &= \sum_k \left[|\Lambda_{kp}|^2 \Theta_{jp} - g_{jk}\Lambda_{kp}^* \sum_i g^*_{ik} \Theta_{ip} \right]
+\end{split}
+\end{equation}
+and
+\begin{equation}
+\begin{split}
+    \frac{\partial \mathcal{L}}{\partial \Lambda_{kp}^*} 
+    &= \sum_{j,i}\bigg(\sum_{p'=0}^P \Lambda_{kp'} \Theta_{jp'} \Theta^*_{ip'} - g_{jk} g^*_{ik}\bigg)\Theta_{jp}^* \Theta_{ip} 
+    \\
+    &= \sum_{p'=0}^P \Lambda_{kp'} \bigg(\sum_{j,i} \Theta_{jp'} \Theta^*_{ip'} \Theta_{jp}^* \Theta_{ip}\bigg) - \sum_{j,i} g_{jk} g^*_{ik} \Theta_{jp}^* \Theta_{ip} 
+    \\
+    &= \sum_{p'=0}^P \Lambda_{kp'} \bigg(\sum_j \Theta_{jp'} \Theta_{jp}^*\bigg)\bigg(\sum_i \Theta^*_{ip'} \Theta_{ip}\bigg) - \sum_{j,i} g_{jk} g^*_{ik} \Theta_{jp}^* \Theta_{ip} 
+    \\
+    &= \sum_{p'=0}^P \Lambda_{kp'} \delta_{pp'} - \sum_{j,i} g_{jk} g^*_{ik} \Theta_{jp}^* \Theta_{ip} 
+    \\
+    &= \Lambda_{kp} - (\sum_j g_{jk} \Theta_{jp}^*)(\sum_ig^*_{ik} \Theta_{ip}) 
+    \\
+    &= \Lambda_{kp} - |\sum_i g_{ik} \Theta_{ip}|^2
+\end{split}
+\end{equation}
+Thus the optimal $\Lambda_{kp}$ for fixed $\Theta_{jp}$ is given by
+\begin{equation}
+    \Lambda_{kp} = |\sum_i g_{ik} \Theta_{ip}|^2.
+\end{equation}
+
+Thus we arrive at the following alternating optimization scheme:
+\begin{enumerate}[label=\arabic*.]
+    \item Initialize $\Theta_{jp}$. If not initialy orthogonal, orthogonalize.
+    \item Update $\Lambda_{kp} = |\sum_i g_{ik} \Theta_{ip}|^2$.
+    \item Update $\Theta_{jp} = \sum_k \Lambda_{kp} g_{jk} \sum_i g^*_{ik} \Theta_{ip}$, then orthogonalize.
+    \item Repeat steps 2 and 3 until convergence.
+\end{enumerate}
+
+
+
+
+\subsubsection{Decomposition of $\Omega_{kl_1} \Omega^*_{kl_2}$}
+
 For each $k$ we have a $L\times L$ hermitian matrix, thus we can extract the $L(L+1)/2$ unique elements to form a $(L(L+1)/2) \times K$ matrix on which
 we can perform a SVD truncated to the $P$'th largest singular values and reform the $L \times L$ matrix to get
 \begin{equation}
     \Omega_{kl_1} \Omega^*_{kl_2} \approx \sum_{p=0}^P C_{l_1l_2,p} \Lambda_{kp}. \label{eq:time_approx_SVD}
 \end{equation}
-For each $p$ we have a $L \times L$ matrix, for which we can perform a decomposition into the rank $R$ approximation as
+For each $p$ we have a $L \times L$ hermitian matrix, for which we can perform a eigen-decomposition 
+into the rank $R$ approximation as
 \begin{equation}
-    C_{l_1l_2,p} \approx \sum_{r=0}^R \hat{C}_{l_1rp} \hat{C}^*_{l_2rp}.
+    C_{l_1l_2,p} \approx \sum_{r=0}^R \lambda_{rp} \hat{C}_{l_1rp} \hat{C}^*_{l_2rp}.
 \end{equation}
 With $R = 1$ in \eqref{eq:time_approx_SVD} this would correspond to a Canonical Polyadic Decomposition.
 
 Inserting these approximations into the normal operator \eqref{eq:normal_op} we get
 \begin{align}
     \exp(\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)) 
-        &\approx \sum_{l_1=0}^L \sum_{l_2=0}^L \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \hat{C}_{l_1rp} \hat{C}^*_{l_2rp} \Upsilon_{jl_1} \Upsilon^*_{il_2} \\
-        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \left(\sum_{l_1=0}^L \hat{C}_{l_1rp} \Upsilon_{jl_1}\right) \left(\sum_{l_2=0}^L \hat{C}_{l_2rp} \Upsilon_{il_2}\right)^* \\
-        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \Theta_{jrp} \Theta^*_{irp} \label{eq:final_approx_normal_op}
+        &\approx \sum_{l_1=0}^L \sum_{l_2=0}^L \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \lambda_{rp} \hat{C}_{l_1rp} \hat{C}^*_{l_2rp} \Upsilon_{jl_1} \Upsilon^*_{il_2} \\
+        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \lambda_{rp} \left(\sum_{l_1=0}^L \hat{C}_{l_1rp} \Upsilon_{jl_1}\right) \left(\sum_{l_2=0}^L \hat{C}_{l_2rp} \Upsilon_{il_2}\right)^* \\
+        &= \sum_{p=0}^P \sum_{r=0}^R \Lambda_{kp} \lambda_{rp} \Theta_{jrp} \Theta^*_{irp} \label{eq:final_approx_normal_op}
 \end{align}
 
+\subsubsection{Decomposition of $\Upsilon_{jl_1}\Upsilon^*_{il_2}$}
+
+Instead of decomposing the temporal factors 
+$\Omega_{kl_1}\Omega^*_{kl_2}$, we may instead seek a decomposition
+of the spatial factors
+\begin{equation}
+    \Upsilon_{jl_1}\Upsilon^*_{il_2}.
+\end{equation}
+The goal is to obtain an approximation of the form
+\begin{equation}
+    \Upsilon_{jl_1}\Upsilon^*_{il_2}
+    \approx
+    \sum_{p=0}^{P}
+    C_{l_1l_2,p}\Theta_{jp}\Theta^*_{ip},
+    \label{eq:upsilon_target}
+\end{equation}
+which would reduce the number of Fourier transforms required for
+application of the normal operator from $L^2$ to $P$.
+
+Direct optimization of \eqref{eq:upsilon_target} is infeasible for realistic
+problem sizes, since the tensors
+$\Upsilon_{jl_1}\Upsilon^*_{il_2}$ cannot be explicitly formed or stored.
+Instead, we construct the decomposition using only matrix-vector products.
+
+We begin by viewing $\Upsilon_{jl}$ as a matrix
+\begin{equation}
+    \mathbf{\Upsilon}\in\mathbb{C}^{N\times L},
+\end{equation}
+where $N$ is the number of spatial voxels.
+We then form the Hermitian operator
+\begin{equation}
+    S_{ji}
+    =
+    \sum_{l=0}^{L}
+    \Upsilon_{jl}\Upsilon^*_{il}.
+    \label{eq:upsilon_covariance}
+\end{equation}
+This operator is never explicitly assembled. Instead, products
+$\mathbf{y}=\mathbf{S}\mathbf{x}$ are evaluated as
+\begin{align}
+    z_l
+    &=
+    \sum_i
+    \Upsilon^*_{il}x_i,
+    \\
+    y_j
+    &=
+    \sum_l
+    \Upsilon_{jl}z_l.
+\end{align}
+Thus, application of $\mathbf{S}$ requires only multiplication by
+$\mathbf{\Upsilon}$ and $\mathbf{\Upsilon}^H$.
+
+Using a Krylov subspace eigensolver such as Lanczos or randomized SVD,
+we compute the leading $P$ eigenvectors of $\mathbf{S}$,
+\begin{equation}
+    \sum_i
+    S_{ji}\Theta_{ip}
+    =
+    \sigma_p^2\Theta_{jp},
+\end{equation}
+with orthonormality
+\begin{equation}
+    \sum_j
+    \Theta^*_{jp}\Theta_{jq}
+    =
+    \delta_{pq}.
+\end{equation}
+The vectors $\Theta_{jp}$ span the optimal rank-$P$ subspace in the
+sense of the Eckart--Young theorem applied to $\mathbf{\Upsilon}$.
+
+Projecting $\Upsilon_{jl}$ onto this basis gives
+\begin{equation}
+    B_{lp}
+    =
+    \sum_j
+    \Theta^*_{jp}\Upsilon_{jl},
+    \label{eq:B_projection}
+\end{equation}
+such that
+\begin{equation}
+    \Upsilon_{jl}
+    \approx
+    \sum_{p=0}^{P}
+    \Theta_{jp}B_{lp}.
+\end{equation}
+Substituting into
+$\Upsilon_{jl_1}\Upsilon^*_{il_2}$ yields
+\begin{align}
+    \Upsilon_{jl_1}\Upsilon^*_{il_2}
+    &\approx
+    \sum_{p=0}^{P}\sum_{q=0}^{P}
+    \Theta_{jp}
+    B_{l_1p}
+    B^*_{l_2q}
+    \Theta^*_{iq}.
+\end{align}
+The desired decomposition \eqref{eq:upsilon_target} is obtained by
+neglecting off-diagonal couplings $p\neq q$, giving
+\begin{equation}
+    \Upsilon_{jl_1}\Upsilon^*_{il_2}
+    \approx
+    \sum_{p=0}^{P}
+    B_{l_1p}B^*_{l_2p}
+    \Theta_{jp}\Theta^*_{ip}.
+\end{equation}
+We therefore identify
+\begin{equation}
+    C_{l_1l_2,p}
+    =
+    B_{l_1p}B^*_{l_2p}.
+\end{equation}
+
+The quality of the approximation depends on the magnitude of the
+discarded cross terms
+$B_{l_1p}B^*_{l_2q}$ for $p\neq q$.
+To reduce these couplings, we may further rotate the basis vectors
+within the retained subspace.
+Let
+\begin{equation}
+    \hat{\Theta}_{jp}
+    =
+    \sum_{q=0}^{P}
+    \Theta_{jq}U_{qp},
+\end{equation}
+where $\mathbf{U}\in\mathbb{C}^{P\times P}$ is unitary.
+The projected coefficients become
+\begin{equation}
+    \hat{B}_{lp}
+    =
+    \sum_q
+    B_{lq}U_{qp}.
+\end{equation}
+The rotation matrix $\mathbf{U}$ may then be chosen to minimize the
+off-diagonal energy
+\begin{equation}
+    \mathcal{E}(\mathbf{U})
+    =
+    \sum_l
+    \sum_{p\neq q}
+    |\hat{B}_{lp}\hat{B}^*_{lq}|^2.
+\end{equation}
+Since this optimization is performed only over the small
+$P\times P$ unitary matrix $\mathbf{U}$, it remains computationally
+feasible even for large imaging problems.
+The optimization may be performed using Jacobi rotations,
+Riemannian gradient descent on the unitary group,
+or approximate joint diagonalization algorithms.
+
+
+
+\subsection{How to compute interpolants efficiently}
 Now, to find the approximations, performing the randomized SVD and SVD in these steps is computationally expensive, therefore, one can 
 approach this with a histogram based method. First of all, the off-resonance and off-linear gradient terms only have effects on the signal on the support
 of the image. Thus, we do these approximations first only on voxels that are within the support. Next we can consider

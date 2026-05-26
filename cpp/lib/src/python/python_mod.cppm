@@ -2,7 +2,6 @@ module;
 
 #include "configure_file_settings.hpp"
 #include <nlohmann/json.hpp>
-#include <unistd.h>   // readlink — no C++ standard equivalent for /proc/self/exe
 
 export module hasty_python_mod;
 
@@ -30,20 +29,6 @@ export struct ScriptResult {
 
 namespace {
 
-std::string exe_dir() {
-    char buf[4096] = {};
-    ssize_t len = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len <= 0) return ".";
-    std::string path(buf, static_cast<size_t>(len));
-    auto pos = path.rfind('/');
-    return pos == std::string::npos ? "." : path.substr(0, pos);
-}
-
-std::string resolve_path(const char* p) {
-    if (p[0] == '/') return p;
-    return exe_dir() + "/" + p;
-}
-
 int parse_port(const std::string& addr) {
     auto pos = addr.rfind(':');
     if (pos == std::string::npos) return 50051;
@@ -69,8 +54,8 @@ std::filesystem::path tmp_base() {
 
 // ─── Exported path helpers ────────────────────────────────────────────────────
 
-export std::string venv_python() { return resolve_path(HASTY_VENV_PYTHON); }
-export std::string scripts_dir() { return resolve_path(HASTY_SCRIPTS_DIR); }
+export std::string venv_python() { return hasty::resolve_exe_relative_path(HASTY_VENV_PYTHON).string(); }
+export std::string scripts_dir() { return hasty::resolve_exe_relative_path(HASTY_SCRIPTS_DIR).string(); }
 
 // ─── UUID helpers ─────────────────────────────────────────────────────────────
 

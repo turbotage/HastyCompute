@@ -210,3 +210,16 @@ mean_mag, std_mag, median_mag, min_mag, max_mag = hull_statistics(hull, vertices
 print(f"Mean magnitude of resolvable velocities: {mean_mag:.2f} ± {std_mag:.2f} units")
 print(f"Median magnitude of resolvable velocities: {median_mag:.2f} units")
 print(f"Min/Max magnitude of resolvable velocities: {min_mag:.2f} / {max_mag:.2f} units")
+
+
+
+A = np.array([
+	[-1, -1, -1],
+	[ 1,  1, -1],
+	[ 1, -1,  1],
+	[-1,  1,  1]
+])
+venc = 70.0
+A = (np.pi / (math.sqrt(3) * venc)) * A
+
+

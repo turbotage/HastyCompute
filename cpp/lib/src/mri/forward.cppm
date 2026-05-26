@@ -1,6 +1,6 @@
 module;
 
-export module mri_mod:forward;
+export module hasty_mri_mod:forward;
 
 import std;
 import hasty_util_mod;

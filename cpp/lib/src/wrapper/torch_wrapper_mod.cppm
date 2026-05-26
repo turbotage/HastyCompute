@@ -104,7 +104,15 @@ export namespace hat {
     using at::_unique2;
     using at::expm1;
     using at::convolution;
+    using at::nanmean;
+    using at::argsort;
+    using at::randperm;
     using at::linalg_solve;
+    using at::linalg_svd;
+    using at::linalg_eig;
+    using at::linalg_eigh;
+    using at::linalg_eigvals;
+    using at::linalg_eigvalsh;
     using at::linalg_ldl_factor;
     using at::linalg_ldl_solve;
     using at::linalg_cholesky;

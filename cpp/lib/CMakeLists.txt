@@ -6,6 +6,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 
+# Cap concurrent link jobs to avoid OOM.
+set_property(GLOBAL PROPERTY JOB_POOLS link=2)
+set(CMAKE_JOB_POOL_LINK link)
+
 # NVCC with GCC host may exceed NVCC's tested host compiler version range
 add_compile_options($<$<COMPILE_LANG_AND_ID:CUDA,NVCC>:-allow-unsupported-compiler>)
 
@@ -26,6 +30,8 @@ set(CMAKE_SHARED_LINKER_FLAGS "" CACHE STRING "" FORCE)
 
 # ── Primary target ────────────────────────────────────────────────────────────
 add_library(HastyCompute SHARED)
+# Limit LLD threads for this target only — avoids OOM without affecting FetchContent deps.
+target_link_options(HastyCompute PRIVATE -Wl,--threads=2)
 
 target_compile_features(HastyCompute PRIVATE cxx_std_23 INTERFACE cxx_std_23)
 
@@ -67,12 +73,17 @@ target_sources(HastyCompute
         "src/fft/toeplitz_creation.cpp"
         "src/fft/toeplitz_mult.cpp"
         "src/fft/toeplitz_transform.cpp"
+        "src/generic_value/generic_value_io_hdf5_impl.cpp"
         "src/io/io_hdf5_impl.cpp"
         "src/linalg/linalg_impl.cpp"
+        "src/linalg/linalg_svd_impl.cpp"
+        "src/io/io_mod.cpp"
+        "src/tensor/tensor_cached.cpp"
         "src/server/cmd_registry_impl.cpp"
         "src/server/generic_value_bank_impl.cpp"
         "src/server/grpc_server_impl.cpp"
         "src/server/server_mod_impl.cpp"
+        "src/threading/threading_mod.cpp"
         "src/viz/viz.cpp"
         "src/wrapper/vkfft.cpp"
 )
@@ -83,15 +94,20 @@ target_sources(HastyCompute
         "src/fft/fft_mod.cppm"
         "src/fft/nufft.cppm"
         "src/fft/toeplitz.cppm"
+        "src/generic_value/generic_value_io.cppm"
         "src/generic_value/generic_value_mod.cppm"
         "src/generic_value/generic_value_slice.cppm"
+        "src/generic_value/generic_value.cppm"
         "src/io/io_blosc.cppm"
         "src/io/io_hdf5.cppm"
         "src/io/io_mod.cppm"
         "src/io/io_nifti.cppm"
         "src/linalg/linalg_mod.cppm"
+        "src/linalg/linalg_op.cppm"
+        "src/linalg/linalg_svd.cppm"
         "src/mri/forward.cppm"
         "src/mri/mri_mod.cppm"
+        "src/mri/normal.cppm"
         "src/mri/off_fourier_interpolators.cppm"
         "src/nvrtc/nvrtc_mod.cppm"
         "src/python/nifti_and_registration.cppm"
@@ -103,6 +119,7 @@ target_sources(HastyCompute
         "src/server/server_mod.cppm"
         "src/tensor/tensor_background_impl.cppm"
         "src/tensor/tensor_background.cppm"
+        "src/tensor/tensor_cached.cppm"
         "src/tensor/tensor_comprep.cppm"
         "src/tensor/tensor_concepts.cppm"
         "src/tensor/tensor_external_linalg.cppm"
@@ -112,13 +129,16 @@ target_sources(HastyCompute
         "src/tensor/tensor_masking.cppm"
         "src/tensor/tensor_mod.cppm"
         "src/tensor/tensor_scalar.cppm"
-        "src/tensor/tensor_tensor.cppm"
+        "src/tensor/tensor.cppm"
+        "src/threading/dep_threadpool.cppm"
+        "src/threading/device_loadbalancing.cppm"
         "src/threading/storage_threadpool.cppm"
         "src/threading/thread_stream.cppm"
         "src/threading/threading_mod.cppm"
         "src/util/util_alias.cppm"
         "src/util/util_containers.cppm"
         "src/util/util_idx.cppm"
+        "src/util/util_io.cppm"
         "src/util/util_meta.cppm"
         "src/util/util_mod.cppm"
         "src/util/util_span.cppm"
@@ -178,13 +198,19 @@ endif()
 set(HASTY_SCRIPTS_DIR "${CMAKE_SOURCE_DIR}/../../python/scripts")
 
 # Debug builds bake absolute build-tree paths; release bakes install-relative paths.
-# C++ resolves relative paths at runtime via exe_dir() (see python_mod.cppm).
+# C++ resolves relative paths at runtime via resolve_exe_relative_path() (util_io.cppm).
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    set(HASTY_VENV_PYTHON "${CMAKE_BINARY_DIR}/.venv/bin/python")
+    set(HASTY_VENV_PYTHON          "${CMAKE_BINARY_DIR}/.venv/bin/python")
     # HASTY_SCRIPTS_DIR already points to source tree — correct for debug
+    set(MODULE_CACHE_RELATIVE_PATH "${CMAKE_BINARY_DIR}/cache/modules")
+    set(TENSOR_CACHE_RELATIVE_PATH "${CMAKE_BINARY_DIR}/cache/tensors")
+    set(DATA_RELATIVE_PATH         "${CMAKE_BINARY_DIR}/data")
 else()
-    set(HASTY_VENV_PYTHON "../.venv/bin/python")
-    set(HASTY_SCRIPTS_DIR "../python/scripts")
+    set(HASTY_VENV_PYTHON          "../.venv/bin/python")
+    set(HASTY_SCRIPTS_DIR          "../python/scripts")
+    set(MODULE_CACHE_RELATIVE_PATH "../cache/modules")
+    set(TENSOR_CACHE_RELATIVE_PATH "../cache/tensors")
+    set(DATA_RELATIVE_PATH         "../data")
 endif()
 
 configure_file(

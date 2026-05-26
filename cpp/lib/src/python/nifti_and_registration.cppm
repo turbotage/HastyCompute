@@ -9,6 +9,7 @@ import hasty_util_mod;
 import hasty_generic_value_mod;
 import hasty_server_mod;
 import hasty_io_mod;
+import hasty_io_mod_nifti;
 
 namespace hasty {
 namespace python {

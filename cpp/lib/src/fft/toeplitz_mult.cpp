@@ -693,12 +693,12 @@ void toeplitz_multiplication_2D(
 
 
 void toeplitz_multiplication_3D(
-    const Tensor&                  inp,
-    Tensor&                        out,
-    const Tensor&                  ker,
-    OptRefW<Tensor>                scr,
-    OptCRefW<Tensor>               m1,
-    OptCRefW<Tensor>               m2,
+    const Tensor&                       inp,
+    Tensor&                             out,
+    const Tensor&                       ker,
+    OptRefW<Tensor>                     scr,
+    OptCRefW<Tensor>                    m1,
+    OptCRefW<Tensor>                    m2,
     ToeplitzMultType                    input_output_mult_type,
     ToeplitzMultType                    input_mult1_type,
     ToeplitzMultType                    output_mult1_type,

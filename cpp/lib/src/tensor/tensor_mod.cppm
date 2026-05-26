@@ -4,6 +4,7 @@ export module hasty_tensor_mod;
 
 export import :background_impl;
 export import :background;
+export import :tensor_cached;
 export import :comprep;
 export import :concepts;
 export import :external_math;

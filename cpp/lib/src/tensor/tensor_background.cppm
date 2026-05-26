@@ -339,6 +339,64 @@ static_assert(sizeof(Device) == 2,
     "Size of Device should be 2 bytes"
 );
 
+export const std::vector<Device>& get_available_devices() {
+    static const std::vector<Device> devices = [] {
+        std::vector<Device> result;
+
+        result.emplace_back(eDeviceType::CPU, device_alias::CPU);
+
+        int num_cuda_devices = 0;
+        cudaError_t err = cudaGetDeviceCount(&num_cuda_devices);
+
+        if (err != cudaSuccess) {
+            return result;
+        }
+
+        result.reserve(1 + num_cuda_devices);
+
+        for (int i = 0;
+             i < num_cuda_devices && i < device_alias::MAX_CUDA_DEVICES;
+             ++i) {
+            result.emplace_back(
+                eDeviceType::CUDA,
+                static_cast<DeviceIndex>(i)
+            );
+        }
+
+        return result;
+    }();
+
+    return devices;
+}
+
+export const std::vector<Device>& get_available_cuda_devices() {
+    static const std::vector<Device> devices = [] {
+        std::vector<Device> result;
+
+        int num_cuda_devices = 0;
+        cudaError_t err = cudaGetDeviceCount(&num_cuda_devices);
+
+        if (err != cudaSuccess) {
+            return result;
+        }
+
+        result.reserve(num_cuda_devices);
+
+        for (int i = 0;
+             i < num_cuda_devices && i < device_alias::MAX_CUDA_DEVICES;
+             ++i) {
+            result.emplace_back(
+                eDeviceType::CUDA,
+                static_cast<DeviceIndex>(i)
+            );
+        }
+
+        return result;
+    }();
+
+    return devices;
+}
+
 // <================== TENSOR OPTIONS ==================> //
 export struct TensorOptions {
 private:

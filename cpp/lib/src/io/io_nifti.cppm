@@ -4,7 +4,7 @@ module;
 #include <cstring>
 #include <cstdlib>
 
-export module hasty_io_mod:nifti;
+export module hasty_io_mod_nifti;
 
 import std;
 import hasty_util_mod;

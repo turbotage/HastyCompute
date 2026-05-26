@@ -7,7 +7,7 @@
 			"hidden": true,
 			"generator": "Ninja",
 			"environment": {
-				"CMAKE_BUILD_PARALLEL_LEVEL": "12",
+				"CMAKE_BUILD_PARALLEL_LEVEL": "8",
 				"MY_INSTALL_PATH": "/home/turbotage/Documents/install",
 				"HASTY_GCC_TOOLCHAIN": "/opt/gcc-15"
 			},
@@ -25,6 +25,7 @@
 				"CMAKE_LINKER": "/usr/bin/lld-22",
 				"CMAKE_CXX_EXTENSIONS": "OFF",
 				"CMAKE_EXPERIMENTAL_CXX_IMPORT_STD": "451f2fe2-a8a2-47c3-bc32-94786d8fc91b",
+				"CMAKE_CXX_STDLIB_MODULES_JSON": "/opt/gcc-15/lib64/libstdc++.modules.json",
 				"HASTY_DATA_FOLDER": "/home/turbotage/Documents/GitHub/HastyData"
 			}
 		}

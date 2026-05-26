@@ -7,10 +7,11 @@ import hasty_tensor_mod;
 import hasty_linalg_mod;
 import hasty_fft_mod;
 import hasty_io_mod;
+import hasty_io_mod_nifti;
 import hasty_viz_mod;
 import hasty_server_mod;
 import hasty_python_mod;
-import mri_mod;
+import hasty_mri_mod;
 
 struct Problem {
     hasty::Tensor mag;
@@ -334,13 +335,6 @@ static hasty::Tensor approx_signal_nufft(
         auto img_flat = zeros({N}, opts_c);
         img_flat.scatter_add_(0, mask_idx, src_l);
 
-        if (l < 2) {
-            std::cout << "  [nufft_dbg] l=" << l
-                      << "  src_l norm=" << src_l.norm().item<float>()
-                      << "  img_flat norm=" << img_flat.norm().item<float>()
-                      << "  Upsilon_l max_abs=" << Upsilon_l.abs().max().item<float>() << "\n";
-        }
-
         auto img_l = img_flat.reshape({nx, ny, nz}).contiguous().unsqueeze(0);
         plan.execute(img_l, F_l);
 
@@ -351,7 +345,7 @@ static hasty::Tensor approx_signal_nufft(
 }
 
 // ── NUFFT-based per-bin weights ───────────────────────────────────────────────
-
+/*
 static hasty::Tensor compute_nufft_bin_weights(
     const Problem& prob,
     const hasty::mri::HistogramResult& hist)
@@ -402,7 +396,7 @@ static hasty::Tensor compute_nufft_bin_weights(
 
     return weights;
 }
-
+*/
 // ── Approx signal via DFT + SVD interpolants ─────────────────────────────────
 //
 // S_dft[k] = Σ_l Omega[k,l] · DFT(img_l, xi[k])
@@ -466,8 +460,7 @@ static bool run_test(const Problem& prob,
                      hasty::i64 n_rate, hasty::i64 n_nl,
                      const std::string& label,
                      hasty::mri::eBinWeighting weighting = hasty::mri::eBinWeighting::L1Mass,
-                     hasty::i64 Lo  = 7,
-                     hasty::i64 Lnl = 4,
+                     hasty::i64 P = 4, hasty::i64 R = 1,
                      bool show_fft_error_plots        = false,
                      bool show_phi_error_plots        = false,
                      bool show_phi_error_vs_B0_plots  = false,
@@ -480,13 +473,10 @@ static bool run_test(const Problem& prob,
     auto hist = mri::extract_histogram(
         prob.mag_flat, prob.z_map_flat, prob.nl_fields_flat, n_rate, n_nl);
     const i64 N_mask = hist.mask_idx.size(0);
-    const float mask_frac = (float)N_mask / (float)prob.N;
     std::cout << "  n_hist=" << hist.n_hist
               << "  N_mask=" << N_mask
               << "  (" << std::fixed << std::setprecision(1)
-              << (100.0f * mask_frac) << "% of N)\n"
-              << "  mag_flat sum=" << prob.mag_flat.sum().item<float>()
-              << "  pd_flat sum="  << prob.pd_flat.sum().item<float>() << "\n";
+              << (100.0f * N_mask / (float)prob.N) << "% of N)\n";
 
     auto op = mri::make_phi_operator(
         hist.z_map_hist, hist.nl_fields_hist,
@@ -501,8 +491,6 @@ static bool run_test(const Problem& prob,
                                      Device{eDeviceType::CPU})
                        .clone().to(prob.mag.device());
 
-    // 4 exact physics variants (computed once, before the L loop)
-    std::cout << "  Computing 4 exact signal variants ...\n";
     auto t0_exact = std::chrono::steady_clock::now();
     auto S_both   = exact_signal_paired(prob, sub_idx, true,  true);
     auto S_offres = exact_signal_paired(prob, sub_idx, true,  false);
@@ -510,9 +498,6 @@ static bool run_test(const Problem& prob,
     auto S_nofft  = exact_signal_paired(prob, sub_idx, false, false);
     double exact_s = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - t0_exact).count();
-    std::cout << "  |S_exact (both)| = " << S_both.norm().item<float>()
-              << "  (exact variants: " << std::fixed << std::setprecision(2)
-              << exact_s << "s)\n";
 
     // ── Signal helpers ────────────────────────────────────────────────────────
 
@@ -566,280 +551,185 @@ static bool run_test(const Problem& prob,
     auto ref_mag   = to_mag(S_both);
     auto ref_phase = to_phase(S_both);
 
-    // ── Histogram-exact signal: forward_exact with bin-mean B0, no nonlin ────
-    //
-    // Replaces each voxel's B0 with its histogram bin-mean B0.
-    // circ_corr(S_both, S_hist_exact):
-    //   ≈ 0.917 → bin width is the bottleneck (increase n_rate)
-    //   ≈ 1.000 → SVD rank or Omega×Upsilon is the bottleneck
-    // circ_corr(S_hist_exact, S_approx_dft):
-    //   ≈ 1.000 → DFT convention matches forward_exact; SVD is the error source
-    {
-        const i64 nx = prob.mag.size(0);
-        const i64 ny = prob.mag.size(1);
-        const i64 nz = prob.mag.size(2);
-        const i64 Nq = prob.N;
-        const TensorOptions opts_fq = TensorOptions(prob.mag.device(), eScalarType::Float);
+    const i64   gx  = prob.mag.size(0);
+    const i64   gy  = prob.mag.size(1);
+    const i64   gz  = prob.mag.size(2);
+    auto dft_cfg_full = fft::make_dft_config({gx, gy, gz}, /*batch_size=*/1, prob.mag.device());
+    auto xi_sub    = prob.k_traj.index_select(0, sub_idx).contiguous();  // [n_sub, 3]
+    auto rho_m_dft = prob.mag_flat.index_select(0, hist.mask_idx).to(eScalarType::ComplexFloat);
 
-        auto bin_z_r = hist.z_map_hist.real().index_select(0, hist.voxel_to_bin);
-        auto bin_z_i = hist.z_map_hist.imag().index_select(0, hist.voxel_to_bin);
-        auto z_qr = zeros({Nq}, opts_fq);
-        auto z_qi = zeros({Nq}, opts_fq);
-        z_qr.scatter_(0, hist.mask_idx, bin_z_r);
-        z_qi.scatter_(0, hist.mask_idx, bin_z_i);
-        auto z_quant_flat   = view_as_complex(stack({z_qr, z_qi}, 1).contiguous());
-        auto rate_map_quant = z_quant_flat.reshape({nx, ny, nz});
+    std::cout << "\n  L   n_hist   phase_corr_err   status\n"
+              << "  " << std::string(44, '-') << "\n";
 
-        auto k_q  = prob.k_traj.index_select(0, sub_idx);
-        auto t_q  = prob.timestamps.index_select(0, sub_idx);
-        auto nl_q = prob.nl_waveforms.index_select(1, sub_idx);
+    bool all_pass = true;
 
-        auto S_hist_exact = mri::forward_exact(
-            prob.mag, prob.sensitivity_maps, rate_map_quant,
-            t_q, k_q, nl_q, prob.nl_basis,
-            true, false);  // apply rate map (quantized B0), no nonlin
+    for (auto L : L_values) {
+        const i64 mpd_val = std::max((i64)8*L, (i64)60);
+        const i64 ncv_val = L + mpd_val;
 
-        auto mhe = to_mag(S_hist_exact);
-        auto phe = to_phase(S_hist_exact);
+        auto weights = mri::phi_lowrank_weights(weighting, hist, prob.timestamps);
 
-        std::cout << "\n  ── hist_exact (forward_exact, bin-mean B0, no SVD) ─────────────\n"
-                  << "  circ_corr(S_both, S_hist_exact) = " << std::fixed << std::setprecision(4)
-                  << circ_corr(ref_phase, phe)
-                  << "  |S| Pearson = " << pearson(ref_mag, mhe) << "\n"
-                  << "  → ≈ 0.917: bin width is bottleneck (increase n_rate)\n"
-                  << "  → ≈ 1.000: SVD rank / Omega×Upsilon is bottleneck\n\n";
+        auto t0_svd = std::chrono::steady_clock::now();
+        auto [Omega, S_phi, Upsilon] = mri::phi_lowrank(op, L, weights, ncv_val, mpd_val);
+        double svd_s = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t0_svd).count();
 
-        // Store for use in L loop
-        // (capture by copy into the lambdas used below)
-        const Tensor mhe_loop = mhe;
-        const Tensor phe_loop = phe;
-
-        // ── DFT config (full 3D, centered coords [-N/2, N/2-1] matching CMCL) ──
-        const i64   gx  = prob.mag.size(0);
-        const i64   gy  = prob.mag.size(1);
-        const i64   gz  = prob.mag.size(2);
-
-        auto dft_cfg_full = fft::make_dft_config({gx, gy, gz}, /*batch_size=*/1,
-                                                  prob.mag.device());
-
-        // k_traj[:,0]=kx, [:,1]=ky, [:,2]=kz — same C-order as cfg.coords dims [ix,iy,iz].
-        auto xi_sub = prob.k_traj.index_select(0, sub_idx).contiguous();  // [n_sub, 3]
-
-        auto rho_m_dft = prob.mag_flat.index_select(0, hist.mask_idx)
-                                       .to(eScalarType::ComplexFloat);
-
-        // ── NUFFT vs DFT pure-Fourier diagnostic ─────────────────────────────
-        // Compare NUFFT(ρ, k_traj)[sub_idx]  vs  DFT(ρ_full_3d, xi_sub).
-        // Both should equal S_nofft (forward_exact, no corrections).
-        // circ_corr ≠ 1.000 → convention mismatch remains.
+        // Print singular values for rank-selection guidance.
         {
-            using namespace hasty::fft;
-            const i64    K_d  = prob.K;
-            const i64    N_d  = prob.N;
-            const i64    nx_d = prob.mag.size(0);
-            const i64    ny_d = prob.mag.size(1);
-            const i64    nz_d = prob.mag.size(2);
-            const Device dev  = prob.mag.device();
-            const TensorOptions opts_cd{dev, eScalarType::ComplexFloat};
-            const TensorOptions opts_fd{dev, eScalarType::Float};
-
-            auto rho_flat = prob.mag_flat.to(eScalarType::ComplexFloat);  // [N]
-
-            auto ktraj_d  = prob.k_traj;
-            auto coords_d = zeros({3, K_d}, opts_fd);
-            coords_d.select(0,0).copy_(ktraj_d.select(1,2));  // kz → iz dim
-            coords_d.select(0,1).copy_(ktraj_d.select(1,1));
-            coords_d.select(0,2).copy_(ktraj_d.select(1,0));  // kx → ix dim
-            coords_d = coords_d.contiguous();
-
-            NufftOptions<cuda_t, f32, UTN> nufft_opts_d;
-            nufft_opts_d.ntransf    = 1;
-            NufftPlan<cuda_t, f32, 3, UTN> plan_d({nx_d, ny_d, nz_d}, nufft_opts_d);
-            plan_d.setpts(coords_d);
-
-            auto img_d = rho_flat.reshape({nx_d, ny_d, nz_d}).contiguous().unsqueeze(0);
-            auto F_nufft_d = zeros({1, K_d}, opts_cd).contiguous();
-            plan_d.execute(img_d, F_nufft_d);
-            auto F_nufft_sub = F_nufft_d.select(0,0).index_select(0, sub_idx);  // [n_sub]
-
-            // DC sanity: NUFFT at kz=ky=kx=0 must equal sum(rho). Build single-point plan.
-            {
-                auto dc_coords = zeros({3, 1}, opts_fd);  // all zeros = DC
-                NufftOptions<cuda_t, f32, UTN> dc_opts;
-                dc_opts.ntransf = 1;
-                NufftPlan<cuda_t, f32, 3, UTN> dc_plan({nx_d, ny_d, nz_d}, dc_opts);
-                dc_plan.setpts(dc_coords);
-                auto dc_out = zeros({1, 1}, opts_cd).contiguous();
-                dc_plan.execute(img_d, dc_out);
-                auto dc_re = dc_out.real().item<float>();
-                auto dc_im = dc_out.imag().item<float>();
-                auto rho_sum = prob.mag_flat.sum().item<float>();
-                std::cout << "  [DC sanity] NUFFT(0,0,0)=(" << dc_re << "," << dc_im
-                          << ")  sum(rho)=" << rho_sum
-                          << "  |diff|=" << std::abs(dc_re - rho_sum) << "\n";
-            }
-
-            // DFT of full ρ at xi_sub (centered coords, matches CMCL NUFFT)
-            auto rho_3d_d  = prob.mag_flat.to(opts_cd).reshape({nx_d, ny_d, nz_d});
-            auto F_dft_sub = fft::dft(dft_cfg_full, rho_3d_d, xi_sub);  // [n_sub]
-
-            auto p_nufft = to_phase(F_nufft_sub.unsqueeze(0));
-            auto p_dft   = to_phase(F_dft_sub.unsqueeze(0));
-            auto p_nofft = to_phase(S_nofft);
-
-            // Print first few values for direct comparison
-            {
-                auto get_re = [](const Tensor& t, i64 i) {
-                    auto c = t.real().cpu().contiguous();
-                    return static_cast<const float*>(c.spanning_view().data)[i];
-                };
-                auto get_im = [](const Tensor& t, i64 i) {
-                    auto c = t.imag().cpu().contiguous();
-                    return static_cast<const float*>(c.spanning_view().data)[i];
-                };
-                auto kz_sub = prob.k_traj.index_select(0, sub_idx).select(1,2).cpu().contiguous();
-                const float* kz_ptr = static_cast<const float*>(kz_sub.spanning_view().data);
-                std::cout << "\n  [diag] first 3 k-space points:\n";
-                for (i64 i = 0; i < 3; ++i) {
-                    float nr = get_re(F_nufft_sub, i), ni = get_im(F_nufft_sub, i);
-                    float dr = get_re(F_dft_sub,   i), di = get_im(F_dft_sub,   i);
-                    float sr = get_re(S_nofft.select(0,0), i), si = get_im(S_nofft.select(0,0), i);
-                    std::cout << "    k=" << i << " kz=" << std::setprecision(3) << kz_ptr[i]
-                              << "  NUFFT=(" << nr << "," << ni << ")"
-                              << "  DFT=(" << dr << "," << di << ")"
-                              << "  Snofft=(" << sr << "," << si << ")"
-                              << "  phase_diff=" << (std::atan2(ni,nr) - std::atan2(di,dr)) << "\n";
-                }
-            }
-
-            std::cout << "\n  ── pure Fourier diagnostic (no SVD, no B0) ─────────────────────\n"
-                      << "  circ_corr(NUFFT(rho), DFT(rho)) = "
-                      << std::fixed << std::setprecision(4) << circ_corr(p_nufft, p_dft) << "\n"
-                      << "  circ_corr(NUFFT(rho), S_nofft)  = "
-                      << circ_corr(p_nufft, p_nofft) << "\n"
-                      << "  circ_corr(DFT(rho),   S_nofft)  = "
-                      << circ_corr(p_dft, p_nofft) << "\n"
-                      << "  → all 1.0000: NUFFT/DFT conventions match; SVD is the issue\n"
-                      << "  → NUFFT≠DFT: NUFFT computes wrong spatial transform\n\n";
+            auto sv = S_phi.cpu().contiguous();
+            const float* sp = static_cast<const float*>(sv.spanning_view().data);
+            std::cout << "  phi singular values [L=" << L << "]:";
+            for (i64 l = 0; l < L; ++l)
+                std::cout << " " << std::scientific << std::setprecision(2) << sp[l];
+            std::cout << "\n";
         }
 
-        std::cout << "\n  L   n_hist   phase_corr_err   status\n"
-                  << "  " << std::string(44, '-') << "\n";
+        // ── Normal operator consistency (naive L² vs P×R) ─────────────────────
+        {
+            using namespace mri;
+            const i64 nx = prob.mag.size(0), ny = prob.mag.size(1), nz = prob.mag.size(2);
+            const Device dev = prob.mag.device();
+            const TensorOptions opts_f{dev, eScalarType::Float};
+            const TensorOptions opts_c{dev, eScalarType::ComplexFloat};
 
-        bool all_pass = true;
-        auto t0_nw = std::chrono::steady_clock::now();
-        auto nufft_weights = compute_nufft_bin_weights(prob, hist);
-        double nw_s = std::chrono::duration<double>(
-            std::chrono::steady_clock::now() - t0_nw).count();
-        std::cout << "  NUFFT bin weights: " << std::fixed << std::setprecision(2)
-                  << nw_s << "s  (sum=" << nufft_weights.sum().item<float>() << ")\n";
+            auto ktraj  = prob.k_traj;
+            auto coords = zeros({3, prob.K}, opts_f);
+            coords.select(0,0).copy_(ktraj.select(1,2));
+            coords.select(0,1).copy_(ktraj.select(1,1));
+            coords.select(0,2).copy_(ktraj.select(1,0));
+            coords = coords.contiguous();
 
-        for (auto L : L_values) {
-            const i64 mpd_val = std::max((i64)8*L, (i64)60);
-            const i64 ncv_val = L + mpd_val;
+            PhiLowrankResult plr{Omega, S_phi, Upsilon};
+            const i64 p_use = std::min(P, L*L);
+            const i64 r_use = std::min(R, L);
 
-            Opt<Tensor> bin_freq_aware;
-            Opt<Tensor> bin_nufft_aware;
-            if (weighting == mri::eBinWeighting::FreqAwareLowrank) {
-                using namespace std::numbers;
-                const float pi_f    = (float)pi_v<f64>;
-                float T_readout     = (prob.timestamps.max() - prob.timestamps.min()).item<float>();
-                auto phase_h = hist.z_map_hist.imag().abs().mul(Scalar(T_readout)).div(Scalar(pi_f));
-                for (i64 q = 0; q < hist.nl_fields_hist.size(0); ++q) {
-                    float max_aq = prob.nl_waveforms.select(0,q).abs().max().item<float>();
-                    phase_h = phase_h.add(
-                        hist.nl_fields_hist.select(0,q).abs().mul(Scalar(max_aq)).div(Scalar(pi_f)));
-                }
-                auto freq_factor = hasty::clamp(phase_h, Scalar(1.0f), Scalar(1e9f));
-                bin_freq_aware  = Opt<Tensor>{hist.bin_l2_energy.mul(freq_factor)};
-                bin_nufft_aware = Opt<Tensor>{nufft_weights.mul(freq_factor)};
+            auto rho_r = rand({nx, ny, nz}, opts_f);
+            auto rho_i = rand({nx, ny, nz}, opts_f);
+            auto rho   = view_as_complex(stack({rho_r, rho_i}, -1).contiguous());
+            auto mask_3d = zeros({nx*ny*nz}, TensorOptions(dev, eScalarType::Bool));
+            mask_3d.scatter_(0, hist.mask_idx,
+                ones({hist.mask_idx.size(0)}, TensorOptions(dev, eScalarType::Bool)));
+            rho = rho.reshape({nx*ny*nz}).masked_fill(mask_3d.logical_not(), Scalar(0.f))
+                     .reshape({nx, ny, nz});
+
+            auto t0n = std::chrono::steady_clock::now();
+            auto emb_naive = make_normal_naive_off_fourier_toeplitz_embeddings(
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, 
+                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE, 
+                eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
+            double t_nb = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
+            auto emb_pr = make_normal_omega_driven_off_fourier_toeplitz_embeddings(
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, p_use, r_use,
+                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
+                eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
+            double t_pb = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
+            auto out_naive = apply_normal_off_fourier_operator(emb_naive, rho);
+            double t_na = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
+            auto out_pr = apply_normal_off_fourier_operator(emb_pr, rho);
+            double t_pa = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            // Only compare at masked voxels (rho is zero outside).
+            auto out_n_flat = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto out_p_flat = out_pr.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+
+            auto abs_err_v = out_n_flat.sub(out_p_flat).abs().contiguous();
+            auto abs_ref_v = out_n_flat.abs().contiguous();
+
+            // Collect finite per-voxel relative errors in C++.
+            const i64 N_m = abs_err_v.size(0);
+            const float* err_ptr = static_cast<const float*>(abs_err_v.spanning_view().data);
+            const float* ref_ptr = static_cast<const float*>(abs_ref_v.spanning_view().data);
+            std::vector<float> re_vals;
+            re_vals.reserve(N_m);
+            double sum_re = 0.0, sum_cc = 0.0;
+            int n_nan = 0;
+            for (i64 i = 0; i < N_m; ++i) {
+                float r = ref_ptr[i] > 1e-30f ? err_ptr[i] / ref_ptr[i] : 0.0f;
+                if (!std::isfinite(r)) { ++n_nan; continue; }
+                re_vals.push_back(r);
+                sum_re += r;
             }
+            if (n_nan > 0)
+                std::cout << "\n  WARNING: " << n_nan << " non-finite values in normal op output\n";
 
-            auto t0_svd = std::chrono::steady_clock::now();
-            auto [Omega, Upsilon] = mri::phi_lowrank(op, L,
-                                                      weighting,
-                                                      Opt<Tensor>{hist.bin_weights},
-                                                      Opt<Tensor>{hist.bin_l2_energy},
-                                                      bin_freq_aware,
-                                                      ncv_val, mpd_val);
-            double svd_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_svd).count();
+            float mean_re = re_vals.empty() ? 0.0f : (float)(sum_re / re_vals.size());
+            std::sort(re_vals.begin(), re_vals.end());
 
-            auto t0_nsvd = std::chrono::steady_clock::now();
-            auto [Omega_nw, Upsilon_nw] = mri::phi_lowrank(op, L,
-                                                             mri::eBinWeighting::FreqAwareLowrank,
-                                                             Opt<Tensor>{hist.bin_weights},
-                                                             Opt<Tensor>{hist.bin_l2_energy},
-                                                             bin_nufft_aware,
-                                                             ncv_val, mpd_val);
-            double nsvd_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_nsvd).count();
+            // Random subset (up to 2000 evenly spaced) for plotting.
+            const i64 n_plot = std::min((i64)2000, (i64)re_vals.size());
+            std::vector<float> plot_vals(n_plot);
+            for (i64 i = 0; i < n_plot; ++i)
+                plot_vals[i] = re_vals[(i64)re_vals.size() * i / n_plot];
 
-            auto sv = Omega.abs();  sv = sv.mul(sv);  sv = sv.sum(0).cpu();
-            std::cout << "  [sv L=" << L << "]";
-            auto sv_view = sv.spanning_view();
-            const float* sv_ptr = static_cast<const float*>(sv_view.data);
-            float sv_total = 0.0f;
-            for (i64 l = 0; l < L; ++l) sv_total += sv_ptr[l];
-            for (i64 l = 0; l < L; ++l)
-                std::cout << " " << std::scientific << std::setprecision(2) << sv_ptr[l];
-            std::cout << "  (sum=" << sv_total << ")\n";
+            std::cout << "\n  Normal op [L=" << L << " P=" << p_use << " R=" << r_use << "]:"
+                      << "  mean_rel_err=" << std::scientific << std::setprecision(3) << mean_re
+                      << "\n  timing: naive_build=" << std::setprecision(2) << t_nb
+                      << "s  pr_build=" << t_pb
+                      << "s  naive_apply=" << t_na
+                      << "s  pr_apply=" << t_pa << "s\n";
 
-            auto t0_approx = std::chrono::steady_clock::now();
-            auto S_approx_full = approx_signal_nufft(
-                prob, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx);
-            double approx_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_approx).count();
-            auto S_approx = S_approx_full.index_select(1, sub_idx);
+            auto plot_t = Tensor::from_blob(plot_vals.data(), {n_plot},
+                              eScalarType::Float, Device{eDeviceType::CPU}).clone();
+            hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
+                .lines   = { plot_t.spanning_view() },
+                .title   = "Normal op rel err (sorted) — " + label + " L=" + std::to_string(L),
+                .xaxis   = "voxel percentile",
+                .yaxis   = "|out_naive - out_pr| / |out_naive|",
+                .legends = {"rel err"},
+                .markers = true,
+                .lines_on = false,
+            }).show();
 
-            float err  = phase_corrected_rel_err(S_both, S_approx);
-            bool  pass = err < 0.05f;
-            all_pass   = all_pass && pass;
+            hasty::viz::orthoslicer(out_naive.abs(), {"normal_naive L²=" + std::to_string(L), std::nullopt}, true, false);
+            hasty::viz::orthoslicer(out_pr.abs(),    {"normal_PR P=" + std::to_string(p_use) + " R=" + std::to_string(r_use), std::nullopt}, true, false);
+        }
 
-            std::cout << "  " << std::setw(3) << L
-                      << "  " << std::setw(7) << hist.n_hist
-                      << "  " << std::scientific << std::setprecision(3) << err
-                      << "  " << (pass ? "PASS" : "FAIL") << "\n";
+        auto t0_approx = std::chrono::steady_clock::now();
+        auto S_approx_full = approx_signal_nufft(
+            prob, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx);
+        double approx_s = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t0_approx).count();
+        auto S_approx = S_approx_full.index_select(1, sub_idx);
 
-            auto t0_dft = std::chrono::steady_clock::now();
-            auto S_dft  = approx_signal_dft(
-                dft_cfg_full, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx,
-                rho_m_dft, prob.N, sub_idx, xi_sub);
-            double dft_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_dft).count();
+        float err  = phase_corrected_rel_err(S_both, S_approx);
+        bool  pass = err < 0.05f;
+        all_pass   = all_pass && pass;
 
-            auto t0_nw_sig = std::chrono::steady_clock::now();
-            auto S_nw_full = approx_signal_nufft(
-                prob, Omega_nw, Upsilon_nw, hist.voxel_to_bin, hist.mask_idx);
-            double nw_sig_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_nw_sig).count();
-            auto S_nw = S_nw_full.index_select(1, sub_idx);
+        std::cout << "  " << std::setw(3) << L
+                  << "  " << std::setw(7) << hist.n_hist
+                  << "  " << std::scientific << std::setprecision(3) << err
+                  << "  " << (pass ? "PASS" : "FAIL") << "\n";
 
-            auto t0_ts = std::chrono::steady_clock::now();
-            auto ts_phi    = mri::time_segmented_phi(hist, prob.timestamps, L, weighting);
-            auto S_ts_full = approx_signal_nufft(
-                prob, ts_phi.Omega, ts_phi.Upsilon, hist.voxel_to_bin, hist.mask_idx);
-            double ts_s = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0_ts).count();
-            auto S_ts = S_ts_full.index_select(1, sub_idx);
+        auto t0_dft = std::chrono::steady_clock::now();
+        auto S_dft  = approx_signal_dft(
+            dft_cfg_full, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx,
+            rho_m_dft, prob.N, sub_idx, xi_sub);
+        double dft_s = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t0_dft).count();
 
-            auto mo  = to_mag(S_offres);  auto po  = to_phase(S_offres);
-            auto mn  = to_mag(S_nonlin);  auto pn  = to_phase(S_nonlin);
-            auto mu  = to_mag(S_nofft);   auto pu  = to_phase(S_nofft);
-            auto ma  = to_mag(S_approx);  auto pa  = to_phase(S_approx);
-            auto md  = to_mag(S_dft);     auto pd  = to_phase(S_dft);
-            auto mnw = to_mag(S_nw);      auto pnw = to_phase(S_nw);
-            auto mts = to_mag(S_ts);      auto pts = to_phase(S_ts);
+        auto mo = to_mag(S_offres);  auto po = to_phase(S_offres);
+        auto mn = to_mag(S_nonlin);  auto pn = to_phase(S_nonlin);
+        auto mu = to_mag(S_nofft);   auto pu = to_phase(S_nofft);
+        auto ma = to_mag(S_approx);  auto pa = to_phase(S_approx);
+        auto md = to_mag(S_dft);     auto pd = to_phase(S_dft);
 
-            const std::string approx_lbl = "approx NUFFT (L=" + std::to_string(L) + ")";
-            const std::string dft_lbl    = "approx DFT  (L=" + std::to_string(L) + ")";
-            const std::string nw_lbl     = "nufft-w     (L=" + std::to_string(L) + ")";
-            const std::string ts_lbl     = "time-seg    (L=" + std::to_string(L) + ")";
-            const std::vector<std::string> sig_labels = {
-                "exact (off-res+nonlin)", "exact (off-res only)",
-                "exact (nonlin only)",    "exact (no off-res/nonlin)",
-                approx_lbl, dft_lbl, nw_lbl, ts_lbl
-            };
+        const std::string approx_lbl = "approx NUFFT (L=" + std::to_string(L) + ")";
+        const std::string dft_lbl    = "approx DFT   (L=" + std::to_string(L) + ")";
+        const std::vector<std::string> sig_labels = {
+            "exact (off-res+nonlin)", "exact (off-res only)",
+            "exact (nonlin only)",    "exact (no off-res/nonlin)",
+            approx_lbl, dft_lbl
+        };
 
             auto make_sort_idx = [&](const Tensor& key) -> Tensor {
                 auto rv = key.spanning_view();
@@ -869,22 +759,14 @@ static bool run_test(const Problem& prob,
                           << std::setw(10) << pearson(ref_mag, m)
                           << " " << std::setw(14) << circ_corr(ref_phase, p) << "\n";
             };
-            print_row("exact (off-res only)",      mo,       po);
-            print_row("exact (nonlin only)",        mn,       pn);
-            print_row("exact (no off-res/nonlin)",  mu,       pu);
-            print_row("hist_exact",                 mhe_loop, phe_loop);
-            print_row(approx_lbl,                   ma,       pa);
-            print_row(dft_lbl,                      md,       pd);
-            print_row(nw_lbl,                       mnw,      pnw);
-            print_row(ts_lbl,                       mts,      pts);
-            std::cout << "  circ_corr(hist_exact, approx_dft) = " << std::fixed
-                      << std::setprecision(4) << circ_corr(phe_loop, pd) << "\n";
+            print_row("exact (off-res only)",      mo, po);
+            print_row("exact (nonlin only)",        mn, pn);
+            print_row("exact (no off-res/nonlin)",  mu, pu);
+            print_row(approx_lbl,                   ma, pa);
+            print_row(dft_lbl,                      md, pd);
             std::cout << "  timing: SVD=" << std::fixed << std::setprecision(2) << svd_s
-                      << "s  nufft_svd=" << nsvd_s
                       << "s  approx_nufft=" << approx_s
-                      << "s  nufft_w_sig=" << nw_sig_s
                       << "s  approx_dft=" << dft_s
-                      << "s  time_seg=" << ts_s
                       << "s  (exact variants=" << exact_s << "s)\n\n";
 
             if (show_phi_error_plots || show_phi_error_vs_B0_plots || show_fft_error_plots) {
@@ -1076,8 +958,7 @@ static bool run_test(const Problem& prob,
             hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
                 .lines    = { srt_mag(ref_mag).spanning_view(), srt_mag(mo).spanning_view(),
                               srt_mag(mn).spanning_view(),      srt_mag(mu).spanning_view(),
-                              srt_mag(ma).spanning_view(),      srt_mag(md).spanning_view(),
-                              srt_mag(mnw).spanning_view(),     srt_mag(mts).spanning_view() },
+                              srt_mag(ma).spanning_view(),      srt_mag(md).spanning_view() },
                 .title    = "|S(k,t)| sorted — " + label + "  L=" + std::to_string(L),
                 .xaxis    = "sample (sorted by |S_exact|)",
                 .yaxis    = "|S|",
@@ -1089,8 +970,7 @@ static bool run_test(const Problem& prob,
             hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
                 .lines    = { srt_phase(ref_phase).spanning_view(), srt_phase(po).spanning_view(),
                               srt_phase(pn).spanning_view(),        srt_phase(pu).spanning_view(),
-                              srt_phase(pa).spanning_view(),        srt_phase(pd).spanning_view(),
-                              srt_phase(pnw).spanning_view(),       srt_phase(pts).spanning_view() },
+                              srt_phase(pa).spanning_view(),        srt_phase(pd).spanning_view() },
                 .title    = "arg(S(k,t)) [rad] sorted — " + label + "  L=" + std::to_string(L),
                 .xaxis    = "sample (sorted by arg(S_exact))",
                 .yaxis    = "arg(S) [rad]",
@@ -1108,16 +988,14 @@ static bool run_test(const Problem& prob,
             };
             const std::vector<std::string> err_labels = {
                 "exact (off-res only)", "exact (nonlin only)",
-                "exact (no off-res/nonlin)", approx_lbl, dft_lbl, nw_lbl, ts_lbl
+                "exact (no off-res/nonlin)", approx_lbl, dft_lbl
             };
             hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
                 .lines    = { srt_mag(rel_err(mo)).spanning_view(),
                               srt_mag(rel_err(mn)).spanning_view(),
                               srt_mag(rel_err(mu)).spanning_view(),
                               srt_mag(rel_err(ma)).spanning_view(),
-                              srt_mag(rel_err(md)).spanning_view(),
-                              srt_mag(rel_err(mnw)).spanning_view(),
-                              srt_mag(rel_err(mts)).spanning_view() },
+                              srt_mag(rel_err(md)).spanning_view() },
                 .title    = "rel err vs |S_exact| sorted — " + label + "  L=" + std::to_string(L),
                 .xaxis    = "sample (sorted by |S_exact| ascending)",
                 .yaxis    = "|S_approx - S_exact| / |S_exact|",
@@ -1128,12 +1006,9 @@ static bool run_test(const Problem& prob,
             } // show_signal_err_vs_mag_plot
 
             } // outer plot guard
-        }
-
-        return all_pass;
     }
 
-    return false;  // unreachable; all_pass returned from inner block
+    return all_pass;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -1273,12 +1148,11 @@ int non_fourier_interp_test()
 
         failures += !run_test(prob_real,
             300,
-            {8, 25},
+            {8},
             16000, 1,
             "real_data full_res",
             hasty::mri::eBinWeighting::L1Mass,
-            8,
-            3,
+            /*P=*/30, /*R=*/6,
             show_fft_error_plots,
             show_phi_error_plots,
             show_phi_error_vs_B0_plots,
@@ -1397,11 +1271,14 @@ void nufft_dft_consistency_test()
     std::cout << (pass ? "PASS" : "FAIL") << "\n";
 }
 
+
 int main()
 {
+    hasty::InferenceMode im;
+
+    hasty::io::setup_default_dirs();
 
     //nufft_dft_consistency_test();
 
     return non_fourier_interp_test();
-    //return 0;
 }

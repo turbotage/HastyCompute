@@ -31,5 +31,19 @@ export Tensor expm1(const Tensor& t)
     return Tensor(hat::expm1(t.to_torch()));
 }
 
+export Tensor nanmean(const Tensor& t)
+{
+    return Tensor(hat::nanmean(t.to_torch()));
+}
+
+export Tensor nanmean(const Tensor& t, i64 dim, bool keepdim = false)
+{
+    return Tensor(hat::nanmean(t.to_torch(), dim, keepdim));
+}
+
+export Tensor argsort(const Tensor& t, i64 dim = -1, bool descending = false)
+{
+    return Tensor(hat::argsort(t.to_torch(), dim, descending));
+}
 
 }

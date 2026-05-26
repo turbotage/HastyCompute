@@ -103,6 +103,11 @@ export Tensor rand_like(const Tensor& other)
     return Tensor(hat::rand_like(other._base));
 }
 
+export Tensor randperm(i64 n, TensorOptions opts = TensorOptions())
+{
+    return Tensor(hat::randperm(n, opts.to_torch()));
+}
+
 // arange overloads
 export Tensor arange(i64 end, TensorOptions opts = TensorOptions())
 {

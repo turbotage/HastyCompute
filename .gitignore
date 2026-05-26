@@ -3,3 +3,4 @@ data/encs/
 data/imgs/
 data/rawdata/
 certs/
+.venv/

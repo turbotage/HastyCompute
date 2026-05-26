@@ -1,6 +1,6 @@
 module;
 
-export module mri_mod:off_fourier_interpolators;
+export module hasty_mri_mod:off_fourier_interpolators;
 
 import std;
 import hasty_util_mod;
@@ -11,8 +11,9 @@ namespace hasty {
 namespace mri {
 
 export struct PhiLowrankResult {
-    Tensor Omega;    // [K, L]
-    Tensor Upsilon;  // [n_hist, L]
+    Tensor Omega;    // [K, L]      — U * sqrt(S)
+    Tensor S;        // [L]         — singular values (Float)
+    Tensor Upsilon;  // [n_hist, L] — V * sqrt(S)
 };
 
 // Weighting strategy for the phi low-rank SVD.
@@ -27,11 +28,6 @@ export enum struct eBinWeighting : i32 {
     None               = 0,
     L1Mass             = 1,
     L2Energy           = 2,
-    // FreqAwareLowrank: w_h = Σρ² × max(1, phase_h/π)
-    // where phase_h is the maximum phase variation this bin produces across the
-    // readout — |ω_h|·T_readout for off-res, max|α_q|·|b_q_h| for each NL field.
-    // Forces the SVD to allocate terms to fast-varying (high-B0 / high-NL) bins
-    // that L2Energy would under-weight, preventing systematic errors from those bins.
     FreqAwareLowrank   = 3,
 };
 
@@ -135,19 +131,46 @@ export linalg::LinearOperator make_phi_operator(
 
 
 // ---------------------------------------------------------------------------
-// phi_lowrank
-// Weights are bin occupancies (sum of mag per bin) for weighted SVD.
-// They scale columns of A so high-occupancy bins dominate the decomposition.
-// Handled outside the LinearOperator: build column-weighted op, SVD, unweight Vh.
+// phi_lowrank_weights
+// Computes the weight vector [n_hist] for the phi_lowrank weighted SVD.
+// Returns nullopt for eBinWeighting::None (unweighted).
 // ---------------------------------------------------------------------------
 
+export Opt<Tensor> phi_lowrank_weights(
+    eBinWeighting weighting,
+    const HistogramResult& hist,
+    const Tensor& timestamps    // [K] float — needed for FreqAwareLowrank
+) {
+    using namespace std::numbers;
+    switch (weighting) {
+        case eBinWeighting::None:
+            return nullopt;
+        case eBinWeighting::L1Mass:
+            return hist.bin_weights;
+        case eBinWeighting::L2Energy:
+            return hist.bin_l2_energy;
+        case eBinWeighting::FreqAwareLowrank: {
+            float T_readout = (timestamps.max() - timestamps.min()).item<f32>();
+            float pi_f = (float)pi_v<f64>;
+            auto phase_h    = hist.z_map_hist.imag().abs()
+                                  .mul(Scalar(T_readout)).div(Scalar(pi_f));
+            auto freq_factor = clamp(phase_h, Scalar(1.0f), Scalar(1e9f));
+            return hist.bin_l2_energy.mul(freq_factor);
+        }
+    }
+    return nullopt;
+}
+
+
+// ---------------------------------------------------------------------------
+// phi_lowrank
+// Weighted SVD of the phi operator. Pass weights from phi_lowrank_weights.
+// Weights scale columns of the operator so high-energy bins dominate the SVD.
+// ---------------------------------------------------------------------------
 export PhiLowrankResult phi_lowrank(
     const linalg::LinearOperator& op,
     i64 L,
-    eBinWeighting weighting               = eBinWeighting::L1Mass,
-    const Opt<Tensor>& bin_weights        = nullopt,   // Σ ρ   — L1Mass
-    const Opt<Tensor>& bin_l2_energy      = nullopt,   // Σ ρ²  — L2Energy
-    const Opt<Tensor>& bin_freq_aware_l2  = nullopt,   // Σρ²·max(1,phase/π) — FreqAwareLowrank
+    const Opt<Tensor>& weights = nullopt,
     i64 ncv = -1,
     i64 mpd = -1
 ) {
@@ -155,20 +178,11 @@ export PhiLowrankResult phi_lowrank(
     const i64    N      = op.n();
     const Device device = op.device();
 
-    // Select the active weight tensor based on requested strategy.
-    Opt<Tensor> active_weights;
-    switch (weighting) {
-        case eBinWeighting::None:             active_weights = nullopt;           break;
-        case eBinWeighting::L1Mass:           active_weights = bin_weights;       break;
-        case eBinWeighting::L2Energy:         active_weights = bin_l2_energy;     break;
-        case eBinWeighting::FreqAwareLowrank: active_weights = bin_freq_aware_l2; break;
-    }
-
     linalg::SVDResult svd;
     Tensor w_sqrt;
 
-    if (active_weights.has_value()) {
-        w_sqrt = pow(*active_weights, 0.5).to(op.dtype());
+    if (weights.has_value()) {
+        w_sqrt = pow(*weights, 0.5).to(op.dtype());
 
         linalg::LinearOperator op_w(K, N,
             [op, w_sqrt](const Tensor& v) { return op.matvec(v.mul(w_sqrt)); },
@@ -180,11 +194,10 @@ export PhiLowrankResult phi_lowrank(
         svd = linalg::operator_svd(op, L, ncv, mpd);
     }
 
-    auto sqrt_S  = pow(svd.S, 0.5).to(op.dtype());
-    auto Omega   = svd.U.mul(sqrt_S.unsqueeze(0));
-    auto Upsilon = svd.Vh.transpose(0, 1).mul(sqrt_S.unsqueeze(0));
+    Tensor& Omega   = svd.U;
+    Tensor& Upsilon = svd.Vh.transpose_(0, 1);
 
-    if (active_weights.has_value()) {
+    if (weights.has_value()) {
         auto w_safe = where(w_sqrt.abs().gt(Scalar(1e-15f)),
                             w_sqrt,
                             ones({N}, TensorOptions(device, op.dtype())));
@@ -194,6 +207,7 @@ export PhiLowrankResult phi_lowrank(
     // SVD computed in double; cast back to float32 for reconstruction use.
     return PhiLowrankResult{
         Omega.to(eScalarType::ComplexFloat),
+        svd.S.to(eScalarType::Float),
         Upsilon.to(eScalarType::ComplexFloat)
     };
 }

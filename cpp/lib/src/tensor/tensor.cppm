@@ -319,6 +319,8 @@ public:
 
     inline Tensor contiguous() const { return Tensor(_base.contiguous()); }
 
+    inline bool defined() const { return _base.defined(); }
+
     inline i64 numel() const { return _base.numel(); }
 
     template<typename T>
@@ -550,9 +552,16 @@ public:
         _base.fill_(value.to_torch());
         return const_cast<Tensor&>(*this);
     }
-
     inline Tensor& fill_(const Tensor& value) const {
         _base.fill_(value._base);
+        return const_cast<Tensor&>(*this);
+    }
+
+    inline Tensor masked_fill(const Tensor& mask, const Scalar& value) const {
+        return Tensor(_base.masked_fill(mask._base, value.to_torch()));
+    }
+    inline Tensor& masked_fill_(const Tensor& mask, const Scalar& value) const {
+        _base.masked_fill_(mask._base, value.to_torch());
         return const_cast<Tensor&>(*this);
     }
 
@@ -763,6 +772,15 @@ public:
     inline Tensor log() const { return Tensor(_base.log()); }
     inline Tensor& log_() { _base.log_(); return *this; }
 
+    inline Tensor sqrt() const { return Tensor(_base.sqrt()); }
+    inline Tensor& sqrt_() { _base.sqrt_(); return *this; }
+
+    inline Tensor rsqrt() const { return Tensor(_base.rsqrt()); }
+    inline Tensor& rsqrt_() { _base.rsqrt_(); return *this; }
+
+    inline Tensor square() const { return Tensor(_base.square()); }
+    inline Tensor& square_() { _base.square_(); return *this; }
+
     inline Tensor lt(const Tensor& other) const { return Tensor(_base.lt(other._base)); }
     inline Tensor lt(const Scalar& other) const { return Tensor(_base.lt(other.to_torch())); }
 
@@ -777,8 +795,16 @@ public:
 
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
 
+    inline Tensor t() const { return Tensor(_base.t()); }
     inline Tensor transpose(i32 dim0, i32 dim1) const { return Tensor(_base.transpose(dim0, dim1)); }
     inline Tensor& transpose_(i32 dim0, i32 dim1) { _base.transpose_(dim0, dim1); return *this; }
+
+    inline Tensor clamp(const Scalar& min, const Scalar& max) const { return Tensor(_base.clamp(min.to_torch(), max.to_torch())); }
+    inline Tensor& clamp_(const Scalar& min, const Scalar& max) { _base.clamp_(min.to_torch(), max.to_torch()); return *this; }
+    inline Tensor clamp_min(const Scalar& min) const { return Tensor(_base.clamp_min(min.to_torch())); }
+    inline Tensor& clamp_min_(const Scalar& min) { _base.clamp_min_(min.to_torch()); return *this; }
+    inline Tensor clamp_max(const Scalar& max) const { return Tensor(_base.clamp_max(max.to_torch())); }
+    inline Tensor& clamp_max_(const Scalar& max) { _base.clamp_max_(max.to_torch()); return *this; }
 
     inline Tensor mm(const Tensor& other) const { return Tensor(_base.mm(other._base)); }
 

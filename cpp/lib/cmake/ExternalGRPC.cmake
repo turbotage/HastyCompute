@@ -65,6 +65,8 @@ ExternalProject_Add(grpc_external
         -DgRPC_INSTALL=ON
         -Dprotobuf_INSTALL=ON
         -Dutf8_range_ENABLE_INSTALL=ON
+        "-DCMAKE_JOB_POOLS=link=2"
+        -DCMAKE_JOB_POOL_LINK=link
 
     BUILD_COMMAND ${CMAKE_COMMAND} --build "${_grpc_build}" --parallel ${_CPU_THREADS}
 

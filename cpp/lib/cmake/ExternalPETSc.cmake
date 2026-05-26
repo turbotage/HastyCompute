@@ -68,7 +68,7 @@ ExternalProject_Add(petsc_external
             "PATH=${_psc_cuda_root}/bin:$ENV{PATH}"
             "PETSC_DIR=${PETSC_SRC_DIR}"
             "PETSC_ARCH=${_PETSC_ARCH}"
-        make -j${_CPU_THREADS} all
+        make -j4 all
 
     INSTALL_COMMAND
         ${CMAKE_COMMAND} -E env
@@ -112,7 +112,7 @@ ExternalProject_Add(slepc_external
             "PATH=${_psc_cuda_root}/bin:$ENV{PATH}"
             "SLEPC_DIR=${SLEPC_SRC_DIR}"
             "PETSC_DIR=${PETSC_INSTALL_DIR}"
-        make -j${_CPU_THREADS}
+        make -j4
 
     INSTALL_COMMAND
         ${CMAKE_COMMAND} -E env

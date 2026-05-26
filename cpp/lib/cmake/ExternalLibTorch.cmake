@@ -63,13 +63,37 @@ else()
 endif()
 
 # PyTorch's core C++ internals conditionally include python_headers.h even with
-# BUILD_PYTHON=OFF.  Find Python3 dev headers and forward them so the build
-# doesn't fail with 'Python.h file not found'.
-find_package(Python3 COMPONENTS Interpreter Development QUIET)
-if(NOT Python3_FOUND)
-    message(FATAL_ERROR "Python3 with Development component required to build LibTorch "
-        "(needed for Python.h even when BUILD_PYTHON=OFF)")
+# BUILD_PYTHON=OFF.  Derive include/lib from the already-found Python3_EXECUTABLE
+# via sysconfig so this works with a venv (venvs lack dev headers; sysconfig
+# always reports the base installation paths).
+if(NOT Python3_EXECUTABLE)
+    message(FATAL_ERROR "Python3_EXECUTABLE not set — include cmake/venv.cmake before ExternalLibTorch.cmake")
 endif()
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_path('include'))"
+    OUTPUT_VARIABLE Python3_INCLUDE_DIRS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')"
+    OUTPUT_VARIABLE _py_libdir
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+        "import sysconfig; print(sysconfig.get_config_var('LDLIBRARY') or '')"
+    OUTPUT_VARIABLE _py_ldlib
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(Python3_LIBRARIES "${_py_libdir}/${_py_ldlib}")
+if(NOT EXISTS "${Python3_INCLUDE_DIRS}/Python.h")
+    message(FATAL_ERROR "Python.h not found at ${Python3_INCLUDE_DIRS} — "
+        "Python3 development headers required to build LibTorch")
+endif()
+message(STATUS "LibTorch Python headers: ${Python3_INCLUDE_DIRS}")
+message(STATUS "LibTorch Python library: ${Python3_LIBRARIES}")
 
 ExternalProject_Add(libtorch_external
     DEPENDS grpc_external   # uses grpc_external's installed protobuf
@@ -151,6 +175,15 @@ ExternalProject_Add(libtorch_external
         -DBUILD_CAFFE2=ON
         -DUSE_OPENMP=ON
         -DUSE_CUDA=ON
+
+    CMAKE_CACHE_ARGS
+        # Semicolons in pool list require CMAKE_CACHE_ARGS (written as cmake set() in
+        # an init file) rather than CMAKE_ARGS (shell args where ; splits the value).
+        # link=2: max 2 concurrent linkers (libtorch_cuda.so link alone uses ~30 GB).
+        # compile=4: max 4 concurrent nvcc compilations (~8-16 GB each = ~64 GB peak).
+        "-DCMAKE_JOB_POOLS:STRING=link=2;compile=8"
+        "-DCMAKE_JOB_POOL_LINK:STRING=link"
+        "-DCMAKE_JOB_POOL_COMPILE:STRING=compile"
 
     BUILD_COMMAND
         ${CMAKE_COMMAND} --build "${LIBTORCH_BUILD_DIR}" --parallel ${_CPU_THREADS}
