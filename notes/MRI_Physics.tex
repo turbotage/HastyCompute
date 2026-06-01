@@ -160,6 +160,77 @@ Thus we arrive at the following alternating optimization scheme:
 
 
 
+\subsubsection{SVD-optimal initialisation of $\Theta$}
+
+The alternating scheme above requires an initialisation for $\Theta_{jp}$.
+We derive the choice of $\Theta_{jp}$ that is optimal for minimising the
+summed normal-operator error $\sum_{i,j}|N_{ij} - \hat{N}_{ij}|^2$, where
+\begin{equation}
+    N_{ij} = \sum_k g^*_{ik} g_{jk}, \qquad
+    \hat{N}_{ij} = \sum_p \mu_p \Theta^*_{ip} \Theta_{jp},
+    \qquad \mu_p = \sum_k \Lambda_{kp}.
+\end{equation}
+Note the conjugate sits on the $i$-index in both $N_{ij}$ and $\hat{N}_{ij}$,
+consistent with the approximation $g_{jk} \approx \sum_p \Theta_{jp}$ (forward model
+uses $\Theta_{jp}$ plain, not conjugated).
+
+Taking the element-wise conjugate of both sides (which does not change $\sum_{i,j}|\cdot|^2$):
+\begin{equation}
+    \sum_{i,j}|N_{ij} - \hat{N}_{ij}|^2
+    = \sum_{i,j}\left|\sum_k g_{ik}g^*_{jk} - \sum_p \mu_p \Theta_{ip}\Theta^*_{jp}\right|^2.
+    \label{eq:svd_equiv_loss}
+\end{equation}
+The right-hand side is the Frobenius loss for approximating the matrix
+$\tilde{N}_{ij} := \sum_k g_{ik}g^*_{jk}$
+by the rank-$P$ Hermitian form $\sum_p \mu_p \Theta_{ip}\Theta^*_{jp}$.
+By the Eckart--Young theorem, the minimiser over orthonormal $\{\Theta_{jp}\}$ is
+the $P$ leading eigenvectors of $\tilde{N}_{ij}$.
+
+Now observe that $\tilde{N}_{ij} = \sum_k g_{ik}g^*_{jk}$ is exactly the normal operator
+of the \emph{conjugated} forward model $g^*_{jk}$.
+The forward approximation \eqref{eq:approx1} gives
+\begin{equation}
+    g_{jk} \approx \sum_l \Omega_{kl}\Upsilon_{jl}.
+\end{equation}
+Conjugating: $g^*_{jk} \approx \sum_l \Omega^*_{kl}\Upsilon^*_{jl}$.
+The normal operator of this conjugated model is
+\begin{equation}
+    \tilde{N}_{ij} = \sum_k g_{ik}g^*_{jk}
+    \approx \sum_l |\sigma_l|^2\, \Upsilon^*_{il}\Upsilon_{jl},
+\end{equation}
+where $\sigma_l$ are the singular values coming from the $\Omega_{kl}$ orthogonality.
+The eigenvectors of $\tilde{N}_{ij}$ are therefore $\Upsilon_{jp}$,
+the same spatial modes already appearing in the decomposition of $g_{jk}$.
+
+Thus the \textbf{optimal initialisation} is
+\begin{equation}
+    \Theta_{jp} = \Upsilon_{jp}, \qquad \mu_p = \sigma_p^2.
+    \label{eq:svd_init}
+\end{equation}
+Substituting into the closed-form optimal $\Lambda_{kp}$:
+\begin{equation}
+\begin{split}
+    \Lambda_{kp} &= \left|\sum_i g^*_{ik}\,\Theta_{ip}\right|^2
+    = \left|\sum_i g^*_{ik}\,\Upsilon_{ip}\right|^2 \\
+    &= \left|\sum_i \sum_l \Omega^*_{kl}\Upsilon^*_{il}\,\Upsilon_{ip}\right|^2
+    = \left|\Omega^*_{kp}\right|^2 = |\Omega_{kp}|^2,
+\end{split}
+\end{equation}
+where the last step uses the orthonormality $\sum_i\Upsilon^*_{il}\Upsilon_{ip}=\delta_{lp}$.
+Thus
+\begin{equation}
+    \Lambda_{kp} = |\Omega_{kp}|^2.
+    \label{eq:lambda_svd}
+\end{equation}
+The per-$k$ weight $\Lambda_{kp}$ is the squared magnitude of the $k$-space coefficient
+for mode $p$, which determines the Toeplitz kernel
+$h_p = \mathbf{F}_{\mathrm{adj}}(\Lambda_{\cdot p})$ for the fast normal-operator application.
+
+In practice $g_{jk}$ is not available in factored form; the optimal $\Theta_{jp}$
+is obtained via a randomised eigendecomposition of $\tilde{N}_{ij} = \sum_k g_{ik}g^*_{jk}$
+(or equivalently of $N_{ij}$, whose conjugate eigenvectors equal those of $\tilde{N}$),
+keeping the $P$ eigenvectors with largest eigenvalues.
+
 \subsubsection{Decomposition of $\Omega_{kl_1} \Omega^*_{kl_2}$}
 
 For each $k$ we have a $L\times L$ hermitian matrix, thus we can extract the $L(L+1)/2$ unique elements to form a $(L(L+1)/2) \times K$ matrix on which
