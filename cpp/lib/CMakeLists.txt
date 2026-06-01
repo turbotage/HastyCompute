@@ -107,6 +107,7 @@ target_sources(HastyCompute
         "src/linalg/linalg_svd.cppm"
         "src/mri/forward.cppm"
         "src/mri/mri_mod.cppm"
+        "src/mri/normal_toeplitz.cppm"
         "src/mri/normal.cppm"
         "src/mri/off_fourier_interpolators.cppm"
         "src/nvrtc/nvrtc_mod.cppm"

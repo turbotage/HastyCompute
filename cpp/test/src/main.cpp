@@ -9,6 +9,81 @@ import hasty_server_mod;
 import hasty_io_mod;
 import hasty_viz_mod;
 
+void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size)
+{
+    using namespace hasty;
+    using namespace hasty::fft;
+
+    Device cuda0(eDeviceType::CUDA, 0);
+
+    Tensor img = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    
+    i64 nz = img.size(0);
+    i64 ny = img.size(1);
+    i64 nx = img.size(2);
+
+    Tensor coords = rand({3, 10000}, TensorOptions(cuda0, eScalarType::Float));
+    coords.mul_(Scalar{2*3.141592f});
+    coords.add_(Scalar{-3.141592f});
+
+    i32 ntransf = 8;
+
+    i64 M = coords.size(1);
+    Tensor nufft_out = zeros({ntransf, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    img = img.unsqueeze(0).contiguous();
+    Tensor smap = ones({ntransf, nx, ny, nz}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    Tensor toep_out = zeros({1, nz, ny, nx}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+
+    {
+        NufftOptions<cuda_t, f32, UTN> nufft_opts1;
+        nufft_opts1.ntransf = ntransf;
+        NufftPlan<cuda_t, f32, 3, UTN> plan1({nx, ny, nz}, nufft_opts1);
+        plan1.setpts(coords);
+        NufftOptions<cuda_t, f32, NTU> nufft_opts2;
+        nufft_opts2.ntransf = ntransf;
+        NufftPlan<cuda_t, f32, 3, NTU> plan2({nx, ny, nz}, nufft_opts2);
+        plan2.setpts(coords);
+
+        hasty::cuda::synchronize(cuda0);
+        auto t0_nufft = std::chrono::steady_clock::now();
+        for (int i = 0; i < 100; ++i) {
+            auto intermediate = smap.mul(img);  // [16, nx, ny, nz]
+            plan1.execute(intermediate, nufft_out);
+            plan2.execute(nufft_out, intermediate);
+            intermediate.mul_(smap);
+            toep_out[0,Slice()] = intermediate.sum(0, /*keepdim=*/true);
+        }
+        hasty::cuda::synchronize(cuda0);
+        double t_nufft = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_nufft).count();
+        std::cout << "NUFFT time for 100 iterations: " << t_nufft << " seconds\n";
+    }
+
+    {
+
+        Tensor kernel = create_toeplitz_kernel_standard(coords, ones({M}, TensorOptions(cuda0, eScalarType::ComplexFloat)), {nz, ny, nx});
+        Tensor scratch = zeros({2*nz, 2*ny, 2*nx}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+        
+        
+        hasty::cuda::synchronize(cuda0);
+        auto t0_toep = std::chrono::steady_clock::now();
+        for (int i = 0; i < 100; ++i) {
+            toeplitz_multiplication(
+                img, toep_out, kernel,
+                scratch, smap, std::nullopt,
+                ToeplitzMultType::NONE,
+                ToeplitzMultType::MULT,      // input_mult1_type  (unused, mult1=null)
+                ToeplitzMultType::MULT_CONJ, // output_mult1_type (unused)
+                ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
+                ToeplitzMultType::NONE, // output_mult2_type (unused)
+                ToeplitzAccumulateType::ACCUMULATE
+            );
+        }
+        hasty::cuda::synchronize(cuda0);
+        double t_toep = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_toep).count();
+        std::cout << "Toeplitz multiplication time for 100 iterations: " << t_toep << " seconds\n";
+    }
+
+}
 
 void test_toeplitz_multiplication_3D(hasty::ArrayRef<hasty::i64> im_size, double rtol = 1e-5, double atol = 1e-3)
 {
@@ -485,8 +560,9 @@ int main() {
     //test_tensor_array_operator();
 
 
+    test_toeplitz_mult_vs_nufft_performance({256, 256, 256});
     //test_toeplitz_multiplication();
-    test_toeplitz_multiplication_2D_visual();
+    //test_toeplitz_multiplication_2D_visual();
     //hasty::viz::test_tensor_viz();
 
     return 0;

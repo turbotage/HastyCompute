@@ -133,8 +133,7 @@ public:
         fences.reserve(_queues.size());
         for (int i = 0; i < (int)_queues.size(); ++i)
             fences.push_back(_submit_to(i, {}, [](Device dev) {
-                cudaSetDevice((int)dev.index);
-                cudaDeviceSynchronize();
+                hasty::cuda::synchronize(dev);
             }));
         for (auto& f : fences) f.get();
     }

@@ -746,6 +746,10 @@ export namespace cuda {
         hat::cuda::CUDAStreamGuard m_guard;
     };
 
+    void synchronize(Device device) {
+        htorch::cuda::synchronize(device.torch_device_index());
+    }
+
 }
 
 

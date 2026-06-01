@@ -614,10 +614,18 @@ static bool run_test(const Problem& prob,
 
             auto t0n = std::chrono::steady_clock::now();
             auto emb_naive = make_normal_naive_off_fourier_toeplitz_embeddings(
-                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, 
-                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE, 
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr,
+                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
                 eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
             double t_nb = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
+            auto emb_diag = make_normal_diagonal_off_fourier_toeplitz_embeddings(
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr,
+                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
+                eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
+            double t_db = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
@@ -629,68 +637,86 @@ static bool run_test(const Problem& prob,
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
-            auto out_naive = apply_normal_off_fourier_operator(emb_naive, rho);
+            auto out_naive = apply_normal_toeplitz_off_fourier_operator(emb_naive, rho);
             double t_na = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
-            auto out_pr = apply_normal_off_fourier_operator(emb_pr, rho);
+            auto out_diag = apply_normal_toeplitz_off_fourier_operator(emb_diag, rho);
+            double t_da = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
+            auto out_pr = apply_normal_toeplitz_off_fourier_operator(emb_pr, rho);
             double t_pa = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
-            // Only compare at masked voxels (rho is zero outside).
-            auto out_n_flat = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
-            auto out_p_flat = out_pr.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            // Compare all variants against naive L² (reference) at masked voxels.
+            auto flat_ref  = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_diag = out_diag .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_pr   = out_pr   .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
 
-            auto abs_err_v = out_n_flat.sub(out_p_flat).abs().contiguous();
-            auto abs_ref_v = out_n_flat.abs().contiguous();
+            auto mean_rel_err = [&](const Tensor& approx) -> float {
+                auto err = flat_ref.sub(approx).abs().contiguous();
+                auto ref = flat_ref.abs().contiguous();
+                const i64 N_m = err.size(0);
+                const float* ep = static_cast<const float*>(err.spanning_view().data);
+                const float* rp = static_cast<const float*>(ref.spanning_view().data);
+                double sum = 0.0; int cnt = 0;
+                for (i64 i = 0; i < N_m; ++i) {
+                    float r = rp[i] > 1e-30f ? ep[i] / rp[i] : 0.0f;
+                    if (std::isfinite(r)) { sum += r; ++cnt; }
+                }
+                return cnt ? (float)(sum / cnt) : 0.0f;
+            };
 
-            // Collect finite per-voxel relative errors in C++.
-            const i64 N_m = abs_err_v.size(0);
-            const float* err_ptr = static_cast<const float*>(abs_err_v.spanning_view().data);
-            const float* ref_ptr = static_cast<const float*>(abs_ref_v.spanning_view().data);
-            std::vector<float> re_vals;
-            re_vals.reserve(N_m);
-            double sum_re = 0.0, sum_cc = 0.0;
-            int n_nan = 0;
-            for (i64 i = 0; i < N_m; ++i) {
-                float r = ref_ptr[i] > 1e-30f ? err_ptr[i] / ref_ptr[i] : 0.0f;
-                if (!std::isfinite(r)) { ++n_nan; continue; }
-                re_vals.push_back(r);
-                sum_re += r;
-            }
-            if (n_nan > 0)
-                std::cout << "\n  WARNING: " << n_nan << " non-finite values in normal op output\n";
+            float mre_diag = mean_rel_err(flat_diag);
+            float mre_pr   = mean_rel_err(flat_pr);
 
-            float mean_re = re_vals.empty() ? 0.0f : (float)(sum_re / re_vals.size());
-            std::sort(re_vals.begin(), re_vals.end());
+            std::cout << "\n  Normal op [L=" << L << "]  (ref=naïve L²)\n"
+                      << "    diagonal (O(L)):          mean_rel_err=" << std::scientific
+                      << std::setprecision(3) << mre_diag << "\n"
+                      << "    omega-driven P×R (P=" << p_use << " R=" << r_use << "):"
+                      << "  mean_rel_err=" << mre_pr << "\n"
+                      << "  timing build:  naive=" << std::setprecision(2) << t_nb
+                      << "s  diag=" << t_db << "s  pr=" << t_pb << "s\n"
+                      << "  timing apply:  naive=" << t_na
+                      << "s  diag=" << t_da << "s  pr=" << t_pa << "s\n";
 
-            // Random subset (up to 2000 evenly spaced) for plotting.
-            const i64 n_plot = std::min((i64)2000, (i64)re_vals.size());
-            std::vector<float> plot_vals(n_plot);
-            for (i64 i = 0; i < n_plot; ++i)
-                plot_vals[i] = re_vals[(i64)re_vals.size() * i / n_plot];
+            // Sorted rel-err plots — diagonal and P×R vs naive reference.
+            auto sorted_rel_err_plot = [&](const Tensor& approx, const std::string& name) {
+                auto err = flat_ref.sub(approx).abs().contiguous();
+                auto ref = flat_ref.abs().contiguous();
+                const i64 N_m = err.size(0);
+                const float* ep = static_cast<const float*>(err.spanning_view().data);
+                const float* rp = static_cast<const float*>(ref.spanning_view().data);
+                std::vector<float> rv;  rv.reserve(N_m);
+                for (i64 i = 0; i < N_m; ++i) {
+                    float r = rp[i] > 1e-30f ? ep[i] / rp[i] : 0.0f;
+                    if (std::isfinite(r)) rv.push_back(r);
+                }
+                std::sort(rv.begin(), rv.end());
+                const i64 np = std::min((i64)2000, (i64)rv.size());
+                std::vector<float> pv(np);
+                for (i64 i = 0; i < np; ++i) pv[i] = rv[(i64)rv.size() * i / np];
+                auto pt = Tensor::from_blob(pv.data(), {np}, eScalarType::Float,
+                              Device{eDeviceType::CPU}).clone();
+                hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
+                    .lines    = { pt.spanning_view() },
+                    .title    = "Normal op rel err (sorted) — " + name + " L=" + std::to_string(L),
+                    .xaxis    = "voxel percentile",
+                    .yaxis    = "|out_ref - out_approx| / |out_ref|",
+                    .legends  = {name},
+                    .markers  = true,
+                    .lines_on = false,
+                }).show();
+            };
 
-            std::cout << "\n  Normal op [L=" << L << " P=" << p_use << " R=" << r_use << "]:"
-                      << "  mean_rel_err=" << std::scientific << std::setprecision(3) << mean_re
-                      << "\n  timing: naive_build=" << std::setprecision(2) << t_nb
-                      << "s  pr_build=" << t_pb
-                      << "s  naive_apply=" << t_na
-                      << "s  pr_apply=" << t_pa << "s\n";
-
-            auto plot_t = Tensor::from_blob(plot_vals.data(), {n_plot},
-                              eScalarType::Float, Device{eDeviceType::CPU}).clone();
-            hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
-                .lines   = { plot_t.spanning_view() },
-                .title   = "Normal op rel err (sorted) — " + label + " L=" + std::to_string(L),
-                .xaxis   = "voxel percentile",
-                .yaxis   = "|out_naive - out_pr| / |out_naive|",
-                .legends = {"rel err"},
-                .markers = true,
-                .lines_on = false,
-            }).show();
+            sorted_rel_err_plot(flat_diag, "diagonal O(L)");
+            sorted_rel_err_plot(flat_pr,   "omega-driven P×R");
 
             hasty::viz::orthoslicer(out_naive.abs(), {"normal_naive L²=" + std::to_string(L), std::nullopt}, true, false);
+            hasty::viz::orthoslicer(out_diag.abs(),  {"normal_diag O(L)=" + std::to_string(L), std::nullopt}, true, false);
             hasty::viz::orthoslicer(out_pr.abs(),    {"normal_PR P=" + std::to_string(p_use) + " R=" + std::to_string(r_use), std::nullopt}, true, false);
         }
 
