@@ -511,4 +511,205 @@ With $R=1$ this is $P$ multiplications, and if $P \ll L^2$ we achieve a large sp
 \end{equation}
 
 
+
+\section{Non-Hermitian Decomposition and Multi-Coil Normal Operator}
+
+\subsection{Non-Hermitian Approximation}
+
+The hermitian decomposition of the normal-operator phase factor
+\begin{equation}
+    e^{\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)} \approx \sum_{p=0}^P \Lambda_{kp}\,\Theta_{jp}\Theta^*_{ip}
+\end{equation}
+constrains the same spatial basis $\Theta$ to appear on both the $j$- and $i$-index, and forces $\Lambda_{kp} \geq 0$.
+We generalise by allowing independent spatial functions for each index:
+\begin{equation}
+    e^{\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)}
+    \approx \sum_{p=0}^P \Lambda_{kp}\,A_{jp}\,B^*_{ip},
+    \label{eq:nonherm_decomp}
+\end{equation}
+where $A_{jp}$, $B_{ip} \in \mathbb{C}$ are independent spatial basis functions and $\Lambda_{kp} \in \mathbb{C}$.
+The hermitian case is recovered by setting $A = B = \Theta$ and restricting $\Lambda_{kp} \in \mathbb{R}_{\geq 0}$.
+The more general form \eqref{eq:nonherm_decomp} strictly enlarges the approximation class and can achieve smaller error for the same number of terms $P$.
+
+\subsection{Full Normal Operator with Coil Maps and Coil Covariance}
+
+We consider $C$ receive coils with sensitivity maps $s_c(\mathbf{r})$ and noise covariance matrix $\Psi \in \mathbb{C}^{C \times C}$ (positive definite Hermitian).
+The per-coil forward operator element is
+\begin{equation}
+    (A_c)_{kj} = s_{cj}\,e^{\Phi(\mathbf{r}_j, t_k)}\,e^{-i\mathbf{k}(t_k)\cdot\mathbf{r}_j},
+\end{equation}
+and the maximum-likelihood (whitened) normal operator is
+\begin{equation}
+    N_{ij}
+    = \sum_{c,c'} (\Psi^{-1})_{cc'} \sum_k (A_c^H)_{ik}(A_{c'})_{kj}
+    = \sum_{c,c'} (\Psi^{-1})_{cc'}\,s^*_{ci}\,s_{c'j}
+      \sum_k e^{\Phi^*(\mathbf{r}_i,t_k)+\Phi(\mathbf{r}_j,t_k)}
+             e^{-i\mathbf{k}(t_k)\cdot(\mathbf{r}_j - \mathbf{r}_i)}.
+\end{equation}
+Define the coil correlation factor
+\begin{equation}
+    \Xi_{ij}
+    = \mathbf{s}_i^H\,\Psi^{-1}\,\mathbf{s}_j
+    = \sum_{c,c'} (\Psi^{-1})_{cc'}\,s^*_{ci}\,s_{c'j},
+    \quad [\mathbf{s}_j]_c = s_{cj}.
+\end{equation}
+Inserting the non-hermitian approximation \eqref{eq:nonherm_decomp} and defining the Toeplitz kernels
+\begin{equation}
+    h_p(\mathbf{r}) = \sum_k \Lambda_{kp}\,e^{-i\mathbf{k}(t_k)\cdot\mathbf{r}}
+    = \bigl[\mathbf{F}_{\mathrm{adj}}(\Lambda_{\cdot p})\bigr](\mathbf{r}),
+    \label{eq:nonherm_kernel}
+\end{equation}
+the full normal operator element becomes
+\begin{equation}
+    N_{ij}
+    \approx
+    \bigl(\mathbf{s}_i^H\,\Psi^{-1}\,\mathbf{s}_j\bigr)
+    \sum_p A_{jp}\,B^*_{ip}\;h_p(\mathbf{r}_j - \mathbf{r}_i).
+    \label{eq:nonherm_N}
+\end{equation}
+The Toeplitz convolution structure is preserved because $h_p$ depends only on the difference $\mathbf{r}_j - \mathbf{r}_i$.
+Note that the kernels $h_p$ are complex-valued when $\Lambda_{kp} \in \mathbb{C}$.
+
+\subsection{Operator Application and Whitened Coil Maps}
+
+The action of \eqref{eq:nonherm_N} on a vector $\boldsymbol{\rho}$ is
+\begin{equation}
+    (N\boldsymbol{\rho})_i
+    \approx
+    \sum_p B^*_{ip}
+    \sum_{c,c'} (\Psi^{-1})_{cc'}\,s^*_{ci}
+    \Bigl[h_p \star \bigl(s_{c'} \odot A_p \odot \boldsymbol{\rho}\bigr)\Bigr]_i.
+    \label{eq:nonherm_apply}
+\end{equation}
+To expose the structure more cleanly, factor $\Psi^{-1} = L^H L$ (e.g.\ via Cholesky) and define the
+\emph{whitened coil maps}
+\begin{equation}
+    \tilde{s}_{qj} = \bigl[L\,\mathbf{s}_j\bigr]_q, \qquad q = 1,\dots,C.
+\end{equation}
+Then $\Xi_{ij} = \sum_q \tilde{s}^*_{qi}\,\tilde{s}_{qj}$ and \eqref{eq:nonherm_apply} becomes
+\begin{equation}
+    \boxed{
+    (N\boldsymbol{\rho})_i
+    \approx
+    \sum_p B^*_{ip}
+    \sum_q \tilde{s}^*_{qi}
+    \Bigl[h_p \star \bigl(\tilde{s}_q \odot A_p \odot \boldsymbol{\rho}\bigr)\Bigr]_i.
+    }
+    \label{eq:nonherm_apply_whitened}
+\end{equation}
+The coil covariance enters only through the whitened maps $\tilde{s}_q$.
+The per-iteration cost is $P \times C$ Toeplitz multiplications, identical in structure to the hermitian
+case but with the flexibility of using different input ($A_p$) and output ($B_p$) spatial modes.
+If $\Psi^{-1}$ is well-approximated by a rank-$Q$ matrix ($Q < C$), the inner sum
+truncates to $Q$ virtual coils.
+
+\subsubsection*{Per-mode algorithm}
+
+For each mode $p = 1,\dots,P$:
+\begin{enumerate}[label=\arabic*.]
+    \item For each whitened coil $q$: form $v^{(q)}_j = \tilde{s}_{qj}\,A_{jp}\,\rho_j$.
+    \item For each $q$: Toeplitz-convolve $u^{(q)}_i = \bigl[h_p \star v^{(q)}\bigr]_i$.
+    \item Accumulate: $(N\boldsymbol{\rho})_i \mathrel{+}= B^*_{ip}\sum_q \tilde{s}^*_{qi}\,u^{(q)}_i$.
+\end{enumerate}
+
+\subsection{Optimal Decomposition: Alternating Optimization}
+
+We seek $A \in \mathbb{C}^{N \times P}$, $B \in \mathbb{C}^{N \times P}$, $\Lambda \in \mathbb{C}^{K \times P}$ minimising
+\begin{equation}
+    \mathcal{L}
+    = \sum_{i,j,k}
+      \Bigl|g_{jk}g^*_{ik} - \sum_{p=0}^P \Lambda_{kp}A_{jp}B^*_{ip}\Bigr|^2,
+    \label{eq:nonherm_loss}
+\end{equation}
+where $g_{jk} = e^{\Phi(\mathbf{r}_j,t_k)}$.
+We impose orthonormality $A^H A = I_P$ and $B^H B = I_P$ throughout.
+
+\subsubsection*{Update for $\Lambda$ (fixed $A$, $B$)}
+
+Define the projected temporal coefficients
+\begin{equation}
+    f_{kp} = \sum_j g_{jk}\,\overline{A_{jp}},
+    \qquad
+    b_{kp} = \sum_i g^*_{ik}\,B_{ip}.
+    \label{eq:fb_def}
+\end{equation}
+In matrix notation, $\mathbf{F} = G^T\overline{A} \in \mathbb{C}^{K \times P}$ and
+$\mathbf{B}_{\mathrm{proj}} = \overline{G}^T B \in \mathbb{C}^{K \times P}$,
+where $G_{jk} = g_{jk}$.
+
+Setting $\partial\mathcal{L}/\partial\Lambda^*_{kp} = 0$ under orthonormality $B^H B = I$ gives the
+closed-form update
+\begin{equation}
+    \Lambda_{kp} = f_{kp}\,b_{kp},
+    \qquad\text{i.e.,}\qquad
+    \boldsymbol{\Lambda} = \mathbf{F} \odot \mathbf{B}_{\mathrm{proj}}.
+    \label{eq:lambda_update}
+\end{equation}
+Compare with the hermitian case $\Lambda_{kp} = |\sum_j g_{jk}\Theta^*_{jp}|^2$: the
+non-hermitian weights are the product of two independent projections, so $\Lambda_{kp} \in \mathbb{C}$ in general.
+
+\subsubsection*{Update for $A$ (fixed $B$, $\Lambda$)}
+
+Setting $\partial\mathcal{L}/\partial\overline{A_{jp}} = 0$ under $B^H B = I$ gives
+\begin{equation}
+    A_{jp} \leftarrow \sum_k g_{jk}\,\overline{\Lambda_{kp}}\,b_{kp},
+    \qquad\text{i.e.,}\qquad
+    A_{\cdot p} \leftarrow G\bigl(\overline{\Lambda_{\cdot p}} \odot (\mathbf{B}_{\mathrm{proj}})_{\cdot p}\bigr),
+    \label{eq:A_update}
+\end{equation}
+followed by orthogonalisation of $A$.
+
+\subsubsection*{Update for $B$ (fixed $A$, $\Lambda$)}
+
+Setting $\partial\mathcal{L}/\partial B_{ip} = 0$ under $A^H A = I$ gives
+\begin{equation}
+    B_{ip} \leftarrow \sum_k g_{ik}\,\Lambda_{kp}\,\overline{f_{kp}},
+    \qquad\text{i.e.,}\qquad
+    B_{\cdot p} \leftarrow G\bigl(\Lambda_{\cdot p} \odot \overline{(\mathbf{F}_{\cdot p})}\bigr),
+    \label{eq:B_update}
+\end{equation}
+followed by orthogonalisation of $B$.
+Note $\overline{f_{kp}} = [\overline{G}^T A]_{kp}$, so $B_{\cdot p} = G(\Lambda_{\cdot p} \odot (\overline{G}^T A)_{\cdot p})$.
+
+\subsubsection*{Algorithm}
+
+\begin{enumerate}[label=\arabic*.]
+    \item Compute the SVD $G = U\Sigma V^H$ and initialise
+          $A = B = U_P$ (top-$P$ left singular vectors). Orthogonality holds by construction.
+    \item Compute $\mathbf{F} = G^T\overline{A}$ and $\mathbf{B}_{\mathrm{proj}} = \overline{G}^T B$.
+    \item Update $\boldsymbol{\Lambda} = \mathbf{F} \odot \mathbf{B}_{\mathrm{proj}}$.
+    \item Update $A_{\cdot p} \leftarrow G(\overline{\Lambda_{\cdot p}} \odot (\mathbf{B}_{\mathrm{proj}})_{\cdot p})$ for each $p$; orthogonalise $A$.
+    \item Update $B_{\cdot p} \leftarrow G(\Lambda_{\cdot p} \odot (\overline{G}^T A)_{\cdot p})$ for each $p$; orthogonalise $B$.
+    \item Repeat steps 2--5 until $\mathcal{L}$ converges.
+\end{enumerate}
+
+\subsubsection*{SVD initialisation recovers the hermitian solution}
+
+With $A = B = U_P$ at initialisation, the projections \eqref{eq:fb_def} evaluate to
+$f_{kp} = \sigma_p V_{kp}$ and $b_{kp} = \sigma_p V^*_{kp}$,
+so the initial $\Lambda$ \eqref{eq:lambda_update} is
+\begin{equation}
+    \Lambda_{kp} = \sigma_p^2 |V_{kp}|^2 = |\Omega_{kp}|^2,
+\end{equation}
+which is exactly the hermitian initialisation \eqref{eq:lambda_svd}.
+The non-hermitian ALS thus starts from the hermitian solution and moves to a lower-loss
+non-hermitian solution as $A$ and $B$ decouple.
+
+\subsection{Comparison Summary}
+
+\begin{center}
+\begin{tabular}{lll}
+    \hline
+    & Hermitian & Non-Hermitian \\
+    \hline
+    Decomposition        & $\sum_p\Lambda_{kp}\Theta_{jp}\Theta^*_{ip}$ & $\sum_p\Lambda_{kp}A_{jp}B^*_{ip}$ \\
+    $\Lambda_{kp}$       & real, $\geq 0$                               & complex \\
+    Input spatial weight & $\Theta_p \odot \tilde{s}_q$                 & $A_p \odot \tilde{s}_q$ \\
+    Output spatial weight& $\Theta^*_p \odot \tilde{s}^*_q$             & $B^*_p \odot \tilde{s}^*_q$ \\
+    Toeplitz kernel      & $\mathbf{F}_\mathrm{adj}(\Lambda_{\cdot p})$, real $\Lambda$ & same, complex $\Lambda$ \\
+    Cost per iteration   & $P \times C$ Toeplitz                        & $P \times C$ Toeplitz \\
+    \hline
+\end{tabular}
+\end{center}
+
 \end{document}
