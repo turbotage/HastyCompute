@@ -460,7 +460,7 @@ static bool run_test(const Problem& prob,
                      hasty::i64 n_rate, hasty::i64 n_nl,
                      const std::string& label,
                      hasty::mri::eBinWeighting weighting = hasty::mri::eBinWeighting::L1Mass,
-                     hasty::i64 P = 4, hasty::i64 R = 1,
+                     hasty::i64 P = 4,
                      bool show_fft_error_plots        = false,
                      bool show_phi_error_plots        = false,
                      bool show_phi_error_vs_B0_plots  = false,
@@ -601,7 +601,6 @@ static bool run_test(const Problem& prob,
 
             PhiLowrankResult plr{Omega, S_phi, Upsilon};
             const i64 p_use = std::min(P, L*L);
-            const i64 r_use = std::min(R, L);
 
             auto rho_r = rand({nx, ny, nz}, opts_f);
             auto rho_i = rand({nx, ny, nz}, opts_f);
@@ -621,19 +620,12 @@ static bool run_test(const Problem& prob,
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
-            auto emb_diag = make_normal_diagonal_off_fourier_toeplitz_embeddings(
-                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr,
+            auto emb_nh = make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, p_use,
+                /*n_als_iter=*/10,
                 eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
                 eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
-            double t_db = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0n).count();
-
-            t0n = std::chrono::steady_clock::now();
-            auto emb_pr = make_normal_omega_driven_off_fourier_toeplitz_embeddings(
-                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, p_use, r_use,
-                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
-                eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
-            double t_pb = std::chrono::duration<double>(
+            double t_nhb = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
@@ -642,19 +634,13 @@ static bool run_test(const Problem& prob,
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
-            auto out_diag = apply_normal_toeplitz_off_fourier_operator(emb_diag, rho);
-            double t_da = std::chrono::duration<double>(
+            auto out_nh = apply_normal_toeplitz_off_fourier_operator(emb_nh, rho);
+            double t_nha = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
-            t0n = std::chrono::steady_clock::now();
-            auto out_pr = apply_normal_toeplitz_off_fourier_operator(emb_pr, rho);
-            double t_pa = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0n).count();
-
-            // Compare all variants against naive L² (reference) at masked voxels.
-            auto flat_ref  = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
-            auto flat_diag = out_diag .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
-            auto flat_pr   = out_pr   .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            // Compare non-hermitian (P splits) against naive L² at masked voxels.
+            auto flat_ref = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_nh  = out_nh   .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
 
             auto mean_rel_err = [&](const Tensor& approx) -> float {
                 auto err = flat_ref.sub(approx).abs().contiguous();
@@ -670,22 +656,19 @@ static bool run_test(const Problem& prob,
                 return cnt ? (float)(sum / cnt) : 0.0f;
             };
 
-            float mre_diag = mean_rel_err(flat_diag);
-            float mre_pr   = mean_rel_err(flat_pr);
+            float mre_nh = mean_rel_err(flat_nh);
 
             std::cout << "\n  Normal op [L=" << L << "]  (ref=naïve L²)\n"
-                      << "    diagonal (O(L)):          mean_rel_err=" << std::scientific
-                      << std::setprecision(3) << mre_diag << "\n"
-                      << "    omega-driven P×R (P=" << p_use << " R=" << r_use << "):"
-                      << "  mean_rel_err=" << mre_pr << "\n"
+                      << "    non-hermitian CP-ALS (P=" << p_use << "):"
+                      << "  mean_rel_err=" << std::scientific << std::setprecision(3) << mre_nh << "\n"
                       << "  timing build:  naive=" << std::setprecision(2) << t_nb
-                      << "s  diag=" << t_db << "s  pr=" << t_pb << "s\n"
+                      << "s  nh=" << t_nhb << "s\n"
                       << "  timing apply:  naive=" << t_na
-                      << "s  diag=" << t_da << "s  pr=" << t_pa << "s\n";
+                      << "s  nh=" << t_nha << "s\n";
 
-            // Sorted rel-err plots — diagonal and P×R vs naive reference.
-            auto sorted_rel_err_plot = [&](const Tensor& approx, const std::string& name) {
-                auto err = flat_ref.sub(approx).abs().contiguous();
+            // Sorted rel-err plot: non-hermitian vs naive L² reference.
+            {
+                auto err = flat_ref.sub(flat_nh).abs().contiguous();
                 auto ref = flat_ref.abs().contiguous();
                 const i64 N_m = err.size(0);
                 const float* ep = static_cast<const float*>(err.spanning_view().data);
@@ -703,26 +686,27 @@ static bool run_test(const Problem& prob,
                               Device{eDeviceType::CPU}).clone();
                 hasty::viz::default_line_plots(hasty::viz::DefaultLinePlotsOptions<float>{
                     .lines    = { pt.spanning_view() },
-                    .title    = "Normal op rel err (sorted) — " + name + " L=" + std::to_string(L),
+                    .title    = "Normal op rel err (sorted) — NH P=" + std::to_string(p_use) +
+                                 " L=" + std::to_string(L),
                     .xaxis    = "voxel percentile",
-                    .yaxis    = "|out_ref - out_approx| / |out_ref|",
-                    .legends  = {name},
+                    .yaxis    = "|out_ref - out_nh| / |out_ref|",
+                    .legends  = {"non-hermitian CP-ALS"},
                     .markers  = true,
                     .lines_on = false,
                 }).show();
-            };
-
-            sorted_rel_err_plot(flat_diag, "diagonal O(L)");
-            sorted_rel_err_plot(flat_pr,   "omega-driven P×R");
+            }
 
             hasty::viz::orthoslicer(out_naive.abs(), {"normal_naive L²=" + std::to_string(L), std::nullopt}, true, false);
-            hasty::viz::orthoslicer(out_diag.abs(),  {"normal_diag O(L)=" + std::to_string(L), std::nullopt}, true, false);
-            hasty::viz::orthoslicer(out_pr.abs(),    {"normal_PR P=" + std::to_string(p_use) + " R=" + std::to_string(r_use), std::nullopt}, true, false);
+            hasty::viz::orthoslicer(out_nh.abs(),    {"normal_NH P=" + std::to_string(p_use) + " L=" + std::to_string(L), std::nullopt}, true, false);
         }
+
+        // phi_lowrank returns raw U (no S); absorb S into Omega for forward signal:
+        // S[k] = sum_l (U[k,l]*S[l]) * NUFFT(Vh^T[:,l]*rho)[k]
+        auto Omega_full = Omega.mul(S_phi.unsqueeze(0));  // [K, L]
 
         auto t0_approx = std::chrono::steady_clock::now();
         auto S_approx_full = approx_signal_nufft(
-            prob, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx);
+            prob, Omega_full, Upsilon, hist.voxel_to_bin, hist.mask_idx);
         double approx_s = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - t0_approx).count();
         auto S_approx = S_approx_full.index_select(1, sub_idx);
@@ -738,7 +722,7 @@ static bool run_test(const Problem& prob,
 
         auto t0_dft = std::chrono::steady_clock::now();
         auto S_dft  = approx_signal_dft(
-            dft_cfg_full, Omega, Upsilon, hist.voxel_to_bin, hist.mask_idx,
+            dft_cfg_full, Omega_full, Upsilon, hist.voxel_to_bin, hist.mask_idx,
             rho_m_dft, prob.N, sub_idx, xi_sub);
         double dft_s = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - t0_dft).count();
@@ -863,7 +847,7 @@ static bool run_test(const Problem& prob,
 
                 auto bins_n    = hist.voxel_to_bin.index_select(0, vox_idx);
                 auto ups_n     = Upsilon.index_select(0, bins_n);
-                auto omega_k   = Omega.index_select(0, t_idx);
+                auto omega_k   = Omega_full.index_select(0, t_idx);
                 auto phi_approx = mm(ups_n, omega_k.transpose(0, 1));
 
                 if (show_phi_error_vs_B0_plots) {
@@ -1168,17 +1152,17 @@ int non_fourier_interp_test()
             pixdim_mm[0], pixdim_mm[1], pixdim_mm[2],
             500, 800,
             cuda0,
-            1.0f,
-            3e-3f,
+            0.5f,
+            1e-3f,
             0.00f);
 
         failures += !run_test(prob_real,
             300,
             {8},
-            16000, 1,
+            14000, 1,
             "real_data full_res",
             hasty::mri::eBinWeighting::L1Mass,
-            /*P=*/30, /*R=*/6,
+            /*P=*/12,
             show_fft_error_plots,
             show_phi_error_plots,
             show_phi_error_vs_B0_plots,

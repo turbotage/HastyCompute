@@ -16,49 +16,58 @@ __device__ inline cuFloatComplex complex_mult_toeplitz_load(cuFloatComplex a, cu
 }
 
 extern "C" __global__ void toeplitz_load_1D(
-    const cuFloatComplex* input,
     cuFloatComplex*       output,
     cuFloatComplex*       scratch,
     const cuFloatComplex* mult1,
     const cuFloatComplex* mult2,
-    int input_output_mult_type,
-    int input_mult1_type,
-    int output_mult1_type,
-    int input_mult2_type,
-    int output_mult2_type,
+    const cuFloatComplex* mult3,
+    const cuFloatComplex* batch_mult,
+    int input_mult1_type,  int output_mult1_type,
+    int input_mult2_type,  int output_mult2_type,
+    int input_mult3_type,  int output_mult3_type,
+    int input_bm_type,     int output_bm_type,
     int batch_in,
     int batch_out,
     int NX,
-    bool accumulate)
+    bool accumulate,
+    bool output_single_batch)
 {
     const long int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < NX) {
         cuFloatComplex temp;
+
         if (batch_out >= 0) {
-            const long int batch_idx = batch_out * NX + idx;
+            const long int out_batch_idx = (output_single_batch ? 0L : (long int)batch_out) * NX + idx;
+            const long int bm_batch_idx  = (long int)batch_out * NX + idx;
             temp = scratch[idx];
-            if (mult1 != nullptr)
+            if (mult1 && output_mult1_type != 0)
                 temp = complex_mult_toeplitz_load(temp, mult1[idx], output_mult1_type);
-            if (mult2 != nullptr)
+            if (mult2 && output_mult2_type != 0)
                 temp = complex_mult_toeplitz_load(temp, mult2[idx], output_mult2_type);
-            if (input_output_mult_type != 0)
-                temp = complex_mult_toeplitz_load(temp, input[batch_idx], input_output_mult_type);
+            if (mult3 && output_mult3_type != 0)
+                temp = complex_mult_toeplitz_load(temp, mult3[idx], output_mult3_type);
+            if (batch_mult && output_bm_type != 0)
+                temp = complex_mult_toeplitz_load(temp, batch_mult[bm_batch_idx], output_bm_type);
             if (accumulate) {
-                cuFloatComplex prev = output[batch_idx];
-                temp.x += prev.x;
-                temp.y += prev.y;
+                output[out_batch_idx].x += temp.x;
+                output[out_batch_idx].y += temp.y;
+            } else {
+                output[out_batch_idx] = temp;
             }
-            output[batch_idx] = temp;
         }
 
         if (batch_in >= 0) {
-            const long int batch_idx = batch_in * NX + idx;
-            temp = input[batch_idx];
-            if (mult1 != nullptr)
+            const long int bm_batch_idx = (long int)batch_in * NX + idx;
+            temp.x = 1.0f; temp.y = 0.0f;
+            if (mult1 && input_mult1_type != 0)
                 temp = complex_mult_toeplitz_load(temp, mult1[idx], input_mult1_type);
-            if (mult2 != nullptr)
+            if (mult2 && input_mult2_type != 0)
                 temp = complex_mult_toeplitz_load(temp, mult2[idx], input_mult2_type);
-            scratch[idx] = temp;   // embed into centered location in 2*NX grid
+            if (mult3 && input_mult3_type != 0)
+                temp = complex_mult_toeplitz_load(temp, mult3[idx], input_mult3_type);
+            if (batch_mult && input_bm_type != 0)
+                temp = complex_mult_toeplitz_load(temp, batch_mult[bm_batch_idx], input_bm_type);
+            scratch[idx] = temp;
         }
     }
 }

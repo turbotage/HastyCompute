@@ -524,11 +524,12 @@ constrains the same spatial basis $\Theta$ to appear on both the $j$- and $i$-in
 We generalise by allowing independent spatial functions for each index:
 \begin{equation}
     e^{\Phi(\mathbf{r}_j, t_k) + \Phi^*(\mathbf{r}_i, t_k)}
-    \approx \sum_{p=0}^P \Lambda_{kp}\,A_{jp}\,B^*_{ip},
+    \approx \sum_{p=0}^P \Lambda_{kp}\,A_{jp}\,B_{ip},
     \label{eq:nonherm_decomp}
 \end{equation}
 where $A_{jp}$, $B_{ip} \in \mathbb{C}$ are independent spatial basis functions and $\Lambda_{kp} \in \mathbb{C}$.
-The hermitian case is recovered by setting $A = B = \Theta$ and restricting $\Lambda_{kp} \in \mathbb{R}_{\geq 0}$.
+Here $B$ is defined so that the hermitian case corresponds to $B_{ip} = \Theta^*_{ip}$, $A_{jp} = \Theta_{jp}$,
+$\Lambda_{kp} \in \mathbb{R}_{\geq 0}$.
 The more general form \eqref{eq:nonherm_decomp} strictly enlarges the approximation class and can achieve smaller error for the same number of terms $P$.
 
 \subsection{Full Normal Operator with Coil Maps and Coil Covariance}
@@ -564,7 +565,7 @@ the full normal operator element becomes
     N_{ij}
     \approx
     \bigl(\mathbf{s}_i^H\,\Psi^{-1}\,\mathbf{s}_j\bigr)
-    \sum_p A_{jp}\,B^*_{ip}\;h_p(\mathbf{r}_j - \mathbf{r}_i).
+    \sum_p A_{jp}\,B_{ip}\;h_p(\mathbf{r}_j - \mathbf{r}_i).
     \label{eq:nonherm_N}
 \end{equation}
 The Toeplitz convolution structure is preserved because $h_p$ depends only on the difference $\mathbf{r}_j - \mathbf{r}_i$.
@@ -576,7 +577,7 @@ The action of \eqref{eq:nonherm_N} on a vector $\boldsymbol{\rho}$ is
 \begin{equation}
     (N\boldsymbol{\rho})_i
     \approx
-    \sum_p B^*_{ip}
+    \sum_p B_{ip}
     \sum_{c,c'} (\Psi^{-1})_{cc'}\,s^*_{ci}
     \Bigl[h_p \star \bigl(s_{c'} \odot A_p \odot \boldsymbol{\rho}\bigr)\Bigr]_i.
     \label{eq:nonherm_apply}
@@ -591,7 +592,7 @@ Then $\Xi_{ij} = \sum_q \tilde{s}^*_{qi}\,\tilde{s}_{qj}$ and \eqref{eq:nonherm_
     \boxed{
     (N\boldsymbol{\rho})_i
     \approx
-    \sum_p B^*_{ip}
+    \sum_p B_{ip}
     \sum_q \tilde{s}^*_{qi}
     \Bigl[h_p \star \bigl(\tilde{s}_q \odot A_p \odot \boldsymbol{\rho}\bigr)\Bigr]_i.
     }
@@ -609,91 +610,128 @@ For each mode $p = 1,\dots,P$:
 \begin{enumerate}[label=\arabic*.]
     \item For each whitened coil $q$: form $v^{(q)}_j = \tilde{s}_{qj}\,A_{jp}\,\rho_j$.
     \item For each $q$: Toeplitz-convolve $u^{(q)}_i = \bigl[h_p \star v^{(q)}\bigr]_i$.
-    \item Accumulate: $(N\boldsymbol{\rho})_i \mathrel{+}= B^*_{ip}\sum_q \tilde{s}^*_{qi}\,u^{(q)}_i$.
+    \item Accumulate: $(N\boldsymbol{\rho})_i \mathrel{+}= B_{ip}\sum_q \tilde{s}^*_{qi}\,u^{(q)}_i$.
 \end{enumerate}
 
 \subsection{Optimal Decomposition: Alternating Optimization}
 
-We seek $A \in \mathbb{C}^{N \times P}$, $B \in \mathbb{C}^{N \times P}$, $\Lambda \in \mathbb{C}^{K \times P}$ minimising
+\subsubsection*{Scale and implicit operators}
+
+In practice $N, K \sim 10^5$--$10^6$, so the matrix $G \in \mathbb{C}^{N \times K}$
+with $G_{jk} = g_{jk} = e^{\Phi(\mathbf{r}_j,t_k)}\,e^{-i\mathbf{k}(t_k)\cdot\mathbf{r}_j}$
+is never formed or stored.
+All computations below involve only matrix-vector products of the form
+\begin{equation}
+    [G\,\mathbf{v}]_j = \sum_k g_{jk}\,v_k,
+    \qquad
+    [G^T\mathbf{x}]_k = \sum_j g_{jk}\,x_j,
+    \qquad
+    [\bar{G}\,\mathbf{v}]_j = \sum_k g^*_{jk}\,v_k,
+    \qquad
+    [\bar{G}^T\mathbf{x}]_k = \sum_j g^*_{jk}\,x_j,
+\end{equation}
+each of which is one (possibly conjugated) NUFFT application of cost $O(N\log N + K)$.
+The SVD needed for initialisation is computed on a small histogram-reduced matrix
+$G_{\mathrm{hist}} \in \mathbb{C}^{N_{\mathrm{hist}} \times K}$ with
+$N_{\mathrm{hist}} \ll N$ as described in Section~\ref{sec:histogram}.
+
+\subsubsection*{Loss and constraints}
+
+We seek $A \in \mathbb{C}^{N \times P}$, $B \in \mathbb{C}^{N \times P}$,
+$\Lambda \in \mathbb{C}^{K \times P}$ minimising
 \begin{equation}
     \mathcal{L}
     = \sum_{i,j,k}
-      \Bigl|g_{jk}g^*_{ik} - \sum_{p=0}^P \Lambda_{kp}A_{jp}B^*_{ip}\Bigr|^2,
+      \Bigl|g_{jk}g^*_{ik} - \sum_{p=0}^P \Lambda_{kp}A_{jp}B_{ip}\Bigr|^2,
     \label{eq:nonherm_loss}
 \end{equation}
-where $g_{jk} = e^{\Phi(\mathbf{r}_j,t_k)}$.
-We impose orthonormality $A^H A = I_P$ and $B^H B = I_P$ throughout.
+under the orthonormality constraints $A^H A = I_P$ and $B^H B = I_P$.
 
 \subsubsection*{Update for $\Lambda$ (fixed $A$, $B$)}
 
-Define the projected temporal coefficients
+Define the projected temporal matrices
 \begin{equation}
-    f_{kp} = \sum_j g_{jk}\,\overline{A_{jp}},
+    \mathbf{F} = G^T\overline{A} \in \mathbb{C}^{K \times P},
+    \quad F_{kp} = \sum_j g_{jk}\,\overline{A_{jp}},
     \qquad
-    b_{kp} = \sum_i g^*_{ik}\,B_{ip}.
-    \label{eq:fb_def}
+    \mathbf{C} = \overline{G}^T\overline{B} \in \mathbb{C}^{K \times P},
+    \quad C_{kp} = \sum_j g^*_{jk}\,\overline{B_{jp}}.
+    \label{eq:FC_def}
 \end{equation}
-In matrix notation, $\mathbf{F} = G^T\overline{A} \in \mathbb{C}^{K \times P}$ and
-$\mathbf{B}_{\mathrm{proj}} = \overline{G}^T B \in \mathbb{C}^{K \times P}$,
-where $G_{jk} = g_{jk}$.
-
-Setting $\partial\mathcal{L}/\partial\Lambda^*_{kp} = 0$ under orthonormality $B^H B = I$ gives the
-closed-form update
+Each column of $\mathbf{F}$ and $\mathbf{C}$ costs one NUFFT.
+Setting $\partial\mathcal{L}/\partial\Lambda^*_{kp} = 0$ under $A^HA=I$, $B^HB=I$ gives
 \begin{equation}
-    \Lambda_{kp} = f_{kp}\,b_{kp},
-    \qquad\text{i.e.,}\qquad
-    \boldsymbol{\Lambda} = \mathbf{F} \odot \mathbf{B}_{\mathrm{proj}}.
+    \boldsymbol{\Lambda} = \mathbf{F} \odot \mathbf{C}.
     \label{eq:lambda_update}
 \end{equation}
-Compare with the hermitian case $\Lambda_{kp} = |\sum_j g_{jk}\Theta^*_{jp}|^2$: the
-non-hermitian weights are the product of two independent projections, so $\Lambda_{kp} \in \mathbb{C}$ in general.
+In the hermitian case ($B_{ip}=\Theta^*_{ip}$, $A_{jp}=\Theta_{jp}$) this reduces to
+$\Lambda_{kp} = |\sum_j g_{jk}\overline{\Theta_{jp}}|^2 \geq 0$.
+In general $\Lambda_{kp} \in \mathbb{C}$.
 
 \subsubsection*{Update for $A$ (fixed $B$, $\Lambda$)}
 
 Setting $\partial\mathcal{L}/\partial\overline{A_{jp}} = 0$ under $B^H B = I$ gives
 \begin{equation}
-    A_{jp} \leftarrow \sum_k g_{jk}\,\overline{\Lambda_{kp}}\,b_{kp},
-    \qquad\text{i.e.,}\qquad
-    A_{\cdot p} \leftarrow G\bigl(\overline{\Lambda_{\cdot p}} \odot (\mathbf{B}_{\mathrm{proj}})_{\cdot p}\bigr),
+    A_{\cdot p} \leftarrow G\bigl(\overline{\Lambda_{\cdot p}} \odot \mathbf{C}_{\cdot p}\bigr),
     \label{eq:A_update}
 \end{equation}
-followed by orthogonalisation of $A$.
+i.e.\ one $G$-matvec per mode, followed by orthogonalisation of $A$.
 
 \subsubsection*{Update for $B$ (fixed $A$, $\Lambda$)}
 
-Setting $\partial\mathcal{L}/\partial B_{ip} = 0$ under $A^H A = I$ gives
+Setting $\partial\mathcal{L}/\partial\overline{B_{ip}} = 0$ under $A^H A = I$ gives
 \begin{equation}
-    B_{ip} \leftarrow \sum_k g_{ik}\,\Lambda_{kp}\,\overline{f_{kp}},
-    \qquad\text{i.e.,}\qquad
-    B_{\cdot p} \leftarrow G\bigl(\Lambda_{\cdot p} \odot \overline{(\mathbf{F}_{\cdot p})}\bigr),
+    B_{\cdot p} \leftarrow \bar{G}\bigl(\overline{\Lambda_{\cdot p}} \odot \mathbf{F}_{\cdot p}\bigr),
     \label{eq:B_update}
 \end{equation}
-followed by orthogonalisation of $B$.
-Note $\overline{f_{kp}} = [\overline{G}^T A]_{kp}$, so $B_{\cdot p} = G(\Lambda_{\cdot p} \odot (\overline{G}^T A)_{\cdot p})$.
+i.e.\ one $\bar{G}$-matvec per mode (conjugate NUFFT), followed by orthogonalisation of $B$.
+Note the symmetry: both $A$ and $B$ updates use $\overline{\Lambda_p}$, but $A$ uses $G$ and $B$ uses $\bar{G}$.
+
+\subsubsection*{Cost per ALS iteration}
+
+Each pass through updates \eqref{eq:lambda_update}--\eqref{eq:B_update} requires $4P$ NUFFT
+applications (2 for $\mathbf{F},\mathbf{C}$; $P$ each for the $A$ and $B$ updates)
+plus two $O(NP^2)$ Gram--Schmidt orthogonalisations, cheap for small $P$.
 
 \subsubsection*{Algorithm}
 
 \begin{enumerate}[label=\arabic*.]
-    \item Compute the SVD $G = U\Sigma V^H$ and initialise
-          $A = B = U_P$ (top-$P$ left singular vectors). Orthogonality holds by construction.
-    \item Compute $\mathbf{F} = G^T\overline{A}$ and $\mathbf{B}_{\mathrm{proj}} = \overline{G}^T B$.
-    \item Update $\boldsymbol{\Lambda} = \mathbf{F} \odot \mathbf{B}_{\mathrm{proj}}$.
-    \item Update $A_{\cdot p} \leftarrow G(\overline{\Lambda_{\cdot p}} \odot (\mathbf{B}_{\mathrm{proj}})_{\cdot p})$ for each $p$; orthogonalise $A$.
-    \item Update $B_{\cdot p} \leftarrow G(\Lambda_{\cdot p} \odot (\overline{G}^T A)_{\cdot p})$ for each $p$; orthogonalise $B$.
-    \item Repeat steps 2--5 until $\mathcal{L}$ converges.
+    \item Compute SVD of $G_{\mathrm{hist}} = U_{\mathrm{hist}}\Sigma V^H$.
+          Select top-$P$ pairs $(l_1,l_2)$ by $\sigma_{l_1}\sigma_{l_2}$ (see below).
+          Set $A_{\cdot p} = (U_{\mathrm{hist}})_{\cdot l_1(p)}$,
+          $B_{\cdot p} = \overline{(U_{\mathrm{hist}})_{\cdot l_2(p)}}$,
+          $\Lambda_{kp} = \sigma_{l_1(p)}\sigma_{l_2(p)}V^*_{k,l_1(p)}V_{k,l_2(p)}$.
+    \item Orthogonalise $A$ and $B$ via QR; recompute $\boldsymbol{\Lambda} = \mathbf{F}\odot\mathbf{C}$.
+    \item Compute $\mathbf{F} = G^T\overline{A}$ and $\mathbf{C} = \overline{G}^T\overline{B}$.
+    \item Update $\boldsymbol{\Lambda} = \mathbf{F}\odot\mathbf{C}$.
+    \item Update $A_{\cdot p} \leftarrow G(\overline{\Lambda_{\cdot p}}\odot\mathbf{C}_{\cdot p})$ for each $p$; orthogonalise $A$.
+    \item Update $B_{\cdot p} \leftarrow \bar{G}(\overline{\Lambda_{\cdot p}}\odot\mathbf{F}_{\cdot p})$ for each $p$; orthogonalise $B$.
+    \item Repeat steps 3--6 until $\mathcal{L}$ converges.
 \end{enumerate}
 
-\subsubsection*{SVD initialisation recovers the hermitian solution}
+\subsubsection*{Optimal SVD initialisation}
 
-With $A = B = U_P$ at initialisation, the projections \eqref{eq:fb_def} evaluate to
-$f_{kp} = \sigma_p V_{kp}$ and $b_{kp} = \sigma_p V^*_{kp}$,
-so the initial $\Lambda$ \eqref{eq:lambda_update} is
+The full $L^2$ expansion of the target reads
 \begin{equation}
-    \Lambda_{kp} = \sigma_p^2 |V_{kp}|^2 = |\Omega_{kp}|^2,
+    g_{jk}g^*_{ik}
+    = \sum_{l_1=1}^L\sum_{l_2=1}^L
+      \sigma_{l_1}\sigma_{l_2}\,U_{jl_1}U^*_{il_2}\,V^*_{kl_1}V_{kl_2}.
+    \label{eq:full_expansion}
 \end{equation}
-which is exactly the hermitian initialisation \eqref{eq:lambda_svd}.
-The non-hermitian ALS thus starts from the hermitian solution and moves to a lower-loss
-non-hermitian solution as $A$ and $B$ decouple.
+Each pair $(l_1, l_2)$ contributes a term of magnitude $\sigma_{l_1}\sigma_{l_2}$.
+In our convention $B_{ip} = U^*_{il_2(p)}$ (absorbing the conjugate into $B$),
+the pair-$p$ contribution is $\Lambda_{kp}A_{jp}B_{ip} = \sigma_{l_1}\sigma_{l_2}U_{jl_1}U^*_{il_2}V^*_{kl_1}V_{kl_2}$.
+Retaining only diagonal pairs $(l,l)$ recovers the hermitian case
+$B_{ip}=\Theta^*_{ip}=U^*_{ip}$, $\Lambda_{kp}=\sigma_p^2|V_{kp}|^2=|\Omega_{kp}|^2$.
+
+For the non-hermitian initialisation, rank all $L^2$ pairs by $\sigma_{l_1}\sigma_{l_2}$
+and retain the top $P$.
+The off-diagonal pair $(1,2)$ contributes $\sigma_1\sigma_2$, which exceeds the diagonal
+contribution $\sigma_P^2$ of the last hermitian term whenever
+$\sigma_P < \sqrt{\sigma_1\sigma_2}$ — almost always true for a fast-decaying spectrum.
+Since repeated indices occur (e.g.\ $U_{\cdot 1}$ appears in pairs $(1,1),(1,2),(1,3),\ldots$),
+the $A$ and $B$ columns are not orthonormal as initialised; QR orthogonalisation followed
+by a $\boldsymbol{\Lambda}$ recompute (step~2 of the algorithm) restores the constraint.
 
 \subsection{Comparison Summary}
 
@@ -702,10 +740,10 @@ non-hermitian solution as $A$ and $B$ decouple.
     \hline
     & Hermitian & Non-Hermitian \\
     \hline
-    Decomposition        & $\sum_p\Lambda_{kp}\Theta_{jp}\Theta^*_{ip}$ & $\sum_p\Lambda_{kp}A_{jp}B^*_{ip}$ \\
+    Decomposition        & $\sum_p\Lambda_{kp}\Theta_{jp}\Theta^*_{ip}$ & $\sum_p\Lambda_{kp}A_{jp}B_{ip}$ \\
     $\Lambda_{kp}$       & real, $\geq 0$                               & complex \\
     Input spatial weight & $\Theta_p \odot \tilde{s}_q$                 & $A_p \odot \tilde{s}_q$ \\
-    Output spatial weight& $\Theta^*_p \odot \tilde{s}^*_q$             & $B^*_p \odot \tilde{s}^*_q$ \\
+    Output spatial weight& $\Theta^*_p \odot \tilde{s}^*_q$             & $B_p \odot \tilde{s}^*_q$ \\
     Toeplitz kernel      & $\mathbf{F}_\mathrm{adj}(\Lambda_{\cdot p})$, real $\Lambda$ & same, complex $\Lambda$ \\
     Cost per iteration   & $P \times C$ Toeplitz                        & $P \times C$ Toeplitz \\
     \hline

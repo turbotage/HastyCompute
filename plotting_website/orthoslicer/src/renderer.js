@@ -656,6 +656,7 @@ export class Renderer {
     constructor(device, volume) {
         this.device  = device;
         this.volume  = volume;
+        this.onPositionChange = null;
         this.pos = {
             t: Math.floor(volume.T / 2),
             e: Math.floor(volume.E / 2),
@@ -806,6 +807,7 @@ export class Renderer {
 
         this.lastStats = { uploadCount, fillMs: performance.now() - t0 };
         this.render();
+        this.onPositionChange?.(this.pos);
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────────

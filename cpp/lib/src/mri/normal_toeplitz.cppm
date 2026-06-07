@@ -295,7 +295,6 @@ export NormalOffFourierToeplitzEmbeddings make_normal_omega_driven_off_fourier_t
 // Spatial bases (L of them) are precomputed and shared via SPtr:
 //   splits[l1][l2].spatial_basis_left.first  == splits[l1][l2'].spatial_basis_left.first
 //   splits[l1][l1].spatial_basis_left.first  == splits[l1][l1].spatial_basis_right.first (l1==l2)
-
 export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz_embeddings(
     const Tensor&                             coords,
     ArrayRef<i64>                             im_size,
@@ -457,6 +456,239 @@ export NormalOffFourierToeplitzEmbeddings make_normal_diagonal_off_fourier_toepl
 }
 
 
+// ─── make_normal_nonhermitian_off_fourier_toeplitz_embeddings ────────────────
+//
+// Non-hermitian CP decomposition: G[j,k]·G*[i,k] ≈ Σ_p Λ[k,p] A[j,p] B[i,p]
+// where B absorbs the conjugate.
+//
+// Init (n_als_iter=0): exact top-P pairs from the L²-term expansion.
+//   A[:,p]=Υ[:,l1], B[:,p]=Υ*[:,l2], Λ[:,p]=S[l1]S[l2]Ω[:,l1]Ω*[:,l2]
+//   This is deterministic and gives the best rank-P subset of the naive L².
+//
+// ALS refinement (n_als_iter>0): unconstrained CP-ALS with Gram correction.
+//   Correctly handles P > L (duplicate Υ columns in init have rank < P, but
+//   Gram correction solves the rank-deficient system; columns diverge after 1 iter).
+//
+// Per ALS iteration:
+//   F = G^T A*   [K,P],  C = G*^T B*  [K,P]
+//   Gram_AB = (A^HA) ⊙ (B^HB)   [P,P]
+//   Λ ← (F⊙C) @ Gram_AB^{-1}
+//   A ← G(Λ* ⊙ C) @ (Gram_Λ ⊙ Gram_B)^{-1},  col-normalise
+//   B ← G*(Λ* ⊙ F) @ (Gram_Λ ⊙ Gram_A_new)^{-1}, col-normalise
+
+// G   [n_hist,K] applied to V [K,P]  → [n_hist,P]
+static Tensor nh_G_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
+{
+    auto tmp = mm(Om.transpose(0,1).contiguous(), v);
+    tmp.mul_(Sc.unsqueeze(1));
+    return mm(Up, tmp);
+}
+
+// G*  [n_hist,K] applied to V [K,P]  → [n_hist,P]
+static Tensor nh_Gc_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
+{
+    auto tmp = mm(Om.conj().contiguous().transpose(0,1).contiguous(), v);
+    tmp.mul_(Sc.unsqueeze(1));
+    return mm(Up.conj().contiguous(), tmp);
+}
+
+// G^T  [K,n_hist] applied to V [n_hist,P]  → [K,P]
+static Tensor nh_GT_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
+{
+    auto tmp = mm(Up.transpose(0,1).contiguous(), v);
+    tmp.mul_(Sc.unsqueeze(1));
+    return mm(Om, tmp);
+}
+
+// G*^T [K,n_hist] applied to V [n_hist,P]  → [K,P]
+static Tensor nh_GcT_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
+{
+    auto tmp = mm(Up.conj().contiguous().transpose(0,1).contiguous(), v);
+    tmp.mul_(Sc.unsqueeze(1));
+    return mm(Om.conj().contiguous(), tmp);
+}
+
+// Compute B [K,P] @ inv(G) where G [P,P] is Hermitian PSD, via eigendecomposition.
+// Eigenvalues < rel_eps * max_eigenvalue are clamped (Tikhonov-style regularization).
+static Tensor nh_rsolve_herm(const Tensor& B, const Tensor& G, double rel_eps = 1e-10)
+{
+    auto eig = linalg_eigh(G);  // eigenvalues [P] real Double (ascending), eigenvectors [P,P]
+    double d_max = eig.eigenvalues.abs().max().item<double>();
+    auto d_clamped = eig.eigenvalues.clamp_min(d_max * rel_eps + 1e-30);
+    auto d_inv = (Scalar(1.0) / d_clamped)
+                     .to(eScalarType::ComplexDouble)
+                     .unsqueeze(0);  // [1,P]
+    // B @ G^{-1} = B @ V @ diag(d_inv) @ V^H
+    auto BV = mm(B, eig.eigenvectors);           // [K,P]
+    return mm(BV.mul(d_inv),
+              eig.eigenvectors.conj().transpose(0,1).contiguous());  // [K,P]
+}
+
+// Column-normalise M [rows,P]: each column divided by its L2 norm.
+static Tensor nh_norm_cols(const Tensor& M)
+{
+    auto norms = M.abs().mul(M.abs()).sum(0).sqrt()
+                   .clamp_min(1e-30)
+                   .to(eScalarType::ComplexDouble)
+                   .unsqueeze(0);  // [1,P]
+    return M.div(norms);
+}
+
+export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
+    const Tensor&                             coords,
+    ArrayRef<i64>                             im_size,
+    const Tensor&                             mask_idx,
+    const Tensor&                             voxel_to_bin,
+    const PhiLowrankResult&                   phi_lowrank,
+    i64                                       p,
+    i64                                       n_als_iter = 10,
+    eComputeStrategyBuildOffFourierEmbeddings compute = eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
+    eStorageStrategyBuildOffFourierEmbeddings storage = eStorageStrategyBuildOffFourierEmbeddings::STORE_ON_CPU
+) {
+    // Work in ComplexDouble for numerical stability
+    const Tensor Up = phi_lowrank.Upsilon.to(eScalarType::ComplexDouble);  // [n_hist,L]
+    const Tensor Om = phi_lowrank.Omega.to(eScalarType::ComplexDouble);    // [K,L]
+    const Tensor Sf = phi_lowrank.S;                                        // [L] Float
+    const i64 L      = Up.size(1);
+    const i64 n_hist = Up.size(0);
+    const i64 K      = Om.size(0);
+    const Device device = Om.device();
+    const i64 nx = im_size[0], ny = im_size[1], nz = im_size[2];
+    const i64 N  = nx * ny * nz;
+
+    if (p < 1 || p > L * L)
+        throw std::invalid_argument("p must be in [1, L^2]");
+
+    // S as ComplexDouble for broadcasting with complex intermediates
+    const Tensor Sc = Sf.to(device).to(eScalarType::ComplexDouble);  // [L]
+
+    // ── Initialise from top-P pairs (l1,l2) ranked by S[l1]·S[l2] ───────────
+    // Duplicate l1/l2 across columns is intentional: the free phase below
+    // breaks symmetry naturally (each pair has distinct Λ[:,p], so V_A diverge
+    // after one unconstrained step even when A[:,p1]==A[:,p2]).
+    auto Sd       = Sf.to(device).to(eScalarType::Double);
+    auto pair_ord = argsort(Sd.unsqueeze(1).mul(Sd.unsqueeze(0)).reshape({L*L}),
+                            0, /*descending=*/true);  // [L²]
+
+    auto A   = zeros({n_hist, p}, TensorOptions(device, eScalarType::ComplexDouble));
+    auto B   = zeros({n_hist, p}, TensorOptions(device, eScalarType::ComplexDouble));
+    auto Lam = zeros({K, p},      TensorOptions(device, eScalarType::ComplexDouble));
+
+    {
+        auto ord_cpu = pair_ord.cpu().contiguous();
+        auto Sf_cpu  = Sf.cpu().contiguous();
+        const i64*   po = ord_cpu.const_data_ptr<i64>();
+        const float* sv = Sf_cpu.const_data_ptr<float>();
+        for (i64 pi = 0; pi < p; ++pi) {
+            i64 idx = po[pi], l1 = idx / L, l2 = idx % L;
+            double scale = (double)sv[l1] * sv[l2];
+            A.select(1, pi).copy_(Up.select(1, l1));
+            B.select(1, pi).copy_(Up.select(1, l2).conj());  // B absorbs conj
+            Lam.select(1, pi).copy_(
+                Om.select(1, l1).mul(Om.select(1, l2).conj()).mul(Scalar(scale)));
+        }
+    }
+
+    // ── Optional ALS refinement ───────────────────────────────────────────────
+    // n_als_iter=0: use direct top-P pairs exactly (deterministic, already set above).
+    // n_als_iter>0: unconstrained CP-ALS with Gram correction.
+    //   Gram correction handles duplicate Υ columns (rank < P) correctly —
+    //   columns diverge after the very first iteration without any free phase.
+    if (n_als_iter > 0) {
+        for (i64 it = 0; it < n_als_iter; ++it) {
+            auto F = nh_GT_mv(Up, Sc, Om, A.conj().contiguous());   // [K,P]
+            auto C = nh_GcT_mv(Up, Sc, Om, B.conj().contiguous());  // [K,P]
+
+            // Gram matrices [P,P] (Hermitian PSD)
+            auto gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
+            auto gram_B = mm(B.conj().transpose(0,1).contiguous(), B);
+
+            // Λ update: Lam = (F⊙C) @ Gram_AB^{-1}
+            Lam = nh_rsolve_herm(F.mul(C), gram_A.mul(gram_B));
+
+            auto gram_L = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
+
+            // A update: A = G(Λ*⊙C) @ (Gram_L ⊙ Gram_B)^{-1},  normalise
+            auto Z_A = nh_G_mv(Up, Sc, Om, Lam.conj().contiguous().mul(C));
+            A = nh_norm_cols(nh_rsolve_herm(Z_A, gram_L.mul(gram_B)));
+
+            // Recompute Gram_A with updated A
+            gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
+
+            // B update: B = G*(Λ*⊙F) @ (Gram_L ⊙ Gram_A_new)^{-1},  normalise
+            auto Z_B = nh_Gc_mv(Up, Sc, Om, Lam.conj().contiguous().mul(F));
+            B = nh_norm_cols(nh_rsolve_herm(Z_B, gram_L.mul(gram_A)));
+        }
+
+        // Final Λ with converged A, B
+        {
+            auto F = nh_GT_mv(Up, Sc, Om, A.conj().contiguous());
+            auto C = nh_GcT_mv(Up, Sc, Om, B.conj().contiguous());
+            auto gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
+            auto gram_B = mm(B.conj().transpose(0,1).contiguous(), B);
+            Lam = nh_rsolve_herm(F.mul(C), gram_A.mul(gram_B));
+        }
+    }
+
+    // Print singular-value-like decay of |Λ[:,p]|_2 (proxy for rank importance)
+    {
+        auto lam_cf = Lam.to(eScalarType::ComplexFloat).cpu().contiguous();
+        std::cout << "  NH-ALS Lambda norms [P=" << p << "]:";
+        for (i64 pi = 0; pi < p; ++pi) {
+            auto col = lam_cf.select(1, pi);
+            double norm = col.norm().item<float>();
+            std::cout << " " << std::scientific << std::setprecision(2) << norm;
+        }
+        std::cout << "\n";
+    }
+
+    auto A_cf   = A.to(eScalarType::ComplexFloat);
+    auto B_cf   = B.to(eScalarType::ComplexFloat);
+    auto Lam_cf = Lam.to(eScalarType::ComplexFloat);
+
+    // ── Build splits: one Split per p (1 inner each) ─────────────────────────
+    auto build_p_split = [&](i64 pi, Device dev)
+        -> Vec<NormalOffFourierToeplitzEmbeddings::Split>
+    {
+        auto a_hist = A_cf.select(1, pi).contiguous().to(dev);
+        auto a_3d   = expand_basis(a_hist, mask_idx, voxel_to_bin, N, nx, ny, nz, dev);
+        auto a_sptr = make_cached(std::move(a_3d), storage);
+
+        auto b_hist = B_cf.select(1, pi).contiguous().to(dev);
+        auto b_3d   = expand_basis(b_hist, mask_idx, voxel_to_bin, N, nx, ny, nz, dev);
+        auto b_sptr = make_cached(std::move(b_3d), storage);
+
+        auto lam_p  = Lam_cf.select(1, pi).contiguous().to(dev);
+        auto kern   = make_cached(make_kernel(coords, lam_p, im_size, dev), storage);
+
+        return { NormalOffFourierToeplitzEmbeddings::Split{
+            {a_sptr, false},   // left:  A[j,p] MULT on input
+            {b_sptr, false},   // right: B[i,p] MULT on output (conj absorbed in B)
+            std::move(kern)
+        }};
+    };
+
+    Vec<Vec<NormalOffFourierToeplitzEmbeddings::Split>> splits(p);
+
+    if (compute == eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE) {
+        for (i64 pi = 0; pi < p; ++pi)
+            splits[pi] = build_p_split(pi, device);
+    } else {
+        auto& lb = global_cuda_load_balancer;
+        using Fut = DepFuture<Vec<NormalOffFourierToeplitzEmbeddings::Split>>;
+        Vec<Fut> futures;
+        futures.reserve(p);
+        for (i64 pi = 0; pi < p; ++pi)
+            futures.push_back(lb.submit([&, pi](Device dev){ return build_p_split(pi, dev); }));
+        for (i64 pi = 0; pi < p; ++pi)
+            splits[pi] = futures[pi].get();
+        lb.sync();
+    }
+
+    return NormalOffFourierToeplitzEmbeddings{std::move(splits), {nx, ny, nz}};
+}
+
+
 // ─── apply_normal_off_fourier_operator ───────────────────────────────────────
 //
 // Works for both P×R and naive L² embeddings (same struct, same apply).
@@ -494,35 +726,34 @@ export Tensor apply_normal_toeplitz_off_fourier_operator(
         const Tensor& kernel  = t_kern;  // [2*nx,2*ny,2*nz] full complex — no decompress needed
 
         auto scr_ref   = OptRefW<Tensor>{scr};
+        auto rho_b_ref = OptCRefW<Tensor>{rho_b};
         auto left_ref  = OptCRefW<Tensor>{t_left};
         auto right_ref = OptCRefW<Tensor>{t_right};
 
         auto mult_in  = conj_l ? fft::ToeplitzMultType::MULT_CONJ : fft::ToeplitzMultType::MULT;
         auto mult_out = conj_r ? fft::ToeplitzMultType::MULT_CONJ : fft::ToeplitzMultType::MULT;
 
+        // batch_mult=rho_b loads the density on input stage; mult1=left on input; mult2=right on output
+        fft::ToeplitzMultiplier tm_rho   { rho_b_ref, fft::ToeplitzMultType::MULT,  fft::ToeplitzMultType::NONE  };
+        fft::ToeplitzMultiplier tm_left  { left_ref,  mult_in,                      fft::ToeplitzMultType::NONE  };
+        fft::ToeplitzMultiplier tm_right { right_ref, fft::ToeplitzMultType::NONE,  mult_out                     };
+        fft::ToeplitzMultiplier tm_none  { std::nullopt, fft::ToeplitzMultType::NONE, fft::ToeplitzMultType::NONE };
+
         if (split.eig_val == 1.0) {
             // Naive L² case (eig_val default): accumulate directly, no scaling needed.
             fft::toeplitz_multiplication(
-                rho_b, out, kernel,
-                scr_ref, left_ref, right_ref,
-                fft::ToeplitzMultType::NONE,
-                mult_in,
-                fft::ToeplitzMultType::NONE,
-                fft::ToeplitzMultType::NONE,
-                mult_out,
+                out, kernel,
+                scr_ref,
+                tm_left, tm_right, tm_none, tm_rho,
                 fft::ToeplitzAccumulateType::ACCUMULATE
             );
         } else {
             // P×R case: compute into temp, then out += eig_val * tmp.
             auto tmp = zeros_like(out);
             fft::toeplitz_multiplication(
-                rho_b, tmp, kernel,
-                scr_ref, left_ref, right_ref,
-                fft::ToeplitzMultType::NONE,
-                mult_in,
-                fft::ToeplitzMultType::NONE,
-                fft::ToeplitzMultType::NONE,
-                mult_out,
+                tmp, kernel,
+                scr_ref,
+                tm_left, tm_right, tm_none, tm_rho,
                 fft::ToeplitzAccumulateType::ACCUMULATE
             );
             out.add_(tmp, split.eig_val);

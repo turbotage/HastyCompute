@@ -9,7 +9,7 @@ import hasty_server_mod;
 import hasty_io_mod;
 import hasty_viz_mod;
 
-void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size)
+void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size, int nkpoints = 100000)
 {
     using namespace hasty;
     using namespace hasty::fft;
@@ -22,11 +22,11 @@ void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size
     i64 ny = img.size(1);
     i64 nx = img.size(2);
 
-    Tensor coords = rand({3, 10000}, TensorOptions(cuda0, eScalarType::Float));
+    Tensor coords = rand({3, nkpoints}, TensorOptions(cuda0, eScalarType::Float));
     coords.mul_(Scalar{2*3.141592f});
     coords.add_(Scalar{-3.141592f});
 
-    i32 ntransf = 8;
+    i32 ntransf = 4;
 
     i64 M = coords.size(1);
     Tensor nufft_out = zeros({ntransf, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
@@ -66,15 +66,18 @@ void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size
         
         hasty::cuda::synchronize(cuda0);
         auto t0_toep = std::chrono::steady_clock::now();
+        auto img_spatial = img.squeeze(0).contiguous();  // [nz, ny, nx]
+        // Fix smap shape to [ntransf, nz, ny, nx]
+        Tensor smap_fixed = ones({ntransf, nz, ny, nx}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+        auto scr_ref = OptRefW<Tensor>{scratch};
+        ToeplitzMultiplier tm_img  { std::cref(img_spatial), ToeplitzMultType::MULT,  ToeplitzMultType::NONE      };
+        ToeplitzMultiplier tm_smap { std::cref(smap_fixed),  ToeplitzMultType::MULT,  ToeplitzMultType::MULT_CONJ };
+        ToeplitzMultiplier tm_none { std::nullopt,            ToeplitzMultType::NONE,  ToeplitzMultType::NONE      };
         for (int i = 0; i < 100; ++i) {
             toeplitz_multiplication(
-                img, toep_out, kernel,
-                scratch, smap, std::nullopt,
-                ToeplitzMultType::NONE,
-                ToeplitzMultType::MULT,      // input_mult1_type  (unused, mult1=null)
-                ToeplitzMultType::MULT_CONJ, // output_mult1_type (unused)
-                ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
-                ToeplitzMultType::NONE, // output_mult2_type (unused)
+                toep_out, kernel,
+                scr_ref,
+                tm_img, tm_none, tm_none, tm_smap,
                 ToeplitzAccumulateType::ACCUMULATE
             );
         }
@@ -140,13 +143,12 @@ void test_toeplitz_multiplication_3D(hasty::ArrayRef<hasty::i64> im_size, double
     }
 
     toeplitz_multiplication(
-        input, output_toep, kernel,
-        std::nullopt, std::nullopt, std::nullopt,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
-        ToeplitzMultType::NONE, // output_mult1_type (unused)
-        ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
-        ToeplitzMultType::NONE, // output_mult2_type (unused)
+        output_toep, kernel,
+        std::nullopt,
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::cref(input), ToeplitzMultType::MULT, ToeplitzMultType::NONE},
         ToeplitzAccumulateType::NONE
     );
 
@@ -220,13 +222,12 @@ void test_toeplitz_multiplication_2D(hasty::ArrayRef<hasty::i64> im_size, double
 
     // --- Toeplitz ---
     toeplitz_multiplication(
-        input, output_toep, kernel,
-        std::nullopt, std::nullopt, std::nullopt,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
+        output_toep, kernel,
+        std::nullopt,
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::cref(input), ToeplitzMultType::MULT, ToeplitzMultType::NONE},
         ToeplitzAccumulateType::NONE
     );
 
@@ -294,13 +295,12 @@ void test_toeplitz_multiplication_1D(hasty::ArrayRef<hasty::i64> im_size, double
 
     // --- Toeplitz ---
     toeplitz_multiplication(
-        input, output_toep, kernel,
-        std::nullopt, std::nullopt, std::nullopt,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,
+        output_toep, kernel,
+        std::nullopt,
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::cref(input), ToeplitzMultType::MULT, ToeplitzMultType::NONE},
         ToeplitzAccumulateType::NONE
     );
 
@@ -421,13 +421,12 @@ void test_toeplitz_multiplication_2D_visual()
     }
 
     toeplitz_multiplication(
-        input, output_toep, kernel,
-        std::nullopt, std::nullopt, std::nullopt,
-        ToeplitzMultType::NONE,
-        ToeplitzMultType::NONE,      // input_mult1_type  (unused, mult1=null)
-        ToeplitzMultType::NONE, // output_mult1_type (unused)
-        ToeplitzMultType::NONE,      // input_mult2_type  (unused, mult2=null)
-        ToeplitzMultType::NONE, // output_mult2_type (unused)
+        output_toep, kernel,
+        std::nullopt,
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::nullopt, ToeplitzMultType::NONE, ToeplitzMultType::NONE},
+        {std::cref(input), ToeplitzMultType::MULT, ToeplitzMultType::NONE},
         ToeplitzAccumulateType::NONE
     );
 
@@ -560,7 +559,8 @@ int main() {
     //test_tensor_array_operator();
 
 
-    test_toeplitz_mult_vs_nufft_performance({256, 256, 256});
+    //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);
+    //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);
     //test_toeplitz_multiplication();
     //test_toeplitz_multiplication_2D_visual();
     //hasty::viz::test_tensor_viz();

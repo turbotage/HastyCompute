@@ -92,6 +92,9 @@ async function init() {
         // Set the GPU framebuffer size to the CSS layout size.
         fitCanvas(canvas);
         renderer.attachCanvas(key, canvas);
+
+        const overlay = document.getElementById(`${key}-overlay`);
+        fitCanvas(overlay);
     }
 
     // ── Initial render (centre of volume) ────────────────────────────────────
@@ -128,11 +131,14 @@ async function init() {
         ];
         for (const { key, id } of views) {
             const overlay = document.getElementById(id);
-            fitCanvas(overlay);
             const { nx, ny } = viewFraction(key, renderer.pos, volume);
             drawCrosshair(overlay, nx, ny, showCursor);
         }
     }
+
+    renderer.onPositionChange = () => {
+        drawAllCursors();
+    };
 
     cursorBtn.addEventListener('click', () => {
         showCursor = !showCursor;
@@ -294,6 +300,14 @@ async function init() {
         for (const { id } of viewIds) {
             fitCanvas(document.getElementById(id));
         }
+        for (const { id } of [
+            { id: 'axial-overlay' },
+            { id: 'sagittal-overlay' },
+            { id: 'coronal-overlay' },
+            { id: 'extra-overlay' },
+        ]) {
+            fitCanvas(document.getElementById(id));
+        }
         renderer.render();
         drawAllCursors();
     });
@@ -351,7 +365,6 @@ function setupInteraction(renderer, volume, drawAllCursors) {
         updatePositionUI(renderer.pos);
         updateStatsUI(renderer.lastStats);
         updateImageStatsUI();
-        drawAllCursors();
     }
 
     for (const { id, fn } of views) {
@@ -403,7 +416,6 @@ function setupInteraction(renderer, volume, drawAllCursors) {
             renderer.setPosition({ [axis]: Math.min(Math.max(cur + delta, 0), max - 1) });
             updatePositionUI(renderer.pos);
             updateStatsUI(renderer.lastStats);
-            drawAllCursors();
         }, { passive: false });
     }
 

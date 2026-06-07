@@ -46,18 +46,20 @@ export Tensor create_toeplitz_kernel_standard(
 
 export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = false);
 
+export struct ToeplitzMultiplier {
+    OptCRefW<Tensor> mult;
+    ToeplitzMultType input_mult_type;
+    ToeplitzMultType output_mult_type;
+};
+
 export void toeplitz_multiplication(
-    const Tensor&               input,
     Tensor&                     output,
     const Tensor&               kernel,
     OptRefW<Tensor>             scratch,
-    OptCRefW<Tensor>            mult1,
-    OptCRefW<Tensor>            mult2,
-    ToeplitzMultType            input_output_mult_type,
-    ToeplitzMultType            input_mult1_type,
-    ToeplitzMultType            output_mult1_type,
-    ToeplitzMultType            input_mult2_type,
-    ToeplitzMultType            output_mult2_type,
+    const ToeplitzMultiplier&   mult1,
+    const ToeplitzMultiplier&   mult2,
+    const ToeplitzMultiplier&   mult3,
+    const ToeplitzMultiplier&   batch_mult,
     ToeplitzAccumulateType      accumulate_type
 );
 
