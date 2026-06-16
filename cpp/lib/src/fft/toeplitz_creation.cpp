@@ -264,12 +264,13 @@ Tensor create_toeplitz_kernel(
     kernel = fftn(kernel, nullopt, ArrayRef<i64>(fft_dims));
 
     kernel = kernel.contiguous();
-    // Scale: 1 / (2 * NX * sqrt(prod(im_size)))  where NX = im_size[ndim-1] (fastest dim).
-    // VkFFT performConvolution+performZeropadding normalises only the non-X inverse passes
-    // (Y, Z, …), leaving a net gain of 2*NX that must be cancelled here.
-    double scale = 0.5;
-    for (auto s : im_size) scale /= static_cast<double>(s); //std::sqrt(static_cast<double>(s));
-    scale /= static_cast<double>(im_size[ndim - 1]);
+    // Scale: 1 / (prod(im_size) * prod_{i=1}^{ndim-1}(2*im_size[i])), i.e. divide by
+    // prod(im_size) and additionally by 2*size for every dim but the slowest (im_size[0]).
+    // VkFFT performConvolution+performZeropadding leaves this net gain on the
+    // non-slowest dims, which must be cancelled here together with NUFFT normalisation.
+    double scale = 1.0;
+    for (auto s : im_size) scale /= static_cast<double>(s);
+    for (std::size_t i = 1; i < im_size.size(); ++i) scale /= (2.0 * static_cast<double>(im_size[i]));
     kernel = kernel.mul(Scalar{scale});
 
     // Cast back to cfloat now that all double-precision work is done
@@ -322,9 +323,13 @@ Tensor create_toeplitz_kernel_standard(
 
     kernel = kernel.contiguous();
 
-    double scale = 0.5;
+    // Scale: 1 / (prod(im_size) * prod_{i=1}^{ndim-1}(2*im_size[i])), i.e. divide by
+    // prod(im_size) and additionally by 2*size for every dim but the slowest (im_size[0]).
+    // VkFFT performConvolution+performZeropadding leaves this net gain on the
+    // non-slowest dims, which must be cancelled here together with NUFFT normalisation.
+    double scale = 1.0;
     for (auto s : im_size) scale /= static_cast<double>(s);
-    scale /= static_cast<double>(im_size[ndim - 1]);
+    for (std::size_t i = 1; i < im_size.size(); ++i) scale /= (2.0 * static_cast<double>(im_size[i]));
     kernel = kernel.mul(Scalar{static_cast<float>(scale)});
 
     //kernel.imag().zero_(); // enforce real-valued kernel (should be exact, but zero out any tiny residual imag part)

@@ -304,10 +304,14 @@ void test_toeplitz_multiplication_1D(hasty::ArrayRef<hasty::i64> im_size, double
         ToeplitzAccumulateType::NONE
     );
 
-    output_toep = output_toep.view({NX}).cpu();
-    output_nufft = output_nufft.view({NX}).cpu();
+    bool real_allclose = allclose(output_toep.real(), output_nufft.real(), rtol, atol);
+    bool imag_allclose = allclose(output_toep.imag(), output_nufft.imag(), rtol, atol);
 
-    
+    if (!real_allclose || !imag_allclose) {
+        std::cout << "Test: Toeplitz Multiplication (1D): FAILED\n";
+    } else {
+        std::cout << "Test: Toeplitz Multiplication (1D): PASSED\n";
+    }
 
 }
 
@@ -558,6 +562,7 @@ int main() {
     //test_cartesian_coords_gives_unity_kernel();
     //test_tensor_array_operator();
 
+    test_toeplitz_multiplication();
 
     //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);
     //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);

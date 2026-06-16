@@ -750,4 +750,108 @@ by a $\boldsymbol{\Lambda}$ recompute (step~2 of the algorithm) restores the con
 \end{tabular}
 \end{center}
 
+\section{Gradient Nonlinearity via Coordinate Substitution (Warp)}
+
+\subsection{Separability assumption}
+
+Split the higher-order field terms in $\Delta B(\mathbf{r},t)$ into two classes:
+\begin{itemize}
+    \item \textbf{Static GNL terms}: spatial harmonics $N^m_l(\mathbf{r})$ ($l\ge2$) whose
+          time waveform is, to good approximation, the \emph{same} impulse response as the
+          linear term of the physical gradient coil that produced them,
+          $G^{lm}_\beta(t) \approx c^{lm}_\beta\, G^0_\beta(t)$. These are pure coil-geometry
+          imperfections — fixed spatial pattern, scaled by the same coil current as the
+          linear gradient.
+    \item \textbf{Residual terms}: $\Delta B_0(\mathbf{r})$ (off-resonance) and concomitant
+          fields, whose time dependence is quadratic in the gradient waveforms (e.g.
+          $G_x(t)G_z(t)$) and therefore cannot share a single coil's linear waveform.
+\end{itemize}
+Define, per axis $\beta$, the composite coordinate field
+\begin{equation}
+    u_\beta(\mathbf{r}) = r_\beta + \sum_{\substack{l\ge2 \\ \text{static}}} c^{lm}_\beta N^m_l(\mathbf{r}),
+    \qquad \mathbf{u}(\mathbf{r}) = (u_x,u_y,u_z).
+\end{equation}
+Under the separability assumption,
+\begin{equation}
+    \sum_\beta G^0_\beta(t) r_\beta + \sum_{\text{static GNL}} G^{lm}_\beta(t)N^m_l(\mathbf{r})
+    = \sum_\beta G^0_\beta(t)\,u_\beta(\mathbf{r}) = \mathbf{k}(t)\cdot\mathbf{u}(\mathbf{r}).
+\end{equation}
+What remains in $\Phi_{\mathrm{res}}(\mathbf{r},t)$ is only $T_2$ decay, $\Delta B_0$, and
+concomitant fields — i.e. $\Phi$ from \eqref{eq:approx1} with the static-GNL channels removed
+from $Q$.
+
+\subsection{Coordinate substitution}
+
+With $\mathbf{q}=\mathbf{u}(\mathbf{r})$,
+\begin{align}
+    S_c(t) &= \int_V s_c(\mathbf{r})\rho(\mathbf{r}) e^{\Phi_{\mathrm{res}}(\mathbf{r},t)}
+              e^{-i\mathbf{k}(t)\cdot\mathbf{u}(\mathbf{r})}\, d\mathbf{r} \nonumber\\
+           &= \int_{\mathbf{u}(V)} \underbrace{s_c(\mathbf{r}(\mathbf{q}))\rho(\mathbf{r}(\mathbf{q}))
+              \,|\det \mathbf{J}_{\mathbf{r}}(\mathbf{q})|}_{\tilde\rho_c(\mathbf{q})}
+              \, e^{\Phi_{\mathrm{res}}(\mathbf{r}(\mathbf{q}),t)} e^{-i\mathbf{k}(t)\cdot\mathbf{q}}
+              \, d\mathbf{q},
+\end{align}
+where $\mathbf{J}_{\mathbf{r}} = \mathbf{J}_{\mathbf{u}}^{-1}$. This is exactly the
+$\mathbf{A}^H\mathbf{A}$ Toeplitz formalism of the previous section, evaluated in
+$\mathbf{q}$-coordinates, with $\Phi_{\mathrm{res}}$ now spanning only off-resonance and
+concomitant fields (fewer histogram channels $Q$, no static-GNL blow-up of $n_{\mathrm{hist}}$).
+
+\subsection{Two-grid discretisation}
+
+\begin{itemize}
+    \item \textbf{$\mathbf{q}$-grid}: regular Cartesian, chosen at FFT-optimal size — the
+          grid the Toeplitz kernel \eqref{eq:toeplitz_apply} is padded/transformed on,
+          unchanged from the existing implementation.
+    \item \textbf{$\mathbf{r}$-grid}: physical voxel grid (image domain, where the
+          regularizer lives), \emph{oversampled} relative to the nominal resolution so that
+          $\mathbf{u}(\text{$\mathbf{r}$-grid domain}) \supseteq \text{$\mathbf{q}$-grid
+          domain}$ — i.e. no extrapolation in $\mathbf{W}$ below. The $\mathbf{r}$-grid is
+          never FFT'd, so its size is unconstrained by factorization concerns.
+    \item $\mathbf{W}$: sparse linear interpolation $\mathbf{r}\text{-grid}
+          \to \mathbf{q}\text{-grid}$ representing $\mathbf{q}=\mathbf{u}(\mathbf{r})$,
+          precomputed once (static, determined by gradient-coil hardware). $\mathbf{W}^H$ is
+          its adjoint, $\mathbf{q}\text{-grid}\to\mathbf{r}\text{-grid}$.
+\end{itemize}
+
+\subsection{Jacobian weighting folded into coil maps}
+
+$\sqrt{|\det\mathbf{J}_{\mathbf{u}}(\mathbf{r})|}$ is a diagonal, closed-form
+(polynomial-in-$\mathbf{r}$, since $\mathbf{u}$ is polynomial) scaling, precomputed once and
+absorbed into effective coil sensitivities,
+\begin{equation}
+    s'_c(\mathbf{r}) = s_c(\mathbf{r})\,\sqrt{|\det\mathbf{J}_{\mathbf{u}}(\mathbf{r})|}.
+\end{equation}
+This keeps $\mathbf{W}$ close to a partial isometry ($\mathbf{W}^H\mathbf{W}\approx
+\mathbf{I}$ on the overlap region), preserving adjoint consistency and CG conditioning
+without extra operator applications.
+
+\subsection{Diffeomorphism requirement}
+
+$\mathbf{u}$ must be invertible ($\det\mathbf{J}_{\mathbf{u}}\neq0$) over the oversampled
+$\mathbf{r}$-grid domain. $\mathbf{J}_{\mathbf{u}} = \mathbf{I} + (\text{small polynomial
+perturbation})$, whose magnitude grows with $|\mathbf{r}|$ (the quadratic GNL terms scale as
+$\alpha\,|\mathbf{r}|$ in the Jacobian). This is \emph{not} assumed a priori — verify
+$\det\mathbf{J}_{\mathbf{u}}(\mathbf{r})>0$ numerically on the $\mathbf{r}$-grid (cheap,
+closed form). If it fails near the FOV edge for a given coefficient set, either crop the
+$\mathbf{r}$-grid domain or leave the offending high-order term in $\Phi_{\mathrm{res}}$
+instead of absorbing it into $\mathbf{u}$.
+
+\subsection{Resulting operator chain}
+
+\begin{align}
+    \mathbf{A}_c &= \mathbf{F}_{\mathbf{q}}\,\mathbf{D}_{\mathrm{res}}\,\mathbf{W}\,
+                    \mathrm{diag}(s'_c), \\
+    \mathbf{A}_c^H\mathbf{A}_c &= \mathrm{diag}(s'^*_c)\,\mathbf{W}^H\,
+                    \mathbf{D}_{\mathrm{res}}^H\,(\text{Toeplitz}_{\mathbf{q}})\,
+                    \mathbf{D}_{\mathrm{res}}\,\mathbf{W}\,\mathrm{diag}(s'_c),
+\end{align}
+where $\text{Toeplitz}_{\mathbf{q}}$ is \eqref{eq:normal_op_PR} unchanged — $\mathbf{k}(t)\cdot\mathbf{q}$
+is linear and translation-invariant on the regular $\mathbf{q}$-grid, so the PSF/Toeplitz
+embedding is unaffected by the warp. $\mathbf{D}_{\mathrm{res}}$ is the existing low-rank
+histogram/SVD interpolator, now over off-resonance + concomitant fields only. $\mathbf{W}$,
+$\mathbf{W}^H$ add one sparse interpolation each per normal-operator application —
+$O(N)$, negligible next to the Toeplitz FFTs. Image-domain regularizers are applied in
+$\mathbf{r}$-space each iteration (i.e. $\mathbf{W}$ sits \emph{inside} the iterative loop,
+not just as a final resampling step).
+
 \end{document}

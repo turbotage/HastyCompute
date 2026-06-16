@@ -415,6 +415,45 @@ export PhiLowrankResult time_segmented_phi(
 
 
 // ---------------------------------------------------------------------------
+// apply_axis_warp
+//
+// Coordinate substitution q = u(r) for a single static, axis-separable GNL
+// term: u_axis(r) = r_axis + c * field(r), other axes unchanged. By
+// construction (see notes/MRI_Physics.tex, "Gradient Nonlinearity via
+// Coordinate Substitution") this is exact when the term's waveform alpha(t)
+// is proportional to k_axis(t), i.e. field(r)*alpha(t) == k_axis(t)*(c*field(r)).
+//
+// jacobian_det = 1 + c * field_grad, where field_grad = d field/d r_axis
+// (diagonal Jacobian since field depends only on r_axis here).
+// ---------------------------------------------------------------------------
+
+export struct AxisWarpResult {
+    Tensor warped_coords;   // [N, 3] float — q = u(r)
+    Tensor jacobian_det;    // [N]    float — det(J_u(r))
+};
+
+export AxisWarpResult apply_axis_warp(
+    const Tensor& coords,      // [N,3] float — physical voxel coords (r)
+    const Tensor& field,       // [N]   float — spatial map for the absorbed GNL term
+    const Tensor& field_grad,  // [N]   float — d field / d r_axis
+    i64 axis,                  // 0=x, 1=y, 2=z — warped coordinate component
+    float c                    // u_axis = r_axis + c * field(r)
+) {
+    if (coords.ndimension() != 2 || coords.size(1) != 3)
+        throw std::invalid_argument("apply_axis_warp: coords must be [N,3]");
+    if (axis < 0 || axis > 2)
+        throw std::invalid_argument("apply_axis_warp: axis must be 0, 1, or 2");
+
+    auto warped = coords.clone();
+    warped.select(1, axis).add_(field.mul(Scalar(c)));
+
+    auto jacobian_det = field_grad.mul(Scalar(c)).add(Scalar(1.0f));
+
+    return AxisWarpResult{warped, jacobian_det};
+}
+
+
+// ---------------------------------------------------------------------------
 // (Factored histogram / factored phi removed — use time_segmented_phi or
 //  the joint phi_lowrank SVD for off-resonance-only comparison.)
 // ---------------------------------------------------------------------------

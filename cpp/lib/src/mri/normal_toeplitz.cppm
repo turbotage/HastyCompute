@@ -461,77 +461,49 @@ export NormalOffFourierToeplitzEmbeddings make_normal_diagonal_off_fourier_toepl
 // Non-hermitian CP decomposition: G[j,k]·G*[i,k] ≈ Σ_p Λ[k,p] A[j,p] B[i,p]
 // where B absorbs the conjugate.
 //
+// Since Υ has orthonormal columns (Υ^HΥ = I_L), the [n_hist,n_hist,K] problem
+// is isometric to a tiny [L,L,K] "core" problem: with W = Ω⊙S [K,L],
+// core tensor M[l,l',k] = W[k,l]·conj(W[k,l']), and CP factors Acore,Bcore [L,P]
+// related to the full-space factors by A = Υ·Acore, B = Υ*·Bcore, Λ unchanged.
+// All ALS work is done in this [L,P] core space (cheap: L is O(10) vs n_hist).
+//
 // Init (n_als_iter=0): exact top-P pairs from the L²-term expansion.
-//   A[:,p]=Υ[:,l1], B[:,p]=Υ*[:,l2], Λ[:,p]=S[l1]S[l2]Ω[:,l1]Ω*[:,l2]
+//   Acore[:,p]=e_{l1}, Bcore[:,p]=e_{l2}, Λ[:,p]=S[l1]S[l2]Ω[:,l1]Ω*[:,l2]
+//     => A[:,p]=Υ[:,l1], B[:,p]=Υ*[:,l2]
 //   This is deterministic and gives the best rank-P subset of the naive L².
 //
-// ALS refinement (n_als_iter>0): unconstrained CP-ALS with Gram correction.
-//   Correctly handles P > L (duplicate Υ columns in init have rank < P, but
-//   Gram correction solves the rank-deficient system; columns diverge after 1 iter).
-//
-// Per ALS iteration:
-//   F = G^T A*   [K,P],  C = G*^T B*  [K,P]
-//   Gram_AB = (A^HA) ⊙ (B^HB)   [P,P]
-//   Λ ← (F⊙C) @ Gram_AB^{-1}
-//   A ← G(Λ* ⊙ C) @ (Gram_Λ ⊙ Gram_B)^{-1},  col-normalise
-//   B ← G*(Λ* ⊙ F) @ (Gram_Λ ⊙ Gram_A_new)^{-1}, col-normalise
+// ALS refinement (n_als_iter>0): block-coordinate-descent CP-ALS, each
+// substep an exact (truncated-pinv) least-squares solve, so ‖M-Mhat‖_F is
+// guaranteed non-increasing every substep:
+//   F = W·conj(Acore), C = conj(W)·Bcore                          [K,P]
+//   gram_A = Acore^H Acore, gram_B = Bcore^H Bcore                [P,P]
+//   Λ      ← (F⊙C) @ pinv(conj(gram_A) ⊙ gram_B)
+//   gram_Λ = Λ^H Λ
+//   Acore  ← [Wᵗ(conj(Λ)⊙C)] @ pinv(gram_B ⊙ conj(gram_Λ))
+//   Bcore  ← [Wᵗ(Λ⊙conj(F'))] @ pinv(gram_A_new ⊙ gram_Λ),  F'=W·conj(Acore_new)
+// No column-normalisation: would rescale Acore/Bcore without rescaling Λ to
+// compensate, breaking the non-increasing guarantee.
 
-// G   [n_hist,K] applied to V [K,P]  → [n_hist,P]
-static Tensor nh_G_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
-{
-    auto tmp = mm(Om.transpose(0,1).contiguous(), v);
-    tmp.mul_(Sc.unsqueeze(1));
-    return mm(Up, tmp);
-}
-
-// G*  [n_hist,K] applied to V [K,P]  → [n_hist,P]
-static Tensor nh_Gc_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
-{
-    auto tmp = mm(Om.conj().contiguous().transpose(0,1).contiguous(), v);
-    tmp.mul_(Sc.unsqueeze(1));
-    return mm(Up.conj().contiguous(), tmp);
-}
-
-// G^T  [K,n_hist] applied to V [n_hist,P]  → [K,P]
-static Tensor nh_GT_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
-{
-    auto tmp = mm(Up.transpose(0,1).contiguous(), v);
-    tmp.mul_(Sc.unsqueeze(1));
-    return mm(Om, tmp);
-}
-
-// G*^T [K,n_hist] applied to V [n_hist,P]  → [K,P]
-static Tensor nh_GcT_mv(const Tensor& Up, const Tensor& Sc, const Tensor& Om, const Tensor& v)
-{
-    auto tmp = mm(Up.conj().contiguous().transpose(0,1).contiguous(), v);
-    tmp.mul_(Sc.unsqueeze(1));
-    return mm(Om.conj().contiguous(), tmp);
-}
-
-// Compute B [K,P] @ inv(G) where G [P,P] is Hermitian PSD, via eigendecomposition.
-// Eigenvalues < rel_eps * max_eigenvalue are clamped (Tikhonov-style regularization).
-static Tensor nh_rsolve_herm(const Tensor& B, const Tensor& G, double rel_eps = 1e-10)
+// Compute B [rows,P] @ pinv(G) where G [P,P] is Hermitian PSD, via eigendecomposition.
+// Eigenvalues < rel_eps * max_eigenvalue are treated as null-space (truncated
+// pseudo-inverse) rather than clamped-and-inverted: G is structurally rank <= L
+// whenever P > L (Acore/Bcore columns are drawn from only L distinct one-hot
+// directions), so clamp-then-invert would amplify those null directions.
+// Truncation gives the minimum-norm least-squares solution, which is the
+// correct block-coordinate-descent step.
+static Tensor nh_rsolve_herm(const Tensor& B, const Tensor& G, double rel_eps = 1e-9)
 {
     auto eig = linalg_eigh(G);  // eigenvalues [P] real Double (ascending), eigenvectors [P,P]
     double d_max = eig.eigenvalues.abs().max().item<double>();
-    auto d_clamped = eig.eigenvalues.clamp_min(d_max * rel_eps + 1e-30);
-    auto d_inv = (Scalar(1.0) / d_clamped)
+    double d_thresh = d_max * rel_eps + 1e-300;
+    auto mask  = eig.eigenvalues.gt(Scalar(d_thresh)).to(eScalarType::Double);
+    auto d_inv = (mask / eig.eigenvalues.clamp_min(d_thresh))
                      .to(eScalarType::ComplexDouble)
                      .unsqueeze(0);  // [1,P]
     // B @ G^{-1} = B @ V @ diag(d_inv) @ V^H
-    auto BV = mm(B, eig.eigenvectors);           // [K,P]
+    auto BV = mm(B, eig.eigenvectors);           // [rows,P]
     return mm(BV.mul(d_inv),
-              eig.eigenvectors.conj().transpose(0,1).contiguous());  // [K,P]
-}
-
-// Column-normalise M [rows,P]: each column divided by its L2 norm.
-static Tensor nh_norm_cols(const Tensor& M)
-{
-    auto norms = M.abs().mul(M.abs()).sum(0).sqrt()
-                   .clamp_min(1e-30)
-                   .to(eScalarType::ComplexDouble)
-                   .unsqueeze(0);  // [1,P]
-    return M.div(norms);
+              eig.eigenvectors.conj().transpose(0,1).contiguous());  // [rows,P]
 }
 
 export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
@@ -550,7 +522,6 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
     const Tensor Om = phi_lowrank.Omega.to(eScalarType::ComplexDouble);    // [K,L]
     const Tensor Sf = phi_lowrank.S;                                        // [L] Float
     const i64 L      = Up.size(1);
-    const i64 n_hist = Up.size(0);
     const i64 K      = Om.size(0);
     const Device device = Om.device();
     const i64 nx = im_size[0], ny = im_size[1], nz = im_size[2];
@@ -559,76 +530,74 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
     if (p < 1 || p > L * L)
         throw std::invalid_argument("p must be in [1, L^2]");
 
-    // S as ComplexDouble for broadcasting with complex intermediates
+    // W = Ω⊙S [K,L] — core-space "kernel" matrix, M[l,l',k] = W[k,l]·conj(W[k,l'])
     const Tensor Sc = Sf.to(device).to(eScalarType::ComplexDouble);  // [L]
+    const Tensor W  = Om.mul(Sc.unsqueeze(0)).contiguous();          // [K,L]
 
     // ── Initialise from top-P pairs (l1,l2) ranked by S[l1]·S[l2] ───────────
-    // Duplicate l1/l2 across columns is intentional: the free phase below
-    // breaks symmetry naturally (each pair has distinct Λ[:,p], so V_A diverge
-    // after one unconstrained step even when A[:,p1]==A[:,p2]).
+    // Acore[:,p]=e_{l1}, Bcore[:,p]=e_{l2}: best rank-P subset of the naive L².
     auto Sd       = Sf.to(device).to(eScalarType::Double);
     auto pair_ord = argsort(Sd.unsqueeze(1).mul(Sd.unsqueeze(0)).reshape({L*L}),
                             0, /*descending=*/true);  // [L²]
 
-    auto A   = zeros({n_hist, p}, TensorOptions(device, eScalarType::ComplexDouble));
-    auto B   = zeros({n_hist, p}, TensorOptions(device, eScalarType::ComplexDouble));
-    auto Lam = zeros({K, p},      TensorOptions(device, eScalarType::ComplexDouble));
+    auto Lam = zeros({K, p}, TensorOptions(device, eScalarType::ComplexDouble));
 
+    Tensor Acore, Bcore;
     {
+        const auto cpu = Device{eDeviceType::CPU};
         auto ord_cpu = pair_ord.cpu().contiguous();
-        auto Sf_cpu  = Sf.cpu().contiguous();
-        const i64*   po = ord_cpu.const_data_ptr<i64>();
-        const float* sv = Sf_cpu.const_data_ptr<float>();
+        const i64* po = ord_cpu.const_data_ptr<i64>();
+
+        std::vector<float> Acore_h(L*p, 0.f), Bcore_h(L*p, 0.f);
         for (i64 pi = 0; pi < p; ++pi) {
             i64 idx = po[pi], l1 = idx / L, l2 = idx % L;
-            double scale = (double)sv[l1] * sv[l2];
-            A.select(1, pi).copy_(Up.select(1, l1));
-            B.select(1, pi).copy_(Up.select(1, l2).conj());  // B absorbs conj
-            Lam.select(1, pi).copy_(
-                Om.select(1, l1).mul(Om.select(1, l2).conj()).mul(Scalar(scale)));
+            Acore_h[l1*p + pi] = 1.0f;
+            Bcore_h[l2*p + pi] = 1.0f;
+            Lam.select(1, pi).copy_(W.select(1, l1).mul(W.select(1, l2).conj()));
         }
+        Acore = Tensor::from_blob(Acore_h.data(), {L,p}, eScalarType::Float, cpu)
+                    .clone().to(device).to(eScalarType::ComplexDouble);
+        Bcore = Tensor::from_blob(Bcore_h.data(), {L,p}, eScalarType::Float, cpu)
+                    .clone().to(device).to(eScalarType::ComplexDouble);
     }
 
-    // ── Optional ALS refinement ───────────────────────────────────────────────
+    // ── Optional ALS refinement (core space, [L,P]) ──────────────────────────
     // n_als_iter=0: use direct top-P pairs exactly (deterministic, already set above).
-    // n_als_iter>0: unconstrained CP-ALS with Gram correction.
-    //   Gram correction handles duplicate Υ columns (rank < P) correctly —
-    //   columns diverge after the very first iteration without any free phase.
-    if (n_als_iter > 0) {
-        for (i64 it = 0; it < n_als_iter; ++it) {
-            auto F = nh_GT_mv(Up, Sc, Om, A.conj().contiguous());   // [K,P]
-            auto C = nh_GcT_mv(Up, Sc, Om, B.conj().contiguous());  // [K,P]
+    // n_als_iter>0: block-coordinate-descent CP-ALS (see header comment).
+    for (i64 it = 0; it < n_als_iter; ++it) {
+        auto F = mm(W, Acore.conj().contiguous());   // [K,P]
+        auto C = mm(W.conj().contiguous(), Bcore);   // [K,P]
 
-            // Gram matrices [P,P] (Hermitian PSD)
-            auto gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
-            auto gram_B = mm(B.conj().transpose(0,1).contiguous(), B);
+        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
 
-            // Λ update: Lam = (F⊙C) @ Gram_AB^{-1}
-            Lam = nh_rsolve_herm(F.mul(C), gram_A.mul(gram_B));
+        auto gram_Lam = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
 
-            auto gram_L = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
+        Acore = nh_rsolve_herm(
+            mm(W.transpose(0,1).contiguous(), Lam.conj().mul(C)),
+            gram_B.mul(gram_Lam.conj()));
 
-            // A update: A = G(Λ*⊙C) @ (Gram_L ⊙ Gram_B)^{-1},  normalise
-            auto Z_A = nh_G_mv(Up, Sc, Om, Lam.conj().contiguous().mul(C));
-            A = nh_norm_cols(nh_rsolve_herm(Z_A, gram_L.mul(gram_B)));
+        gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
 
-            // Recompute Gram_A with updated A
-            gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
-
-            // B update: B = G*(Λ*⊙F) @ (Gram_L ⊙ Gram_A_new)^{-1},  normalise
-            auto Z_B = nh_Gc_mv(Up, Sc, Om, Lam.conj().contiguous().mul(F));
-            B = nh_norm_cols(nh_rsolve_herm(Z_B, gram_L.mul(gram_A)));
-        }
-
-        // Final Λ with converged A, B
-        {
-            auto F = nh_GT_mv(Up, Sc, Om, A.conj().contiguous());
-            auto C = nh_GcT_mv(Up, Sc, Om, B.conj().contiguous());
-            auto gram_A = mm(A.conj().transpose(0,1).contiguous(), A);
-            auto gram_B = mm(B.conj().transpose(0,1).contiguous(), B);
-            Lam = nh_rsolve_herm(F.mul(C), gram_A.mul(gram_B));
-        }
+        auto F_new = mm(W, Acore.conj().contiguous());
+        Bcore = nh_rsolve_herm(
+            mm(W.transpose(0,1).contiguous(), Lam.mul(F_new.conj())),
+            gram_A.mul(gram_Lam));
     }
+
+    if (n_als_iter > 0) {
+        // Final Λ with converged Acore, Bcore
+        auto F = mm(W, Acore.conj().contiguous());
+        auto C = mm(W.conj().contiguous(), Bcore);
+        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
+    }
+
+    // Map core-space factors back to full [n_hist,P] space: A = Υ·Acore, B = Υ*·Bcore
+    auto A = mm(Up, Acore).contiguous();
+    auto B = mm(Up.conj().contiguous(), Bcore).contiguous();
 
     // Print singular-value-like decay of |Λ[:,p]|_2 (proxy for rank importance)
     {

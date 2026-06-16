@@ -26,6 +26,13 @@ struct Problem {
     hasty::Tensor z_map_flat;      // [N] complex
     hasty::Tensor nl_fields_flat;  // [Q, N] float
     hasty::i64 K, N, C;
+
+    // ── warp-validation extras (Phase 1, see notes/MRI_Physics.tex) ──────────
+    // Channel Q-1 (field_y2 = y², alpha_y2 = -c_y2*k_y/dy_m) is separable:
+    // field_y2(r)*alpha_y2(t) = -k_rad_per_m_y(t)*c_y2*y² = phase shift of
+    // exp(i*…) combined with exp(-i*k·r) gives exp(-i*k·u(r)), u_y=y+c_y2*y².
+    hasty::Tensor coords_pix_flat; // [N, 3] float — integer-centered pixel coords (ix-nx/2, no +0.5 voxel offset)
+    float         nl_y2_c_pix;    // c_y2 * dy_m (dimensionless warp coefficient in pixel space)
 };
 
 static bool cuda_available()
@@ -67,7 +74,7 @@ static Problem make_problem_real(
     const i64 nz = pd_vol.size(2);
     const i64 N  = nx * ny * nz;
     const i64 K  = n_spokes * n_samp;
-    const i64 Q  = 2;
+    const i64 Q  = 4;  // field_z2 (concomitant), field_xy (concomitant), field_xz (concomitant), field_y2 (separable GNL → warp)
     const i64 C  = 1;
 
     const float dx_m  = pixdim_x_mm * 1e-3f;
@@ -106,6 +113,16 @@ static Problem make_problem_real(
     auto phys_y = ry.mul(Scalar(FOV_y));
     auto phys_z = rz.mul(Scalar(FOV_z));
 
+    // INTEGER-centered pixel-index coords matching fft::dft / forward_exact:
+    //   n_d = i_d - N_d/2   (no +0.5 voxel-center offset)
+    // This makes exp(-i·k·n_d) == fft::dft's phase kernel exactly.
+    // The GNL warp displacement uses (pix_y + 0.5) = phys_y/dy_m as the
+    // field argument (see run_test_warp), so u_y = n_y + c_y2_pix*(n_y+0.5)².
+    auto pix_x = phys_x.div(Scalar(dx_m)).sub(Scalar(0.5f));   // ix - nx/2
+    auto pix_y = phys_y.div(Scalar(dy_m)).sub(Scalar(0.5f));   // iy - ny/2
+    auto pix_z = phys_z.div(Scalar(dz_m)).sub(Scalar(0.5f));   // iz - nz/2
+    auto coords_pix_flat = stack({pix_x, pix_y, pix_z}, 1).contiguous();  // [N, 3]
+
     // Magnetization: raw PD (pd_flat) and morphologically masked PD (mag_flat)
     // pd_flat: full signal support — used for the exact reference signal
     // mag_flat: pd * mask — used for histogram binning and approx interpolator
@@ -125,12 +142,31 @@ static Problem make_problem_real(
 
     auto sensitivity_maps = ones({C, nx, ny, nz}, opts_c);
 
-    // Synthetic nonlinear fields: z² and x·y (in m²)
-    auto field_z2       = phys_z.mul(phys_z);
-    auto field_xy       = phys_x.mul(phys_y);
+    // Concomitant-like fields: spatial maps whose waveforms are NOT proportional
+    // to any single k_d(t), so they cannot be absorbed into a coordinate warp.
+    // field_z2: z²  — waveform ∝ dz²·g_bip (proportional to kz(t) would require
+    //   spoke factor dz alone, but we use dz² so alpha ∝ cumsum(dz²·G), NOT ∝ kz).
+    // field_xy: x·y — waveform ∝ dx·dy·g_bip, cross-product → non-separable.
+    // field_xz: x·z — waveform ∝ dx·dz·g_bip, cross-product → non-separable.
+    //   (Represents a concomitant B_con ∝ Gx(t)·Gz(t)·x·z / B0 type coupling.)
+    auto field_z2 = phys_z.mul(phys_z);
+    auto field_xy = phys_x.mul(phys_y);
+    auto field_xz = phys_x.mul(phys_z);   // new concomitant channel
+
+    // Warp-separable GNL channel: field_y2 = y² (in m²), with alpha_y2(t) chosen
+    // (below, once k_traj exists) proportional to k_y(t) so that
+    // field_y2(r)*alpha_y2(t) == k_y(t)*(c_y2*y²) == k(t)·(u(r)-r) for
+    // u_y(r) = y + c_y2*y². Coefficient c_y2 set so the Jacobian perturbation
+    // |2*c_y2*y| <= 0.3 over the FOV (det J_u = 1 + 2*c_y2*y ∈ [0.7, 1.3]).
+    auto field_y2      = phys_y.mul(phys_y);
+    auto field_y2_grad = phys_y.mul(Scalar(2.0f));   // d(y²)/dy
+    const float c_y2   = 0.03f / FOV_y;  // realistic: ~7.5 rad max GNL phase (was 0.3 → 75 rad)
+
     auto nl_basis       = stack({field_z2.reshape({nx, ny, nz}),
-                                  field_xy.reshape({nx, ny, nz})}, 0);
-    auto nl_fields_flat = stack({field_z2, field_xy}, 0);
+                                  field_xy.reshape({nx, ny, nz}),
+                                  field_xz.reshape({nx, ny, nz}),
+                                  field_y2.reshape({nx, ny, nz})}, 0);
+    auto nl_fields_flat = stack({field_z2, field_xy, field_xz, field_y2}, 0);
 
     // Koosh-ball trajectory
     std::vector<float> dirs(n_spokes * 3);
@@ -161,30 +197,45 @@ static Problem make_problem_real(
     auto timestamps = Tensor::from_blob(t_data.data(), {K},    eScalarType::Float, cpu).clone().to(dev);
 
     // Bipolar nonlinear waveforms (zero net phase per spoke).
-    // G_z2_amp / G_xy_amp designed so peak z² phase = ±π·nl_scale rad (polar spoke, edge voxel).
+    // G_z2_amp: peak z² phase = ±π·nl_scale rad (polar spoke, edge voxel).
+    // G_xy_amp / G_xz_amp: peak x·y and x·z phase = ±0.5π·nl_scale rad.
+    // G_xz waveform uses spoke factor dx·dz: NOT proportional to kx, ky, or kz
+    // for a general 3D spoke direction → non-separable concomitant coupling.
     i64   half     = n_samp / 2;
     float z_sq_max = 0.5f * FOV_z * 0.5f * FOV_z;
     float xy_max   = 0.5f * FOV_x * 0.5f * FOV_y;
+    float xz_max   = 0.5f * FOV_x * 0.5f * FOV_z;
     float G_z2_amp = nl_scale * 0.5f * 2.0f * (float)pi_v<f64> / (gamma * dt * (float)half * z_sq_max);
-    float G_xy_amp = nl_scale * 0.5f * (float)pi_v<f64>         / (gamma * dt * (float)half * xy_max * 0.5f);
+    float G_xy_amp = nl_scale * 0.5f * (float)pi_v<f64>         / (gamma * dt * (float)half * xy_max  * 0.5f);
+    float G_xz_amp = nl_scale * 0.5f * (float)pi_v<f64>         / (gamma * dt * (float)half * xz_max  * 0.5f);
 
     std::vector<float> g_bip(n_samp);
     for (i64 j = 0; j < n_samp; ++j) g_bip[j] = j < half ? 1.0f : -1.0f;
 
-    std::vector<float> G_z2(K), G_xy(K);
+    std::vector<float> G_z2(K), G_xy(K), G_xz(K);
     for (i64 s = 0; s < n_spokes; ++s) {
         float dz2 = dirs[s*3+2] * dirs[s*3+2];
         float dxy = dirs[s*3+0] * dirs[s*3+1];
+        float dxz = dirs[s*3+0] * dirs[s*3+2];   // cross-product → non-separable
         for (i64 j = 0; j < n_samp; ++j) {
             G_z2[s*n_samp+j] = G_z2_amp * dz2 * g_bip[j];
             G_xy[s*n_samp+j] = G_xy_amp * dxy * g_bip[j];
+            G_xz[s*n_samp+j] = G_xz_amp * dxz * g_bip[j];
         }
     }
     auto G_z2_t = Tensor::from_blob(G_z2.data(), {K}, eScalarType::Float, cpu).clone().to(dev);
     auto G_xy_t = Tensor::from_blob(G_xy.data(), {K}, eScalarType::Float, cpu).clone().to(dev);
+    auto G_xz_t = Tensor::from_blob(G_xz.data(), {K}, eScalarType::Float, cpu).clone().to(dev);
 
     auto alpha_z2 = G_z2_t.to(eScalarType::Double).cumsum(0).to(eScalarType::Float).mul(Scalar(-gamma * dt));
     auto alpha_xy = G_xy_t.to(eScalarType::Double).cumsum(0).to(eScalarType::Float).mul(Scalar(-gamma * dt));
+    auto alpha_xz = G_xz_t.to(eScalarType::Double).cumsum(0).to(eScalarType::Float).mul(Scalar(-gamma * dt));
+
+    // Warp-separable waveform: alpha_y2(t) = -c_y2 * k_y(t) / dy_m  [rad/m²]
+    // So that i*field_y2*alpha_y2 = -i*k_rad_per_m_y*c_y2*y² = -i*k·(u(r)-r),
+    // combining with exp(-i*k·r) gives exp(-i*k·u(r)) exactly.
+    const float c_y2_pix = c_y2 * dy_m;  // dimensionless warp coeff in pixel space
+    auto alpha_y2 = k_traj.select(1, 1).div(Scalar(dy_m)).mul(Scalar(-c_y2)).contiguous();
 
     // ── Physics diagnostics ──────────────────────────────────────────────────
     {
@@ -202,10 +253,20 @@ static Problem make_problem_real(
 
         float max_alpha_z2  = alpha_z2.abs().max().item<float>();
         float max_alpha_xy  = alpha_xy.abs().max().item<float>();
+        float max_alpha_xz  = alpha_xz.abs().max().item<float>();
         float max_field_z2  = field_z2.abs().max().item<float>();
         float max_field_xy  = field_xy.abs().max().item<float>();
+        float max_field_xz  = field_xz.abs().max().item<float>();
         float max_phase_z2  = max_field_z2 * max_alpha_z2;
         float max_phase_xy  = max_field_xy * max_alpha_xy;
+        float max_phase_xz  = max_field_xz * max_alpha_xz;
+
+        float max_alpha_y2  = alpha_y2.abs().max().item<float>();
+        float max_field_y2  = field_y2.abs().max().item<float>();
+        float max_phase_y2  = max_field_y2 * max_alpha_y2;
+        auto jac_in_mask = field_y2_grad.masked_select(mask_bool).mul(Scalar(c_y2)).add(Scalar(1.0f));
+        float jac_min = jac_in_mask.min().item<float>();
+        float jac_max = jac_in_mask.max().item<float>();
 
         std::cout << "\n  ── problem physics ──────────────────────────────────────\n"
                   << "  volume: " << nx << "×" << ny << "×" << nz
@@ -224,7 +285,7 @@ static Problem make_problem_real(
                   << std::setprecision(2) << b0_max_phase << " rad"
                   << "  (max|B0|×2π×T_readout)\n"
                   << "\n"
-                  << "  NL fields (nl_scale=" << nl_scale << ", bipolar → resets each spoke):\n"
+                  << "  Concomitant fields (nl_scale=" << nl_scale << ", bipolar, non-separable):\n"
                   << "    z²: max|α_z2|=" << std::scientific << std::setprecision(3)
                   << max_alpha_z2 << " rad/m²"
                   << "  max|b_z2|=" << max_field_z2 << " m²"
@@ -233,17 +294,31 @@ static Problem make_problem_real(
                   << max_alpha_xy << " rad/m²"
                   << "  max|b_xy|=" << max_field_xy << " m²"
                   << "  → max phase=" << std::fixed << std::setprecision(2) << max_phase_xy << " rad\n"
+                  << "    x·z: max|α_xz|=" << std::scientific << std::setprecision(3)
+                  << max_alpha_xz << " rad/m²"
+                  << "  max|b_xz|=" << max_field_xz << " m²"
+                  << "  → max phase=" << std::fixed << std::setprecision(2) << max_phase_xz << " rad\n"
+                  << "\n"
+                  << "  Warp-separable channel (y², alpha_y2 = c_y2·k_y, c_y2="
+                  << std::scientific << std::setprecision(3) << c_y2 << "):\n"
+                  << "    max|α_y2|=" << max_alpha_y2 << " rad/m²"
+                  << "  max|b_y2|=" << max_field_y2 << " m²"
+                  << "  → max phase=" << std::fixed << std::setprecision(3) << max_phase_y2 << " rad\n"
+                  << "    det(J_u) = 1 + 2·c_y2·y  ∈ [" << std::setprecision(3)
+                  << jac_min << ", " << jac_max << "]  (diffeomorphism "
+                  << ((jac_min > 0.0f) ? "OK" : "VIOLATED") << ")\n"
                   << "  ─────────────────────────────────────────────────────────\n\n";
     }
 
-    auto nl_waveforms = stack({alpha_z2, alpha_xy}, 0);
+    auto nl_waveforms = stack({alpha_z2, alpha_xy, alpha_xz, alpha_y2}, 0);
 
     return Problem{
         mag_3d, rate_map, sensitivity_maps,
         k_traj, timestamps,
         nl_waveforms, nl_basis,
         mag_flat, pd_flat, z_map_flat, nl_fields_flat,
-        K, N, C
+        K, N, C,
+        coords_pix_flat, c_y2_pix
     };
 }
 
@@ -452,6 +527,193 @@ static float phase_corrected_rel_err(const hasty::Tensor& S_ref,
     return std::sqrt(std::max(err_sq, 0.0f)) / (ne + 1e-30f);
 }
 
+// ── Core-space CP-rank-P fit diagnostic ────────────────────────────────────────
+//
+// T[hj,hi,k] = G[hj,k]*conj(G[hi,k]) with G = Upsilon @ diag(S) @ Omega^T.
+// Since Upsilon has orthonormal columns, CP-rank-P approximation of T is
+// equivalent (same Frobenius error) to CP-rank-P approximation of the tiny
+// core tensor M[l,l',k] = W[k,l]*conj(W[k,l']), W = Omega .* S  [K,L].
+// This lets us evaluate ALS variants in milliseconds instead of minutes.
+
+// B [rows,P] @ pinv(G) via eigendecomposition. Truncated (Moore-Penrose) pinv:
+// eigenvalues below rel_eps*d_max are treated as exact null-space (d_inv=0).
+// This is the minimum-norm least-squares solution for rank-deficient G,
+// the correct block-coordinate-descent step (non-increasing objective).
+static hasty::Tensor cpcore_rsolve_trunc(const hasty::Tensor& B, const hasty::Tensor& G, double rel_eps = 1e-9)
+{
+    using namespace hasty;
+    auto eig = linalg_eigh(G);
+    double d_max    = eig.eigenvalues.abs().max().item<double>();
+    double d_thresh = d_max * rel_eps + 1e-300;
+    auto mask  = eig.eigenvalues.gt(Scalar(d_thresh)).to(eScalarType::Double);
+    auto d_inv = (mask / eig.eigenvalues.clamp_min(d_thresh))
+                     .to(eScalarType::ComplexDouble)
+                     .unsqueeze(0);
+    auto BV = mm(B, eig.eigenvectors);
+    return mm(BV.mul(d_inv), eig.eigenvectors.conj().transpose(0,1).contiguous());
+}
+
+// Relative Frobenius error ||M - Mhat||_F / ||M||_F via gram-trace identities
+// (avoids materialising the [L,L,K] tensor).
+static double cpcore_rel_err(const hasty::Tensor& W,      // [K,L] ComplexDouble
+                              const hasty::Tensor& Acore,  // [L,P]
+                              const hasty::Tensor& Bcore,  // [L,P]
+                              const hasty::Tensor& Lam)    // [K,P]
+{
+    using namespace hasty;
+    auto row_norm2  = W.abs().pow(Scalar(2.0)).sum(1);            // [K] real
+    double M_norm_sq = row_norm2.pow(Scalar(2.0)).sum().item<double>();
+
+    auto F = mm(W, Acore.conj().contiguous());                    // [K,P]
+    auto C = mm(W.conj().contiguous(), Bcore);                    // [K,P]
+    double cross_re = Lam.mul(F.mul(C).conj()).sum().real().item<double>();
+
+    auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);  // [P,P]
+    auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+    auto gram_L = mm(Lam  .conj().transpose(0,1).contiguous(), Lam);
+    double Mhat_norm_sq = gram_L.conj().mul(gram_A.conj()).mul(gram_B).sum().real().item<double>();
+
+    double err_sq = M_norm_sq - 2.0 * cross_re + Mhat_norm_sq;
+    return std::sqrt(std::max(err_sq, 0.0)) / std::sqrt(std::max(M_norm_sq, 1e-300));
+}
+
+// Fast diagnostic: top-P-pairs init vs damped CP-ALS, in core space.
+static void core_cp_diagnostic(const hasty::Tensor& Omega,   // [K,L]
+                                const hasty::Tensor& S_phi,   // [L] Float
+                                hasty::i64 p,
+                                hasty::i64 n_iter,
+                                double rel_eps)
+{
+    using namespace hasty;
+    const i64 L = Omega.size(1);
+    const i64 K = Omega.size(0);
+    const Device dev = Omega.device();
+    const auto cpu = Device{eDeviceType::CPU};
+
+    auto Sc = S_phi.to(eScalarType::Double).to(eScalarType::ComplexDouble);  // [L]
+    auto W  = Omega.to(eScalarType::ComplexDouble).mul(Sc.unsqueeze(0)).contiguous();  // [K,L]
+
+    // Top-P pairs (l1,l2) ranked by S[l1]*S[l2], same as the deterministic init.
+    auto Sd       = S_phi.to(eScalarType::Double);
+    auto pair_ord = argsort(Sd.unsqueeze(1).mul(Sd.unsqueeze(0)).reshape({L*L}), 0, /*descending=*/true);
+
+    std::vector<float> Acore_h(L*p, 0.f), Bcore_h(L*p, 0.f);
+    std::vector<i64> l1s(p), l2s(p);
+    {
+        auto ord_cpu = pair_ord.cpu().contiguous();
+        const i64* po = ord_cpu.const_data_ptr<i64>();
+        for (i64 pi = 0; pi < p; ++pi) {
+            i64 idx = po[pi];
+            l1s[pi] = idx / L; l2s[pi] = idx % L;
+            Acore_h[l1s[pi]*p + pi] = 1.0f;
+            Bcore_h[l2s[pi]*p + pi] = 1.0f;
+        }
+    }
+    auto Acore = Tensor::from_blob(Acore_h.data(), {L,p}, eScalarType::Float, cpu)
+                    .clone().to(dev).to(eScalarType::ComplexDouble);
+    auto Bcore = Tensor::from_blob(Bcore_h.data(), {L,p}, eScalarType::Float, cpu)
+                    .clone().to(dev).to(eScalarType::ComplexDouble);
+
+    auto Lam = zeros({K,p}, TensorOptions(dev, eScalarType::ComplexDouble));
+    for (i64 pi = 0; pi < p; ++pi)
+        Lam.select(1,pi).copy_(W.select(1,l1s[pi]).mul(W.select(1,l2s[pi]).conj()));
+
+    std::cout << "\n  Core-space CP fit [L=" << L << ", P=" << p << ", rel_eps=" << rel_eps << "]\n"
+              << "    init (SVD-pairs, no ALS): rel_err=" << std::scientific << std::setprecision(3)
+              << cpcore_rel_err(W, Acore, Bcore, Lam) << "\n";
+
+    for (i64 it = 0; it < n_iter; ++it) {
+        // Lam update: Lam = (F*C) @ pinv(conj(gram_A) * gram_B)
+        //   F = W @ conj(Acore), C = conj(W) @ Bcore
+        auto F = mm(W, Acore.conj().contiguous());   // [K,P]
+        auto C = mm(W.conj().contiguous(), Bcore);   // [K,P]
+
+        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        Lam = cpcore_rsolve_trunc(F.mul(C), gram_A.conj().mul(gram_B), rel_eps);
+
+        auto gram_Lam = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
+
+        // Acore update: Acore = [W^T @ (conj(Lam) * C)] @ pinv(gram_B * conj(gram_Lam))
+        //   C = conj(W) @ Bcore (old Bcore)
+        Acore = cpcore_rsolve_trunc(
+            mm(W.transpose(0,1).contiguous(), Lam.conj().mul(C)),
+            gram_B.mul(gram_Lam.conj()), rel_eps);
+
+        gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+
+        // Bcore update: Bcore = [W^T @ (Lam * conj(F_new))] @ pinv(gram_A_new * gram_Lam)
+        //   F_new = W @ conj(Acore_new)
+        auto F_new = mm(W, Acore.conj().contiguous());   // [K,P]
+        Bcore = cpcore_rsolve_trunc(
+            mm(W.transpose(0,1).contiguous(), Lam.mul(F_new.conj())),
+            gram_A.mul(gram_Lam), rel_eps);
+
+        // Final Lam with updated A,B for the error readout.
+        gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        F = mm(W, Acore.conj().contiguous());
+        C = mm(W.conj().contiguous(), Bcore);
+        auto Lam_eval = cpcore_rsolve_trunc(F.mul(C), gram_A.conj().mul(gram_B), rel_eps);
+
+        std::cout << "    iter " << std::setw(2) << it
+                  << ": rel_err=" << std::scientific << std::setprecision(3)
+                  << cpcore_rel_err(W, Acore, Bcore, Lam_eval) << "\n";
+    }
+}
+
+// ── Approx signal via direct DFT at arbitrary (possibly warped) pixel coords ──
+//
+// S[k] = Σ_l Omega_sub[k,l] · Σ_n Upsilon[bin(n),l] · rho_m[n] · exp(-i·k·pix[n])
+//
+// pix[n,:] are centered pixel-index coords (= phys/dx per dim) in the same
+// convention as fft::dft / forward_exact: phase = exp(-i·k_traj·n_pix).
+// For the warp comparison, pix[n] = u(r(n)) (warped by apply_axis_warp in
+// pixel-index space). Processed in k-chunks of size k_chunk to bound GPU memory.
+static hasty::Tensor approx_signal_direct(
+    const hasty::Tensor& Omega_sub,    // [n_sub, L]
+    const hasty::Tensor& Upsilon,      // [n_hist, L]
+    const hasty::Tensor& voxel_to_bin, // [N_mask] long
+    const hasty::Tensor& rho_m,        // [N_mask] ComplexFloat
+    const hasty::Tensor& pix_masked,   // [N_mask, 3] float — centered pixel coords (or warped)
+    const hasty::Tensor& k_sub,        // [n_sub, 3] float ∈ [-π,π] — k_traj subset
+    hasty::i64 k_chunk = 32)
+{
+    using namespace hasty;
+    using namespace std::numbers;
+
+    const i64    L      = Omega_sub.size(1);
+    const i64    n_sub  = Omega_sub.size(0);
+    const i64    N_mask = rho_m.size(0);
+    const Device dev    = rho_m.device();
+    const TensorOptions opts_c{dev, eScalarType::ComplexFloat};
+
+    // src[n, l] = Upsilon[bin(n), l] · rho_m[n]  — [N_mask, L]
+    auto ups_vox = Upsilon.index_select(0, voxel_to_bin);           // [N_mask, L]
+    auto src     = ups_vox.to(eScalarType::ComplexFloat)
+                          .mul(rho_m.unsqueeze(1));                  // [N_mask, L]
+
+    const Scalar neg_i = Scalar(std::complex<f32>(0.0f, -1.0f));
+    auto pix_t  = pix_masked.transpose(0, 1).contiguous();          // [3, N_mask]
+    auto signal = zeros({n_sub}, opts_c);
+
+    for (i64 k0 = 0; k0 < n_sub; k0 += k_chunk) {
+        const i64 kc   = std::min(k_chunk, n_sub - k0);
+        auto k_c       = k_sub.narrow(0, k0, kc);                  // [kc, 3]
+        // phase[kc, N_mask] = k_c @ pix_t;  exp(-i·phase) = DFT kernel
+        auto phase     = mm(k_c, pix_t)
+                             .to(eScalarType::ComplexFloat)
+                             .mul(neg_i).exp();                      // [kc, N_mask]
+        // S_sub[kc, L] = phase @ src
+        auto S_sub     = mm(phase, src);                            // [kc, L]
+        // signal[k0:k0+kc] = Σ_l Omega_sub[k0:k0+kc, l] · S_sub[:, l]
+        signal.narrow(0, k0, kc).copy_(
+            S_sub.mul(Omega_sub.narrow(0, k0, kc)).sum(1));
+    }
+
+    return signal.unsqueeze(0);  // [1, n_sub]
+}
+
 // ── Core test ─────────────────────────────────────────────────────────────────
 
 static bool run_test(const Problem& prob,
@@ -602,6 +864,9 @@ static bool run_test(const Problem& prob,
             PhiLowrankResult plr{Omega, S_phi, Upsilon};
             const i64 p_use = std::min(P, L*L);
 
+            // Fast core-space diagnostic (milliseconds, no embedding build).
+            core_cp_diagnostic(Omega, S_phi, p_use, /*n_iter=*/25, /*rel_eps=*/1e-9);
+
             auto rho_r = rand({nx, ny, nz}, opts_f);
             auto rho_i = rand({nx, ny, nz}, opts_f);
             auto rho   = view_as_complex(stack({rho_r, rho_i}, -1).contiguous());
@@ -620,9 +885,18 @@ static bool run_test(const Problem& prob,
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
+            auto emb_nh_init = make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
+                coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, p_use,
+                /*n_als_iter=*/0,
+                eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
+                eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
+            double t_nhb_init = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
             auto emb_nh = make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
                 coords, {nx, ny, nz}, hist.mask_idx, hist.voxel_to_bin, plr, p_use,
-                /*n_als_iter=*/10,
+                /*n_als_iter=*/50,
                 eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
                 eStorageStrategyBuildOffFourierEmbeddings::STORE_IN_FILE);
             double t_nhb = std::chrono::duration<double>(
@@ -634,13 +908,19 @@ static bool run_test(const Problem& prob,
                 std::chrono::steady_clock::now() - t0n).count();
 
             t0n = std::chrono::steady_clock::now();
+            auto out_nh_init = apply_normal_toeplitz_off_fourier_operator(emb_nh_init, rho);
+            double t_nha_init = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0n).count();
+
+            t0n = std::chrono::steady_clock::now();
             auto out_nh = apply_normal_toeplitz_off_fourier_operator(emb_nh, rho);
             double t_nha = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0n).count();
 
             // Compare non-hermitian (P splits) against naive L² at masked voxels.
-            auto flat_ref = out_naive.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
-            auto flat_nh  = out_nh   .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_ref     = out_naive  .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_nh_init = out_nh_init.reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
+            auto flat_nh      = out_nh     .reshape({nx*ny*nz}).index_select(0, hist.mask_idx).cpu().contiguous();
 
             auto mean_rel_err = [&](const Tensor& approx) -> float {
                 auto err = flat_ref.sub(approx).abs().contiguous();
@@ -656,15 +936,18 @@ static bool run_test(const Problem& prob,
                 return cnt ? (float)(sum / cnt) : 0.0f;
             };
 
-            float mre_nh = mean_rel_err(flat_nh);
+            float mre_init = mean_rel_err(flat_nh_init);
+            float mre_nh   = mean_rel_err(flat_nh);
 
             std::cout << "\n  Normal op [L=" << L << "]  (ref=naïve L²)\n"
+                      << "    SVD init, no ALS   (P=" << p_use << "):"
+                      << "  mean_rel_err=" << std::scientific << std::setprecision(3) << mre_init << "\n"
                       << "    non-hermitian CP-ALS (P=" << p_use << "):"
                       << "  mean_rel_err=" << std::scientific << std::setprecision(3) << mre_nh << "\n"
                       << "  timing build:  naive=" << std::setprecision(2) << t_nb
-                      << "s  nh=" << t_nhb << "s\n"
+                      << "s  init=" << t_nhb_init << "s  als=" << t_nhb << "s\n"
                       << "  timing apply:  naive=" << t_na
-                      << "s  nh=" << t_nha << "s\n";
+                      << "s  init=" << t_nha_init << "s  als=" << t_nha << "s\n";
 
             // Sorted rel-err plot: non-hermitian vs naive L² reference.
             {
@@ -1021,6 +1304,175 @@ static bool run_test(const Problem& prob,
     return all_pass;
 }
 
+// ── Warp comparison: absorb y² channel into coordinate substitution ───────────
+//
+// Builds histogram on Q_residual=2 channels only (field_z2, field_xy) and
+// evaluates the approximation at warped pixel-index coords u(r) = r + c·r_y²·ĵ,
+// using approx_signal_direct for direct comparison against S_both reference.
+// This validates that: (a) histogram shrinks, (b) accuracy holds at same/smaller L.
+static void run_test_warp(const Problem& prob,
+                          hasty::i64 n_sub,
+                          const std::vector<hasty::i64>& L_values,
+                          hasty::i64 n_rate, hasty::i64 n_nl,
+                          const std::string& label,
+                          hasty::mri::eBinWeighting weighting = hasty::mri::eBinWeighting::L1Mass)
+{
+    using namespace hasty;
+    std::cout << "\n[warp test: " << label << "]\n";
+    std::cout << "  K=" << prob.K << "  N=" << prob.N << "  n_sub=" << n_sub << "\n";
+
+    // Q_residual = 3: drop the separable y² channel (last index = 3).
+    // Residual: {field_z2, field_xy, field_xz} — concomitant terms only.
+    auto nl_fields_res    = prob.nl_fields_flat.narrow(0, 0, 3);   // [3, N]
+    auto nl_waveforms_res = prob.nl_waveforms.narrow(0, 0, 3);     // [3, K]
+
+    auto hist = mri::extract_histogram(
+        prob.mag_flat, prob.z_map_flat, nl_fields_res, n_rate, n_nl);
+    const i64 N_mask = hist.mask_idx.size(0);
+    std::cout << "  n_hist=" << hist.n_hist
+              << "  N_mask=" << N_mask
+              << "  (" << std::fixed << std::setprecision(1)
+              << (100.0f * N_mask / (float)prob.N) << "% of N) — concomitant-only residual (Q=3, GNL absorbed into warp)\n";
+
+    auto op = mri::make_phi_operator(
+        hist.z_map_hist, hist.nl_fields_hist,
+        nl_waveforms_res, prob.timestamps);
+
+    // Same seed as run_test → identical sub_idx for direct error comparison.
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<i64> dist(0, prob.K - 1);
+    std::vector<i64> idx_buf(n_sub);
+    for (i64 i = 0; i < n_sub; ++i) idx_buf[i] = dist(rng);
+    auto sub_idx = Tensor::from_blob(idx_buf.data(), {n_sub}, eScalarType::Long,
+                                     Device{eDeviceType::CPU})
+                       .clone().to(prob.mag.device());
+
+    auto S_both  = exact_signal_paired(prob, sub_idx, true, true);  // ground truth
+    auto ref_mag   = S_both.select(0, 0).abs().cpu().contiguous();
+    auto ref_phase = [&]() {
+        auto s1 = S_both.select(0, 0).cpu().contiguous();
+        auto re = s1.real().contiguous(); auto im = s1.imag().contiguous();
+        auto rv = re.spanning_view(); auto iv = im.spanning_view();
+        i64 M = rv.sizes[0];
+        std::vector<float> ph(M);
+        const float* rp = static_cast<const float*>(rv.data);
+        const float* ip = static_cast<const float*>(iv.data);
+        for (i64 i = 0; i < M; ++i) ph[i] = std::atan2(ip[i], rp[i]);
+        return Tensor::from_blob(ph.data(), {M}, eScalarType::Float,
+                                 Device{eDeviceType::CPU}).clone();
+    }();
+
+    auto pearson = [](const Tensor& a, const Tensor& b) -> float {
+        auto ad = a.to(eScalarType::Double);
+        auto bd = b.to(eScalarType::Double);
+        double n   = (double)a.size(0);
+        double sa  = ad.sum().item<double>();
+        double sb  = bd.sum().item<double>();
+        double sab = ad.mul(bd).sum().item<double>();
+        double sa2 = ad.mul(ad).sum().item<double>();
+        double sb2 = bd.mul(bd).sum().item<double>();
+        double num = n * sab - sa * sb;
+        double den = std::sqrt(std::max(0.0, (n*sa2 - sa*sa) * (n*sb2 - sb*sb)));
+        return (float)(num / (den + 1e-60));
+    };
+
+    auto circ_corr = [](const Tensor& pa, const Tensor& pb) -> float {
+        auto diff = pa.sub(pb).contiguous();
+        auto dv = diff.spanning_view();
+        i64 M = dv.sizes[0];
+        const float* d = static_cast<const float*>(dv.data);
+        double sum_cos = 0.0;
+        for (i64 i = 0; i < M; ++i) sum_cos += std::cos(d[i]);
+        return (float)(sum_cos / M);
+    };
+
+    // Pre-compute warped pixel coords for masked voxels.
+    // Warp: u_y = n_y + c_y2_pix*(n_y+0.5)²
+    // pix_masked stores n_d = i_d - N_d/2 (integer-centered, matching fft::dft).
+    // The GNL field in physical space is phys_y² = (n_y+0.5)²*dy_m², so the
+    // displacement in pixel space is c_y2_pix*(n_y+0.5)² = c_y2*phys_y²/dy_m.
+    // This exactly cancels the GNL phase exp(i*field_y2*alpha_y2) in forward_exact.
+    auto pix_masked  = prob.coords_pix_flat.index_select(0, hist.mask_idx);  // [N_mask,3]
+    auto pix_y_m     = pix_masked.select(1, 1);                              // n_y [N_mask]
+    auto pix_y_c     = pix_y_m.add(Scalar(0.5f));                           // n_y+0.5 = phys_y/dy_m
+    auto field_warp  = pix_y_c.mul(pix_y_c);                                // (n_y+0.5)²
+    auto fgrad_warp  = pix_y_c.mul(Scalar(2.0f));                           // 2*(n_y+0.5)
+    auto warp = mri::apply_axis_warp(pix_masked, field_warp, fgrad_warp, 1, prob.nl_y2_c_pix);
+
+    {
+        float jac_min = warp.jacobian_det.min().item<float>();
+        float jac_max = warp.jacobian_det.max().item<float>();
+        std::cout << "  det(J_u) in masked voxels: [" << std::fixed << std::setprecision(3)
+                  << jac_min << ", " << jac_max << "]  (diffeomorphism "
+                  << ((jac_min > 0.0f) ? "OK" : "VIOLATED") << ")\n";
+    }
+
+    auto rho_m   = prob.mag_flat.index_select(0, hist.mask_idx).to(eScalarType::ComplexFloat);
+    auto k_sub   = prob.k_traj.index_select(0, sub_idx);  // [n_sub, 3]
+    auto pix_w   = warp.warped_coords;                     // [N_mask, 3]
+
+    std::cout << "\n  L   n_hist   phase_corr_err   status  (warp)\n"
+              << "  " << std::string(49, '-') << "\n";
+
+    for (auto L : L_values) {
+        const i64 mpd_val = std::max((i64)8*L, (i64)60);
+        const i64 ncv_val = L + mpd_val;
+
+        auto weights = mri::phi_lowrank_weights(weighting, hist, prob.timestamps);
+        auto [Omega, S_phi, Upsilon] = mri::phi_lowrank(op, L, weights, ncv_val, mpd_val);
+
+        auto Omega_sub = Omega.index_select(0, sub_idx);  // [n_sub, L]
+
+        // Sanity check: approx_signal_direct with UNWARPED pix_masked.
+        // Should approximate S_no_y2 (no GNL), revealing if the direct formula is correct.
+        auto S_noWarp = approx_signal_direct(Omega_sub, Upsilon,
+                                             hist.voxel_to_bin, rho_m,
+                                             pix_masked, k_sub);
+
+        auto S_warp = approx_signal_direct(Omega_sub, Upsilon,
+                                           hist.voxel_to_bin, rho_m,
+                                           pix_w, k_sub);
+
+        float ne = S_both.norm().item<float>();
+        float na_warp   = S_warp.norm().item<float>();
+        float na_noWarp = S_noWarp.norm().item<float>();
+
+        auto approx_phase_of = [&](const Tensor& S) {
+            auto s1 = S.select(0, 0).cpu().contiguous();
+            auto re = s1.real().contiguous(); auto im = s1.imag().contiguous();
+            auto rv = re.spanning_view(); auto iv = im.spanning_view();
+            i64 M = rv.sizes[0];
+            std::vector<float> ph(M);
+            const float* rp = static_cast<const float*>(rv.data);
+            const float* ip = static_cast<const float*>(iv.data);
+            for (i64 i = 0; i < M; ++i) ph[i] = std::atan2(ip[i], rp[i]);
+            return Tensor::from_blob(ph.data(), {M}, eScalarType::Float,
+                                     Device{eDeviceType::CPU}).clone();
+        };
+
+        float phase_r_warp   = circ_corr(ref_phase, approx_phase_of(S_warp));
+        float phase_r_noWarp = circ_corr(ref_phase, approx_phase_of(S_noWarp));
+        float mag_r_warp     = pearson(ref_mag, S_warp.select(0,0).abs().cpu().contiguous());
+
+        float err_warp   = phase_corrected_rel_err(S_both, S_warp);
+        float err_noWarp = phase_corrected_rel_err(S_both, S_noWarp);
+
+        bool pass = (phase_r_warp > 0.995f);
+        std::cout << "  " << std::setw(2) << L
+                  << "  " << std::setw(6) << hist.n_hist
+                  << "   na_warp/ne=" << std::fixed << std::setprecision(3) << (na_warp/ne)
+                  << "  na_nw/ne=" << (na_noWarp/ne)
+                  << "\n"
+                  << "       warp:   mag_r=" << std::setprecision(4) << mag_r_warp
+                  << "  phase_r=" << phase_r_warp
+                  << "  err=" << std::scientific << std::setprecision(3) << err_warp
+                  << "\n"
+                  << "       noWarp: phase_r=" << std::fixed << std::setprecision(4) << phase_r_noWarp
+                  << "  err=" << std::scientific << std::setprecision(3) << err_noWarp
+                  << "  " << (pass ? "PASS" : "FAIL") << "\n";
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 int non_fourier_interp_test()
@@ -1154,7 +1606,7 @@ int non_fourier_interp_test()
             cuda0,
             0.5f,
             1e-3f,
-            0.00f);
+            0.5f);
 
         failures += !run_test(prob_real,
             300,
@@ -1162,11 +1614,21 @@ int non_fourier_interp_test()
             14000, 1,
             "real_data full_res",
             hasty::mri::eBinWeighting::L1Mass,
-            /*P=*/12,
+            /*P=*/14,
             show_fft_error_plots,
             show_phi_error_plots,
             show_phi_error_vs_B0_plots,
             show_signal_err_vs_mag_plot);
+
+        // Warp comparison: y² GNL absorbed into coord substitution, Q_res=3 concomitant residual.
+        // n_nl=2 (vs joint n_nl=1) so the residual histogram captures NL bin variation
+        // and n_hist is comparable — shows both rank savings and bin-count behavior.
+        run_test_warp(prob_real,
+            300,
+            {6, 8},   // compare at L=6 (might match L=8 joint) and L=8 (expect better)
+            14000, 2,
+            "real_data full_res",
+            hasty::mri::eBinWeighting::L1Mass);
     }
 
     std::cout << "\n=====================================================\n"
