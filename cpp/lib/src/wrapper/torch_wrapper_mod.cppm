@@ -107,6 +107,8 @@ export namespace hat {
     using at::nanmean;
     using at::argsort;
     using at::randperm;
+    using at::floor;
+    using at::frac;
     using at::linalg_solve;
     using at::linalg_svd;
     using at::linalg_eig;
@@ -118,7 +120,12 @@ export namespace hat {
     using at::linalg_cholesky;
     using at::linalg_cholesky_out;
     using at::linalg_lu;
+    using at::linalg_qr;
+    using at::linalg_qr_out;
+    using at::linalg_qr_outf;
     using at::pinverse;
+    using at::matmul;
+    using at::bmm;
 
 
     namespace indexing {

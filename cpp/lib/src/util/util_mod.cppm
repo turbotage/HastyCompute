@@ -63,6 +63,21 @@ export std::string uuid_to_hex(const std::array<u8, 16>& uuid) {
     return out;
 }
 
+// For bank keys, which are raw 16-byte strings rather than std::array<u8,16>.
+// Raw key bytes must never be embedded verbatim in exception/error messages —
+// they're essentially never valid UTF-8, and any such message that reaches a
+// protobuf string field (e.g. via e.what() -> error_msg) corrupts the wire format.
+export std::string uuid_to_hex(const std::string& key) {
+    static constexpr char hex_chars[] = "0123456789abcdef";
+    std::string out(key.size() * 2, '0');
+    for (std::size_t i = 0; i < key.size(); ++i) {
+        auto byte = static_cast<u8>(key[i]);
+        out[i * 2]     = hex_chars[(byte >> 4) & 0xF];
+        out[i * 2 + 1] = hex_chars[byte & 0xF];
+    }
+    return out;
+}
+
 export std::array<u8, 16> hex_to_uuid_array(const std::string& hex) {
     if (hex.size() != 32)
         throw std::runtime_error("[python] UUID hex string must be 32 chars");

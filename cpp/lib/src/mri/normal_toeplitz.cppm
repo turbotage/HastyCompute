@@ -493,7 +493,25 @@ export NormalOffFourierToeplitzEmbeddings make_normal_diagonal_off_fourier_toepl
 // correct block-coordinate-descent step.
 static Tensor nh_rsolve_herm(const Tensor& B, const Tensor& G, double rel_eps = 1e-9)
 {
-    auto eig = linalg_eigh(G);  // eigenvalues [P] real Double (ascending), eigenvectors [P,P]
+    const i64    P   = G.size(0);
+    const Device dev = G.device();
+
+    // Diagonal (Tikhonov) jitter: once CP-ALS has nearly converged, G's
+    // eigenvalues cluster near zero/near-duplicate, which can make LAPACK's
+    // syevd (inside linalg_eigh) fail to converge outright rather than just
+    // lose precision. A jitter far below rel_eps*d_max separates clustered
+    // eigenvalues enough for syevd to converge, without perturbing the
+    // truncated-pseudo-inverse result (jitter << rel_eps means it never
+    // changes which eigenvalues clear the truncation threshold below).
+    const double g_scale = G.abs().max().item<double>();
+    const double jitter  = g_scale * 1e-12 + 1e-300;
+    auto diag_idx = arange(P, TensorOptions(dev, eScalarType::Long)).mul(Scalar((i64)(P + 1)));
+    auto jitter_t = ones({P}, TensorOptions(dev, G.scalar_type())).mul(Scalar(jitter));
+    auto G_reg    = G.reshape({P * P}).clone();
+    G_reg.scatter_add_(0, diag_idx, jitter_t);
+    G_reg = G_reg.reshape({P, P});
+
+    auto eig = linalg_eigh(G_reg);  // eigenvalues [P] real Double (ascending), eigenvectors [P,P]
     double d_max = eig.eigenvalues.abs().max().item<double>();
     double d_thresh = d_max * rel_eps + 1e-300;
     auto mask  = eig.eigenvalues.gt(Scalar(d_thresh)).to(eScalarType::Double);

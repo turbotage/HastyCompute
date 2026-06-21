@@ -703,7 +703,7 @@ concept is_tensor_index_type = std::is_convertible_v<T, TensorIndexType>;
 
 
 
-// <================== CUDA GUARD ==================> //
+// <================== CUDA ==================> //
 export namespace cuda {
 
     struct CUDAGuard {
@@ -748,6 +748,11 @@ export namespace cuda {
 
     void synchronize(Device device) {
         htorch::cuda::synchronize(device.torch_device_index());
+    }
+
+    void cuda_empty_cache()
+    {
+        hat::cuda::CUDACachingAllocator::emptyCache();
     }
 
 }

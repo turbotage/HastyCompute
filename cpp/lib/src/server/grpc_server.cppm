@@ -47,8 +47,8 @@ export GrpcServerHandle start_grpc_server(
     GenericValueBank& bank,
     CommandRegistry& registry,
     const std::string& address = "0.0.0.0:50051",
-    UPtr<OStreamInterface> log_stream = make_uptr<LogStream>("grpc.log"),
-    UPtr<OStreamInterface> internal_log_stream = make_uptr<LogStream>("internal_grpc.log")
+    UPtr<OStreamInterface> log_stream = make_uptr<LogStream>(hasty::log_dir() + "/grpc.log"),
+    UPtr<OStreamInterface> internal_log_stream = make_uptr<LogStream>(hasty::log_dir() + "/internal_grpc.log")
 );
 
 

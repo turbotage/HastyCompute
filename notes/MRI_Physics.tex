@@ -419,6 +419,100 @@ the feature vector
     \end{bmatrix}
 \end{equation}
 Now, we can make a histogram of the feature vectors for all voxels in the support, and perform the approximations on the histogram bins instead of on the individual voxels.
+\label{sec:histogram}
+
+This histogram has a serious scaling problem. If the feature vector has $D_f$ components and
+each is binned into $n_d$ values, the number of histogram cells is
+\begin{equation}
+    N_{\mathrm{hist}} = \prod_{d=1}^{D_f} n_d,
+    \label{eq:hist_blowup}
+\end{equation}
+\emph{independent of how many voxels are actually present} — it is a product over bin
+\emph{resolutions}, not a count of populated cells. With a non-trivial $T_2$ map and several
+concomitant channels active, $N_{\mathrm{hist}}$ can easily exceed $N$, the number of voxels in
+the support, which defeats the entire point of histogramming (it is meant to
+\emph{reduce} the problem below $N$ before the SVD in \eqref{eq:approx1}, not multiply it
+beyond $N$). Worse, fixed bin-edge quantization is itself a source of approximation error that
+the SVD step cannot see or correct for.
+
+\subsection{A fixed feature-space basis (no histogram)}
+\label{sec:featurebasis}
+
+The histogram's only real job is to give the SVD in \eqref{eq:approx1} a small, finite set of
+representative feature points to act on. We can produce such a set directly, with no
+data-dependent cell count, by exploiting the same structure already used for the gradient
+nonlinearity warp (Section~\ref{sec:histogram} is precisely the multi-channel generalisation of
+the classical \emph{time-segmentation} off-resonance trick of Sutton/Noll/Fessler — what follows
+generalises that trick's fixed-basis machinery to the full feature vector instead of $z(\mathbf{r})$
+alone).
+
+Since $\Delta B_0(\mathbf{r})$ and $N_l^m(\mathbf{r})$ are static (time-independent) fields, the
+residual phase from \eqref{eq:approx1}'s exponent is \emph{exactly linear} in the feature vector
+$\overline\Psi(\mathbf{r})$ for fixed $t$:
+\begin{equation}
+    \Phi_{\mathrm{res}}(\mathbf{r}, t) = -t\,z(\mathbf{r}) + \sum_{q=1}^{Q_c} N_q(\mathbf{r})\,W_q(t)
+    = \overline\Psi(\mathbf{r}) \cdot \mathbf{w}(t),
+    \label{eq:phi_res_bilinear}
+\end{equation}
+where $W_q(t) = \int_0^t G_q(\tau)\,d\tau$ is the known waveform integral for residual channel
+$q$ (computed once from the gradient sequence, no field-map knowledge needed), and
+$\mathbf{w}(t) = (-t, W_1(t), \ldots, W_{Q_c}(t))$. This is exactly the bilinear-exponent
+structure $g(\mathbf{r},t) = \exp\bigl(\overline\Psi(\mathbf{r})\cdot\mathbf{w}(t)\bigr)$ already
+analysed for the warp's Fourier-integral-operator phase $\mathbf{k}(t)\cdot\mathbf{u}(\mathbf{r})$
+— smooth, low-degree-polynomial in $\mathbf{r}$ on one side, smooth in $t$ on the other. The
+admissibility argument is the same: $g$ restricted to a \emph{bounded box} of feature space is
+well-approximated by a fixed low-degree interpolation basis, with no dependence on how many
+voxels populate that box.
+
+\paragraph{Construction.} Fix, a priori (from known physical bounds — $T_2$/$B_0$ map range,
+FOV geometric extent for $N_q$ — \emph{not} from voxel occupancy), a bounding box
+$[\Psi_d^-,\Psi_d^+]$ for each feature axis $d=1,\ldots,D_f$ ($D_f = 2 + Q_c$, splitting the
+complex $z$ into real/imaginary axes). Place $n_d$ Chebyshev nodes on axis $d$ and form the
+tensor-product Lagrange basis
+\begin{equation}
+    \Upsilon_l(\overline\Psi) = \prod_{d=1}^{D_f} \ell^{(d)}_{l_d}(\Psi_d),
+    \qquad l = (l_1,\ldots,l_{D_f}),
+    \qquad L = \prod_{d=1}^{D_f} n_d,
+    \label{eq:feature_basis}
+\end{equation}
+where $\ell^{(d)}_{l_d}$ is the barycentric Lagrange polynomial through axis $d$'s Chebyshev
+nodes. Define
+\begin{equation}
+    \Upsilon_{jl} := \Upsilon_l\bigl(\overline\Psi(\mathbf{r}_j)\bigr),
+    \label{eq:feature_basis_eval}
+\end{equation}
+evaluated \emph{directly} at each voxel's own continuous feature value — no binning, no
+quantization, $O(N\cdot L)$ to evaluate for all voxels. This replaces the histogram-derived
+$\Upsilon_{jl}$ of \eqref{eq:approx1} with one whose size $L$ is a design choice (set by how many
+Chebyshev nodes the smoothness of $g$ actually requires per axis), never a function of $N$,
+$T_2$ heterogeneity, or how many concomitant channels are active.
+
+\paragraph{Fitting $\Omega_{kl}$.} With $\Upsilon$ fixed, \eqref{eq:approx1} becomes a per-$k$
+linear least-squares fit of the same form as classical time-segmentation, but here it can be
+solved in closed form against the exactly known target $g(\mathbf{r}_j,t_k)$ rather than against
+fitted histogram-bin centres:
+\begin{equation}
+    \boldsymbol\Omega_{k,:} = \Bigl(\Upsilon^H \mathbf{D}_w \Upsilon\Bigr)^{-1}
+                              \Upsilon^H \mathbf{D}_w\, \mathbf{g}_{:,k},
+    \qquad (\mathbf{g}_{:,k})_j = \exp\bigl(\Phi_{\mathrm{res}}(\mathbf{r}_j,t_k)\bigr),
+    \label{eq:omega_closed_form}
+\end{equation}
+where $\mathbf{D}_w = \mathrm{diag}(w_j)$ is a quadrature weight over the support voxels. The
+$L\times L$ Gram matrix $\Upsilon^H\mathbf{D}_w\Upsilon$ is computed once, independent of $K$.
+\textbf{The weight $w_j$ should not be a function of $\rho(\mathbf{r}_j)$} — unlike PD-mass
+weighting, $w_j$ here only needs to reflect how densely populated the support is around
+$\mathbf{r}_j$'s feature value (a population/quadrature weight, computable a priori from the
+mask and field maps alone), since $\rho$ is the unknown being reconstructed, not a quantity
+available to weight an offline basis-fitting step.
+
+\paragraph{Cost.} Evaluating $\Upsilon$ costs $O(NL)$ once. The right-hand side of
+\eqref{eq:omega_closed_form} costs $O(NL)$ per $k$ (a weighted projection of the basis against
+the exactly-known exponential, summed over support voxels) — but since $g$ is itself bilinear in
+$(\overline\Psi,\mathbf{w}(t))$, this projection is the \emph{same kind} of admissible sum as the
+forward operator itself, and can be reduced further with one more level of Chebyshev compression
+in feature space if $K$ is large enough to matter; the direct $O(NLK)$ form is already a strict
+improvement whenever $N_{\mathrm{hist}}$ from \eqref{eq:hist_blowup} threatens to approach or
+exceed $N$, since $L$ is fixed by design rather than multiplying across feature axes.
 
 \section*{Normal Operator via Toeplitz Embedding}
 

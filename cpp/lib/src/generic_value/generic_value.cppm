@@ -120,6 +120,10 @@ public:
         return std::get<std::string>(m_data);
     }
 
+    std::string& as_string() {
+        return std::get<std::string>(m_data);
+    }
+
     Tensor operator[](const TensorIndex& idx) const & {
         if (!is_tensor()) {
             throw std::runtime_error("Not a tensor");

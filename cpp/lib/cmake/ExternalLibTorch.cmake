@@ -27,7 +27,7 @@
 
 include(ExternalProject)
 
-set(_TORCH_GIT_TAG "v2.11.0")
+set(_TORCH_GIT_TAG "v2.12.1")
 
 set(LIBTORCH_SRC_DIR     "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-src")
 set(LIBTORCH_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/_deps/libtorch-build")

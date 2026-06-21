@@ -1,8 +1,11 @@
 module;
 
+#include "configure_file_settings.hpp"
+
 export module hasty_util_mod:stream;
 
 import std;
+import :io;
 
 namespace hasty {
 
@@ -27,8 +30,8 @@ public:
         }
     }
 
-    explicit FlushingFileStream(std::filesystem::path filepath)
-        : _stream(filepath)
+    explicit FlushingFileStream(std::filesystem::path filepath, bool append = false)
+        : _stream(filepath, append ? std::ios::app : std::ios::trunc)
     {
         if (!_stream) {
             throw std::runtime_error("Failed to open file: " + filepath.string());
@@ -36,6 +39,7 @@ public:
     }
 
     void write(const std::vector<std::uint8_t>& data) {
+        std::scoped_lock lock(_mtx);
         _stream.write(reinterpret_cast<const char*>(data.data()), data.size());
         if (!_stream) {
             throw std::runtime_error("Failed to write to stream");
@@ -87,8 +91,11 @@ public:
 
 private:
     std::ofstream _stream;
+    std::mutex _mtx;
 };
 
 export using LogStream = FlushingFileStream;
+
+export std::string log_dir() { return hasty::resolve_exe_relative_path(HASTY_LOG_DIR).string(); }
 
 }

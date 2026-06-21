@@ -84,6 +84,7 @@ target_sources(HastyCompute
         "src/server/grpc_server_impl.cpp"
         "src/server/server_mod_impl.cpp"
         "src/threading/threading_mod.cpp"
+        "src/python/python_mod_impl.cpp"
         "src/viz/viz.cpp"
         "src/wrapper/vkfft.cpp"
 )
@@ -105,6 +106,10 @@ target_sources(HastyCompute
         "src/linalg/linalg_mod.cppm"
         "src/linalg/linalg_op.cppm"
         "src/linalg/linalg_svd.cppm"
+        "src/mri/butterfly_factorization.cppm"
+        "src/mri/butterfly_id.cppm"
+        "src/mri/butterfly_tree.cppm"
+        "src/mri/coordinate_warp.cppm"
         "src/mri/forward.cppm"
         "src/mri/mri_mod.cppm"
         "src/mri/normal_toeplitz.cppm"
@@ -206,12 +211,15 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
     set(MODULE_CACHE_RELATIVE_PATH "${CMAKE_BINARY_DIR}/cache/modules")
     set(TENSOR_CACHE_RELATIVE_PATH "${CMAKE_BINARY_DIR}/cache/tensors")
     set(DATA_RELATIVE_PATH         "${CMAKE_BINARY_DIR}/data")
+    # Logs live in the repo root (cpp/lib -> cpp -> HastyCompute), not the build tree.
+    set(HASTY_LOG_DIR              "${CMAKE_SOURCE_DIR}/../../logs")
 else()
     set(HASTY_VENV_PYTHON          "../.venv/bin/python")
     set(HASTY_SCRIPTS_DIR          "../python/scripts")
     set(MODULE_CACHE_RELATIVE_PATH "../cache/modules")
     set(TENSOR_CACHE_RELATIVE_PATH "../cache/tensors")
     set(DATA_RELATIVE_PATH         "../data")
+    set(HASTY_LOG_DIR              "../logs")
 endif()
 
 configure_file(

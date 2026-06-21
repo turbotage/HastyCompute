@@ -1,7 +1,7 @@
 # Fdb version 4
-["pdflatex"] 1781564060.80628 "/home/turbotage/Documents/GitHub/HastyCompute/notes/MRI_Physics.tex" "MRI_Physics.pdf" "MRI_Physics" 1781564061.11451 0
+["pdflatex"] 1782056166.48535 "/home/turbotage/Documents/GitHub/HastyCompute/notes/MRI_Physics.tex" "MRI_Physics.pdf" "MRI_Physics" 1782056167.07497 0
   "/etc/texmf/web2c/texmf.cnf" 1725959665.05904 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/turbotage/Documents/GitHub/HastyCompute/notes/MRI_Physics.tex" 1781564060.29781 38805 580af8305d892f92d7264dc1a1232d31 ""
+  "/home/turbotage/Documents/GitHub/HastyCompute/notes/MRI_Physics.tex" 1782056166.09045 44829 ef5d5ddacdc9eb2cc7f2d705c591fc18 ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm" 1136768653 1536 e07581a4bb3136ece9eeb4c3ffab8233 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmbsy5.tfm" 1246382020 1120 1e8878807317373affa7f7bba4cf2f6a ""
@@ -94,8 +94,8 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1725959675.68823 5472669 54eaf61a88b6b7896ebd0dac973cb29c ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1725959707 8214543 319a8b6f7f70783398c049f7b79b050f ""
-  "MRI_Physics.aux" 1781564061.08584 3721 62f0d282e9cafce2738eaa2e0d5bd4e6 "pdflatex"
-  "MRI_Physics.tex" 1781564060.29781 38805 580af8305d892f92d7264dc1a1232d31 ""
+  "MRI_Physics.aux" 1782056167.02083 4441 35c4e01e25d2c1b5e8153e03d9a2f43a "pdflatex"
+  "MRI_Physics.tex" 1782056166.09045 44829 ef5d5ddacdc9eb2cc7f2d705c591fc18 ""
   (generated)
   "MRI_Physics.aux"
   "MRI_Physics.log"

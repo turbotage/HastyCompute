@@ -244,7 +244,7 @@ public:
             auto uuid = uuid_key(uuid_proto);
             if (!_bank.contains(uuid)) {
                 response->set_success(false);
-                response->set_error_msg("Input UUID not found in bank: " + uuid);
+                response->set_error_msg("Input UUID not found in bank: " + hasty::uuid_to_hex(uuid));
                 return grpc::Status::OK;
             }
             inputs.push_back(_bank.fetch_value(uuid));

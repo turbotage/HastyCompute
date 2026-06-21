@@ -54,7 +54,7 @@ std::filesystem::path tmp_base() {
 
 // ─── Exported path helpers ────────────────────────────────────────────────────
 
-export std::string venv_python() { return hasty::resolve_exe_relative_path(HASTY_VENV_PYTHON).string(); }
+export std::string python_venv_dir() { return hasty::resolve_exe_relative_path(HASTY_VENV_PYTHON).string(); }
 export std::string scripts_dir() { return hasty::resolve_exe_relative_path(HASTY_SCRIPTS_DIR).string(); }
 
 // ─── UUID helpers ─────────────────────────────────────────────────────────────
@@ -97,7 +97,9 @@ export ScriptResult run_script(
     const std::vector<std::string>& args        = {},
     int                             num_outputs = 0,
     bool                            debug       = false,
-    int                             debug_port  = 5678)
+    int                             debug_port  = 5678,
+    UPtr<OStreamInterface> log_stream = make_uptr<LogStream>(hasty::log_dir() + "/python_script.log", true)
+)
 {
     if (!server::default_grpc_server_handle || !server::default_http_server)
         server::start_default_servers();
@@ -108,6 +110,9 @@ export ScriptResult run_script(
     std::vector<std::array<u8, 16>> output_uuids_raw;
     std::vector<std::string>        output_hex;
     output_uuids_raw.reserve(num_outputs);
+
+
+
     output_hex.reserve(num_outputs);
     for (int i = 0; i < num_outputs; ++i) {
         auto uuid = hasty::generate_uuid();
@@ -116,15 +121,36 @@ export ScriptResult run_script(
         output_hex.push_back(uuid_to_hex(uuid));
     }
 
+    // Pre-register a writable string slot the script logs into instead of
+    // printing. Each write is drained straight to log_stream and cleared, so
+    // the bank entry never grows — it's a mailbox, not a buffer.
+    auto log_uuid = hasty::generate_uuid();
+    {
+        hasty::server::GenericValueBankCallbacks log_callbacks;
+        log_callbacks.after_write_callback =
+            [stream = log_stream.get()](hasty::GenericValue& value, std::string&) {
+                if (!value.is_string()) return;
+                auto& text = value.as_string();
+                if (!text.empty()) {
+                    (*stream) << text;
+                    text.clear();
+                }
+            };
+        hasty::server::global_generic_value_bank.push_value_with_key(
+            log_uuid, hasty::GenericValue(std::string{}), std::move(log_callbacks));
+    }
+    std::string log_hex = uuid_to_hex(log_uuid);
+
     auto base      = tmp_base();
     auto err_path  = base.string() + "_err.txt";
     auto exit_path = base.string() + "_exit.txt";
 
-    std::string cmd = "\"" + venv_python() + "\""
+    std::string cmd = "\"" + python_venv_dir() + "\""
                     + " \"" + script_path + "\""
                     + " --grpc-port=" + std::to_string(grpc_port);
     if (debug)
         cmd += " --debug-port=" + std::to_string(debug_port);
+    cmd += " --log=" + log_hex;
     for (const auto& a : args)
         cmd += " " + a;
     if (num_outputs == 1) {
@@ -172,6 +198,10 @@ export ScriptResult run_script(
     } else {
         result.output_uuids = std::move(output_hex);
     }
+
+    // The log slot is a transient mailbox, never a result — always drop it.
+    hasty::server::global_generic_value_bank.delete_value(
+        std::string(reinterpret_cast<const char*>(log_uuid.data()), 16));
 
     return result;
 }

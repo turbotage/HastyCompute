@@ -575,99 +575,40 @@ public:
         return const_cast<Tensor&>(*this);
     }
 
-    Tensor add(const Tensor& other, const Scalar& alpha=1) const {
-        return Tensor(_base.add(other._base, alpha.to_torch()));
-    }
-    Tensor& add_(const Tensor& other, const Scalar& alpha=1) {
-        _base.add_(other._base, alpha.to_torch());
-        return *this;
-    }
-    Tensor add(const Scalar& other, const Scalar& alpha=1) const {
-        return Tensor(_base.add(other.to_torch(), alpha.to_torch()));
-    }
-    Tensor& add_(const Scalar& other, const Scalar& alpha=1) {
-        _base.add_(other.to_torch(), alpha.to_torch());
-        return *this;
-    }
+    Tensor add(const Tensor& other, const Scalar& alpha=1) const { return Tensor(_base.add(other._base, alpha.to_torch())); }
+    Tensor& add_(const Tensor& other, const Scalar& alpha=1) { _base.add_(other._base, alpha.to_torch()); return *this; }
+    Tensor add(const Scalar& other, const Scalar& alpha=1) const { return Tensor(_base.add(other.to_torch(), alpha.to_torch())); }
+    Tensor& add_(const Scalar& other, const Scalar& alpha=1) { _base.add_(other.to_torch(), alpha.to_torch()); return *this; }
 
-    Tensor sub(const Tensor& other, const Scalar& alpha=1) const {
-        return Tensor(_base.sub(other._base, alpha.to_torch()));
-    }
-    Tensor& sub_(const Tensor& other, const Scalar& alpha=1) {
-        _base.sub_(other._base, alpha.to_torch());
-        return *this;
-    }
-    Tensor sub(const Scalar& other, const Scalar& alpha=1) const {
-        return Tensor(_base.sub(other.to_torch(), alpha.to_torch()));
-    }
-    Tensor& sub_(const Scalar& other, const Scalar& alpha=1) {
-        _base.sub_(other.to_torch(), alpha.to_torch());
-        return *this;
-    }
+    Tensor sub(const Tensor& other, const Scalar& alpha=1) const { return Tensor(_base.sub(other._base, alpha.to_torch())); }
+    Tensor& sub_(const Tensor& other, const Scalar& alpha=1) { _base.sub_(other._base, alpha.to_torch()); return *this; }
+    Tensor sub(const Scalar& other, const Scalar& alpha=1) const { return Tensor(_base.sub(other.to_torch(), alpha.to_torch())); }
+    Tensor& sub_(const Scalar& other, const Scalar& alpha=1) { _base.sub_(other.to_torch(), alpha.to_torch()); return *this; }
 
-    Tensor mul(const Tensor& other) const {
-        return Tensor(_base.mul(other._base));
-    }
-    Tensor& mul_(const Tensor& other) {
-        _base.mul_(other._base);
-        return *this;
-    }
-    Tensor mul(const Scalar& other) const {
-        return Tensor(_base.mul(other.to_torch()));
-    }
-    Tensor& mul_(const Scalar& other) {
-        _base.mul_(other.to_torch());
-        return *this;
-    }
+    Tensor mul(const Tensor& other) const { return Tensor(_base.mul(other._base)); }
+    Tensor& mul_(const Tensor& other) { _base.mul_(other._base); return *this; }
+    Tensor mul(const Scalar& other) const { return Tensor(_base.mul(other.to_torch())); }
+    Tensor& mul_(const Scalar& other) { _base.mul_(other.to_torch()); return *this; }
 
-    Tensor div(const Tensor& other) const {
-        return Tensor(_base.div(other._base));
-    }
-    Tensor& div_(const Tensor& other) {
-        _base.div_(other._base);
-        return *this;
-    }
-    Tensor div(const Scalar& other) const {
-        return Tensor(_base.div(other.to_torch()));
-    }
-    Tensor& div_(const Scalar& other) {
-        _base.div_(other.to_torch());
-        return *this;
-    }
+    Tensor div(const Tensor& other) const { return Tensor(_base.div(other._base)); }
+    Tensor& div_(const Tensor& other) { _base.div_(other._base); return *this; }
+    Tensor div(const Scalar& other) const { return Tensor(_base.div(other.to_torch())); }
+    Tensor& div_(const Scalar& other) { _base.div_(other.to_torch()); return *this; }
 
-    Tensor pow(const Tensor& exponent) const {
-        return Tensor(_base.pow(exponent._base));
-    }
-    Tensor& pow_(const Tensor& exponent) {
-        _base.pow_(exponent._base);
-        return *this;
-    }
-    Tensor pow(const Scalar& exponent) const {
-        return Tensor(_base.pow(exponent.to_torch()));
-    }
-    Tensor& pow_(const Scalar& exponent) {
-        _base.pow_(exponent.to_torch());
-        return *this;
-    }
+    Tensor pow(const Tensor& exponent) const { return Tensor(_base.pow(exponent._base)); }
+    Tensor& pow_(const Tensor& exponent) { _base.pow_(exponent._base); return *this; }
+    Tensor pow(const Scalar& exponent) const { return Tensor(_base.pow(exponent.to_torch())); }
+    Tensor& pow_(const Scalar& exponent) { _base.pow_(exponent.to_torch()); return *this; }
 
-    Tensor bitwise_and(const Tensor& other) const {
-        return Tensor(_base.bitwise_and(other._base));
-    }
-    Tensor& bitwise_and_(const Tensor& other) {
-        _base.bitwise_and_(other._base);
-        return *this;
-    }
-    Tensor bitwise_and(const Scalar& other) const {
-        return Tensor(_base.bitwise_and(other.to_torch()));
-    }
-    Tensor& bitwise_and_(const Scalar& other) {
-        _base.bitwise_and_(other.to_torch());
-        return *this;
-    }
+    Tensor reciprocal() const { return Tensor(_base.reciprocal()); }
+    Tensor& reciprocal_() { _base.reciprocal_(); return *this; }
 
-    Tensor bitwise_or(const Tensor& other) const {
-        return Tensor(_base.bitwise_or(other._base));
-    }
+    Tensor bitwise_and(const Tensor& other) const { return Tensor(_base.bitwise_and(other._base)); }
+    Tensor& bitwise_and_(const Tensor& other) { _base.bitwise_and_(other._base); return *this; }
+    Tensor bitwise_and(const Scalar& other) const { return Tensor(_base.bitwise_and(other.to_torch())); }
+    Tensor& bitwise_and_(const Scalar& other) { _base.bitwise_and_(other.to_torch()); return *this; }
+
+    Tensor bitwise_or(const Tensor& other) const { return Tensor(_base.bitwise_or(other._base)); }
     Tensor& bitwise_or_(const Tensor& other) {
         _base.bitwise_or_(other._base);
         return *this;
@@ -787,6 +728,12 @@ public:
     inline Tensor gt(const Tensor& other) const { return Tensor(_base.gt(other._base)); }
     inline Tensor gt(const Scalar& other) const { return Tensor(_base.gt(other.to_torch())); }
 
+    inline Tensor le(const Tensor& other) const { return Tensor(_base.le(other._base)); }
+    inline Tensor le(const Scalar& other) const { return Tensor(_base.le(other.to_torch())); }
+
+    inline Tensor ge(const Tensor& other) const { return Tensor(_base.ge(other._base)); }
+    inline Tensor ge(const Scalar& other) const { return Tensor(_base.ge(other.to_torch())); }
+
     inline Tensor round() const { return Tensor(_base.round()); }
     inline Tensor& round_() { _base.round_(); return *this; }
 
@@ -794,6 +741,9 @@ public:
     inline Tensor& sgn_() { _base.sgn_(); return *this; }
 
     inline bool equal(const Tensor& other) const { return _base.equal(other._base); }
+
+    inline Tensor floor() const { return Tensor(_base.floor()); }
+    inline Tensor& floor_() { _base.floor_(); return *this; }
 
     inline Tensor t() const { return Tensor(_base.t()); }
     inline Tensor transpose(i32 dim0, i32 dim1) const { return Tensor(_base.transpose(dim0, dim1)); }

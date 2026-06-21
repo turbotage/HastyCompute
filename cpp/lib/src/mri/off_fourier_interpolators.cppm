@@ -24,109 +24,479 @@ export struct PhiLowrankResult {
 //   L1Mass    — w_h = Σ_{n∈h} ρ[n]  (total PD mass, current default)
 //   L2Energy  — w_h = Σ_{n∈h} ρ[n]² (Parseval-optimal: minimises signal
 //               L2 energy error when cross-bin correlations are negligible)
+//   Count     — w_h = Σ_{n∈h} 1 (bin population count). Unlike L1Mass/
+//               L2Energy, this needs NO PD/magnitude value — only the mask
+//               and field maps, both known a priori from scanner geometry/
+//               B0 map, never the reconstructed image itself. The other two
+//               require ground-truth PD, which doesn't exist before
+//               reconstruction in a real pipeline (mag is only available
+//               here because this test driver has a synthetic reference).
 export enum struct eBinWeighting : i32 {
     None               = 0,
     L1Mass             = 1,
     L2Energy           = 2,
     FreqAwareLowrank   = 3,
+    Count              = 4,
+};
+
+// One term in the concomitant field expansion:
+//   B_con(r,t) ≈ Σ_q spatial_map_q(r) · waveform_q(t)
+// where waveform_q arises from gradient products G_i(t)·G_j(t), NOT k(t).
+// GNL separable terms (proportional to k-axis) are handled by CoordinateWarp.
+//
+// waveform is spoke-shaped [nspokes, nsamps] (not flat [K]) so make_phi_operator
+// can subsample in time *within* a spoke — gradient products vary smoothly along
+// a spoke, but jump between spokes, so subsampling must respect that boundary.
+export struct ConcomitantBasis {
+    Tensor spatial_map;  // [N] float               — field map evaluated at r-space voxels
+    Tensor waveform;     // [nspokes, nsamps] float  — accumulated concomitant phase per sample
 };
 
 export struct HistogramResult {
-    Tensor mask_idx;        // [N_mask]   long  — flat voxel indices in the image
-    Tensor voxel_to_bin;    // [N_mask]   long  — bin index for each masked voxel
+    Tensor mask_idx;          // [N_mask]    long  — flat voxel indices in image
+    Tensor voxel_to_bin;      // [N_mask]    long  — bin index for each masked voxel
     i64    n_hist;
-    Tensor z_map_hist;      // [n_hist]   complex — weighted-mean z per bin
-    Tensor nl_fields_hist;  // [Q, n_hist] float  — weighted-mean fields per bin
-    Tensor bin_weights;     // [n_hist]   float  — Σ ρ   per bin  (L1 mass)
-    Tensor bin_l2_energy;   // [n_hist]   float  — Σ ρ²  per bin  (L2 energy)
+    Tensor z_map_hist;        // [n_hist]    ComplexFloat — weighted-mean z per bin
+    Tensor conc_fields_hist;  // [Q, n_hist] float        — weighted-mean concomitant fields per bin
+    Tensor conc_waveforms;    // [Q, nspokes, nsamps] float — stacked waveforms from ConcomitantBasis
+    Tensor bin_weights;       // [n_hist]    float        — Σ ρ   per bin (L1 mass)
+    Tensor bin_l2_energy;     // [n_hist]    float        — Σ ρ²  per bin (L2 energy)
+    Tensor bin_count;         // [n_hist]    float        — Σ 1   per bin (population count, no PD needed)
+};
+
+
+// ---------------------------------------------------------------------------
+// extract_histogram
+//
+// Bins masked voxels by their (z_real, z_imag, f_0, ..., f_{Q-1}) features.
+// n_rate bins for each component of z_map, n_conc_bins per concomitant field.
+// Weighted means use mag as weight. bin_weights = Σ_{j in bin} mag_j.
+// concomitant may be empty (Q=0): only z_map features used.
+// ---------------------------------------------------------------------------
+
+export HistogramResult extract_histogram(
+    const Tensor& mag_flat,
+    const Tensor& z_map_flat,
+    const std::vector<ConcomitantBasis>& concomitant,
+    i64 n_rate,
+    i64 n_conc_bins = 1
+) {
+    const i64    N      = mag_flat.size(0);
+    const i64    Q      = (i64)concomitant.size();
+    const Device device = mag_flat.device();
+
+    const TensorOptions opts_f = TensorOptions(device, eScalarType::Float);
+    const TensorOptions opts_l = TensorOptions(device, eScalarType::Long);
+
+    if (mag_flat.scalar_type() != eScalarType::Float)
+        throw std::invalid_argument("mag_flat must be Float");
+    if (z_map_flat.scalar_type() != eScalarType::ComplexFloat)
+        throw std::invalid_argument("z_map_flat must be ComplexFloat");
+
+    i64 nspokes = 0, nsamps = 0;
+    for (i64 q = 0; q < Q; ++q) {
+        if (concomitant[q].spatial_map.scalar_type() != eScalarType::Float)
+            throw std::invalid_argument("concomitant spatial_map must be Float");
+        if (concomitant[q].spatial_map.ndimension() != 1 || concomitant[q].spatial_map.size(0) != N)
+            throw std::invalid_argument("concomitant spatial_map must be [N]");
+        if (concomitant[q].waveform.scalar_type() != eScalarType::Float)
+            throw std::invalid_argument("concomitant waveform must be Float");
+        if (concomitant[q].waveform.ndimension() != 2)
+            throw std::invalid_argument("concomitant waveform must be [nspokes, nsamps]");
+        if (q == 0) {
+            nspokes = concomitant[q].waveform.size(0);
+            nsamps  = concomitant[q].waveform.size(1);
+        } else if (concomitant[q].waveform.size(0) != nspokes || concomitant[q].waveform.size(1) != nsamps) {
+            throw std::invalid_argument("concomitant waveform spoke shape mismatch across terms");
+        }
+    }
+
+    auto mask     = mag_flat.gt(Scalar(0.0f));
+    auto mask_idx = arange(N, opts_l).masked_select(mask);
+    const i64 N_mask = mask_idx.size(0);
+
+    auto mag_m = mag_flat.masked_select(mask);
+
+    auto select_masked = [&](const Tensor& x) {
+        return x.masked_select(mask);
+    };
+
+    auto bin_feat = [&](const Tensor& x, i64 n) -> Tensor {
+        const float lo_f   = x.min().item<f32>();
+        const float hi_f   = x.max().item<f32>();
+        const float range  = hi_f - lo_f;
+        const float scale  = std::max({std::abs(lo_f), std::abs(hi_f), 1e-30f});
+
+        // Collapse to a single bin when the range is dominated by floating-
+        // point noise rather than real signal -- e.g. a channel disabled at
+        // the physics level (b0_scale/conc_scale/gnl_scale=0) is supposed to
+        // be exactly constant, but still passes through a full complex
+        // FFT/NUFFT warp pipeline that's never literally identity at the
+        // bit level, leaving ~1e-6 relative round-off. The old fixed 1e-12
+        // ABSOLUTE epsilon (in the division denominator) couldn't catch
+        // this -- noise sits orders of magnitude above that -- so min-max
+        // normalization spread bit-noise across all n bins, multiplying out
+        // into a huge, physically meaningless n_hist (seen: 420097 bins for
+        // an all-effects-disabled sanity config that should need exactly 1).
+        if (range < scale * 1e-4f)
+            return zeros({x.size(0)}, TensorOptions(x.device(), eScalarType::Long));
+
+        auto idx = x.sub(Scalar(lo_f)).div(Scalar(range + 1e-12f))
+                    .mul(Scalar((f32)(n - 1)))
+                    .to(eScalarType::Long);
+        return clamp(idx, Scalar((i64)0), Scalar((i64)(n - 1)));
+    };
+
+    // Strides: z_real | z_imag | conc_0 | ... | conc_{Q-1}  (row-major)
+    i64 conc_total = 1;
+    for (i64 q = 0; q < Q; ++q) conc_total *= n_conc_bins;
+
+    auto z_real_m = select_masked(z_map_flat.real());
+    auto z_imag_m = select_masked(z_map_flat.imag());
+
+    auto bin_flat = bin_feat(z_real_m, n_rate).mul(Scalar(n_rate * conc_total))
+                     .add(bin_feat(z_imag_m, n_rate).mul(Scalar(conc_total)));
+
+    i64 conc_stride = conc_total;
+    for (i64 q = 0; q < Q; ++q) {
+        conc_stride /= n_conc_bins;
+        auto conc_m = select_masked(concomitant[q].spatial_map);
+        bin_flat    = bin_flat.add(bin_feat(conc_m, n_conc_bins).mul(Scalar(conc_stride)));
+    }
+
+    auto [unique_bins, voxel_to_bin] = unique_with_inverse(bin_flat);
+    const i64 n_hist = unique_bins.size(0);
+
+    auto scatter_wmean_f = [&](const Tensor& vals) -> Tensor {
+        auto wv  = zeros({n_hist}, opts_f);
+        auto wc  = zeros({n_hist}, opts_f);
+        wv.scatter_add_(0, voxel_to_bin, vals.mul(mag_m));
+        wc.scatter_add_(0, voxel_to_bin, mag_m);
+        return wv.div(clamp(wc, Scalar(1e-30f), Scalar(1e30f)));
+    };
+
+    auto z_real_hist = scatter_wmean_f(z_real_m);
+    auto z_imag_hist = scatter_wmean_f(z_imag_m);
+    auto z_map_hist  = view_as_complex(stack({z_real_hist, z_imag_hist}, 1).contiguous());
+
+    // Stack concomitant field centroids: [Q, n_hist]
+    std::vector<Tensor> conc_cols;
+    conc_cols.reserve(Q);
+    for (i64 q = 0; q < Q; ++q)
+        conc_cols.push_back(scatter_wmean_f(select_masked(concomitant[q].spatial_map)).unsqueeze(0));
+
+    auto conc_fields_hist = Q > 0 ? cat(conc_cols, 0)
+                                  : empty({0, n_hist}, opts_f);
+
+    // Stack waveforms: [Q, nspokes, nsamps]
+    std::vector<Tensor> wf_rows;
+    wf_rows.reserve(Q);
+    for (i64 q = 0; q < Q; ++q)
+        wf_rows.push_back(concomitant[q].waveform.unsqueeze(0));
+
+    auto conc_waveforms = Q > 0 ? cat(wf_rows, 0)
+                                : empty({0, 0, 0}, opts_f);
+
+    auto bin_weights = zeros({n_hist}, opts_f);
+    bin_weights.scatter_add_(0, voxel_to_bin, mag_m);
+
+    auto bin_l2_energy = zeros({n_hist}, opts_f);
+    bin_l2_energy.scatter_add_(0, voxel_to_bin, mag_m.mul(mag_m));
+
+    // Population count per bin — Σ 1, NOT mag-derived. Needs only mask_idx
+    // (mask/field-maps are known a priori) and voxel_to_bin (derived from
+    // z_map/concomitant fields, also known a priori) — no PD/mag value
+    // anywhere in this computation, unlike L1Mass/L2Energy which need the
+    // very thing reconstruction is solving for.
+    auto bin_count = zeros({n_hist}, opts_f);
+    bin_count.scatter_add_(0, voxel_to_bin, ones({N_mask}, opts_f));
+
+    return HistogramResult{
+        mask_idx, voxel_to_bin, n_hist,
+        z_map_hist, conc_fields_hist, conc_waveforms,
+        bin_weights, bin_l2_energy, bin_count
+    };
+}
+
+// ---------------------------------------------------------------------------
+// extract_features_no_histogram
+//
+// Same output shape as extract_histogram (a HistogramResult), but WITHOUT
+// any value-based binning: every masked voxel is its own "bin"
+// (n_hist == N_mask, voxel_to_bin == identity). No bin_feat/unique_with_
+// inverse/scatter_add_ anywhere — z_map_hist/conc_fields_hist are the exact
+// per-voxel feature values, not weighted-mean bin centroids.
+//
+// This exists because value-based histogramming has an unbounded cost
+// blowup: n_hist scales as a PRODUCT of per-axis bin resolutions
+// (n_rate^2 * n_conc_bins^Q), independent of how many voxels actually exist,
+// and once a real (non-degenerate) T2/B0 map is in play this routinely
+// exceeds N_mask itself -- at that point histogramming is pure overhead, not
+// compression. Going through every voxel exactly is the trivial upper bound
+// on accuracy (zero quantization error) AND on cost (n_hist == N_mask,
+// never more) -- downstream (make_phi_operator/phi_lowrank) is unchanged,
+// since it only consumes HistogramResult's fields generically.
+// ---------------------------------------------------------------------------
+
+export HistogramResult extract_features_no_histogram(
+    const Tensor& mag_flat,
+    const Tensor& z_map_flat,
+    const std::vector<ConcomitantBasis>& concomitant
+) {
+    const i64    N      = mag_flat.size(0);
+    const i64    Q      = (i64)concomitant.size();
+    const Device device = mag_flat.device();
+    const TensorOptions opts_f = TensorOptions(device, eScalarType::Float);
+    const TensorOptions opts_l = TensorOptions(device, eScalarType::Long);
+
+    if (mag_flat.scalar_type() != eScalarType::Float)
+        throw std::invalid_argument("mag_flat must be Float");
+    if (z_map_flat.scalar_type() != eScalarType::ComplexFloat)
+        throw std::invalid_argument("z_map_flat must be ComplexFloat");
+
+    i64 nspokes = 0, nsamps = 0;
+    for (i64 q = 0; q < Q; ++q) {
+        if (q == 0) { nspokes = concomitant[q].waveform.size(0); nsamps = concomitant[q].waveform.size(1); }
+        else if (concomitant[q].waveform.size(0) != nspokes || concomitant[q].waveform.size(1) != nsamps)
+            throw std::invalid_argument("concomitant waveform spoke shape mismatch across terms");
+    }
+
+    auto mask     = mag_flat.gt(Scalar(0.0f));
+    auto mask_idx = arange(N, opts_l).masked_select(mask);
+    const i64 n_hist = mask_idx.size(0);   // one "bin" per masked voxel, exactly
+
+    auto select_masked = [&](const Tensor& x) { return x.masked_select(mask); };
+
+    auto mag_m       = select_masked(mag_flat);
+    auto z_map_hist  = select_masked(z_map_flat).contiguous();   // [n_hist] ComplexFloat, exact per-voxel z
+
+    std::vector<Tensor> conc_cols;
+    conc_cols.reserve(Q);
+    for (i64 q = 0; q < Q; ++q)
+        conc_cols.push_back(select_masked(concomitant[q].spatial_map).unsqueeze(0));
+    auto conc_fields_hist = Q > 0 ? cat(conc_cols, 0) : empty({0, n_hist}, opts_f);
+
+    std::vector<Tensor> wf_rows;
+    wf_rows.reserve(Q);
+    for (i64 q = 0; q < Q; ++q) wf_rows.push_back(concomitant[q].waveform.unsqueeze(0));
+    auto conc_waveforms = Q > 0 ? cat(wf_rows, 0) : empty({0, 0, 0}, opts_f);
+
+    auto voxel_to_bin  = arange(n_hist, opts_l);   // identity: bin h == masked voxel h
+    auto bin_weights   = mag_m.contiguous();
+    auto bin_l2_energy = mag_m.mul(mag_m).contiguous();
+    auto bin_count     = ones({n_hist}, opts_f);
+
+    return HistogramResult{
+        mask_idx, voxel_to_bin, n_hist,
+        z_map_hist, conc_fields_hist, conc_waveforms,
+        bin_weights, bin_l2_energy, bin_count
+    };
+}
+
+
+// ---------------------------------------------------------------------------
+// SpokeSubsampleInfo / PhiOperatorResult
+//
+// make_phi_operator subsamples time within each spoke (gradient waveforms —
+// hence the concomitant phase — vary smoothly along a spoke, but jump between
+// spokes, so the stride must respect spoke boundaries). The resulting SVD
+// (phi_lowrank) runs on K_sub = nspokes*n_sub rows instead of the full
+// K = nspokes*nsamps, then upsample_omega_spokes reconstructs the full-rate
+// Omega via cubic interpolation per spoke. subsample=1 -> n_sub == nsamps,
+// i.e. no subsampling (identity upsample).
+// ---------------------------------------------------------------------------
+
+export struct SpokeSubsampleInfo {
+    i64 nspokes;
+    i64 nsamps;     // full samples per spoke
+    i64 n_sub;      // subsampled samples per spoke
+    i64 subsample;  // stride
+};
+
+export struct PhiOperatorResult {
+    linalg::LinearOperator op;  // [K_sub, n_hist] — operates on subsampled time samples
+    SpokeSubsampleInfo      spoke_info;
 };
 
 
 // ---------------------------------------------------------------------------
 // make_phi_operator
+//
+// Builds the [K_sub, n_hist] phi operator from HistogramResult:
+//   phi[k,h] = exp(-z_h · t_k) · Π_q exp(i · conc_fields_hist[q,h] · conc_waveforms[q,k])
+// where z_h = B0+off-resonance (complex), conc terms are real accumulated phase.
+//
+// timestamps is spoke-shaped [nspokes, nsamps]. subsample=1 uses every sample
+// (K_sub == nspokes*nsamps); subsample=S keeps every S-th sample within each
+// spoke (indices 0, S, 2S, ... clamped to the spoke length) — pair with
+// phi_lowrank then upsample_omega_spokes to recover full time resolution.
+//
+// The exp()/matmul-heavy work (building phi, the Lanczos matvec contraction)
+// runs in ComplexFloat — the dominant cost is transcendental evaluation, and a
+// one-time ~1e-7 relative error per phi entry doesn't compound across SVD
+// iterations. Only the small per-chunk *output* vector is cast up to
+// ComplexDouble before accumulating into the result, so the externally
+// visible operator dtype (and Lanczos's own iterate) stays double precision —
+// avoiding the float32<->float64 round-trip-per-iteration error growth that
+// motivated building everything in double originally.
 // ---------------------------------------------------------------------------
 
-export linalg::LinearOperator make_phi_operator(
-    const Tensor& z_map,
-    const Tensor& nl_fields,
-    const Tensor& nl_alpha,
-    const Tensor& timestamps,
+export PhiOperatorResult make_phi_operator(
+    const HistogramResult& hist,
+    const Tensor& timestamps,   // [nspokes, nsamps] float
+    i64 subsample  = 1,
     i64 chunk_size = 512
 ) {
-    const i64    K      = timestamps.size(0);
-    const i64    N      = z_map.size(0);
-    const i64    Q      = nl_fields.size(0);
-    const Device device = z_map.device();
+    if (timestamps.scalar_type() != eScalarType::Float)
+        throw std::invalid_argument("timestamps must be Float");
+    if (timestamps.ndimension() != 2)
+        throw std::invalid_argument("timestamps must be [nspokes, nsamps]");
+    if (subsample < 1)
+        throw std::invalid_argument("subsample must be >= 1");
 
-    auto chk_device = [&](const Tensor& t, std::string_view name) {
-        if (t.device() != device)
-            throw std::invalid_argument(std::string(name) + " device mismatch");
-    };
-    auto chk_dtype = [&](const Tensor& t, eScalarType expected, std::string_view name) {
-        if (t.scalar_type() != expected)
-            throw std::invalid_argument(std::string(name) + " wrong dtype");
-    };
+    const i64    nspokes = timestamps.size(0);
+    const i64    nsamps  = timestamps.size(1);
+    const i64    N       = hist.n_hist;
+    const i64    Q       = hist.conc_fields_hist.size(0);
+    const Device device  = hist.z_map_hist.device();
 
-    chk_dtype(z_map,      eScalarType::ComplexFloat, "z_map");
-    chk_dtype(nl_fields,  eScalarType::Float,        "nl_fields");
-    chk_dtype(nl_alpha,   eScalarType::Float,        "nl_alpha");
-    chk_dtype(timestamps, eScalarType::Float,        "timestamps");
+    if (Q > 0 && (hist.conc_waveforms.size(0) != Q
+               || hist.conc_waveforms.size(1) != nspokes
+               || hist.conc_waveforms.size(2) != nsamps))
+        throw std::invalid_argument("conc_waveforms shape mismatch with timestamps");
 
-    if (z_map.ndimension() != 1)
-        throw std::invalid_argument("z_map must be 1-D [N]");
-    if (nl_fields.ndimension() != 2 || nl_fields.size(1) != N)
-        throw std::invalid_argument("nl_fields must be [Q, N]");
-    if (nl_alpha.ndimension() != 2 || nl_alpha.size(0) != Q || nl_alpha.size(1) != K)
-        throw std::invalid_argument("nl_alpha must be [Q, K]");
-    if (timestamps.ndimension() != 1)
-        throw std::invalid_argument("timestamps must be 1-D");
+    // Uniform stride within each spoke; n_sub may undershoot nsamps-1 by up to
+    // (subsample-1) samples when it doesn't divide evenly — upsample_omega_spokes
+    // clamps the trailing tail flat (constant extrapolation) in that case.
+    const i64 n_sub = (nsamps - 1) / subsample + 1;
+    auto sub_idx = arange(n_sub, TensorOptions(device, eScalarType::Long))
+                       .mul(Scalar(subsample));
 
-    chk_device(nl_fields,  "nl_fields");
-    chk_device(nl_alpha,   "nl_alpha");
-    chk_device(timestamps, "timestamps");
+    const i64 K_sub = nspokes * n_sub;
 
-    // Build phi in double precision so the SVD MatVec has full f64 accuracy.
-    // PETSc Lanczos already uses double internally; without this, every
-    // matvec application round-trips float32→double→float32, accumulating
-    // ~1e-7 relative error per application over K=400k terms.
-    const Scalar pos_i_d = Scalar(std::complex<f64>(0.0, 1.0));
+    auto timestamps_sub = timestamps.index_select(1, sub_idx).reshape({K_sub});
 
+    Tensor conc_waveforms_sub = Q > 0
+        ? hist.conc_waveforms.index_select(2, sub_idx).reshape({Q, K_sub})
+        : empty({0, K_sub}, TensorOptions(device, eScalarType::Float));
+
+    const Scalar pos_i_f = Scalar(std::complex<f32>(0.0f, 1.0f));
+
+    const Tensor z_map_hist       = hist.z_map_hist;
+    const Tensor conc_fields_hist = hist.conc_fields_hist;
+
+    // ComplexFloat — see function doc for why this doesn't reintroduce the
+    // round-trip error the original ComplexDouble build avoided.
     auto build_phi = [=](i64 k0, i64 kB) -> Tensor {
-        auto t_c  = timestamps.narrow(0, k0, kB).to(eScalarType::ComplexDouble);
-        auto zm_d = z_map.to(eScalarType::ComplexDouble);
-        auto phi  = (zm_d.unsqueeze(0).mul(-t_c.unsqueeze(1))).exp();
+        auto t_c  = timestamps_sub.narrow(0, k0, kB).to(eScalarType::ComplexFloat);
+        auto zm_f = z_map_hist.to(eScalarType::ComplexFloat);
+        auto phi  = (zm_f.unsqueeze(0).mul(-t_c.unsqueeze(1))).exp();  // [kB, n_hist]
         for (i64 q = 0; q < Q; ++q) {
             phi = phi.mul(
-                nl_fields.select(0, q).to(eScalarType::ComplexDouble).unsqueeze(0)
-                          .mul(nl_alpha.select(0, q).narrow(0, k0, kB)
-                                       .to(eScalarType::ComplexDouble).unsqueeze(1))
-                          .mul(pos_i_d).exp()
+                conc_fields_hist.select(0, q).to(eScalarType::ComplexFloat).unsqueeze(0)
+                    .mul(conc_waveforms_sub.select(0, q).narrow(0, k0, kB)
+                             .to(eScalarType::ComplexFloat).unsqueeze(1))
+                    .mul(pos_i_f).exp()
             );
         }
-        return phi;  // [kB, N] ComplexDouble
+        return phi;  // [kB, n_hist] ComplexFloat
     };
 
     auto mv_fn = [=](const Tensor& x) -> Tensor {
-        auto result = zeros({K}, TensorOptions(device, eScalarType::ComplexDouble));
-        for (i64 k0 = 0; k0 < K; k0 += chunk_size) {
-            const i64 kB = std::min(chunk_size, K - k0);
-            result.narrow(0, k0, kB).copy_(mv(build_phi(k0, kB), x));
+        auto result = zeros({K_sub}, TensorOptions(device, eScalarType::ComplexDouble));
+        auto x_f    = x.to(eScalarType::ComplexFloat);
+        for (i64 k0 = 0; k0 < K_sub; k0 += chunk_size) {
+            const i64 kB = std::min(chunk_size, K_sub - k0);
+            result.narrow(0, k0, kB).copy_(
+                mv(build_phi(k0, kB), x_f).to(eScalarType::ComplexDouble));
         }
         return result;
     };
 
     auto rmv_fn = [=](const Tensor& y) -> Tensor {
         auto result = zeros({N}, TensorOptions(device, eScalarType::ComplexDouble));
-        for (i64 k0 = 0; k0 < K; k0 += chunk_size) {
-            const i64 kB = std::min(chunk_size, K - k0);
-            result += mv(build_phi(k0, kB).conj().transpose(0, 1), y.narrow(0, k0, kB));
+        auto y_f    = y.to(eScalarType::ComplexFloat);
+        for (i64 k0 = 0; k0 < K_sub; k0 += chunk_size) {
+            const i64 kB = std::min(chunk_size, K_sub - k0);
+            auto chunk = mv(build_phi(k0, kB).conj().transpose(0, 1), y_f.narrow(0, k0, kB));
+            result += chunk.to(eScalarType::ComplexDouble);
         }
         return result;
     };
 
-    return linalg::LinearOperator(K, N,
+    linalg::LinearOperator op(K_sub, N,
         std::move(mv_fn), std::move(rmv_fn),
         eScalarType::ComplexDouble, device);
+
+    return PhiOperatorResult{
+        std::move(op),
+        SpokeSubsampleInfo{nspokes, nsamps, n_sub, subsample}
+    };
+}
+
+
+// ---------------------------------------------------------------------------
+// upsample_omega_spokes
+//
+// Reconstructs full time-resolution Omega [nspokes*nsamps, L] from the
+// subsampled-SVD Omega_sub [nspokes*n_sub, L] via Catmull-Rom cubic
+// interpolation along the time axis, independently per spoke (Upsilon, the
+// spatial/bin basis, is time-independent and needs no reconstruction).
+//
+// subsample=1 (n_sub == nsamps) is the identity — returned unchanged.
+// ---------------------------------------------------------------------------
+
+export Tensor upsample_omega_spokes(
+    const Tensor& Omega_sub,           // [nspokes*n_sub, L] ComplexFloat
+    const SpokeSubsampleInfo& info
+) {
+    if (info.n_sub == info.nsamps)
+        return Omega_sub;
+
+    const i64    L      = Omega_sub.size(1);
+    const Device device = Omega_sub.device();
+
+    auto src = Omega_sub.reshape({info.nspokes, info.n_sub, L});
+
+    const TensorOptions opts_f = TensorOptions(device, eScalarType::Float);
+    const TensorOptions opts_l = TensorOptions(device, eScalarType::Long);
+
+    auto j         = arange(info.nsamps, opts_f);
+    auto u         = j.div(Scalar((f32)info.subsample));
+    auto u_clamped = clamp(u, Scalar(0.0f), Scalar((f32)(info.n_sub - 1)));
+    auto i0_f      = hasty::floor(u_clamped);
+    auto t         = u_clamped.sub(i0_f);                 // fractional part, [nsamps]
+    auto i0        = i0_f.to(eScalarType::Long);
+
+    auto clamp_idx = [&](const Tensor& idx) {
+        return clamp(idx, Scalar((i64)0), Scalar((i64)(info.n_sub - 1)));
+    };
+    auto i_m1 = clamp_idx(i0.sub(Scalar((i64)1)));
+    auto i_p1 = clamp_idx(i0.add(Scalar((i64)1)));
+    auto i_p2 = clamp_idx(i0.add(Scalar((i64)2)));
+    auto i0c  = clamp_idx(i0);
+
+    auto t2 = t.mul(t);
+    auto t3 = t2.mul(t);
+
+    auto w_m1 = t3.mul(Scalar(-0.5f)).add(t2).sub(t.mul(Scalar(0.5f)));
+    auto w_0  = t3.mul(Scalar(1.5f)).sub(t2.mul(Scalar(2.5f))).add(Scalar(1.0f));
+    auto w_1  = t3.mul(Scalar(-1.5f)).add(t2.mul(Scalar(2.0f))).add(t.mul(Scalar(0.5f)));
+    auto w_2  = t3.mul(Scalar(0.5f)).sub(t2.mul(Scalar(0.5f)));
+
+    auto cw = [&](const Tensor& w) {
+        return w.to(eScalarType::ComplexFloat).unsqueeze(0).unsqueeze(2);  // [1, nsamps, 1]
+    };
+    auto tap = [&](const Tensor& idx) {
+        return src.index_select(1, idx);  // [nspokes, nsamps, L]
+    };
+
+    auto out = tap(i_m1).mul(cw(w_m1))
+                  .add(tap(i0c).mul(cw(w_0)))
+                  .add(tap(i_p1).mul(cw(w_1)))
+                  .add(tap(i_p2).mul(cw(w_2)));
+
+    return out.reshape({info.nspokes * info.nsamps, L});
 }
 
 
@@ -149,6 +519,8 @@ export Opt<Tensor> phi_lowrank_weights(
             return hist.bin_weights;
         case eBinWeighting::L2Energy:
             return hist.bin_l2_energy;
+        case eBinWeighting::Count:
+            return hist.bin_count;
         case eBinWeighting::FreqAwareLowrank: {
             float T_readout = (timestamps.max() - timestamps.min()).item<f32>();
             float pi_f = (float)pi_v<f64>;
@@ -177,6 +549,13 @@ export PhiLowrankResult phi_lowrank(
     const i64    K      = op.m();
     const i64    N      = op.n();
     const Device device = op.device();
+
+    if (L > std::min(K, N))
+        throw std::invalid_argument(
+            "phi_lowrank: requested L=" + std::to_string(L) +
+            " exceeds operator rank bound min(K,N)=" + std::to_string(std::min(K, N)) +
+            " — n_hist should never be this small (no off-resonance/concomitant "
+            "variation in the input?); this is a caller bug, not something to silently clamp.");
 
     linalg::SVDResult svd;
     Tensor w_sqrt;
@@ -214,124 +593,17 @@ export PhiLowrankResult phi_lowrank(
 
 
 // ---------------------------------------------------------------------------
-// extract_histogram
-//
-// Bins masked voxels by their (z_real, z_imag, f_0, ..., f_{Q-1}) features.
-// n_rate bins for each component of z_map, n_nl bins per nonlinear field.
-// Weighted means use mag as weight. bin_weights = Σ_{j in bin} mag_j.
-// ---------------------------------------------------------------------------
-
-export HistogramResult extract_histogram(
-    const Tensor& mag_flat,
-    const Tensor& z_map_flat,
-    const Tensor& nl_fields,
-    i64 n_rate,
-    i64 n_nl
-) {
-    const i64    N      = mag_flat.size(0);
-    const i64    Q      = nl_fields.size(0);
-    const Device device = mag_flat.device();
-
-    const TensorOptions opts_f = TensorOptions(device, eScalarType::Float);
-    const TensorOptions opts_l = TensorOptions(device, eScalarType::Long);
-
-    if (mag_flat.scalar_type() != eScalarType::Float)
-        throw std::invalid_argument("mag_flat must be Float");
-    if (z_map_flat.scalar_type() != eScalarType::ComplexFloat)
-        throw std::invalid_argument("z_map_flat must be ComplexFloat");
-    if (nl_fields.scalar_type() != eScalarType::Float)
-        throw std::invalid_argument("nl_fields must be Float");
-    if (nl_fields.ndimension() != 2 || nl_fields.size(1) != N)
-        throw std::invalid_argument("nl_fields must be [Q, N]");
-
-    auto mask     = mag_flat.gt(Scalar(0.0f));
-    auto mask_idx = arange(N, opts_l).masked_select(mask);
-    const i64 N_mask = mask_idx.size(0);
-
-    auto mag_m = mag_flat.masked_select(mask);
-
-    auto select_masked = [&](const Tensor& x) {
-        return x.masked_select(mask);
-    };
-
-    auto bin_feat = [&](const Tensor& x, i64 n) -> Tensor {
-        auto lo  = x.min();
-        auto hi  = x.max();
-        auto idx = x.sub(lo).div(hi.sub(lo).add(Scalar(1e-12f)))
-                    .mul(Scalar((f32)(n - 1)))
-                    .to(eScalarType::Long);
-        return clamp(idx, Scalar((i64)0), Scalar((i64)(n - 1)));
-    };
-
-    // Strides: z_real | z_imag | nl_0 | ... | nl_{Q-1}  (row-major)
-    i64 nl_total = 1;
-    for (i64 q = 0; q < Q; ++q) nl_total *= n_nl;
-
-    auto z_real_m = select_masked(z_map_flat.real());
-    auto z_imag_m = select_masked(z_map_flat.imag());
-
-    auto bin_flat = bin_feat(z_real_m, n_rate).mul(Scalar(n_rate * nl_total))
-                     .add(bin_feat(z_imag_m, n_rate).mul(Scalar(nl_total)));
-
-    i64 nl_stride = nl_total;
-    for (i64 q = 0; q < Q; ++q) {
-        nl_stride /= n_nl;
-        auto nl_m  = select_masked(nl_fields.select(0, q));
-        bin_flat   = bin_flat.add(bin_feat(nl_m, n_nl).mul(Scalar(nl_stride)));
-    }
-
-    auto [unique_bins, voxel_to_bin] = unique_with_inverse(bin_flat);
-    const i64 n_hist = unique_bins.size(0);
-
-    auto scatter_wmean_f = [&](const Tensor& vals) -> Tensor {
-        auto wv  = zeros({n_hist}, opts_f);
-        auto wc  = zeros({n_hist}, opts_f);
-        wv.scatter_add_(0, voxel_to_bin, vals.mul(mag_m));
-        wc.scatter_add_(0, voxel_to_bin, mag_m);
-        return wv.div(clamp(wc, Scalar(1e-30f), Scalar(1e30f)));
-    };
-
-    auto z_real_hist = scatter_wmean_f(z_real_m);
-    auto z_imag_hist = scatter_wmean_f(z_imag_m);
-    auto z_map_hist  = view_as_complex(stack({z_real_hist, z_imag_hist}, 1).contiguous());
-
-    std::vector<Tensor> nl_cols;
-    nl_cols.reserve(Q);
-    for (i64 q = 0; q < Q; ++q)
-        nl_cols.push_back(scatter_wmean_f(select_masked(nl_fields.select(0, q))).unsqueeze(0));
-
-    auto nl_fields_hist = Q > 0 ? cat(nl_cols, 0)
-                                : empty({0, n_hist}, opts_f);
-
-    auto bin_weights = zeros({n_hist}, opts_f);
-    bin_weights.scatter_add_(0, voxel_to_bin, mag_m);
-
-    auto bin_l2_energy = zeros({n_hist}, opts_f);
-    bin_l2_energy.scatter_add_(0, voxel_to_bin, mag_m.mul(mag_m));
-
-    return HistogramResult{
-        mask_idx, voxel_to_bin, n_hist,
-        z_map_hist, nl_fields_hist, bin_weights, bin_l2_energy
-    };
-}
-
-
-// ---------------------------------------------------------------------------
 // time_segmented_phi
 //
-// Classic time-segmentation approximation (off-resonance only, ignores NL).
+// Classic time-segmentation approximation (off-resonance only).
 // Fixes L spatial maps Υ[h,l] = exp(-z_h·τ_l) at uniformly-spaced segment
 // times τ_l ∈ [t_min, t_max], then finds the weighted-LS-optimal temporal
 // coefficients Ω[k,l] that minimise
 //   Σ_h w_h |Σ_l Ω[k,l]·Υ[h,l] - exp(-z_h·t_k)|²
 // for each k independently.
 //
-// Normal equations:  G·Ω[k,:]ᵀ = R[k,:]ᵀ
-//   G[l,m]  = Σ_h w_h·conj(Υ[h,l])·Υ[h,m]         [L×L, precomputed once]
-//   R[k,l]  = Σ_h w_h·conj(Υ[h,l])·exp(-z_h·t_k)  [K×L, chunked matmul]
-//
+// Concomitant fields are handled by make_phi_operator / phi_lowrank.
 // Returns PhiLowrankResult — same struct as SVD → same approx_signal call.
-// Computed in f64 for numerical stability, cast to cf32 on return.
 // ---------------------------------------------------------------------------
 
 export PhiLowrankResult time_segmented_phi(
@@ -360,6 +632,8 @@ export PhiLowrankResult time_segmented_phi(
             w = hist.bin_weights; break;
         case eBinWeighting::L2Energy:
             w = hist.bin_l2_energy; break;
+        case eBinWeighting::Count:
+            w = hist.bin_count; break;
         case eBinWeighting::FreqAwareLowrank: {
             float T_readout = (timestamps.max() - timestamps.min()).item<f32>();
             auto phase_h    = hist.z_map_hist.imag().abs()
@@ -403,61 +677,15 @@ export PhiLowrankResult time_segmented_phi(
     }
 
     // ── Ω: solve G @ Ωᵀ = Rᵀ  →  Ω = (G⁻¹ Rᵀ)ᵀ ────────────────────────────
-    // G is [L×L], linalg_solve is O(L³) — negligible for L ≤ 16.
     auto Omega = linalg_solve(G, R.transpose(0, 1))
                      .transpose(0, 1).contiguous();                   // [K, L]
 
     return PhiLowrankResult{
         Omega.to(eScalarType::ComplexFloat),
+        Tensor{},  // S not produced by time segmentation
         Upsilon.to(eScalarType::ComplexFloat)
     };
 }
-
-
-// ---------------------------------------------------------------------------
-// apply_axis_warp
-//
-// Coordinate substitution q = u(r) for a single static, axis-separable GNL
-// term: u_axis(r) = r_axis + c * field(r), other axes unchanged. By
-// construction (see notes/MRI_Physics.tex, "Gradient Nonlinearity via
-// Coordinate Substitution") this is exact when the term's waveform alpha(t)
-// is proportional to k_axis(t), i.e. field(r)*alpha(t) == k_axis(t)*(c*field(r)).
-//
-// jacobian_det = 1 + c * field_grad, where field_grad = d field/d r_axis
-// (diagonal Jacobian since field depends only on r_axis here).
-// ---------------------------------------------------------------------------
-
-export struct AxisWarpResult {
-    Tensor warped_coords;   // [N, 3] float — q = u(r)
-    Tensor jacobian_det;    // [N]    float — det(J_u(r))
-};
-
-export AxisWarpResult apply_axis_warp(
-    const Tensor& coords,      // [N,3] float — physical voxel coords (r)
-    const Tensor& field,       // [N]   float — spatial map for the absorbed GNL term
-    const Tensor& field_grad,  // [N]   float — d field / d r_axis
-    i64 axis,                  // 0=x, 1=y, 2=z — warped coordinate component
-    float c                    // u_axis = r_axis + c * field(r)
-) {
-    if (coords.ndimension() != 2 || coords.size(1) != 3)
-        throw std::invalid_argument("apply_axis_warp: coords must be [N,3]");
-    if (axis < 0 || axis > 2)
-        throw std::invalid_argument("apply_axis_warp: axis must be 0, 1, or 2");
-
-    auto warped = coords.clone();
-    warped.select(1, axis).add_(field.mul(Scalar(c)));
-
-    auto jacobian_det = field_grad.mul(Scalar(c)).add(Scalar(1.0f));
-
-    return AxisWarpResult{warped, jacobian_det};
-}
-
-
-// ---------------------------------------------------------------------------
-// (Factored histogram / factored phi removed — use time_segmented_phi or
-//  the joint phi_lowrank SVD for off-resonance-only comparison.)
-// ---------------------------------------------------------------------------
-
 
 
 // ---------------------------------------------------------------------------
@@ -467,6 +695,7 @@ export AxisWarpResult apply_axis_warp(
 // where agg[b,k] = Σ_{j: bin[j]=b}  mag[j]·coil[c,j]·exp(-2πi·k·r[j])
 //
 // coords_masked in normalized units [-0.5, 0.5], k_traj in cycles/FOV.
+// For warped operators, pass q-space coords instead of r-space coords.
 // ---------------------------------------------------------------------------
 
 export Tensor approx_signal(

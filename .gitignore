@@ -4,3 +4,5 @@ data/imgs/
 data/rawdata/
 certs/
 .venv/
+logs/
+external_impl/

@@ -202,6 +202,51 @@ static void test_svd_perf(hasty::i64 m, hasty::i64 n, hasty::i64 k, hasty::Devic
     std::cout << "  avg: " << total / reps << " ms\n";
 }
 
+// ─── Batched linalg_svd check (A0 for butterfly factorization) ────────────────
+//
+// hasty::linalg_svd (tensor_external_linalg.cppm) wraps hat::linalg_svd, which
+// is libtorch's own at::linalg_svd — that batches over leading dims natively.
+// This codebase has never called it batched before; confirm a [batch,m,n]
+// call matches a loop of single-matrix calls exactly (same underlying op,
+// just exercised in the shape this codebase hasn't used yet).
+
+static bool test_batched_svd(hasty::i64 batch, hasty::i64 m, hasty::i64 n)
+{
+    std::cout << "\n[batched-svd] batch=" << batch << " " << m << "x" << n << "\n";
+
+    hasty::Device cpu{hasty::eDeviceType::CPU};
+    hasty::TensorOptions cd{cpu, hasty::eScalarType::ComplexDouble};
+
+    std::mt19937_64 rng{99};
+    std::normal_distribution<double> nd;
+
+    auto A = hasty::zeros({batch, m, n}, cd);
+    auto* Ap = A.mutable_data_ptr<std::complex<double>>();
+    for (hasty::i64 i = 0; i < batch * m * n; ++i) Ap[i] = {nd(rng), nd(rng)};
+
+    // Batched call.
+    auto [Ub, Sb, Vhb] = hasty::linalg_svd(A, false);
+
+    // Loop of single-matrix calls.
+    double max_sv_err = 0.0;
+    for (hasty::i64 b = 0; b < batch; ++b) {
+        auto Ai = A.select(0, b).contiguous();
+        auto [Ui, Si, Vhi] = hasty::linalg_svd(Ai, false);
+        auto Sb_i = Sb.select(0, b).cpu();
+        auto Si_cpu = Si.cpu();
+        const auto* gp = Sb_i.const_data_ptr<double>();
+        const auto* rp = Si_cpu.const_data_ptr<double>();
+        hasty::i64 rank = std::min(m, n);
+        for (hasty::i64 r = 0; r < rank; ++r)
+            max_sv_err = std::max(max_sv_err, std::abs(gp[r] - rp[r]) / (rp[r] + 1e-30));
+    }
+
+    bool ok = max_sv_err < 1e-8;
+    std::cout << "  max_sv_rel_err (batched vs looped) = " << max_sv_err
+              << (ok ? "  OK" : "  FAIL") << "\n";
+    return ok;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 int main()
@@ -219,6 +264,11 @@ int main()
     failures += !test_svd_accuracy(128,  96, 12, cpu);
     failures += !test_svd_accuracy( 96, 128, 12, cpu);
     failures += !test_svd_accuracy(256, 256, 16, cpu, 1e-3, 5e-3);
+
+    // ── Batched linalg_svd (A0 for butterfly factorization) ─────────────────
+    failures += !test_batched_svd(8, 16, 16);
+    failures += !test_batched_svd(16, 12, 20);   // wide (n > m)
+    failures += !test_batched_svd(4, 32, 32);
 
     // ── Performance: matvec is O(mn) loops so use moderate sizes ────────────
     test_svd_perf(256, 192, 16, cpu, 3);

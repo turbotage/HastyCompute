@@ -11,6 +11,16 @@ import :tensor;
 
 namespace hasty {
 
+export Tensor floor(const Tensor& t)
+{
+    return Tensor(hat::floor(t.to_torch()));
+}
+
+export Tensor frac(const Tensor& t)
+{
+    return Tensor(hat::frac(t.to_torch()));
+}
+
 export Tensor log1p(const Tensor& t)
 {
     return Tensor(hat::log1p(t.to_torch()));
@@ -45,5 +55,6 @@ export Tensor argsort(const Tensor& t, i64 dim = -1, bool descending = false)
 {
     return Tensor(hat::argsort(t.to_torch(), dim, descending));
 }
+
 
 }
