@@ -1,0 +1,14 @@
+[package]
+name = "hasty-fft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hasty-cuda = { path = "../hasty-cuda" }
+cudarc.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+hasty-testkit = { path = "../hasty-testkit" }
+num-complex.workspace = true

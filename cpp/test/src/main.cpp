@@ -9,25 +9,227 @@ import hasty_server_mod;
 import hasty_io_mod;
 import hasty_viz_mod;
 
-void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size, int nkpoints = 100000)
+void test_just_nufft(hasty::ArrayRef<hasty::i64> im_size, int nkpoints = 1000000)
 {
     using namespace hasty;
     using namespace hasty::fft;
 
     Device cuda0(eDeviceType::CUDA, 0);
 
-    Tensor img = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
-    
-    i64 nz = img.size(0);
-    i64 ny = img.size(1);
-    i64 nx = img.size(2);
+    i32 ntransf = 16;
+
+    Tensor img = rand({ntransf, im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+    Tensor temp = rand({ntransf, im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    i64 nz = img.size(1);
+    i64 ny = img.size(2);
+    i64 nx = img.size(3);
+    Tensor coords = rand({3, nkpoints}, TensorOptions(cuda0, eScalarType::Float));
+    coords.mul_(Scalar{2*3.141592f});
+    coords.add_(Scalar{-3.141592f});
+    i64 M = coords.size(1);
+    Tensor nufft_out = zeros({ntransf, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    Tensor nufft_out_accum = zeros({ntransf, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    Tensor time_basis = rand({1, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+
+    NufftOptions<cuda_t, f32, UTN> nufft_opts1;
+    nufft_opts1.ntransf = ntransf;
+    NufftPlan<cuda_t, f32, 3, UTN> plan1({nx, ny, nz}, nufft_opts1);
+    plan1.setpts(coords);
+
+    hasty::cuda::synchronize(cuda0);
+    auto t0_nufft = std::chrono::steady_clock::now();
+    for (int i = 0; i < 100; ++i) {
+        plan1.execute(img, nufft_out);
+        nufft_out.mul_(time_basis);
+        nufft_out_accum.add_(nufft_out);
+    }
+    hasty::cuda::synchronize(cuda0);
+    auto t_nufft = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_nufft).count();
+    std::cout << "NUFFT time for 100 iterations: " << t_nufft << " seconds\n";
+
+}
+
+void test_just_toeplitz(hasty::ArrayRef<hasty::i64> im_size, int nkpoints = 1000000)
+{
+    using namespace hasty;
+    using namespace hasty::fft;
+    cuda::ProfilerCaptureGuard profiler_capture;
+
+    Device cuda0(eDeviceType::CUDA, 0);
+    Device cpu(eDeviceType::CPU, -1);
+
+    i32 ntransf = 16;
+    Tensor smap = rand({ntransf, im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    ToeplitzMultiplier tm_smap { std::cref(smap), ToeplitzMultType::MULT, ToeplitzMultType::MULT_CONJ };
 
     Tensor coords = rand({3, nkpoints}, TensorOptions(cuda0, eScalarType::Float));
     coords.mul_(Scalar{2*3.141592f});
     coords.add_(Scalar{-3.141592f});
+    Tensor kernel0 = create_toeplitz_kernel_standard(
+        coords, ones({nkpoints}, TensorOptions(cuda0, eScalarType::ComplexFloat)),
+        {im_size[0], im_size[1], im_size[2]}, /*use_cpu_nufft=*/true);
 
+    Tensor scratch = zeros({2*im_size[0], 2*im_size[1], 2*im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    Tensor img     = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+    Tensor img_out = zeros({1, im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
+
+    Tensor kernel_cpu = kernel0.to(TensorOptions(cpu, eScalarType::ComplexFloat)).contiguous();
+    kernel0 = Tensor();
+    Tensor mult2_cpu  = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cpu, eScalarType::ComplexFloat)).contiguous();
+    Tensor mult3_cpu  = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cpu, eScalarType::ComplexFloat)).contiguous();
+
+    auto scr_ref = OptRefW<Tensor>{scratch};
+    ToeplitzMultiplier tm_img  { std::cref(img), ToeplitzMultType::MULT, ToeplitzMultType::NONE };
+
+    hasty::cuda::synchronize(cuda0);
+    hasty::cuda::empty_cache();
+
+    auto t0_toep = std::chrono::steady_clock::now();
+    {
+        nvtx::ScopedRange range("toeplitz_with_percopy_transfer");
+        for (int i = 0; i < 100; ++i) {
+            nvtx::ScopedRange iter_range("iter");
+            Tensor kernel_cuda, mult2_cuda, mult3_cuda;
+            {
+                nvtx::ScopedRange copy_range("h2d_copy");
+                kernel_cuda = kernel_cpu.to(cuda0).contiguous();
+                mult2_cuda  = mult2_cpu.to(cuda0).contiguous();
+                mult3_cuda  = mult3_cpu.to(cuda0).contiguous();
+            }
+            ToeplitzMultiplier tm_mult2 { std::cref(mult2_cuda), ToeplitzMultType::MULT, ToeplitzMultType::NONE };
+            ToeplitzMultiplier tm_mult3 { std::cref(mult3_cuda), ToeplitzMultType::NONE, ToeplitzMultType::MULT };
+            nvtx::ScopedRange mult_range("toeplitz_multiplication");
+            toeplitz_multiplication(
+                img_out, kernel_cuda,
+                scr_ref,
+                tm_img, tm_mult2, tm_mult3, tm_smap,
+                ToeplitzAccumulateType::ACCUMULATE
+            );
+        }
+    }
+    hasty::cuda::synchronize(cuda0);
+    double t_toep = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_toep).count();
+    std::cout << "Toeplitz multiplication time for 100 iterations: " << t_toep << " seconds\n";
+
+    Tensor kernel_resident = kernel_cpu.to(cuda0).contiguous();
+    Tensor mult2_resident  = mult2_cpu.to(cuda0).contiguous();
+    Tensor mult3_resident  = mult3_cpu.to(cuda0).contiguous();
+    ToeplitzMultiplier tm_mult2_resident { std::cref(mult2_resident), ToeplitzMultType::MULT, ToeplitzMultType::NONE };
+    ToeplitzMultiplier tm_mult3_resident { std::cref(mult3_resident), ToeplitzMultType::NONE, ToeplitzMultType::MULT };
+    hasty::cuda::synchronize(cuda0);
+    hasty::cuda::empty_cache();
+    t0_toep = std::chrono::steady_clock::now();
+    {
+        nvtx::ScopedRange range("toeplitz_resident");
+        for (int i = 0; i < 100; ++i) {
+            toeplitz_multiplication(
+                img_out, kernel_resident,
+                scr_ref,
+                tm_img, tm_mult2_resident, tm_mult3_resident, tm_smap,
+                ToeplitzAccumulateType::ACCUMULATE
+            );
+        }
+    }
+    hasty::cuda::synchronize(cuda0);
+    t_toep = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_toep).count();
+    std::cout << "Toeplitz multiplication time for 100 iterations: " << t_toep << " seconds\n";
+
+    kernel_resident = Tensor();
+    mult2_resident = Tensor();
+    mult3_resident = Tensor();
+    hasty::cuda::synchronize(cuda0);
+    hasty::cuda::empty_cache();
+
+    Tensor kernel_pinned = kernel_cpu.to(TensorOptions(cpu, eScalarType::ComplexFloat).pinned_memory(true)).contiguous();
+    Tensor mult2_pinned  = mult2_cpu.to(TensorOptions(cpu, eScalarType::ComplexFloat).pinned_memory(true)).contiguous();
+    Tensor mult3_pinned  = mult3_cpu.to(TensorOptions(cpu, eScalarType::ComplexFloat).pinned_memory(true)).contiguous();
+
+    Tensor kernel_buf[2] = {
+        zeros({2*im_size[0], 2*im_size[1], 2*im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous(),
+        zeros({2*im_size[0], 2*im_size[1], 2*im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous()
+    };
+    Tensor mult2_buf[2] = {
+        zeros({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous(),
+        zeros({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous()
+    };
+    Tensor mult3_buf[2] = {
+        zeros({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous(),
+        zeros({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous()
+    };
+
+    hasty::cuda::CUDAStream compute_stream = hasty::cuda::get_stream_from_pool(cuda0);
+    hasty::cuda::CUDAStream copy_stream = hasty::cuda::get_stream_from_pool(cuda0);
+    hasty::cuda::CUDAEvent copy_done[2];
+    hasty::cuda::CUDAEvent read_done[2];
+
+    hasty::cuda::synchronize(cuda0);
+    hasty::cuda::empty_cache();
+
+    auto copy_set = [&](int slot) {
+        kernel_buf[slot].copy_(kernel_pinned, /*non_blocking=*/true);
+        mult2_buf[slot].copy_(mult2_pinned, /*non_blocking=*/true);
+        mult3_buf[slot].copy_(mult3_pinned, /*non_blocking=*/true);
+    };
+
+    {
+        hasty::cuda::CUDAStreamGuard guard(copy_stream);
+        copy_set(0);
+        copy_done[0].record(copy_stream);
+    }
+
+    t0_toep = std::chrono::steady_clock::now();
+    {
+        nvtx::ScopedRange range("toeplitz_pinned_streamed");
+        for (int i = 0; i < 100; ++i) {
+            nvtx::ScopedRange iter_range("iter");
+            int cur = i % 2;
+            int nxt = (i + 1) % 2;
+
+            copy_done[cur].block(compute_stream);
+
+            if (i + 1 < 100) {
+                nvtx::ScopedRange copy_range("h2d_copy_async");
+                hasty::cuda::CUDAStreamGuard guard(copy_stream);
+                read_done[nxt].block(copy_stream);
+                copy_set(nxt);
+                copy_done[nxt].record(copy_stream);
+            }
+
+            ToeplitzMultiplier tm_mult2_pipelined { std::cref(mult2_buf[cur]), ToeplitzMultType::MULT, ToeplitzMultType::NONE };
+            ToeplitzMultiplier tm_mult3_pipelined { std::cref(mult3_buf[cur]), ToeplitzMultType::NONE, ToeplitzMultType::MULT };
+            {
+                hasty::cuda::CUDAStreamGuard compute_guard(compute_stream);
+                nvtx::ScopedRange mult_range("toeplitz_multiplication");
+                toeplitz_multiplication(
+                    img_out, kernel_buf[cur],
+                    scr_ref,
+                    tm_img, tm_mult2_pipelined, tm_mult3_pipelined, tm_smap,
+                    ToeplitzAccumulateType::ACCUMULATE
+                );
+            }
+            read_done[cur].record(compute_stream);
+        }
+    }
+    hasty::cuda::synchronize(cuda0);
+    t_toep = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_toep).count();
+    std::cout << "Toeplitz multiplication (pinned + streamed copy) time for 100 iterations: " << t_toep << " seconds\n";
+}
+
+void test_toeplitz_mult_vs_nufft_performance(hasty::ArrayRef<hasty::i64> im_size, int nkpoints = 100000)
+{
+    using namespace hasty;
+    using namespace hasty::fft;
+    Device cuda0(eDeviceType::CUDA, 0);
+    Tensor img = rand({im_size[0], im_size[1], im_size[2]}, TensorOptions(cuda0, eScalarType::ComplexFloat));
+
+    i64 nz = img.size(0);
+    i64 ny = img.size(1);
+    i64 nx = img.size(2);
+    Tensor coords = rand({3, nkpoints}, TensorOptions(cuda0, eScalarType::Float));
+    coords.mul_(Scalar{2*3.141592f});
+    coords.add_(Scalar{-3.141592f});
     i32 ntransf = 4;
-
     i64 M = coords.size(1);
     Tensor nufft_out = zeros({ntransf, M}, TensorOptions(cuda0, eScalarType::ComplexFloat)).contiguous();
     img = img.unsqueeze(0).contiguous();
@@ -562,7 +764,26 @@ int main() {
     //test_cartesian_coords_gives_unity_kernel();
     //test_tensor_array_operator();
 
-    test_toeplitz_multiplication();
+    std::cout << "Running benchmarks...\n" << std::endl;
+    test_just_toeplitz({384, 384, 384}, 1000000);
+    if (false) {
+        hasty::cuda::synchronize(hasty::Device(hasty::eDeviceType::CUDA, 0));
+        hasty::cuda::empty_cache();
+        test_just_nufft({256, 256, 256}, 100000);
+        hasty::cuda::synchronize(hasty::Device(hasty::eDeviceType::CUDA, 0));
+        hasty::cuda::empty_cache();
+        test_just_nufft({288, 288, 288}, 100000);
+    }
+    if (false) {
+        hasty::cuda::synchronize(hasty::Device(hasty::eDeviceType::CUDA, 0));
+        hasty::cuda::empty_cache();
+        test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);
+        hasty::cuda::synchronize(hasty::Device(hasty::eDeviceType::CUDA, 0));
+        hasty::cuda::empty_cache();
+        test_toeplitz_mult_vs_nufft_performance({320, 320, 320}, 100000);
+    }
+
+    //test_toeplitz_multiplication();
 
     //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);
     //test_toeplitz_mult_vs_nufft_performance({256, 256, 256}, 100000);

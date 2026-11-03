@@ -161,6 +161,7 @@ Thus we arrive at the following alternating optimization scheme:
 
 
 \subsubsection{SVD-optimal initialisation of $\Theta$}
+\label{sec:svd_init}
 
 The alternating scheme above requires an initialisation for $\Theta_{jp}$.
 We derive the choice of $\Theta_{jp}$ that is optimal for minimising the
@@ -404,11 +405,12 @@ or approximate joint diagonalization algorithms.
 
 
 
-\subsection{How to compute interpolants efficiently}
-Now, to find the approximations, performing the randomized SVD and SVD in these steps is computationally expensive, therefore, one can 
-approach this with a histogram based method. First of all, the off-resonance and off-linear gradient terms only have effects on the signal on the support
-of the image. Thus, we do these approximations first only on voxels that are within the support. Next we can consider
-the feature vector
+\subsection{Feature vector and the histogram's scaling problem}
+\label{sec:histogram}
+
+The off-resonance and off-linear gradient terms only affect the signal on the support of the
+image, so the approximation in \eqref{eq:approx1} only ever needs to run on voxels within the
+support. Consider the feature vector
 \begin{equation}
     \overline{\Psi}(\mathbf{r}) = \begin{bmatrix}
         \mathbf{z}(\mathbf{r}) = \Delta B_0(\mathbf{r}) + 1/ T_2(\mathbf{r}) \\
@@ -416,103 +418,114 @@ the feature vector
         R^0_1(\mathbf{r}) \\
         R^{-1}_1(\mathbf{r}) \\
         \vdots
-    \end{bmatrix}
+    \end{bmatrix}.
 \end{equation}
-Now, we can make a histogram of the feature vectors for all voxels in the support, and perform the approximations on the histogram bins instead of on the individual voxels.
-\label{sec:histogram}
-
-This histogram has a serious scaling problem. If the feature vector has $D_f$ components and
-each is binned into $n_d$ values, the number of histogram cells is
+The original implementation \emph{binned} this feature vector by value (one histogram axis per
+component) and ran the SVD of \eqref{eq:approx1} on the histogram bins instead of on individual
+voxels. This has a fatal scaling problem: if the feature vector has $D_f$ components and
+component $d$ is binned into $n_d$ values, the number of histogram cells is
 \begin{equation}
     N_{\mathrm{hist}} = \prod_{d=1}^{D_f} n_d,
     \label{eq:hist_blowup}
 \end{equation}
-\emph{independent of how many voxels are actually present} — it is a product over bin
+\emph{independent of how many voxels are actually present} — a product over bin
 \emph{resolutions}, not a count of populated cells. With a non-trivial $T_2$ map and several
-concomitant channels active, $N_{\mathrm{hist}}$ can easily exceed $N$, the number of voxels in
-the support, which defeats the entire point of histogramming (it is meant to
-\emph{reduce} the problem below $N$ before the SVD in \eqref{eq:approx1}, not multiply it
-beyond $N$). Worse, fixed bin-edge quantization is itself a source of approximation error that
-the SVD step cannot see or correct for.
+concomitant channels active, $N_{\mathrm{hist}}$ routinely exceeds $N$, the number of support
+voxels, which defeats the entire point of histogramming (meant to \emph{reduce} the problem below
+$N$ before the SVD, not multiply it beyond $N$). Fixed bin-edge quantization is also itself a
+source of error the SVD step cannot see or correct for. \textbf{Conclusion: histogramming is
+removed entirely.} Every support voxel keeps its own exact feature value
+$\overline\Psi(\mathbf{r}_j)$ — the trivial upper bound on both accuracy (zero quantization
+error) and the number of rows the SVD ever sees ($N$, never more).
 
-\subsection{A fixed feature-space basis (no histogram)}
+\subsection{Why this doesn't make the SVD worse}
 \label{sec:featurebasis}
 
-The histogram's only real job is to give the SVD in \eqref{eq:approx1} a small, finite set of
-representative feature points to act on. We can produce such a set directly, with no
-data-dependent cell count, by exploiting the same structure already used for the gradient
-nonlinearity warp (Section~\ref{sec:histogram} is precisely the multi-channel generalisation of
-the classical \emph{time-segmentation} off-resonance trick of Sutton/Noll/Fessler — what follows
-generalises that trick's fixed-basis machinery to the full feature vector instead of $z(\mathbf{r})$
-alone).
+Removing the histogram does not change what is being approximated, only how many (and which)
+rows go into the SVD of \eqref{eq:approx1} — every row is now an exact voxel rather than a
+quantized bin centroid. By the Eckart--Young theorem (already invoked in
+Section~\ref{sec:svd_init} for the normal-operator initialisation), the SVD-truncated rank-$L$
+approximation is the \emph{provably optimal} rank-$L$ approximation of whatever matrix it is
+given, in Frobenius norm — no fixed, non-data-adapted basis (Chebyshev, polynomial, or otherwise)
+can do better for the same $L$. So the right fix for the histogram's blowup is not to replace the
+SVD with something cheaper-but-suboptimal; it is to give the SVD the exact matrix directly
+(matrix-free matvecs over the real voxels, $O(N)$ per matvec) instead of a value-quantized,
+combinatorially-sized surrogate of it.
 
-Since $\Delta B_0(\mathbf{r})$ and $N_l^m(\mathbf{r})$ are static (time-independent) fields, the
-residual phase from \eqref{eq:approx1}'s exponent is \emph{exactly linear} in the feature vector
-$\overline\Psi(\mathbf{r})$ for fixed $t$:
+\subsection{An exact nonlinear (multiplicative) decomposition}
+\label{sec:nonlinear_decomp}
+
+The bilinear structure of $\Phi_{\mathrm{res}}$ suggests a genuinely different lever, orthogonal
+to the SVD discussion above: since $\Delta B_0(\mathbf{r})$, $1/T_2(\mathbf{r})$, and
+$N_q(\mathbf{r})$ are all static (time-independent), the residual exponent of \eqref{eq:approx1}
+is \emph{exactly linear} in the feature vector $\overline\Psi(\mathbf{r})$ for fixed $t$:
 \begin{equation}
     \Phi_{\mathrm{res}}(\mathbf{r}, t) = -t\,z(\mathbf{r}) + \sum_{q=1}^{Q_c} N_q(\mathbf{r})\,W_q(t)
     = \overline\Psi(\mathbf{r}) \cdot \mathbf{w}(t),
     \label{eq:phi_res_bilinear}
 \end{equation}
-where $W_q(t) = \int_0^t G_q(\tau)\,d\tau$ is the known waveform integral for residual channel
-$q$ (computed once from the gradient sequence, no field-map knowledge needed), and
-$\mathbf{w}(t) = (-t, W_1(t), \ldots, W_{Q_c}(t))$. This is exactly the bilinear-exponent
-structure $g(\mathbf{r},t) = \exp\bigl(\overline\Psi(\mathbf{r})\cdot\mathbf{w}(t)\bigr)$ already
-analysed for the warp's Fourier-integral-operator phase $\mathbf{k}(t)\cdot\mathbf{u}(\mathbf{r})$
-— smooth, low-degree-polynomial in $\mathbf{r}$ on one side, smooth in $t$ on the other. The
-admissibility argument is the same: $g$ restricted to a \emph{bounded box} of feature space is
-well-approximated by a fixed low-degree interpolation basis, with no dependence on how many
-voxels populate that box.
+where $W_q(t)$ is channel $q$'s known time-integral — for the static-GNL channels already
+absorbed into the warp this is a single gradient integral $\int_0^t G_\beta(\tau)\,d\tau$, but for
+\emph{concomitant} channels it is the gradient-\emph{product} integral demanded by the 2nd-order
+Maxwell terms (e.g.\ $W_{z^2}(t) = -i\gamma\int_0^t (G_x(\tau)^2+G_y(\tau)^2)/(8B_0)\,d\tau$).
+Separability only requires that each term factor into a pure function of $\mathbf{r}$ times a
+pure function of $t$ — it does not require $W_q$ to be linear in any single gradient waveform, so
+the gradient-product origin of the concomitant terms does not break
+\eqref{eq:phi_res_bilinear}.
 
-\paragraph{Construction.} Fix, a priori (from known physical bounds — $T_2$/$B_0$ map range,
-FOV geometric extent for $N_q$ — \emph{not} from voxel occupancy), a bounding box
-$[\Psi_d^-,\Psi_d^+]$ for each feature axis $d=1,\ldots,D_f$ ($D_f = 2 + Q_c$, splitting the
-complex $z$ into real/imaginary axes). Place $n_d$ Chebyshev nodes on axis $d$ and form the
-tensor-product Lagrange basis
+This bilinear exponent has an \textbf{exact} multiplicative factorization, with zero
+approximation error:
 \begin{equation}
-    \Upsilon_l(\overline\Psi) = \prod_{d=1}^{D_f} \ell^{(d)}_{l_d}(\Psi_d),
-    \qquad l = (l_1,\ldots,l_{D_f}),
-    \qquad L = \prod_{d=1}^{D_f} n_d,
-    \label{eq:feature_basis}
+    g(\mathbf{r},t) = \exp\bigl(\overline\Psi(\mathbf{r})\cdot\mathbf{w}(t)\bigr)
+    = \prod_{d=1}^{D_f} \exp\bigl(\Psi_d(\mathbf{r})\,w_d(t)\bigr),
+    \label{eq:exact_product_decomp}
 \end{equation}
-where $\ell^{(d)}_{l_d}$ is the barycentric Lagrange polynomial through axis $d$'s Chebyshev
-nodes. Define
-\begin{equation}
-    \Upsilon_{jl} := \Upsilon_l\bigl(\overline\Psi(\mathbf{r}_j)\bigr),
-    \label{eq:feature_basis_eval}
-\end{equation}
-evaluated \emph{directly} at each voxel's own continuous feature value — no binning, no
-quantization, $O(N\cdot L)$ to evaluate for all voxels. This replaces the histogram-derived
-$\Upsilon_{jl}$ of \eqref{eq:approx1} with one whose size $L$ is a design choice (set by how many
-Chebyshev nodes the smoothness of $g$ actually requires per axis), never a function of $N$,
-$T_2$ heterogeneity, or how many concomitant channels are active.
+i.e.\ $D_f$ factors, one per physical channel, each \emph{exactly} rank-1 in its own axis. This is
+a genuinely nonlinear (multiplicative, not additive) identity — $\exp(A)\exp(B)=\exp(A+B)$ run in
+reverse — and is not a Taylor truncation: it is exact at every order, regardless of how large
+$\Psi_d(\mathbf{r})w_d(t)$ gets.
 
-\paragraph{Fitting $\Omega_{kl}$.} With $\Upsilon$ fixed, \eqref{eq:approx1} becomes a per-$k$
-linear least-squares fit of the same form as classical time-segmentation, but here it can be
-solved in closed form against the exactly known target $g(\mathbf{r}_j,t_k)$ rather than against
-fitted histogram-bin centres:
-\begin{equation}
-    \boldsymbol\Omega_{k,:} = \Bigl(\Upsilon^H \mathbf{D}_w \Upsilon\Bigr)^{-1}
-                              \Upsilon^H \mathbf{D}_w\, \mathbf{g}_{:,k},
-    \qquad (\mathbf{g}_{:,k})_j = \exp\bigl(\Phi_{\mathrm{res}}(\mathbf{r}_j,t_k)\bigr),
-    \label{eq:omega_closed_form}
-\end{equation}
-where $\mathbf{D}_w = \mathrm{diag}(w_j)$ is a quadrature weight over the support voxels. The
-$L\times L$ Gram matrix $\Upsilon^H\mathbf{D}_w\Upsilon$ is computed once, independent of $K$.
-\textbf{The weight $w_j$ should not be a function of $\rho(\mathbf{r}_j)$} — unlike PD-mass
-weighting, $w_j$ here only needs to reflect how densely populated the support is around
-$\mathbf{r}_j$'s feature value (a population/quadrature weight, computable a priori from the
-mask and field maps alone), since $\rho$ is the unknown being reconstructed, not a quantity
-available to weight an offline basis-fitting step.
+\paragraph{Why this doesn't trivially collapse $L$.} The NUFFT/Toeplitz-embedding machinery above
+only computes a single linear sum over $\mathbf{r}$ for one $t$ at a
+time. Multiplying $D_f$ separate $t$-dependent factors into the image before gridding still
+requires, in general, a fresh per-sample multiply for every one of the $K$ readout times, unless
+\emph{each factor on its own} already has low rank in $t$. It does: this is exactly the classical
+1D time-segmentation result — $\exp(z(\mathbf{r})t)$ is smooth and bounded over a finite readout,
+so it needs only a handful of terms. The same admissibility argument applies per concomitant
+channel independently.
 
-\paragraph{Cost.} Evaluating $\Upsilon$ costs $O(NL)$ once. The right-hand side of
-\eqref{eq:omega_closed_form} costs $O(NL)$ per $k$ (a weighted projection of the basis against
-the exactly-known exponential, summed over support voxels) — but since $g$ is itself bilinear in
-$(\overline\Psi,\mathbf{w}(t))$, this projection is the \emph{same kind} of admissible sum as the
-forward operator itself, and can be reduced further with one more level of Chebyshev compression
-in feature space if $K$ is large enough to matter; the direct $O(NLK)$ form is already a strict
-improvement whenever $N_{\mathrm{hist}}$ from \eqref{eq:hist_blowup} threatens to approach or
-exceed $N$, since $L$ is fixed by design rather than multiplying across feature axes.
+\paragraph{The actual lever: composition instead of fusion.} Decompose each channel
+\emph{separately} in time — its own small $L_d$, fit by the same per-channel closed-form
+weighted least squares used for classical 1D time-segmentation,
+\begin{equation}
+    \boldsymbol\Omega^{(d)}_{k,:} = \Bigl(\mathbf{B}_d^H \mathbf{D}_w \mathbf{B}_d\Bigr)^{-1}
+                                    \mathbf{B}_d^H \mathbf{D}_w\, \exp\bigl(\Psi_d(\cdot)\,w_d(t_k)\bigr),
+    \label{eq:per_channel_fit}
+\end{equation}
+where $\mathbf{B}_d$ is any small fixed basis (e.g.\ Chebyshev/Lagrange) on axis $d$ alone —
+applied one axis at a time — and then composed as
+\textbf{sequential} Toeplitz/NUFFT stages within each CG/gradient-step iteration, rather than
+expanding \eqref{eq:exact_product_decomp} into one fused additive sum (which reproduces the
+\emph{same} $\prod_d L_d$ blow-up as the histogram, just relocated from bin count to term count).
+Composing factors at \emph{application time} instead of fusing them into one basis costs
+\begin{equation}
+    \sum_{d=1}^{D_f} L_d \quad\text{(composition)} \qquad\text{vs.}\qquad \prod_{d=1}^{D_f} L_d \quad\text{(fused sum)},
+    \label{eq:composition_vs_fusion}
+\end{equation}
+i.e.\ additive instead of multiplicative scaling in the number of channels — a real, exact
+nonlinear-decomposition win, distinct from (and compatible with) the per-channel SVD/time-segmentation
+choice of each $L_d$. The price is more (but individually cheaper) NUFFT/Toeplitz applications per
+iteration instead of one larger fused one, and the requirement that the iterative solver actually
+apply the channels as a chain rather than assuming a single fused forward operator.
+
+A literal elementwise nonlinearity inside one flat sum (e.g.\ fitting
+$g\approx\bigl(\sum_l a_l(\mathbf{r})b_l(t)\bigr)^2$ or $\sum_l\sin(\cdot)$ terms) does \emph{not}
+have this clean structure: the NUFFT can only apply a \emph{linear} sum of complex exponentials
+efficiently, so feeding its output through a further elementwise nonlinearity breaks the
+"multiply image, then NUFFT" pattern that makes \eqref{eq:approx1}--\eqref{eq:nonherm_apply_whitened}
+fast in the first place. The exponential's own multiplicativity \eqref{eq:exact_product_decomp},
+realised as \emph{operator composition}, is the form of nonlinearity that is actually exploitable
+here.
 
 \section*{Normal Operator via Toeplitz Embedding}
 
@@ -708,6 +721,7 @@ For each mode $p = 1,\dots,P$:
 \end{enumerate}
 
 \subsection{Optimal Decomposition: Alternating Optimization}
+\label{sec:als}
 
 \subsubsection*{Scale and implicit operators}
 
@@ -843,6 +857,516 @@ by a $\boldsymbol{\Lambda}$ recompute (step~2 of the algorithm) restores the con
     \hline
 \end{tabular}
 \end{center}
+
+\section{Exact Closed-Form Expansion for Concomitant Fields}
+\label{sec:concomitant_exact}
+
+Off-resonance/$T_2$ ($z(\mathbf{r})$) and concomitant fields were both routed through the same
+generic data-driven machinery (histogram-then-SVD, or per-voxel SVD after
+Section~\ref{sec:histogram}) in earlier sections. That machinery is the right tool for
+$z(\mathbf{r})$, a genuinely unknown, patient-specific field with no closed form. It is the
+\emph{wrong} tool for concomitant fields, which are entirely determined by sequence design
+before any data is acquired — using a generic, data-fitted basis for something already known in
+closed form throws away exact structure for no reason, and is also why naive treatments
+(low-order polynomial phase fits applied to the \emph{reconstructed image}) fail: they fit the
+wrong domain. Concomitant phase varies with the acquisition timeline (per-sample $t_k$, with a
+slope that changes every spoke), not as a single static spatial pattern superimposed on the final
+image — a post-hoc fit on the image can only remove a $t$-independent phase, which this is not.
+The fix is to put the exact structure into the operator itself, at the point where $t_k$ is still
+present.
+
+\subsection{The spatial basis is already minimal}
+
+The standard 2nd-order Maxwell concomitant field (Bernstein/King/Zhou; Norris \& Hutchison 1990)
+is, for a $z$-main-field system with instantaneous gradient $\mathbf{G}(t)=(G_x,G_y,G_z)(t)$,
+\begin{equation}
+    B_{\mathrm{conc}}(\mathbf{r},t) = \frac{G_x^2+G_y^2}{8B_0}z^2
+        + \frac{G_z^2}{8B_0}(x^2+y^2) + \frac{G_xG_z}{2B_0}xz + \frac{G_yG_z}{2B_0}yz.
+    \label{eq:conc_maxwell}
+\end{equation}
+Expanding in the 6 monomials of $\mathbf{G}(t)$ — $\{G_x^2,G_y^2,G_z^2,G_xG_y,G_xG_z,G_yG_z\}$ —
+the $G_x^2$ and $G_y^2$ terms share the identical spatial weight $z^2/(8B_0)$, and the $G_xG_y$
+coefficient is exactly zero (there is no $xy$ term in the standard theory). What remains is
+exactly $Q_c=4$ linearly independent spatial fields, $\{z^2, x^2+y^2, xz, yz\}$. This is the
+\emph{minimal} spatial rank — it follows directly from \eqref{eq:conc_maxwell}, not from fitting
+or truncating anything, and cannot be reduced further (the four fields are linearly independent
+functions of $\mathbf{r}$).
+
+\subsection{The temporal coefficients are exactly known}
+
+Define $\Phi_{\mathrm{conc}}(\mathbf{r},t) = \sum_{q=1}^{Q_c} N_q(\mathbf{r})\,w_q(t)$, where
+$N_q\in\{z^2,x^2+y^2,xz,yz\}$ and
+\begin{equation}
+    w_q(t) = -i\gamma\int_0^t \mathrm{coupling}_q(\tau)\,d\tau,
+\end{equation}
+with $\mathrm{coupling}_q(t)$ the corresponding gradient-product factor from
+\eqref{eq:conc_maxwell} (e.g.\ $(G_x(t)^2+G_y(t)^2)/(8B_0)$ for $q{=}1$). Unlike $z(\mathbf{r})$,
+$\mathrm{coupling}_q(t)$ depends only on the pulse sequence's own gradient waveforms — it requires
+no field map, no calibration scan, no fitting of any kind. $w_q(t)$ is computable to machine
+precision directly from the sequence design.
+
+\subsection{Low-order Taylor expansion, with an a priori error bound}
+
+Since both the spatial basis $\{N_q\}$ and the temporal coefficients $w_q(t)$ are exactly known,
+the multinomial (Taylor) expansion of $\exp(\Phi_{\mathrm{conc}})$ is itself exactly known, with
+no data-dependent step anywhere:
+\begin{equation}
+    \exp\bigl(\Phi_{\mathrm{conc}}(\mathbf{r},t)\bigr)
+        = \sum_{p=0}^{\infty} \frac{1}{p!}\Bigl(\sum_{q=1}^{Q_c} N_q(\mathbf{r})w_q(t)\Bigr)^{p}
+        = \sum_{\alpha} \frac{1}{\alpha!}\, F_\alpha(\mathbf{r})\, g_\alpha(t),
+    \label{eq:conc_multinomial}
+\end{equation}
+where $\alpha=(\alpha_1,\ldots,\alpha_{Q_c})$ ranges over multi-indices, $\alpha! = \prod_q
+\alpha_q!$, $F_\alpha(\mathbf{r}) = \prod_q N_q(\mathbf{r})^{\alpha_q}$ (a fixed, exactly known
+polynomial in $\mathbf{r}$ — e.g.\ $\alpha=(2,0,0,0)$ gives $F_\alpha = z^4$), and
+$g_\alpha(t) = \prod_q w_q(t)^{\alpha_q}$ (a fixed, exactly known function of $t$, computable
+directly from the sequence). Truncating at total order $|\alpha|\le P$ gives
+\begin{equation}
+    \exp\bigl(\Phi_{\mathrm{conc}}(\mathbf{r},t)\bigr)
+        \approx \sum_{|\alpha|\le P} \frac{1}{\alpha!}\, F_\alpha(\mathbf{r})\, g_\alpha(t),
+    \qquad L(P) = \binom{Q_c+P}{P}
+    \label{eq:conc_truncated}
+\end{equation}
+terms — $L(1)=5$ (the constant term plus exactly the existing 4 channels), $L(2)=15$, and so on.
+\textbf{Every coefficient in \eqref{eq:conc_truncated} is exact and known in closed form} — there
+is no SVD, no histogram, no fitting step for the concomitant block at any truncation order.
+
+The truncation error is the standard exponential Taylor remainder,
+\begin{equation}
+    \Bigl|\exp(\Phi_{\mathrm{conc}}) - \sum_{|\alpha|\le P}\tfrac{1}{\alpha!}F_\alpha g_\alpha\Bigr|
+        \;\le\; \frac{|\Phi_{\mathrm{conc}}|^{P+1}}{(P+1)!}\,e^{|\Phi_{\mathrm{conc}}|},
+    \label{eq:conc_remainder}
+\end{equation}
+giving a concrete, checkable a priori bound from $\max_{\mathbf{r},t}|\Phi_{\mathrm{conc}}|$ alone
+— exactly the quantity already printed as the "concomitant: max phase" diagnostic. This is why
+low order is justified here specifically: concomitant phase scales as $G^2/B_0$ (quadratic in
+gradient amplitude over twice the main field), typically a small number of radians at most for
+realistic sequences/field strengths, unlike the off-resonance or static-GNL phases, which can
+range over many radians and therefore cannot use a low-order Taylor truncation (they need the
+genuine admissibility/Chebyshev compression of Section~\ref{sec:histogram}'s warp discussion, or
+real data-driven SVD). \emph{This is the precise sense in which "fit a low-order polynomial"
+intuition is correct for concomitant fields but wrong when applied post-hoc to the image}: the
+expansion converges quickly in the right variable ($\Phi_{\mathrm{conc}}$, evaluated at
+acquisition time $t_k$), not in image-domain phase after the fact.
+
+\subsection{What this does \emph{not} buy: the normal operator}
+
+\eqref{eq:conc_truncated} has exactly the $\sum_l \Omega_{kl}\Upsilon_{jl}$ form of
+\eqref{eq:approx1} for the \emph{forward} operator — but the forward operator is applied once
+(to form $\mathbf{A}^H\mathbf{b}$); every iteration's cost is the \emph{normal} operator
+$\mathbf{A}^H\mathbf{A}$, and a cheap forward decomposition does not imply a cheap normal
+operator. Composing this exact concomitant block with the off-resonance block sequentially, as
+originally suggested here, is wrong: the true exponent is a \emph{sum}
+$\Phi_{\mathrm{total}}=-tz(\mathbf{r})+\Phi_{\mathrm{conc}}(\mathbf{r},t)$, so
+$\exp(\Phi_{\mathrm{total}})=\exp(-tz(\mathbf{r}))\exp(\Phi_{\mathrm{conc}})$ is a
+\emph{product}, not a sum, of two factors multiplying the same image at the same acquisition
+time — there is no stage at which they act on separate inputs, so there is nothing to compose
+sequentially. Combining an $L_z$-term off-resonance decomposition with an $L_{\mathrm{conc}}=L(P)$-term
+concomitant decomposition gives $L_z\cdot L_{\mathrm{conc}}$ forward terms, full stop, and Taylor's
+exactness for the concomitant factor does not change that.
+
+Worse, even granting the $L_z\cdot L_{\mathrm{conc}}$ forward terms, this is feeding the
+\emph{normal}-operator compression of Section~\ref{sec:tensor_theory} below a deliberately
+non-data-adapted (Taylor, not SVD) intermediate basis. Since SVD is optimal at every stage
+(Eckart--Young), chaining "Taylor $\to$ compress" is never better than "direct per-voxel SVD on
+the combined $\exp(\Phi_{\mathrm{total}})\to$ compress," and is generally worse for the same
+final rank $P$. \textbf{Conclusion: build $(\Omega,\Upsilon)$ once, directly, via the matrix-free
+per-voxel SVD of Section~\ref{sec:featurebasis} on the combined off-resonance+concomitant
+exponent, and feed that into the normal-operator compression below.} The exact concomitant
+structure derived above is not useless — \eqref{eq:conc_remainder}'s a priori error bound is a
+legitimate, free diagnostic for how many SVD modes the concomitant contribution is likely to
+need, and the closed-form $g_\alpha(t)$ is a cheap way to evaluate matvecs during that SVD — but
+it is a construction-cost convenience, not a rank reduction.
+
+\subsection{Reducing the per-term cost of the $L_z\times Q_c$ coupling, via k-space differentiation}
+\label{sec:conc_kspace_deriv}
+
+The $L_z\cdot Q_c$ term count above is real and unavoidable for a per-term correction — it is not
+removed by anything below. What \emph{can} be reduced is the cost of realizing each of those
+$L_z\cdot Q_c$ terms. The standard Fourier property
+\begin{equation}
+    \mathcal{F}\bigl[r_a r_b\,f(\mathbf{r})\bigr](\mathbf{k}) = -\partial_{k_a}\partial_{k_b}\,
+        \hat f(\mathbf{k}), \qquad \hat f = \mathcal{F}[f],
+    \label{eq:ft_monomial_derivative}
+\end{equation}
+is exact for any axis pair $a,b$ (including $a{=}b$) and any function $f$. Since every $N_q$ is a
+quadratic monomial (Section~\ref{sec:concomitant_exact} above), $\mathcal{F}[N_q\cdot f]$ is
+exactly $D_q[\hat f]$ for a fixed second-derivative operator $D_q\in\{-\partial_{k_z}^2,\,
+-(\partial_{k_x}^2+\partial_{k_y}^2),\,-\partial_{k_x}\partial_{k_z},\,-\partial_{k_y}\partial_{k_z}\}$.
+
+The existing $L_z$-term normal operator already computes $\widehat{\Upsilon_l\rho} =
+\mathcal{F}[\Upsilon_l\cdot\rho]$ once per term $l$, as part of the unmodified base Toeplitz
+machinery. Rather than building a \emph{new} NUFFT/kernel for each $(\Upsilon_l, N_q)$ pair
+(the $L_z\cdot Q_c$ forward terms of the previous subsection), apply $D_q$ directly to the
+already-computed array:
+\begin{equation}
+    \mathcal{F}\bigl[N_q\cdot\Upsilon_l\cdot\rho\bigr] = D_q\bigl[\widehat{\Upsilon_l\rho}\bigr],
+    \label{eq:conc_kspace_correction}
+\end{equation}
+evaluated via a finite-difference stencil on the same k-space grid the base term already
+populates. $D_q$ (a second derivative) is self-adjoint under the periodic boundary conditions the
+FFT grid already has, so the same trick applies symmetrically in the adjoint/gridding direction —
+the correction's adjoint is $D_q$ applied \emph{before} the existing inverse FFT, not after,
+with no extra transform either way.
+
+This does not change the $L_z\cdot Q_c$ term count, and is not free: it trades exactness for a
+small-$\Phi_{\mathrm{conc}}$ truncation (only the $P{=}1$ term of
+\eqref{eq:conc_truncated} is reachable this way without combinatorially many higher-derivative
+stencils — consistent with \eqref{eq:conc_remainder}'s bound, since concomitant phase is
+typically small), plus a finite-difference discretization error that depends on k-space grid
+resolution and was not present in the exact closed-form route above. What it buys is replacing
+$L_z\cdot Q_c$ \emph{new NUFFT/kernel constructions} with $L_z\cdot Q_c$ \emph{cheap stencil
+evaluations} on arrays already being computed — $L_z$ NUFFTs (unchanged from the base operator)
+plus $L_z\cdot Q_c$ stencils, instead of $L_z\cdot Q_c$ NUFFTs. A genuine but more modest saving
+than eliminating the coupling itself, which \eqref{eq:conc_kspace_correction} does not do.
+
+\section{Closed-Form Normal-Operator Compression, With Coils}
+\label{sec:tensor_theory}
+
+The previous draft of this section wrongly framed the normal-operator compression as a 3-way
+tensor (CP) decomposition of $T[j,i,k]=g_{jk}\bar g_{ik}$, and concluded — correctly, for that
+specific (wrong) framing — that no closed form exists in general (Kolda \& Bader 2009; de Silva
+\& Lim 2008 ill-posedness). That critique does not apply to the actual problem here. The point
+made against it: once coil maps, whitening, and the $k$-sum are folded into one operator acting
+on the image, the right object to compress is not a free-floating 3-tensor — it is the
+already-fixed $L\times L$ temporal structure coming out of the forward SVD, and reducing
+\emph{that} is an ordinary matrix problem, with the coil dimension factoring out for free. This
+section redoes the derivation properly.
+
+\subsection{The full operator, exactly, before any compression}
+
+With the $L$-term forward SVD $g_{jk}\approx\sum_l \Upsilon_{jl}\Omega_{kl}$ (Eckart--Young
+optimal for $g$) and whitened coil maps $\tilde s_{cj}$, the exact (no further approximation)
+normal operator is
+\begin{equation}
+    N_{ij} = \Xi_{ij}\sum_{l_1,l_2=1}^L \Upsilon_{jl_1}\bar\Upsilon_{il_2}\,h_{l_1l_2}(\mathbf{r}_j-\mathbf{r}_i),
+    \qquad \Xi_{ij}=\sum_{c=1}^C \tilde s^*_{ci}\tilde s_{cj},
+    \qquad h_{l_1l_2}=\mathbf{F}_{\mathrm{adj}}(\Omega_{\cdot l_1}\odot\bar\Omega_{\cdot l_2}),
+    \label{eq:N_exact_coils}
+\end{equation}
+which, multiplying out $\Xi$ and collecting terms, is
+\begin{equation}
+    N_{ij} = \sum_{c=1}^C\sum_{l_1,l_2=1}^L
+        \bigl[\tilde s_{cj}\Upsilon_{jl_1}\bigr]\,\bigl[\tilde s^*_{ci}\bar\Upsilon_{il_2}\bigr]\,
+        h_{l_1l_2}(\mathbf{r}_j-\mathbf{r}_i).
+    \label{eq:N_raw_LC}
+\end{equation}
+This is \emph{exactly} the user's ansatz $\sum_p\sum_c B_{pc}\mathbf{F}^HC_pD_p\mathbf{F}A_{pc}$,
+with $p\leftrightarrow(l_1,l_2)$ (so $P_{\mathrm{raw}}=L^2$, not yet reduced), $A_{pc}(j)=\tilde
+s_{cj}\Upsilon_{jl_1}$, $B_{pc}(i)=\tilde s_{ci}\Upsilon_{il_2}$, and $C_pD_p\leftrightarrow
+h_{l_1l_2}$ — zero approximation error beyond the original $L$-term forward SVD. This matches
+the already-derived "Full Normal Operator with Coil Maps" section above, just not yet compressed
+from $L^2$ down to a smaller $P$.
+
+\subsection{Coils do \emph{not} factor out of the compression problem}
+\label{sec:coils_dont_factor}
+
+An earlier draft of this section claimed the opposite — that the $L^2\to P$ compression could be
+solved on $h_{l_1l_2}$/$\mathbf{M}(t_k)$ alone, coil-free, and then paired with every coil for
+free afterward. \textbf{That is wrong.} The target of compression is $N_{ij}=\Xi_{ij}M_{ij}$
+(Hadamard product, $M_{ij}:=\sum_{l_1,l_2}\Upsilon_{jl_1}\bar\Upsilon_{il_2}h_{l_1l_2}(\mathbf{r}_j-\mathbf{r}_i)$),
+so $N_{ij}-\hat N_{ij} = \Xi_{ij}(M_{ij}-\hat M_{ij})$. Minimising the \emph{unweighted}
+$\sum_{ij}|M_{ij}-\hat M_{ij}|^2$ is a different optimisation problem from minimising the
+\emph{actually relevant} $\sum_{ij}|\Xi_{ij}|^2|M_{ij}-\hat M_{ij}|^2$, and the two have different
+minimisers whenever $\Xi_{ij}$ is non-constant — exactly like weighted vs.\ unweighted least
+squares disagree whenever the weights aren't flat. $\Xi_{ij}$ (coil-sensitivity products) is
+essentially never constant. Solving the coil-free problem and pairing with coils afterward
+optimises the wrong objective.
+
+\paragraph{Redone with the weight included.} The loss is now
+\begin{equation}
+    \mathcal{L} = \sum_{i,j,k} |\Xi_{ij}|^2\,\bigl|G_{jik}-\textstyle\sum_p\Lambda_{kp}A_{jp}B_{ip}\bigr|^2,
+    \qquad G_{jik}=g_{jk}\bar g_{ik}.
+    \label{eq:coil_weighted_loss}
+\end{equation}
+$\Lambda$ still enters linearly, so it is still eliminable in closed form (Variable Projection
+still applies) — but $\mathcal{G}$ no longer factors into one Hadamard product of two plain Gram
+matrices. Expanding $\Xi_{ij}=\sum_c\tilde s^*_{ci}\tilde s_{cj}$ and defining the
+\emph{coil-weighted} factors $A^{(c)}_{jp}:=\tilde s_{cj}A_{jp}$, $B^{(c)}_{ip}:=\tilde
+s^*_{ci}B_{ip}$, the stationarity condition for $\Lambda$ becomes
+\begin{equation}
+    \mathcal{G}_{pp'} = \sum_{c,c'} \bigl(A^{(c')H}A^{(c)}\bigr)_{pp'}\,\bigl(B^{(c')H}B^{(c)}\bigr)_{pp'},
+    \qquad
+    \boldsymbol\ell(k)_p = \sum_{c,c'} F^{(c,c')}_{kp}\,C^{(c,c')}_{kp},
+    \qquad
+    \Lambda(k)=\mathcal{G}^{-1}\boldsymbol\ell(k),
+    \label{eq:coil_weighted_lambda}
+\end{equation}
+where $F^{(c,c')}_{kp}=\sum_j \tilde s_{cj}g_{jk}\bar{\tilde s}_{c'j}\bar A_{jp}$ and
+$C^{(c,c')}_{kp}=\sum_i \tilde s^*_{ci}\bar g_{ik}\tilde s_{c'i}\bar B_{ip}$ are coil-PAIR-weighted
+matvecs against $g$/$\bar g$. \textbf{This is still closed form — Variable Projection survives —
+but it is genuinely $C^2$-coupled}, not $C$-independent: $\mathcal{G}$ sums $C^2$ Hadamard
+products (not $1$), and each ALS/VARPRO step needs $C^2$ coil-pair-weighted matvecs (not $C$).
+For a real receive array ($C\sim8$--$32$) this is a $64$--$1024\times$ cost increase over the
+(wrong) coil-free version, and the optimal $A,B,\Lambda$ now depend on the actual coil
+sensitivity maps — they are not portable across different coil arrays/subjects without
+recomputing, unlike the coil-free $\{h_{l_1l_2}\}$ compression. If $\Xi$'s rank is reduced first
+(noise-covariance-whitened virtual coils, $Q<C$), $C^2\to Q^2$, but the coupling does not
+disappear unless $Q=1$ (a single effective channel, $\Xi_{ij}$ then genuinely rank-1 and the
+naive Hadamard factorisation becomes exactly correct again).
+
+\subsection{The $L^2\to P$ reduction is two exact matrix steps, not a hard tensor problem}
+
+Vectorize the upper-triangular entries of $\mathbf{M}(t_k)$ into a length-$\tfrac{L(L+1)}{2}$
+vector for every $k$, stack these as columns of a $\tfrac{L(L+1)}{2}\times K$ matrix
+$\mathbf{Z}$, and take its rank-$P$ SVD:
+\begin{equation}
+    \mathbf{Z} \approx \sum_{p=1}^P s_p\,\mathbf{a}_p\mathbf{b}_p^H,
+    \qquad \Lambda_{kp} := s_p\,a_p(t_k)
+    \label{eq:Z_svd}
+\end{equation}
+— an ordinary matrix SVD, Eckart--Young optimal for this $\tfrac{L(L+1)}{2}\times K$ matrix, full
+stop (this is exactly \eqref{eq:time_approx_SVD} above; the previous section's mistake was
+treating this as needing a joint 3-mode tensor factorization, when combining $(l_1,l_2)$ into one
+flat row-index \emph{first} — principled, since the output must be a Hermitian quadratic form,
+not an arbitrary choice — turns it into a plain matrix SVD). Reshape each $\mathbf{b}_p$ back into
+an $L\times L$ Hermitian matrix $C_{\cdot\cdot p}$ and eigendecompose it,
+\begin{equation}
+    C_{l_1l_2,p} \approx \sum_{r=1}^R \lambda_{rp}\,\hat C_{l_1rp}\bar{\hat C}_{l_2rp},
+    \qquad \Theta_{j,rp} := \sum_l \hat C_{lrp}\,\Upsilon_{jl}
+    \label{eq:C_eig}
+\end{equation}
+— again an ordinary, exact eigendecomposition of a tiny $L\times L$ Hermitian matrix, one per
+mode $p$. Both steps are closed form. \textbf{There is no hard tensor problem anywhere in this
+pipeline} — it never requires simultaneously fitting independent factors along three modes
+(which would be the genuinely hard CP/Tucker problem); it sequentially fixes one matrix problem
+at a time, each exactly solvable, because the $(l_1,l_2)$ pairing is collapsed into a single axis
+before the first SVD rather than left as a free tensor mode.
+
+\paragraph{The one honest caveat.} Solving \eqref{eq:Z_svd} then \eqref{eq:C_eig} \emph{sequentially}
+is optimal at each individual stage, but is not guaranteed to be \emph{jointly} optimal over the
+combined $(P,R)$ pair simultaneously — the same mild, well-understood gap as sequential HOSVD
+versus the true optimal Tucker decomposition (de Lathauwer, de Moor, Vandewalle, \emph{A
+Multilinear Singular Value Decomposition}, SIAM J. Matrix Anal. 2000), which comes with a
+\emph{proven, bounded} suboptimality factor — not the unbounded/ill-posed CP situation wrongly
+invoked in the previous draft.
+
+\subsection{Eliminating $\Lambda$ exactly: variable projection}
+\label{sec:varpro}
+
+The reduction above still left a residual gap (sequential, not jointly optimal). Push further by
+writing the optimality conditions of the $L^2$ least-squares problem directly and solving them,
+rather than appealing to a heuristic initialisation for ALS. Drop the orthonormality constraints
+on $A,B$ (they were a simplifying assumption, not a requirement — the redundant $C_p,D_p$ pair is
+absorbed into a single $\Lambda_p$ as already noted), and minimise
+\begin{equation}
+    \mathcal{L}(A,B,\Lambda) = \sum_{j,i,k}\Bigl|G_{jik} - \sum_p \Lambda_{kp}A_{jp}B_{ip}\Bigr|^2,
+    \qquad G_{jik} := g_{jk}\bar g_{ik}.
+    \label{eq:varpro_loss}
+\end{equation}
+$\Lambda$ enters \eqref{eq:varpro_loss} \emph{linearly} for fixed $A,B$ — this is a separable
+nonlinear least squares problem, and $\Lambda$ can be eliminated in closed form exactly (the
+Variable Projection method of Golub \& Pereyra, \emph{The Differentiation of Pseudo-Inverses and
+Nonlinear Least Squares Problems Whose Variables Separate}, SIAM J. Numer. Anal. 1973), leaving a
+smaller nonlinear problem in $A,B$ alone — a real reduction, not a heuristic.
+
+\paragraph{The restriction to $\mathrm{span}\{\Upsilon\}$ is exact, not a simplifying assumption
+(coil-free case only).} Before substituting, justify why this restriction loses nothing.
+$g_{jk}=\sum_l\Upsilon_{jl}W_{kl}$ means $g$'s $j$-fibre lies in $\mathrm{span}\{\Upsilon\}$ by
+construction — not an assumption, a direct consequence of $g$ already being an $L$-rank
+factorisation. Hence $G_{jik}=g_{jk}\bar g_{ik}$ has \emph{zero} component outside
+$\mathrm{span}\{\Upsilon\}\otimes\mathrm{span}\{\Upsilon^*\}$ for every $k$ — there is nothing in
+$G$ living outside that subspace to approximate. Decompose any candidate $A=A^\parallel+A^\perp$
+(projection onto $\mathrm{span}\{\Upsilon\}$ plus orthogonal remainder), likewise $B$. Since
+$\Upsilon^\perp\perp\Upsilon$ exactly, the four cross terms of $\sum_p\Lambda_{kp}A_{jp}B_{ip}$
+($\parallel\parallel,\parallel\perp,\perp\parallel,\perp\perp$) are mutually orthogonal in the
+\emph{unweighted} Frobenius inner product, and $G$ only overlaps the $\parallel\parallel$ piece.
+Pythagoras gives
+\begin{equation}
+    \|G-\textstyle\sum_p\Lambda AB\|^2
+        = \|G_{\parallel\parallel}-(\textstyle\sum\Lambda AB)_{\parallel\parallel}\|^2
+        + \|(\textstyle\sum\Lambda AB)_{\parallel\perp}\|^2
+        + \|(\textstyle\sum\Lambda AB)_{\perp\parallel}\|^2
+        + \|(\textstyle\sum\Lambda AB)_{\perp\perp}\|^2.
+    \label{eq:pythagoras_restriction}
+\end{equation}
+The last three terms are pure added error — zero benefit, since $G$ has nothing there to match. So
+the \emph{global} minimiser over \textbf{all} $[N,P]$ matrices necessarily has $A^\perp=0,B^\perp=0$.
+Restricting to $\mathrm{span}\{\Upsilon\}$ is exactly where the unconstrained optimum already sits
+— provably lossless, not a tradeoff, \emph{for the coil-free ($C{=}1$, or uniform-coil) loss
+\eqref{eq:varpro_loss} as written.}
+
+\textbf{This does not extend to coil weighting.} The coil-weighted loss
+(\S\ref{sec:coils_dont_factor}) is $\sum_{j,i,k}|\Xi_{ij}|^2|M_{jik}-\sum_p\Lambda_{kp}A_{jp}B_{ip}|^2$
+— weighted by $|\Xi_{ij}|^2$, which depends on $(i,j)$ in a way that does \emph{not} respect the
+$\Upsilon/\Upsilon^\perp$ split in general. The cross terms in
+\eqref{eq:pythagoras_restriction} relied on $\Upsilon^\perp\perp\Upsilon$ in the \emph{unweighted}
+inner product; under $|\Xi_{ij}|^2$-weighting that orthogonality does not carry over, so the cross
+terms no longer vanish for an arbitrary coil pattern. Restricting $A^{\mathrm{core}},B^{\mathrm{core}}$
+to $\mathrm{span}\{\Upsilon\}$ in \texttt{als\_refine\_coil\_weighted} is therefore a practical,
+tractable choice once coils are non-uniform — \textbf{not} a proven exact equivalence. This is the
+same fact already established in \S\ref{sec:coils_dont_factor} ("coils do not factor out of the
+compression problem") recurring here in a different guise — consistent with it, not a new result.
+
+Returning to the coil-free case: $A,B$ are not arbitrary $[N,P]$ matrices in the implementation,
+they are
+constrained to $A_{jp}=\sum_l\Upsilon_{jl}A^{\mathrm{core}}_{lp}$,
+$B_{ip}=\sum_{l'}\Upsilon^*_{il'}B^{\mathrm{core}}_{l'p}$ — linear combinations of the existing
+$L$ orthonormal spatial modes, with the core coefficients $A^{\mathrm{core}},B^{\mathrm{core}}$
+($[L,P]$) being what is actually optimised. Substituting these and $g_{jk}=\sum_l\Upsilon_{jl}W_{kl}$
+into \eqref{eq:varpro_loss},
+\begin{equation}
+    G_{jik} - \sum_p\Lambda_{kp}A_{jp}B_{ip}
+        = \sum_{l,l'}\Upsilon_{jl}\Upsilon^*_{il'}\,M_{ll'k},
+    \qquad
+    M_{ll'k} := W_{kl}\bar W_{kl'} - \sum_p A^{\mathrm{core}}_{lp}\Lambda_{kp}B^{\mathrm{core}}_{l'p}.
+    \label{eq:M_residual}
+\end{equation}
+Summing $|\cdot|^2$ over $j,i$ and using orthonormality
+$\sum_j\Upsilon_{jl}\Upsilon^*_{jm}=\delta_{lm}$ twice,
+\begin{equation}
+    \sum_{j,i}\Bigl|\sum_{l,l'}\Upsilon_{jl}\Upsilon^*_{il'}M_{ll'k}\Bigr|^2
+    = \sum_{l,l',m,m'} M_{ll'k}\bar M_{mm'k}\,\delta_{lm}\,\delta_{l'm'}
+    = \sum_{l,l'}|M_{ll'k}|^2,
+    \label{eq:voxel_collapse}
+\end{equation}
+\emph{exactly} — not an approximation, not a Fourier/Parseval argument, just $\Upsilon^H\Upsilon=I_L$
+(true because $\Upsilon$ is SVD-derived). Therefore
+\begin{equation}
+    \mathcal{L}(A,B,\Lambda) = \sum_{l,l',k}\Bigl|W_{kl}\bar W_{kl'}
+        - \sum_p A^{\mathrm{core}}_{lp}\Lambda_{kp}B^{\mathrm{core}}_{l'p}\Bigr|^2,
+    \label{eq:varpro_loss_core}
+\end{equation}
+a loss over $(l,l',k)$ only — $[L,L,K]$-sized, no voxel index $j,i$ anywhere. \textbf{This is
+why the ALS/VARPRO minimisation, and the diagnostic loss \texttt{varpro\_reduced\_loss} that
+tracks it, never construct a single voxel- or grid-resolution Toeplitz kernel}: the $N$-voxel sums
+in the original \eqref{eq:varpro_loss} have already been summed out in closed form via
+\eqref{eq:voxel_collapse} before the optimisation ever runs, leaving an equivalent problem entirely
+in core ($L,P,K$-sized) space. Sanity check against \eqref{eq:varpro_loss_core} with
+$A^{\mathrm{core}}=B^{\mathrm{core}}=0$: $\sum_{l,l',k}|W_{kl}\bar W_{kl'}|^2
+=\sum_k\bigl(\sum_l|W_{kl}|^2\bigr)^2$ — exactly \texttt{g\_norm\_sq}, validated bit-for-bit against
+a brute-force voxel-space computation in \texttt{test\_gnorm\_closed\_form}. The Toeplitz spatial
+kernels ($h_{ll'}$, built per $(l,l')$ pair via the sampling pattern) are a separate, downstream
+representation used only to \emph{apply} whichever operator (naive $L^2$-term or compressed
+$P$-term) is ultimately deployed — the fitting/compression step that decides $A^{\mathrm{core}},
+B^{\mathrm{core}},\Lambda$ never needs them.
+
+\paragraph{Stationarity in $\Lambda$.} Setting $\partial\mathcal{L}/\partial\Lambda^*_{kp}=0$ for
+each $k$ gives the normal equations
+\begin{equation}
+    \sum_{j,i} G_{jik}\,\bar A_{jp}\bar B_{ip} = \sum_{p'} \Lambda_{kp'}\,
+        \underbrace{\Bigl(\sum_j A_{jp'}\bar A_{jp}\Bigr)}_{\mathcal{A}_{pp'}}\,
+        \underbrace{\Bigl(\sum_i B_{ip'}\bar B_{ip}\Bigr)}_{\mathcal{B}_{pp'}},
+    \label{eq:lambda_stationarity}
+\end{equation}
+since the $(j,i)$-indexed "design vector" for mode $p'$ is the outer product $A_{\cdot p'}\otimes
+B_{\cdot p'}$, whose Gram matrix factors into the \emph{Hadamard product} of the separate Gram
+matrices $\mathcal{A}=A^HA$, $\mathcal{B}=B^HB$ (a standard fact for Khatri-Rao/Kronecker-structured
+design matrices). Writing $\boldsymbol\ell(k)_p := \sum_{j,i}G_{jik}\bar A_{jp}\bar B_{ip}$ and
+$\mathcal{G} := \mathcal{A}\odot\mathcal{B}$ (elementwise product, $P\times P$),
+\eqref{eq:lambda_stationarity} is exactly $\boldsymbol\ell(k) = \mathcal{G}\,\boldsymbol\Lambda(k)$, so
+\begin{equation}
+    \boxed{\boldsymbol\Lambda(k) = \mathcal{G}^{-1}\boldsymbol\ell(k)}
+    \label{eq:lambda_closed_form}
+\end{equation}
+whenever $\mathcal{G}$ is invertible — a genuine closed form for $\Lambda$ given $A,B$, with no
+orthonormality assumption. \textbf{This is a strict generalisation of the document's existing
+$\Lambda=F\odot C$ update}: when $A,B$ are constrained orthonormal ($\mathcal{A}=\mathcal{B}=I_P$),
+$\mathcal{G}=I_P\odot I_P=I_P$ exactly, and \eqref{eq:lambda_closed_form} collapses to
+$\Lambda_{kp}=\ell(k)_p$, recovering $\Lambda=F\odot C$ — so the orthonormal case was never doing
+anything different, it was just the special case where $\mathcal{G}$ happens to be the identity.
+
+\paragraph{The reduced problem.} Substituting \eqref{eq:lambda_closed_form} back into
+\eqref{eq:varpro_loss} (the standard "profiling out a linear nuisance parameter" identity)
+gives a loss depending on $A,B$ alone,
+\begin{equation}
+    \mathcal{L}(A,B) = \|G\|_F^2 - \sum_k \boldsymbol\ell(k)^H\,\mathcal{G}(A,B)^{-1}\,\boldsymbol\ell(k),
+    \label{eq:varpro_reduced}
+\end{equation}
+i.e.\ minimising \eqref{eq:varpro_loss} over all three factors jointly is \emph{exactly equivalent}
+to maximising the generalised-Rayleigh-quotient-like quantity
+$\sum_k\boldsymbol\ell(k)^H\mathcal{G}(A,B)^{-1}\boldsymbol\ell(k)$ over $A,B$ only. This is a real
+reduction from a 3-block to a 2-block problem — one fewer coupled factor, with the elimination
+exact rather than approximate.
+
+\paragraph{Why this is where it stops.} $\boldsymbol\ell(k)$ is bilinear in $(A,B)$ and
+$\mathcal{G}$ is biquadratic in $(A,B)$, so \eqref{eq:varpro_reduced} is still genuinely nonlinear
+and non-convex in the remaining $(A,B)$ — eliminating $\Lambda$ removes exactly the one block that
+entered \emph{linearly}; $A$ and $B$ enter the original model multiplicatively with each other
+(through $A_{jp}B_{ip}$) and cannot both be eliminated the same way (fixing $\Lambda$ and $A$ makes
+$B$ linear and eliminable too, by the identical argument — but then $A$ no longer is, and vice
+versa: only ever one block can be profiled out in closed form at a time). This is not a new gap —
+it is the same fact already cited (no Eckart--Young analogue once three or more factors are
+coupled multiplicatively), now \emph{localised} to exactly the $(A,B)$ pair rather than the whole
+problem. \textbf{Net result: a provably exact, non-heuristic two-block reduction
+(\eqref{eq:lambda_closed_form}--\eqref{eq:varpro_reduced}), with the genuinely hard part of the
+problem isolated to the smallest residual core it can be — Variable-Projection-accelerated ALS on
+$(A,B)$ only, rather than naive 3-block ALS on $(A,B,\Lambda)$.} This is a real, citable
+improvement to the existing algorithm, not a restatement of the impossibility result.
+
+\subsection{Full algorithm}
+\label{sec:full_algorithm}
+
+\textbf{Stage 0 — coil-free closed-form initialisation} (replaces the ad hoc top-$P$-pair
+one-hot init):
+\begin{enumerate}[label=\arabic*.]
+    \item From the $L$-term forward SVD $(\Upsilon,\Omega,\boldsymbol\sigma)$, form
+          $\mathbf{M}(t_k)=\boldsymbol\Omega_{k,:}\boldsymbol\Omega_{k,:}^H\in\mathbb{C}^{L\times L}$
+          for every sample $k$ (rank-1, Hermitian, by construction).
+    \item Vectorize the upper-triangular entries of $\mathbf{M}(t_k)$ into a
+          $\tfrac{L(L+1)}{2}$-vector, stack over $k$ into $\mathbf{Z}\in\mathbb{C}^{L(L+1)/2\times K}$,
+          take its rank-$P$ SVD \eqref{eq:Z_svd}.
+    \item Reshape each right singular vector back into an $L\times L$ Hermitian matrix and take
+          its \emph{full} eigendecomposition (all $L$ eigenpairs, not just the dominant one --
+          a generic $L\times L$ Hermitian matrix spreads energy across several eigenvalues, and
+          $R=1$ measurably underperforms keeping all of them, see below). Pool candidates across
+          \emph{every} retained $\mathbf{Z}$-mode $\times$ every eigenvector and keep the global
+          top-$P\!\cdot\!R$ by score $|s_p\cdot\lambda_{rp}|$ — this lets a single dominant
+          $\mathbf{Z}$-mode contribute several terms rather than forcing exactly one eigenvector
+          per mode.
+    \item Set $A^{(0)}_{j,(r,p)}=\sqrt{|\lambda_{rp}|}\sum_l\hat C_{lrp}\Upsilon_{jl}$,
+          $B^{(0)}_{j,(r,p)}=\mathrm{sign}(\lambda_{rp})\sqrt{|\lambda_{rp}|}\sum_l\hat C_{lrp}\Upsilon_{jl}$
+          — the sign correction on $B^{(0)}$ is necessary, not optional: these Hermitian
+          matrices are generally \emph{indefinite} (not PSD), so $\sqrt{|\lambda|}$ on both sides
+          silently drops the sign whenever $\lambda_{rp}<0$.
+\end{enumerate}
+
+\paragraph{Empirical validation (\texttt{normal\_toeplitz\_als\_test.cpp}).} Pre-ALS, this init's
+loss is occasionally slightly \emph{worse} than the old top-$P$-pairs heuristic (the new
+candidates, drawn from different $\mathbf{Z}$-modes, are not mutually orthogonal, so picking the
+global top-$P\!\cdot\!R$ by individual score can pay a redundancy cost the old one-hot init never
+incurs). What matters is the \emph{converged} result: running the same ALS refinement
+(Stage 1) from both inits, this init reaches a measurably lower final loss after $\sim$20
+iterations, on every random draw tested — confirming it as the better choice in the regime that
+matters (the production call site already runs 50 ALS iterations).
+
+\textbf{Stage 1 — VARPRO-style refinement} (closed-form $\Lambda$ every step, no orthonormality
+assumed — this is what the document's existing ALS code already does structurally for the
+$\Lambda$ step; the gap is only in initialisation and convergence tracking):
+\begin{enumerate}[label=\arabic*.]
+    \item[] Repeat until $\mathcal{L}(A,B)$ \eqref{eq:varpro_reduced} stops decreasing
+            (relative tolerance, e.g.\ $10^{-4}$) or a max-iteration budget is hit:
+    \item Form $\mathbf{F}=\mathbf{W}\bar A$, $\mathbf{C}=\bar{\mathbf{W}}B$ where
+          $\mathbf{W}=\Omega\odot S\in\mathbb{C}^{K\times L}$ (matrix-free against the dense
+          $[L,P\cdot R]$ core — no $N$- or $K$-scale tensor ever formed, matching the existing
+          code's core-space trick).
+    \item $\boldsymbol\ell(k) = \mathbf{F}_{k,:}\odot\mathbf{C}_{k,:}$ for every $k$;
+          $\mathcal{G}=(A^HA)\odot(B^HB)$; solve
+          $\Lambda(k)=\mathcal{G}^{-1}\boldsymbol\ell(k)$ \eqref{eq:lambda_closed_form} (truncated
+          pseudo-inverse if $\mathcal{G}$ is ill-conditioned, as the existing
+          \texttt{nh\_rsolve\_herm} already does).
+    \item Evaluate $\mathcal{L}(A,B)$ via \eqref{eq:varpro_reduced} — \textbf{record this}; it is
+          currently not tracked at all (fixed iteration count, no stopping criterion).
+    \item Update $A$ given $(B,\Lambda)$ closed form (linear in $A$ for fixed $B,\Lambda$ —
+          identical structure to the existing $A$-update); update $B$ given $(A,\Lambda)$
+          symmetrically.
+    \item \emph{(Stretch goal, not yet derived in closed form here)} True VARPRO additionally
+          corrects the $A$- and $B$-updates for $\Lambda$'s own dependence on $A,B$ via the
+          implicit-function chain rule through \eqref{eq:lambda_closed_form} (the standard
+          Golub--Pereyra projected-Jacobian correction) — this is what separates VARPRO from plain
+          alternating block coordinate descent in the literature, and is the one piece of the
+          method not yet worked out term-by-term here.
+\end{enumerate}
+
+\textbf{Stage 2 — coils.} \textbf{Not free} (Section~\ref{sec:coils_dont_factor}): naively
+pairing every mode with every coil ($A_{p'c}=A_{p'}\odot\tilde s_c$, etc.) reuses Stages 0--1's
+$\Lambda$, which solved the wrong (coil-free) objective. The correct version reruns Stage 1's
+VARPRO loop with the $C^2$-coupled $\mathcal{G}$/$\boldsymbol\ell(k)$ of
+\eqref{eq:coil_weighted_lambda} — Stage 0's closed-form init can still seed $A,B$ (a reasonable
+starting point, just not the converged answer), but $\Lambda$ must be re-solved coil-aware before
+trusting the result. $P\cdot R$ Toeplitz kernels, $P\cdot R\cdot C$ diagonal pairs in the final
+applied operator either way — the cost structure target is unchanged, only how $\Lambda$ is
+\emph{found} changes.
 
 \section{Gradient Nonlinearity via Coordinate Substitution (Warp)}
 

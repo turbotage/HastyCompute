@@ -90,7 +90,14 @@ public:
         }
     }
 
-    std::pair<std::vector<u8>,u8> read_max_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+    // 10s was too tight for large-tensor serialization: a freshly-spawned
+    // serializer thread waiting to be scheduled, plus blosc2_compress_ctx
+    // spinning up hardware_concurrency() threads competing for the same
+    // cores right after a long CPU-bound computation, can easily exceed it
+    // even with nothing actually wrong -- this isn't a deadlock detector at
+    // that point, just an under-provisioned timeout. 120s gives real margin
+    // while still catching genuine hangs.
+    std::pair<std::vector<u8>,u8> read_max_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout = std::chrono::seconds(120)) {
         if (nbytes <= 0) {
             throw std::runtime_error("nbytes must be positive");
         }
@@ -113,7 +120,7 @@ public:
         throw std::runtime_error("Timeout while waiting for chunk");
     }
 
-    std::pair<std::vector<u8>,u8> read_exact_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout_per_chunk = std::chrono::seconds(10)) {
+    std::pair<std::vector<u8>,u8> read_exact_nbytes_blocking(i64 nbytes, std::chrono::milliseconds timeout_per_chunk = std::chrono::seconds(120)) {
         if (nbytes <= 0) {
             throw std::runtime_error("nbytes must be positive");
         }
@@ -147,6 +154,18 @@ public:
                         }
                         break;
                     }
+                } else if (_finished) {
+                    // Predicate was satisfied by _finished alone (no chunks
+                    // left, producer is done) but we still need more bytes
+                    // than the stream ever delivered -- _finished never
+                    // resets, so without this check wait_for keeps
+                    // returning true immediately on every iteration
+                    // (predicate already satisfied), busy-spinning forever
+                    // instead of actually waiting. Genuine end-of-stream
+                    // with insufficient data, not a timeout -- throw now.
+                    throw std::runtime_error(
+                        "Stream finished with insufficient data: needed " + std::to_string(nbytes) +
+                        " bytes, got " + std::to_string(bytes_read));
                 }
             } else {
                 throw std::runtime_error("Timeout while waiting for chunk");

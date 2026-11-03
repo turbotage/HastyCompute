@@ -9,6 +9,7 @@ namespace io {
 
 std::filesystem::path module_cache_dir;
 std::filesystem::path tensor_cache_dir;
+std::filesystem::path persistent_cache_dir;
 std::filesystem::path data_relative_dir;
 std::filesystem::path hasty_data_dir;
 std::filesystem::path hasty_scripts_dir;

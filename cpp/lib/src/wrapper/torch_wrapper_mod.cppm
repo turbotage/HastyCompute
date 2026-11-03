@@ -8,6 +8,9 @@ module;
 #include <c10/cuda/CUDACachingAllocator.h>
 #include "c10/cuda/CUDAStream.h"
 #include <c10/cuda/CUDAGuard.h>
+#include <ATen/cuda/CUDAEvent.h>
+#include <nvtx3/nvToolsExt.h>
+#include <cuda_profiler_api.h>
 
 namespace std {
     template<>
@@ -66,10 +69,12 @@ export namespace hat {
     using at::zeros;
     using at::ones;
     using at::rand;
+    using at::randn;
     using at::empty_like;
     using at::zeros_like;
     using at::ones_like;
     using at::rand_like;
+    using at::randn_like;
     using at::real;
     using at::imag;
     using at::abs;
@@ -143,10 +148,33 @@ export namespace hat {
         }
 
         using at::cuda::getDefaultCUDAStream;
+        using at::cuda::getCurrentCUDAStream;
+        using at::cuda::setCurrentCUDAStream;
+        using at::cuda::getStreamFromPool;
         using at::cuda::device_count;
 
         using at::cuda::CUDAStream;
         using at::cuda::CUDAStreamGuard;
+        using at::cuda::CUDAEvent;
+
+        // Bounds the active capture window for `nsys profile -c cudaProfilerApi
+        // --capture-range=cudaProfilerApi`, so a trace only covers the region between
+        // a matched start/stop pair instead of the whole process lifetime.
+        using ::cudaProfilerStart;
+        using ::cudaProfilerStop;
+    }
+
+    // nvtxRangePushA/nvtxRangePop/nvtxMarkA are emitted with internal linkage by the
+    // nvtx3 header (lazy dynamic-loader trick), so they can't be re-exported via a
+    // `using` declaration from a module. Wrap them in real (externally linked)
+    // functions instead — called from tensor_background.cppm's hasty::nvtx wrapper.
+    // Not `inline`: these must stay defined exactly once, in this TU's object code,
+    // so the TU-local nvtxRangePushA/nvtxRangePop/nvtxMarkA they call are never
+    // inlined into a different translation unit.
+    namespace nvtx {
+        void range_push(const char* name) { ::nvtxRangePushA(name); }
+        void range_pop() { ::nvtxRangePop(); }
+        void mark(const char* name) { ::nvtxMarkA(name); }
     }
 
 }

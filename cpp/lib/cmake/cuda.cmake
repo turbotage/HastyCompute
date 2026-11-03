@@ -1,6 +1,6 @@
 find_package(CUDAToolkit REQUIRED)
 
-foreach(_tgt toolkit nvrtc cudart cufft cuda_driver)
+foreach(_tgt toolkit nvrtc cudart cufft cuda_driver nvtx3)
     if(TARGET CUDA::${_tgt})
         target_link_libraries(HastyCompute PRIVATE CUDA::${_tgt})
     endif()

@@ -1,0 +1,18 @@
+[package]
+name = "hasty-recon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reconstruction: multi-coil spiral 4D-flow encoding operators with physics (B0, concomitant, GNL), CG/P2nP solvers"
+
+[dependencies]
+hasty-cuda = { path = "../hasty-cuda" }
+hasty-nufft = { path = "../hasty-nufft" }
+hasty-fft = { path = "../hasty-fft" }
+hasty-toeplitz = { path = "../hasty-toeplitz" }
+hasty-mrsim = { path = "../hasty-mrsim" }
+cudarc.workspace = true
+num-complex.workspace = true
+thiserror.workspace = true
+nalgebra = "0.33"
+serde_json = "1"

@@ -5,6 +5,7 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Choosing decompositions}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {1.1.1}The exponential decomposition}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {1.1.2}SVD-optimal initialisation of $\Theta $}{3}{}\protected@file@percent }
+\newlabel{sec:svd_init}{{1.1.2}{3}{}{}{}}
 \newlabel{eq:svd_equiv_loss}{{21}{3}{}{}{}}
 \newlabel{eq:svd_init}{{24}{4}{}{}{}}
 \newlabel{eq:lambda_svd}{{26}{4}{}{}{}}
@@ -15,18 +16,19 @@
 \newlabel{eq:upsilon_target}{{33}{5}{}{}{}}
 \newlabel{eq:upsilon_covariance}{{35}{5}{}{}{}}
 \newlabel{eq:B_projection}{{40}{5}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}How to compute interpolants efficiently}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Feature vector and the histogram's scaling problem}{6}{}\protected@file@percent }
 \newlabel{sec:histogram}{{1.2}{6}{}{}{}}
 \newlabel{eq:hist_blowup}{{49}{6}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}A fixed feature-space basis (no histogram)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Why this doesn't make the SVD worse}{7}{}\protected@file@percent }
 \newlabel{sec:featurebasis}{{1.3}{7}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}An exact nonlinear (multiplicative) decomposition}{7}{}\protected@file@percent }
+\newlabel{sec:nonlinear_decomp}{{1.4}{7}{}{}{}}
 \newlabel{eq:phi_res_bilinear}{{50}{7}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{Construction.}{7}{}\protected@file@percent }
-\newlabel{eq:feature_basis}{{51}{7}{}{}{}}
-\newlabel{eq:feature_basis_eval}{{52}{7}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{Fitting $\Omega _{kl}$.}{7}{}\protected@file@percent }
-\newlabel{eq:omega_closed_form}{{53}{7}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{Cost.}{7}{}\protected@file@percent }
+\newlabel{eq:exact_product_decomp}{{51}{7}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why this doesn't trivially collapse $L$.}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The actual lever: composition instead of fusion.}{7}{}\protected@file@percent }
+\newlabel{eq:per_channel_fit}{{52}{7}{}{}{}}
+\newlabel{eq:composition_vs_fusion}{{53}{7}{}{}{}}
 \newlabel{eq:psf_def}{{56}{8}{}{}{}}
 \newlabel{eq:toeplitz_apply}{{57}{8}{}{}{}}
 \newlabel{eq:normal_op_Lsq}{{58}{8}{}{}{}}
@@ -41,6 +43,7 @@
 \newlabel{eq:nonherm_apply}{{71}{10}{}{}{}}
 \newlabel{eq:nonherm_apply_whitened}{{73}{10}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Optimal Decomposition: Alternating Optimization}{10}{}\protected@file@percent }
+\newlabel{sec:als}{{2.4}{10}{}{}{}}
 \newlabel{eq:nonherm_loss}{{75}{11}{}{}{}}
 \newlabel{eq:FC_def}{{76}{11}{}{}{}}
 \newlabel{eq:lambda_update}{{77}{11}{}{}{}}
@@ -48,11 +51,56 @@
 \newlabel{eq:B_update}{{79}{11}{}{}{}}
 \newlabel{eq:full_expansion}{{80}{12}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Comparison Summary}{12}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3}Gradient Nonlinearity via Coordinate Substitution (Warp)}{12}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Separability assumption}{12}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Coordinate substitution}{13}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Two-grid discretisation}{13}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Jacobian weighting folded into coil maps}{13}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Diffeomorphism requirement}{13}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Resulting operator chain}{13}{}\protected@file@percent }
-\gdef \@abspage@last{13}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Exact Closed-Form Expansion for Concomitant Fields}{12}{}\protected@file@percent }
+\newlabel{sec:concomitant_exact}{{3}{12}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}The spatial basis is already minimal}{12}{}\protected@file@percent }
+\newlabel{eq:conc_maxwell}{{81}{12}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}The temporal coefficients are exactly known}{13}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Low-order Taylor expansion, with an a priori error bound}{13}{}\protected@file@percent }
+\newlabel{eq:conc_multinomial}{{83}{13}{}{}{}}
+\newlabel{eq:conc_truncated}{{84}{13}{}{}{}}
+\newlabel{eq:conc_remainder}{{85}{13}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}What this does \emph  {not} buy: the normal operator}{13}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Reducing the per-term cost of the $L_z\times Q_c$ coupling, via k-space differentiation}{14}{}\protected@file@percent }
+\newlabel{sec:conc_kspace_deriv}{{3.5}{14}{}{}{}}
+\newlabel{eq:ft_monomial_derivative}{{86}{14}{}{}{}}
+\newlabel{eq:conc_kspace_correction}{{87}{14}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Closed-Form Normal-Operator Compression, With Coils}{14}{}\protected@file@percent }
+\newlabel{sec:tensor_theory}{{4}{14}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}The full operator, exactly, before any compression}{15}{}\protected@file@percent }
+\newlabel{eq:N_exact_coils}{{88}{15}{}{}{}}
+\newlabel{eq:N_raw_LC}{{89}{15}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Coils do \emph  {not} factor out of the compression problem}{15}{}\protected@file@percent }
+\newlabel{sec:coils_dont_factor}{{4.2}{15}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Redone with the weight included.}{15}{}\protected@file@percent }
+\newlabel{eq:coil_weighted_loss}{{90}{15}{}{}{}}
+\newlabel{eq:coil_weighted_lambda}{{91}{15}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}The $L^2\to P$ reduction is two exact matrix steps, not a hard tensor problem}{16}{}\protected@file@percent }
+\newlabel{eq:Z_svd}{{92}{16}{}{}{}}
+\newlabel{eq:C_eig}{{93}{16}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{The one honest caveat.}{16}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Eliminating $\Lambda $ exactly: variable projection}{16}{}\protected@file@percent }
+\newlabel{sec:varpro}{{4.4}{16}{}{}{}}
+\newlabel{eq:varpro_loss}{{94}{16}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{The restriction to $\mathrm  {span}\{\Upsilon \}$ is exact, not a simplifying assumption (coil-free case only).}{16}{}\protected@file@percent }
+\newlabel{eq:pythagoras_restriction}{{95}{16}{}{}{}}
+\newlabel{eq:M_residual}{{96}{17}{}{}{}}
+\newlabel{eq:voxel_collapse}{{97}{17}{}{}{}}
+\newlabel{eq:varpro_loss_core}{{98}{17}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Stationarity in $\Lambda $.}{17}{}\protected@file@percent }
+\newlabel{eq:lambda_stationarity}{{99}{17}{}{}{}}
+\newlabel{eq:lambda_closed_form}{{100}{17}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{The reduced problem.}{18}{}\protected@file@percent }
+\newlabel{eq:varpro_reduced}{{101}{18}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why this is where it stops.}{18}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Full algorithm}{18}{}\protected@file@percent }
+\newlabel{sec:full_algorithm}{{4.5}{18}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Empirical validation (\texttt  {normal\_toeplitz\_als\_test.cpp}).}{18}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Gradient Nonlinearity via Coordinate Substitution (Warp)}{19}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Separability assumption}{19}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Coordinate substitution}{20}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Two-grid discretisation}{20}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Jacobian weighting folded into coil maps}{20}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Diffeomorphism requirement}{20}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Resulting operator chain}{20}{}\protected@file@percent }
+\gdef \@abspage@last{20}

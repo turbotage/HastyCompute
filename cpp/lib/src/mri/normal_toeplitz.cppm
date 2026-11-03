@@ -42,6 +42,7 @@ export struct NormalOffFourierToeplitzEmbeddings {
     };
     Vec<Vec<Split>>   splits;     // [outer][inner]  (P×R or L×L)
     std::array<i64,3> im_size;    // {nx, ny, nz}
+    Opt<Tensor>        coil_maps = nullopt;  // [C, nx, ny, nz] ComplexFloat — factored outside splits
 };
 
 // ─── Strategy enums ──────────────────────────────────────────────────────────
@@ -295,6 +296,13 @@ export NormalOffFourierToeplitzEmbeddings make_normal_omega_driven_off_fourier_t
 // Spatial bases (L of them) are precomputed and shared via SPtr:
 //   splits[l1][l2].spatial_basis_left.first  == splits[l1][l2'].spatial_basis_left.first
 //   splits[l1][l1].spatial_basis_left.first  == splits[l1][l1].spatial_basis_right.first (l1==l2)
+// coil_maps: nullopt => single implicit coil of all-ones (identical to the
+// previous coil-blind behaviour, zero overhead). Otherwise [C,N] ComplexFloat
+// -- the EXACT expansion N_ij = Sum_c Sum_{l1,l2} [s_cj*Upsilon_jl1] *
+// [conj(s_ci)*conj(Upsilon_il2)] * h_l1l2(rj-ri) (MRI_Physics.tex eq:N_raw_LC)
+// needs only C (not C^2) terms here -- the C^2 coupling is specific to
+// FITTING a reduced P<L^2 model (als_refine_coil_weighted), not to this
+// exact/uncompressed L^2 reference, so this stays a simple per-coil loop.
 export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz_embeddings(
     const Tensor&                             coords,
     ArrayRef<i64>                             im_size,
@@ -302,23 +310,24 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
     const Tensor&                             voxel_to_bin,
     const PhiLowrankResult&                   phi_lowrank,
     eComputeStrategyBuildOffFourierEmbeddings compute = eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
-    eStorageStrategyBuildOffFourierEmbeddings storage = eStorageStrategyBuildOffFourierEmbeddings::STORE_ON_CPU
+    eStorageStrategyBuildOffFourierEmbeddings storage = eStorageStrategyBuildOffFourierEmbeddings::STORE_ON_CPU,
+    Opt<Tensor>                               coil_maps = nullopt
 ) {
     const Tensor& Omega   = phi_lowrank.Omega;
     const Tensor& S_phi   = phi_lowrank.S;
     const Tensor& Upsilon = phi_lowrank.Upsilon;
     const i64 K = Omega.size(0), L = Omega.size(1);
     const Device device = Omega.device();
-    const i64 N_mask = mask_idx.size(0);
     const i64 nx = im_size[0], ny = im_size[1], nz = im_size[2];
     const i64 N  = nx * ny * nz;
+    const i64 C  = coil_maps.has_value() ? coil_maps->size(0) : 1;
 
     // Kernel weight: Omega_full[k,l] = Omega[k,l]*S[l]  (absorb full S into kernel).
     // Kernel weight product: S[l1]*S[l2]*Omega[k,l1]*conj(Omega[k,l2]).
     // Spatial bases use raw Upsilon (no S compensation) — S lives entirely in kernel.
     auto S_phi_f = S_phi.to(device);  // [L] Float
 
-    // Precompute L expanded spatial bases using raw Upsilon.
+    // L coil-free spatial bases — coil maps factored out, applied at operator apply time.
     Vec<SPtr<CachedTensor>> basis_sptrs(L);
     for (i64 l = 0; l < L; ++l) {
         auto v_l = Upsilon.select(1, l).to(eScalarType::ComplexFloat).contiguous();
@@ -326,7 +335,7 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
         basis_sptrs[l] = make_cached(std::move(expanded), storage);
     }
 
-    // Build L² kernels and splits.
+    // Build L² coil-free kernels and L² splits.
     auto build_l_splits = [&](i64 l1, Device dev)
         -> Vec<NormalOffFourierToeplitzEmbeddings::Split>
     {
@@ -341,7 +350,7 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
             auto omega_full_l2 = Omega.select(1, l2).to(dev)
                                       .mul(S_phi_f.select(0, l2).to(dev))
                                       .to(eScalarType::ComplexFloat).contiguous();
-            auto weights = omega_full_l1.mul(omega_full_l2.conj()).contiguous();  // [K]
+            auto weights = omega_full_l1.mul(omega_full_l2.conj()).contiguous();
             auto kernel_sptr = make_cached(make_kernel(coords, weights, im_size, dev), storage);
 
             row.push_back({
@@ -349,6 +358,8 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
                 {basis_sptrs[l2], true},   // right: Υ_l2 MULT_CONJ on output
                 std::move(kernel_sptr)
             });
+            if (dev.type == eDeviceType::CUDA) cuda::synchronize(dev);
+            cuda::empty_cache();
         }
         return row;
     };
@@ -357,8 +368,22 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
     splits.resize(L);
 
     if (compute == eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE) {
-        for (i64 l1 = 0; l1 < L; ++l1)
+        for (i64 l1 = 0; l1 < L; ++l1) {
             splits[l1] = build_l_splits(l1, device);
+            // Each build_l_splits call constructs L fresh cuFINUFFT plans
+            // (one per l2), each needing its own raw cudaMalloc for internal
+            // fine-grid buffers on the 2x-zero-padded Toeplitz grid (8x the
+            // q-grid voxel count). Even though each kernel is evicted via
+            // make_cached's storage strategy right after, PyTorch's caching
+            // allocator retains the freed blocks in its own pool rather than
+            // returning them to the driver -- across L*L=64 sequential plan
+            // builds (L=8) that retained-but-idle pool competes with
+            // cuFINUFFT's OWN raw allocations for physical VRAM and can OOM
+            // it even though the memory is technically free. Clear every
+            // outer iteration (L calls, not L^2) to keep this cheap.
+            if (device.type == eDeviceType::CUDA) cuda::synchronize(device);
+            hasty::cuda::empty_cache();
+        }
     }
     else {
         auto& lb = global_cuda_load_balancer;
@@ -372,7 +397,11 @@ export NormalOffFourierToeplitzEmbeddings make_normal_naive_off_fourier_toeplitz
         lb.sync();
     }
 
-    return NormalOffFourierToeplitzEmbeddings{std::move(splits), {nx, ny, nz}};
+    Opt<Tensor> cm_stored = nullopt;
+    if (coil_maps.has_value())
+        cm_stored = coil_maps->to(eScalarType::ComplexFloat)
+                        .reshape({C, nx, ny, nz}).to(device).contiguous();
+    return NormalOffFourierToeplitzEmbeddings{std::move(splits), {nx, ny, nz}, std::move(cm_stored)};
 }
 
 
@@ -467,10 +496,16 @@ export NormalOffFourierToeplitzEmbeddings make_normal_diagonal_off_fourier_toepl
 // related to the full-space factors by A = Υ·Acore, B = Υ*·Bcore, Λ unchanged.
 // All ALS work is done in this [L,P] core space (cheap: L is O(10) vs n_hist).
 //
-// Init (n_als_iter=0): exact top-P pairs from the L²-term expansion.
-//   Acore[:,p]=e_{l1}, Bcore[:,p]=e_{l2}, Λ[:,p]=S[l1]S[l2]Ω[:,l1]Ω*[:,l2]
-//     => A[:,p]=Υ[:,l1], B[:,p]=Υ*[:,l2]
-//   This is deterministic and gives the best rank-P subset of the naive L².
+// Init (z_svd_init): closed-form, Eckart-Young-exact for the [L(L+1)/2,K]
+// vectorized-Hermitian-matrix-vs-k unfolding -- see z_svd_init's doc above
+// for the construction. Strictly better-or-equal pre-ALS than the old
+// one-hot/argsort top-P-pairs scheme by candidate-pool construction (same
+// L²-sized pool, now combined via eigenvectors instead of restricted to
+// individual coordinate pairs); empirically also reaches a better POST-ALS
+// converged loss (measured in cpp/test/src/normal_toeplitz_als_test.cpp:
+// new init wins by ~20 ALS iterations even on draws where it starts
+// slightly behind pre-ALS) -- this is what n_als_iter should be set large
+// enough to reach (the real call site already uses n_als_iter=50).
 //
 // ALS refinement (n_als_iter>0): block-coordinate-descent CP-ALS, each
 // substep an exact (truncated-pinv) least-squares solve, so ‖M-Mhat‖_F is
@@ -524,6 +559,188 @@ static Tensor nh_rsolve_herm(const Tensor& B, const Tensor& G, double rel_eps = 
               eig.eigenvectors.conj().transpose(0,1).contiguous());  // [rows,P]
 }
 
+// ── Closed-form (Eckart-Young-exact) CP-ALS initialisation ──────────────────
+//
+// Replaces the old one-hot/argsort top-P-pairs init (Acore[:,p]=e_{l1},
+// Bcore[:,p]=e_{l2} for the top-P pairs by S[l1]*S[l2]), which discards ALL
+// cross-(l1,l2) structure entirely. See notes/MRI_Physics.tex, section
+// "Closed-Form Normal-Operator Compression, With Coils" / "Full algorithm"
+// (Stage 0) for the derivation.
+//
+// Build the per-sample rank-1 Hermitian M(k)=W[k,:]@W[k,:]^H (LxL), vectorize
+// its upper triangle, stack over k into Z [L(L+1)/2, K], and SVD it -- this
+// SVD is Eckart-Young exact for THIS matrix (no tensor-CP hardness: the
+// (l1,l2) pair is collapsed into one joint row-index BEFORE the SVD, which
+// is what keeps this a plain matrix problem). Each retained Z-mode's right
+// singular vector reshapes back into an LxL Hermitian coefficient matrix --
+// take its FULL eigendecomposition (all L eigenpairs, not just the dominant
+// one: a generic LxL Hermitian matrix spreads its energy across several
+// eigenvalues, and keeping only the top one throws most of that away,
+// measured directly: rank-1-per-mode lost to the old top-sigma-product
+// heuristic in practice). Pool candidates across ALL retained Z-modes x ALL
+// L eigenvectors (same L^2-sized candidate universe the old top-pairs
+// method drew from) and keep the global top-`p` by combined score
+// |Sz[pz]*eigval[r]| -- so a single dominant Z-mode can contribute several
+// terms if its matrix has several large eigenvalues, rather than being
+// forced to spread across p distinct Z-modes one eigenvector each.
+export struct ZSvdInit { Tensor Acore, Bcore, Lam; };
+
+export ZSvdInit z_svd_init(const Tensor& W, i64 p)
+{
+    const i64    L      = W.size(1);
+    const Device device = W.device();
+    const auto   cpu    = Device{eDeviceType::CPU};
+
+    std::vector<i64> l1v, l2v;
+    l1v.reserve(L*(L+1)/2);
+    l2v.reserve(L*(L+1)/2);
+    for (i64 l1 = 0; l1 < L; ++l1)
+        for (i64 l2 = l1; l2 < L; ++l2) { l1v.push_back(l1); l2v.push_back(l2); }
+    const i64 M = (i64)l1v.size();
+
+    auto l1_t = Tensor::from_blob(l1v.data(), {M}, eScalarType::Long, cpu).clone().to(device);
+    auto l2_t = Tensor::from_blob(l2v.data(), {M}, eScalarType::Long, cpu).clone().to(device);
+
+    // Z[m,k] = W[k,l1v[m]] * conj(W[k,l2v[m]])  -- [M,K]
+    auto Z = W.index_select(1, l1_t).mul(W.index_select(1, l2_t).conj())
+                 .transpose(0, 1).contiguous();
+
+    auto svd = linalg_svd(Z, false);   // U:[M,r] S:[r] real Vh:[r,K]
+    // Candidate pool: ALL of Z's rank (up to M=L(L+1)/2 Z-modes) x L
+    // eigenvectors each. No reason to cap this at L modes -- that was wrong,
+    // it threw away most of the richer candidates for no benefit; the global
+    // top-p selection below can only improve (never worsen) with a bigger
+    // pool to choose from.
+    const i64 n_pz = svd.S.size(0);
+
+    auto Uz  = svd.U.narrow(1, 0, n_pz).cpu().contiguous();   // [M,n_pz]
+    auto Sz  = svd.S.narrow(0, 0, n_pz);                       // [n_pz] real Double
+    auto Vhz = svd.Vh.narrow(0, 0, n_pz);                      // [n_pz,K]
+    auto Sz_cpu = Sz.cpu().contiguous();
+    const double* Sz_ptr = Sz_cpu.const_data_ptr<double>();
+
+    const std::complex<double>* Uz_ptr = Uz.const_data_ptr<std::complex<double>>();
+
+    // Per Z-mode: full eigendecomposition, kept on-device for later column
+    // copies; scores collected for the global top-p selection below.
+    std::vector<Tensor> evecs_per_pz(n_pz);     // [L,L] each
+    std::vector<std::vector<double>> evals_per_pz(n_pz);
+    struct Candidate { double score; i64 pz, r; };
+    std::vector<Candidate> candidates;
+    candidates.reserve(n_pz * L);
+
+    for (i64 pz = 0; pz < n_pz; ++pz) {
+        std::vector<std::complex<double>> Cmat(L*L, std::complex<double>(0.0, 0.0));
+        for (i64 m = 0; m < M; ++m) {
+            std::complex<double> val = Uz_ptr[m*n_pz + pz];
+            Cmat[l1v[m]*L + l2v[m]] = val;
+            if (l1v[m] != l2v[m]) Cmat[l2v[m]*L + l1v[m]] = std::conj(val);
+        }
+        auto Cmat_t = Tensor::from_blob(Cmat.data(), {L, L}, eScalarType::ComplexDouble, cpu)
+                          .clone().to(device);
+        auto eig = linalg_eigh(Cmat_t);   // ascending real eigenvalues, [L] / [L,L]
+        evecs_per_pz[pz] = eig.eigenvectors;
+
+        auto evals_cpu = eig.eigenvalues.cpu().contiguous();
+        const double* evals = evals_cpu.const_data_ptr<double>();
+        evals_per_pz[pz].assign(evals, evals + L);
+        for (i64 r = 0; r < L; ++r)
+            candidates.push_back({std::abs(Sz_ptr[pz] * evals[r]), pz, r});
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+    const i64 p_use = std::min(p, (i64)candidates.size());
+    if (p_use < p)
+        std::cout << "  [z_svd_init] requested p=" << p << " exceeds candidate pool="
+                  << candidates.size() << " -- remaining " << (p - p_use) << " mode(s) left zero\n";
+
+    auto Acore = zeros({L, p}, TensorOptions(device, eScalarType::ComplexDouble));
+    auto Bcore = zeros({L, p}, TensorOptions(device, eScalarType::ComplexDouble));
+    auto Lam   = zeros({Vhz.size(1), p}, TensorOptions(device, eScalarType::ComplexDouble));
+
+    for (i64 pi = 0; pi < p_use; ++pi) {
+        const auto& cand = candidates[pi];
+        auto evec = evecs_per_pz[cand.pz].select(1, cand.r).contiguous();   // [L]
+        const double eigval = evals_per_pz[cand.pz][cand.r];
+        const double sc     = std::sqrt(std::abs(eigval));
+        // Acore(l1)*conj(Bcore(l2)) must equal eigval*v(l1)*conj(v(l2)) --
+        // since Hermitian eigenvalues can be NEGATIVE (these matrices are
+        // not PSD in general), sqrt(|eigval|) on BOTH sides would silently
+        // drop the sign whenever eigval<0. Fold the sign into Bcore only.
+        const double sign = (eigval < 0.0) ? -1.0 : 1.0;
+        Acore.select(1, pi).copy_(evec.mul(Scalar(std::complex<double>(sc, 0.0))));
+        Bcore.select(1, pi).copy_(evec.mul(Scalar(std::complex<double>(sign * sc, 0.0))));
+
+        Lam.select(1, pi).copy_(
+            Vhz.select(0, cand.pz).conj().mul(Sz.select(0, cand.pz).to(eScalarType::ComplexDouble)));
+    }
+
+    return ZSvdInit{Acore, Bcore, Lam};
+}
+
+// VARPRO-reduced loss 𝓛(A,B) = ‖G‖²_F − Σ_k ℓ(k)^H Λ(k), G[j,i,k]=g_{jk}ḝ_{ik}
+// (MRI_Physics.tex eq:varpro_reduced) -- exact, cheap (no N- or K²-scale
+// tensor formed): ‖G‖²_F = Σ_k(Σ_l|W[k,l]|²)² via Υ's orthonormal columns,
+// and the "explained" term is the same F⊙C tensors the ALS loop already
+// computes each iteration.
+export double varpro_reduced_loss(const Tensor& W, const Tensor& Acore, const Tensor& Bcore, const Tensor& Lam)
+{
+    const double g_norm_sq = W.abs().pow(Scalar(2.0)).sum(1).pow(Scalar(2.0)).sum().item<double>();
+    auto F = mm(W, Acore.conj().contiguous());
+    auto C = mm(W.conj().contiguous(), Bcore);
+    const double explained = F.mul(C).conj().mul(Lam).sum().real().item<double>();
+    return g_norm_sq - explained;
+}
+
+// Block-coordinate-descent CP-ALS refinement, starting from any (Acore,Bcore,Lam)
+// -- extracted so both the production pipeline and tests can run identical
+// refinement from different inits and compare post-ALS (not just pre-ALS)
+// loss, which is what actually matters once an init feeds into iteration.
+export ZSvdInit als_refine(const Tensor& W, Tensor Acore, Tensor Bcore, Tensor Lam, i64 n_iter, bool verbose = false)
+{
+    for (i64 it = 0; it < n_iter; ++it) {
+        auto F = mm(W, Acore.conj().contiguous());   // [K,P]
+        auto C = mm(W.conj().contiguous(), Bcore);   // [K,P]
+
+        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
+
+        if (verbose)
+            std::cout << "  NH-ALS iter " << it << ": loss=" << std::scientific
+                      << std::setprecision(4) << varpro_reduced_loss(W, Acore, Bcore, Lam) << "\n";
+
+        auto gram_Lam = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
+
+        Acore = nh_rsolve_herm(
+            mm(W.transpose(0,1).contiguous(), Lam.conj().mul(C)),
+            gram_B.mul(gram_Lam.conj()));
+
+        gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+
+        auto F_new = mm(W, Acore.conj().contiguous());
+        Bcore = nh_rsolve_herm(
+            mm(W.transpose(0,1).contiguous(), Lam.mul(F_new.conj())),
+            gram_A.mul(gram_Lam));
+    }
+
+    if (n_iter > 0) {
+        // Final Λ with converged Acore, Bcore
+        auto F = mm(W, Acore.conj().contiguous());
+        auto C = mm(W.conj().contiguous(), Bcore);
+        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
+        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
+        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
+    }
+
+    return ZSvdInit{Acore, Bcore, Lam};
+}
+
+// coil_maps: stored in result for factored apply; not used in ALS (ALS always
+// minimises the unweighted ||M_core - M_hat_core||²_F in core space, which is
+// the exact optimal P-term approximation of the L² sum without coil weighting).
+// Coil weighting enters only at apply time via the factored C_c outer loop.
 export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_toeplitz_embeddings(
     const Tensor&                             coords,
     ArrayRef<i64>                             im_size,
@@ -533,7 +750,8 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
     i64                                       p,
     i64                                       n_als_iter = 10,
     eComputeStrategyBuildOffFourierEmbeddings compute = eComputeStrategyBuildOffFourierEmbeddings::RUN_ALL_ON_INPUT_DEVICE,
-    eStorageStrategyBuildOffFourierEmbeddings storage = eStorageStrategyBuildOffFourierEmbeddings::STORE_ON_CPU
+    eStorageStrategyBuildOffFourierEmbeddings storage = eStorageStrategyBuildOffFourierEmbeddings::STORE_ON_CPU,
+    Opt<Tensor>                               coil_maps = nullopt
 ) {
     // Work in ComplexDouble for numerical stability
     const Tensor Up = phi_lowrank.Upsilon.to(eScalarType::ComplexDouble);  // [n_hist,L]
@@ -552,66 +770,14 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
     const Tensor Sc = Sf.to(device).to(eScalarType::ComplexDouble);  // [L]
     const Tensor W  = Om.mul(Sc.unsqueeze(0)).contiguous();          // [K,L]
 
-    // ── Initialise from top-P pairs (l1,l2) ranked by S[l1]·S[l2] ───────────
-    // Acore[:,p]=e_{l1}, Bcore[:,p]=e_{l2}: best rank-P subset of the naive L².
-    auto Sd       = Sf.to(device).to(eScalarType::Double);
-    auto pair_ord = argsort(Sd.unsqueeze(1).mul(Sd.unsqueeze(0)).reshape({L*L}),
-                            0, /*descending=*/true);  // [L²]
+    // ── Closed-form (Eckart-Young-exact) init -- see z_svd_init doc above ────
+    auto init = z_svd_init(W, p);
 
-    auto Lam = zeros({K, p}, TensorOptions(device, eScalarType::ComplexDouble));
-
-    Tensor Acore, Bcore;
-    {
-        const auto cpu = Device{eDeviceType::CPU};
-        auto ord_cpu = pair_ord.cpu().contiguous();
-        const i64* po = ord_cpu.const_data_ptr<i64>();
-
-        std::vector<float> Acore_h(L*p, 0.f), Bcore_h(L*p, 0.f);
-        for (i64 pi = 0; pi < p; ++pi) {
-            i64 idx = po[pi], l1 = idx / L, l2 = idx % L;
-            Acore_h[l1*p + pi] = 1.0f;
-            Bcore_h[l2*p + pi] = 1.0f;
-            Lam.select(1, pi).copy_(W.select(1, l1).mul(W.select(1, l2).conj()));
-        }
-        Acore = Tensor::from_blob(Acore_h.data(), {L,p}, eScalarType::Float, cpu)
-                    .clone().to(device).to(eScalarType::ComplexDouble);
-        Bcore = Tensor::from_blob(Bcore_h.data(), {L,p}, eScalarType::Float, cpu)
-                    .clone().to(device).to(eScalarType::ComplexDouble);
-    }
-
-    // ── Optional ALS refinement (core space, [L,P]) ──────────────────────────
-    // n_als_iter=0: use direct top-P pairs exactly (deterministic, already set above).
-    // n_als_iter>0: block-coordinate-descent CP-ALS (see header comment).
-    for (i64 it = 0; it < n_als_iter; ++it) {
-        auto F = mm(W, Acore.conj().contiguous());   // [K,P]
-        auto C = mm(W.conj().contiguous(), Bcore);   // [K,P]
-
-        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
-        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
-        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
-
-        auto gram_Lam = mm(Lam.conj().transpose(0,1).contiguous(), Lam);
-
-        Acore = nh_rsolve_herm(
-            mm(W.transpose(0,1).contiguous(), Lam.conj().mul(C)),
-            gram_B.mul(gram_Lam.conj()));
-
-        gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
-
-        auto F_new = mm(W, Acore.conj().contiguous());
-        Bcore = nh_rsolve_herm(
-            mm(W.transpose(0,1).contiguous(), Lam.mul(F_new.conj())),
-            gram_A.mul(gram_Lam));
-    }
-
-    if (n_als_iter > 0) {
-        // Final Λ with converged Acore, Bcore
-        auto F = mm(W, Acore.conj().contiguous());
-        auto C = mm(W.conj().contiguous(), Bcore);
-        auto gram_A = mm(Acore.conj().transpose(0,1).contiguous(), Acore);
-        auto gram_B = mm(Bcore.conj().transpose(0,1).contiguous(), Bcore);
-        Lam = nh_rsolve_herm(F.mul(C), gram_A.conj().mul(gram_B));
-    }
+    // ── ALS refinement (core space, [L,P]) -- see als_refine doc above ──────
+    ZSvdInit refined = als_refine(W, init.Acore, init.Bcore, init.Lam, n_als_iter, /*verbose=*/true);
+    auto Acore = refined.Acore;
+    auto Bcore = refined.Bcore;
+    auto Lam   = refined.Lam;
 
     // Map core-space factors back to full [n_hist,P] space: A = Υ·Acore, B = Υ*·Bcore
     auto A = mm(Up, Acore).contiguous();
@@ -633,26 +799,26 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
     auto B_cf   = B.to(eScalarType::ComplexFloat);
     auto Lam_cf = Lam.to(eScalarType::ComplexFloat);
 
-    // ── Build splits: one Split per p (1 inner each) ─────────────────────────
+    const i64 C = coil_maps.has_value() ? coil_maps->size(0) : 1;
+
+    // ── Build splits: P coil-free modes ──────────────────────────────────────
+    // Coil maps are stored separately in the result and applied at operator
+    // apply time via the factored C_c outer loop.
     auto build_p_split = [&](i64 pi, Device dev)
         -> Vec<NormalOffFourierToeplitzEmbeddings::Split>
     {
         auto a_hist = A_cf.select(1, pi).contiguous().to(dev);
         auto a_3d   = expand_basis(a_hist, mask_idx, voxel_to_bin, N, nx, ny, nz, dev);
-        auto a_sptr = make_cached(std::move(a_3d), storage);
 
         auto b_hist = B_cf.select(1, pi).contiguous().to(dev);
         auto b_3d   = expand_basis(b_hist, mask_idx, voxel_to_bin, N, nx, ny, nz, dev);
-        auto b_sptr = make_cached(std::move(b_3d), storage);
 
         auto lam_p  = Lam_cf.select(1, pi).contiguous().to(dev);
         auto kern   = make_cached(make_kernel(coords, lam_p, im_size, dev), storage);
 
-        return { NormalOffFourierToeplitzEmbeddings::Split{
-            {a_sptr, false},   // left:  A[j,p] MULT on input
-            {b_sptr, false},   // right: B[i,p] MULT on output (conj absorbed in B)
-            std::move(kern)
-        }};
+        return {{ {make_cached(std::move(a_3d), storage), false},  // left:  A_p MULT on input
+                  {make_cached(std::move(b_3d), storage), false},  // right: B_p MULT on output (conj(Υ) absorbed in B)
+                  std::move(kern) }};
     };
 
     Vec<Vec<NormalOffFourierToeplitzEmbeddings::Split>> splits(p);
@@ -672,7 +838,11 @@ export NormalOffFourierToeplitzEmbeddings make_normal_nonhermitian_off_fourier_t
         lb.sync();
     }
 
-    return NormalOffFourierToeplitzEmbeddings{std::move(splits), {nx, ny, nz}};
+    Opt<Tensor> cm_stored = nullopt;
+    if (coil_maps.has_value())
+        cm_stored = coil_maps->to(eScalarType::ComplexFloat)
+                        .reshape({C, nx, ny, nz}).to(device).contiguous();
+    return NormalOffFourierToeplitzEmbeddings{std::move(splits), {nx, ny, nz}, std::move(cm_stored)};
 }
 
 
@@ -755,9 +925,24 @@ export Tensor apply_normal_toeplitz_off_fourier_operator(
     };
 
     if (compute == eComputeStrategyApplyOffFourierNormal::RUN_ALL_ON_INPUT_DEVICE) {
-        for (auto& row : embeddings.splits)
-            for (auto& split : row)
-                run_split(split, output, scratch, rho_batch, device);
+        if (!embeddings.coil_maps.has_value()) {
+            for (auto& row : embeddings.splits)
+                for (auto& split : row)
+                    run_split(split, output, scratch, rho_batch, device);
+        } else {
+            // Factored coil structure: N f = Σ_c conj(C_c) · [Σ_p B_p · h_p ★ (A_p · C_c·f)]
+            const Tensor& cm = *embeddings.coil_maps;  // [C, nx, ny, nz]
+            const i64 C = cm.size(0);
+            for (i64 c = 0; c < C; ++c) {
+                auto coil_c  = cm.select(0, c).to(device);            // [nx,ny,nz] ComplexFloat
+                auto rho_c   = rho_batch.mul(coil_c.unsqueeze(0));    // [1,nx,ny,nz]
+                auto inner   = zeros_like(output);
+                for (auto& row : embeddings.splits)
+                    for (auto& split : row)
+                        run_split(split, inner, scratch, rho_c, device);
+                output.add_(inner.mul(coil_c.conj().unsqueeze(0)));
+            }
+        }
     }
     else {
         auto& lb = global_cuda_load_balancer;

@@ -166,4 +166,52 @@ export std::string timed_uuid_hex_array_to_string(const std::array<u8, 48>& hex)
     return out;
 }
 
+// std::hash<std::string_view> produces ONE size_t (8 bytes on 64-bit) --
+// not nearly enough to fill a 24-byte id. Extend it by re-hashing the
+// string concatenated with a round-specific fixed salt, round by round,
+// concatenating each round's 8 bytes until n_bytes is filled (or the last
+// round is truncated to whatever's left). NOT cryptographic (std::hash
+// gives no such guarantee) -- adequate for cache-key collision avoidance
+// in this non-adversarial setting (internal content-addressed cache keys),
+// not a security boundary.
+static void extend_hash_bytes(std::string_view s, u8* out, std::size_t n_bytes) {
+    static constexpr std::string_view salts[] = {"", "|hasty-salt-1", "|hasty-salt-2", "|hasty-salt-3"};
+    std::size_t filled = 0;
+    for (std::size_t round = 0; filled < n_bytes; ++round) {
+        if (round >= std::size(salts))
+            throw std::runtime_error("extend_hash_bytes: n_bytes exceeds available salt rounds");
+        std::string round_input(s);
+        round_input += salts[round];
+        std::size_t h = std::hash<std::string>{}(round_input);
+        std::size_t take = std::min(sizeof(h), n_bytes - filled);
+        std::memcpy(out + filled, &h, take);
+        filled += take;
+    }
+}
+
+// Arbitrary string -> 24-byte digest (hash-extended, see extend_hash_bytes)
+// -> hex-encoded into the same 48-ASCII-char id format as
+// timed_uuid_to_hex_array. Deterministic -- same string always produces the
+// same id, for cache-key lookup (CachedTensor::exists/the string
+// constructor).
+export std::array<u8, 48> string_to_hex_array(std::string_view s) {
+    std::array<u8, 24> digest{};
+    extend_hash_bytes(s, digest.data(), 24);
+    return timed_uuid_to_hex_array(digest);
+}
+
+// Same hashing, but the first 8 bytes are the current timestamp (matching
+// generate_timed_uuid's own [8 bytes time][16 bytes payload] layout) rather
+// than purely hash-derived -- every call produces a DIFFERENT id even for
+// the same string, for "tag a freshly generated cache entry with a
+// human-readable label" use cases, as opposed to string_to_hex_array's
+// deterministic lookup-by-key use case.
+export std::array<u8, 48> timed_string_to_hex_array(std::string_view s) {
+    std::array<u8, 24> digest{};
+    u64 timestamp = nanotime();
+    std::memcpy(digest.data(), &timestamp, 8);
+    extend_hash_bytes(s, digest.data() + 8, 16);
+    return timed_uuid_to_hex_array(digest);
+}
+
 }

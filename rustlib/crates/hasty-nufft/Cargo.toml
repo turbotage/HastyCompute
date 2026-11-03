@@ -1,0 +1,16 @@
+[package]
+name = "hasty-nufft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hasty-cuda = { path = "../hasty-cuda" }
+hasty-fft = { path = "../hasty-fft" }
+cudarc.workspace = true
+thiserror.workspace = true
+nalgebra = "0.33"
+num-complex.workspace = true
+
+[dev-dependencies]
+hasty-testkit = { path = "../hasty-testkit" }

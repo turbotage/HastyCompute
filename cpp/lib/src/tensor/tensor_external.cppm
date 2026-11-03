@@ -103,6 +103,29 @@ export Tensor rand_like(const Tensor& other)
     return Tensor(hat::rand_like(other._base));
 }
 
+export Tensor randn(ArrayRef<i64> sizes, TensorOptions options)
+{
+    return Tensor(hat::randn(sizes.to_torch(), options.to_torch()));
+}
+
+export Tensor randn(ArrayRef<i64> sizes, Opt<Device> device, Opt<eScalarType> dtype)
+{
+    if (device.has_value() && dtype.has_value()) {
+        return randn(sizes, TensorOptions(*device, *dtype));
+    } else if (device.has_value()) {
+        return randn(sizes, TensorOptions().device(*device));
+    } else if (dtype.has_value()) {
+        return randn(sizes, TensorOptions().dtype(*dtype));
+    } else {
+        return randn(sizes, TensorOptions());
+    }
+}
+
+export Tensor randn_like(const Tensor& other)
+{
+    return Tensor(hat::randn_like(other._base));
+}
+
 export Tensor randperm(i64 n, TensorOptions opts = TensorOptions())
 {
     return Tensor(hat::randperm(n, opts.to_torch()));

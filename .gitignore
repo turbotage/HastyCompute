@@ -6,3 +6,4 @@ certs/
 .venv/
 logs/
 external_impl/
+.nsys-reports/

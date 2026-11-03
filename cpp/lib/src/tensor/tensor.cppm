@@ -756,6 +756,10 @@ public:
     inline Tensor clamp_max(const Scalar& max) const { return Tensor(_base.clamp_max(max.to_torch())); }
     inline Tensor& clamp_max_(const Scalar& max) { _base.clamp_max_(max.to_torch()); return *this; }
 
+    inline Tup<Tensor, Tensor> sort(i64 dim=-1, bool descending=false) const { auto [values, indices] = _base.sort(dim, descending); return {Tensor(values), Tensor(indices)}; }
+    inline Tensor argsort(i64 dim=-1, bool descending=false) const { return Tensor(_base.argsort(dim, descending)); }
+
+
     inline Tensor mm(const Tensor& other) const { return Tensor(_base.mm(other._base)); }
 
     inline Tensor eq(const Tensor& other) const { return Tensor(_base.eq(other._base)); }
@@ -775,6 +779,8 @@ private:
     friend Tensor ones_like(const Tensor& other);
     friend Tensor rand(ArrayRef<i64> sizes, TensorOptions options);
     friend Tensor rand_like(const Tensor& other);
+    friend Tensor randn(ArrayRef<i64> sizes, TensorOptions options);
+    friend Tensor randn_like(const Tensor& other);
 
 };
 

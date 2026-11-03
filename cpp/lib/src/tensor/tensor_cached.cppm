@@ -16,8 +16,42 @@ export class CachedTensor {
 public:
     CachedTensor() : _base(std::make_shared<CachedTensorBase>()) {}
 
-    CachedTensor(Tensor&& base) : _base(std::make_shared<CachedTensorBase>()) {
-        _base->id = timed_uuid_to_hex_array(generate_timed_uuid());
+    // Constructs a handle to a tensor ALREADY on disk (e.g. a previously
+    // cache_in_file'd result being looked up again) -- does not load it yet
+    // (loading stays lazy, via get_tensor(), same as every other path in
+    // this class), but DOES eagerly verify the file exists so a missing
+    // cache entry fails fast at construction, not later at first use deep
+    // inside some unrelated call site.
+    // persistent=false (default): looks in tensor_cache_dir, the
+    // within-one-run scratch space setup_default_dirs() purges every
+    // startup. persistent=true: looks in persistent_cache_dir instead,
+    // which is never purged -- for caches meant to survive across separate
+    // process invocations (e.g. an expensive fit keyed by config, checked
+    // again on the next run).
+    explicit CachedTensor(std::string_view id_string, bool persistent = false)
+        : _base(std::make_shared<CachedTensorBase>())
+    {
+        if (!exists(id_string, persistent))
+            throw std::runtime_error("CachedTensor: no cached tensor found for id " + std::string(id_string));
+        _base->id = string_to_hex_array(id_string);
+        _base->persistent = persistent;
+    }
+
+    // Check whether a cached tensor exists on disk for this id, without
+    // constructing anything -- e.g. for a "compute once, check first next
+    // time" cache: build the id from your own key, call this, and only
+    // recompute + cache_in_file() on a miss.
+    static bool exists(std::string_view id_string, bool persistent = false);
+
+    CachedTensor(Tensor&& base, std::optional<std::string_view> id_string = std::nullopt, bool persistent = false)
+        : _base(std::make_shared<CachedTensorBase>())
+    {
+        if (id_string.has_value()) {
+            _base->id = string_to_hex_array(*id_string);
+        } else {
+            _base->id = timed_uuid_to_hex_array(generate_timed_uuid());
+        }
+        _base->persistent = persistent;
 
         if (base.device().type == eDeviceType::CPU) {
             _base->cpu_base = std::move(base);
@@ -38,6 +72,10 @@ public:
 
     ~CachedTensor() {
         if (!_base) return;
+        // Persistent entries are meant to survive past this object's
+        // lifetime -- only transient (tensor_cache_dir) entries get cleaned
+        // up here.
+        if (_base->persistent) return;
         auto id_string = timed_uuid_hex_array_to_string(_base->id);
         remove_file_if_exists(hasty::io::tensor_cache_dir / id_string);
     }
@@ -164,6 +202,7 @@ private:
         Opt<Tensor> cpu_base;
         Arr<Opt<Tensor>, device_alias::MAX_CUDA_DEVICES> cuda_cache;
         Arr<u8, 48> id;
+        bool persistent = false;
     };
     std::shared_ptr<CachedTensorBase> _base;
 };

@@ -31,20 +31,22 @@ static Tensor circ_reverse(const Tensor& t, i64 d)
 //              and cufinufft stores x-fastest → reshape = {NZ,NY,NX} = im_size ✓
 // double_prec: run in f64, cast result back to cfloat
 // cmcl_mode  : use CMCL mode ordering (DC at index N/2) instead of FFT ordering (DC at 0)
+// use_cpu    : run the NUFFT itself on CPU (finufft) instead of GPU (cufinufft) — avoids
+//              cufinufft's internal spreading/sorting/FFT-plan GPU memory overhead at the
+//              cost of slower execution. Input/output device of the surrounding pipeline
+//              is unchanged: omega/weights are copied to CPU and the result copied back.
 //
-// Returns cfloat tensor of shape `shape_out`
-static Tensor ntu_nufft(
+// Returns cfloat tensor of shape `shape_out`, on omega's original device
+template<is_device D>
+static Tensor ntu_nufft_on(
     const Tensor&               omega,
     const Tensor&               weights,
     ArrayRef<i64>               shape_out,
     bool                        double_prec,
-    bool                        cmcl_mode = false)
+    bool                        cmcl_mode)
 {
     int ndim  = (int)shape_out.size();
-    i64 total = 1;
-    for (auto m : shape_out) total *= m;
-
-    Device dev(eDeviceType::CUDA, (DeviceIndex)(int)omega.device().index);
+    Device dev = omega.device();
 
     auto execute = [&]<typename T>() -> Tensor
     {
@@ -57,21 +59,21 @@ static Tensor ntu_nufft(
         Tensor wts_w    = weights.to(cplx_dtype).unsqueeze(0).contiguous();
         Tensor output   = zeros(shape_out, TensorOptions(dev, cplx_dtype)).unsqueeze(0);
 
-        NufftOptions<cuda_t, T, NTU> opts;
-        opts.mode_order = cmcl_mode ? NufftOptions<cuda_t, T, NTU>::eModeOrder::CMCL
-                                    : NufftOptions<cuda_t, T, NTU>::eModeOrder::FFT;
+        NufftOptions<D, T, NTU> opts;
+        opts.mode_order = cmcl_mode ? NufftOptions<D, T, NTU>::eModeOrder::CMCL
+                                    : NufftOptions<D, T, NTU>::eModeOrder::FFT;
 
         if (ndim == 1) {
-            NufftPlan<cuda_t, T, 1, NTU> plan({shape_out[0]}, opts);
+            NufftPlan<D, T, 1, NTU> plan({shape_out[0]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         } else if (ndim == 2) {
-            NufftPlan<cuda_t, T, 2, NTU> plan({shape_out[0], shape_out[1]}, opts);
+            NufftPlan<D, T, 2, NTU> plan({shape_out[0], shape_out[1]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }
         else if (ndim == 3) {
-            NufftPlan<cuda_t, T, 3, NTU> plan({shape_out[0], shape_out[1], shape_out[2]}, opts);
+            NufftPlan<D, T, 3, NTU> plan({shape_out[0], shape_out[1], shape_out[2]}, opts);
             plan.setpts(coords_w);
             plan.execute(wts_w, output);
         }
@@ -84,6 +86,23 @@ static Tensor ntu_nufft(
 
     return double_prec ? execute.template operator()<f64>()
                        : execute.template operator()<f32>();
+}
+
+static Tensor ntu_nufft(
+    const Tensor&               omega,
+    const Tensor&               weights,
+    ArrayRef<i64>               shape_out,
+    bool                        double_prec,
+    bool                        cmcl_mode = false,
+    bool                        use_cpu = false)
+{
+    if (use_cpu) {
+        Device cpu_dev(eDeviceType::CPU);
+        Tensor out = ntu_nufft_on<cpu_t>(
+            omega.to(cpu_dev), weights.to(cpu_dev), shape_out, double_prec, cmcl_mode);
+        return out.to(omega.device());
+    }
+    return ntu_nufft_on<cuda_t>(omega, weights, shape_out, double_prec, cmcl_mode);
 }
 
 
@@ -283,7 +302,8 @@ Tensor create_toeplitz_kernel(
 Tensor create_toeplitz_kernel_standard(
     const Tensor&           coords,
     const Tensor&           weights,
-    ArrayRef<i64>           im_size
+    ArrayRef<i64>           im_size,
+    bool                    use_cpu_nufft
 )
 {
     i64 ndim = (i64)im_size.size();
@@ -308,7 +328,8 @@ Tensor create_toeplitz_kernel_standard(
 
     // NUFFT onto the 2N grid in FFT mode: DC is at index 0, so output is
 
-    Tensor kernel = ntu_nufft(coords, weights, full_shape, /*double_prec=*/false);
+    Tensor kernel = ntu_nufft(coords, weights, full_shape, /*double_prec=*/false,
+                              /*cmcl_mode=*/false, use_cpu_nufft);
 
     // Zero the Nyquist slice along each dim independently — h[-N,*] and h[*,-N]
     // are not part of the circulant embedding and must be set to zero.

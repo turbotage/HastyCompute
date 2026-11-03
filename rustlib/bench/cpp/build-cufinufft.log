@@ -1,0 +1,166 @@
+-- The C compiler identification is GNU 15.2.0
+-- The CXX compiler identification is GNU 15.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test funrollloops
+-- Performing Test funrollloops - Success
+-- Performing Test ffpcontract_fast
+-- Performing Test ffpcontract_fast - Success
+-- Performing Test fnomatherrno
+-- Performing Test fnomatherrno - Success
+-- Performing Test fnosignedzeros
+-- Performing Test fnosignedzeros - Success
+-- Performing Test fnotrappingmath
+-- Performing Test fnotrappingmath - Success
+-- Performing Test fassociativemath
+-- Performing Test fassociativemath - Success
+-- Performing Test freciprocalmath
+-- Performing Test freciprocalmath - Success
+-- Performing Test fmergeallconstants
+-- Performing Test fmergeallconstants - Success
+-- Performing Test ftreevectorize
+-- Performing Test ftreevectorize - Success
+-- Performing Test fimplicitconstexpr
+-- Performing Test fimplicitconstexpr - Success
+-- Performing Test fcxlimitedrange
+-- Performing Test fcxlimitedrange - Success
+-- Performing Test fnosemanticinterposition
+-- Performing Test fnosemanticinterposition - Success
+-- Performing Test O3
+-- Performing Test O3 - Success
+-- Performing Test /Ox
+-- Performing Test /Ox - Failed
+-- Flag /Ox is not supported
+-- Performing Test /fp:contract
+-- Performing Test /fp:contract - Failed
+-- Flag /fp:contract is not supported
+-- Performing Test /fp:except
+-- Performing Test /fp:except - Failed
+-- Flag /fp:except- is not supported
+-- Performing Test /GF
+-- Performing Test /GF - Failed
+-- Flag /GF is not supported
+-- Performing Test /GY
+-- Performing Test /GY - Failed
+-- Flag /GY is not supported
+-- Performing Test /GS
+-- Performing Test /GS - Failed
+-- Flag /GS- is not supported
+-- Performing Test /Ob
+-- Performing Test /Ob - Failed
+-- Flag /Ob is not supported
+-- Performing Test /Oi
+-- Performing Test /Oi - Failed
+-- Flag /Oi is not supported
+-- Performing Test /Ot
+-- Performing Test /Ot - Failed
+-- Flag /Ot is not supported
+-- Performing Test /Oy
+-- Performing Test /Oy - Failed
+-- Flag /Oy is not supported
+-- FINUFFT Release flags: -funroll-loops;-ffp-contract=fast;-fno-math-errno;-fno-signed-zeros;-fno-trapping-math;-fassociative-math;-freciprocal-math;-fmerge-all-constants;-ftree-vectorize;-fimplicit-constexpr;-fcx-limited-range;-fno-semantic-interposition;-O3
+-- Performing Test g
+-- Performing Test g - Success
+-- Performing Test g3
+-- Performing Test g3 - Success
+-- Performing Test ggdb
+-- Performing Test ggdb - Success
+-- Performing Test ggdb3
+-- Performing Test ggdb3 - Success
+-- Performing Test Wall
+-- Performing Test Wall - Success
+-- Performing Test Wextra
+-- Performing Test Wextra - Success
+-- Performing Test Wpedantic
+-- Performing Test Wpedantic - Success
+-- Performing Test Wnounknownpragmas
+-- Performing Test Wnounknownpragmas - Success
+-- Performing Test /W4
+-- Performing Test /W4 - Failed
+-- Flag /W4 is not supported
+-- Performing Test /permissive
+-- Performing Test /permissive - Failed
+-- Flag /permissive- is not supported
+-- Performing Test /wd4068
+-- Performing Test /wd4068 - Failed
+-- Flag /wd4068 is not supported
+-- FINUFFT Debug flags: -g;-g3;-ggdb;-ggdb3;-Wall;-Wextra;-Wpedantic;-Wno-unknown-pragmas
+-- FINUFFT RelWithDebInfo flags: -funroll-loops;-ffp-contract=fast;-fno-math-errno;-fno-signed-zeros;-fno-trapping-math;-fassociative-math;-freciprocal-math;-fmerge-all-constants;-ftree-vectorize;-fimplicit-constexpr;-fcx-limited-range;-fno-semantic-interposition;-O3;-funroll-loops;-ffp-contract=fast;-fno-math-errno;-fno-signed-zeros;-fno-trapping-math;-fassociative-math;-freciprocal-math;-fmerge-all-constants;-ftree-vectorize;-fimplicit-constexpr;-fcx-limited-range;-fno-semantic-interposition;-O3;-g;-g3;-ggdb;-ggdb3;-Wall;-Wextra;-Wpedantic;-Wno-unknown-pragmas
+-- Performing Test march_native
+-- Performing Test march_native - Success
+-- FINUFFT Arch flags: -march=native
+-- Downloading CPM.cmake to /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/cmake/CPM_0.42.0.cmake
+-- Using user-specified CMAKE_CUDA_ARCHITECTURES=89
+-- The CUDA compiler identification is NVIDIA 13.0.48 with host compiler GNU 15.2.0
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /usr/local/cuda-13.0/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Found CUDAToolkit: /usr/local/cuda-13.0/targets/x86_64-linux/include;/usr/local/cuda-13.0/targets/x86_64-linux/include/cccl (found version "13.0.48")
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- CUDA 13 detected
+-- CPM: Adding package CCCL@3.0.2 (v3.0.2)
+-- Finding CCCL components: Thrust;CUB;libcudacxx
+-- cccl_cmake_dir: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/cccl
+-- Found libcudacxx: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/libcudacxx/libcudacxx-config.cmake (found suitable version "3.0.2.0", minimum required is "3.0.2.0")
+-- Found Thrust: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/thrust/thrust-config.cmake (found suitable exact version "3.0.2.0")
+-- Found CUB: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/cub/cub-config.cmake (found suitable version "3.0.2.0", minimum required is "3.0.2.0")
+-- Found CCCL: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/cccl/cccl-config.cmake (found version "3.0.2.0")
+-- Found Thrust: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft/_deps/cccl-src/lib/cmake/thrust/thrust-config.cmake (found version "3.0.2.0")
+-- Found Python3: /home/turbotage/Documents/GitHub/HastyCompute/.venv/bin/python3.11 (found version "3.11.9") found components: Interpreter
+-- [IWYU] IWYU not enabled: compile_commands.json not found (enable with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON)
+-- Performing Test FINUFFT_HAS_NO_DEPRECATED_DECLARATIONS
+-- Performing Test FINUFFT_HAS_NO_DEPRECATED_DECLARATIONS - Success
+-- FINUFFT configuration summary:
+--   CMAKE_BUILD_TYPE: Release
+--   FINUFFT_USE_CPU: OFF
+--   FINUFFT_USE_CUDA: ON
+--   FINUFFT_USE_OPENMP: ON
+--   FINUFFT_STATIC_LINKING: ON
+--   FINUFFT_POSITION_INDEPENDENT_CODE: ON
+--   FINUFFT_ENABLE_INSTALL: ON
+--   FINUFFT_BUILD_EXAMPLES: OFF
+--   FINUFFT_BUILD_TESTS: OFF
+--   FINUFFT_BUILD_FORTRAN: OFF
+--   FINUFFT_BUILD_MATLAB: OFF
+--   FINUFFT_BUILD_PYTHON: OFF
+--   FINUFFT_USE_SANITIZERS: OFF
+--   FINUFFT_FFTW_SUFFIX: DEFAULT
+--   FINUFFT_FFTW_LIBRARIES: DEFAULT
+--   FINUFFT_ARCH_FLAGS: -march=native
+--   FINUFFT_USE_DUCC0: OFF
+--   CMAKE_CUDA_ARCHITECTURES: 89
+-- Configuring done (17.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/bench/cpp/build-cufinufft
+[1/20] Building CXX object src/common/CMakeFiles/finufft_common.dir/kernel.cpp.o
+[2/20] Building CXX object src/common/CMakeFiles/finufft_common.dir/utils.cpp.o
+[3/20] Building CXX object src/common/CMakeFiles/finufft_common.dir/pswf.cpp.o
+[4/20] Building CXX object src/cuda/CMakeFiles/cufinufft.dir/spreadinterp.cpp.o
+[5/20] Linking CXX static library src/common/libfinufft_common.a
+[6/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/precision_independent.cu.o
+[7/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/1d/cufinufft1d.cu.o
+[8/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/2d/cufinufft2d.cu.o
+[9/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/1d/interp1d_wrapper.cu.o
+[10/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/deconvolve_wrapper.cu.o
+[11/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/3d/cufinufft3d.cu.o
+[12/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/memtransfer_wrapper.cu.o
+[13/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/common.cu.o
+[14/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/1d/spread1d_wrapper.cu.o
+[15/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/2d/interp2d_wrapper.cu.o
+[16/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/cufinufft.cu.o
+[17/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/3d/interp3d_wrapper.cu.o
+[18/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/2d/spread2d_wrapper.cu.o
+[19/20] Building CUDA object src/cuda/CMakeFiles/cufinufft.dir/3d/spread3d_wrapper.cu.o
+[20/20] Linking CUDA static library libcufinufft.a

@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/hasty-cuda", "crates/hasty-fft", "crates/hasty-nufft", "crates/hasty-toeplitz", "crates/hasty-testkit", "crates/hasty-bench", "crates/hasty-mrsim", "crates/hasty-phantom", "crates/hasty-recon"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+cudarc = { version = "0.19", default-features = false, features = ["std", "driver", "nvrtc", "cufft", "cuda-13000", "dynamic-loading"] }
+num-complex = "0.4"
+rustfft = "6"
+thiserror = "2"
+
+[profile.release]
+debug = 1

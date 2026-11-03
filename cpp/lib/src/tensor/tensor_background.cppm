@@ -560,6 +560,17 @@ public:
         return *this;
     }
 
+    [[nodiscard]] inline TensorOptions pinned_memory(bool p) const noexcept {
+        TensorOptions r = *this;
+        r.m_pinned_memory = p;
+        return r;
+    }
+
+    inline TensorOptions& pinned_memory_(bool p) noexcept {
+        m_pinned_memory = p;
+        return *this;
+    }
+
     inline const Opt<Device>& get_device() const noexcept { return m_dev; }
     inline const Opt<eScalarType>& get_dtype() const noexcept { return m_dtype; }
     inline const Opt<eLayout>& get_layout() const noexcept { return m_layout; }
@@ -704,11 +715,22 @@ concept is_tensor_index_type = std::is_convertible_v<T, TensorIndexType>;
 
 
 // <================== CUDA ==================> //
+//
+// These wrap ATen's c10::cuda types, which are themselves header-only inline code
+// calling the raw CUDA runtime API (cudaEventRecord, cudaStreamWaitEvent, ...).
+// Method bodies are deliberately kept OUT of the class definitions and defined
+// below as ordinary (non-inline) out-of-line functions: a function body written
+// inside a class definition is implicitly `inline`, which means a consumer's
+// translation unit (e.g. HastyTest's main.cpp) would re-codegen the body itself
+// and need the raw CUDA runtime symbols resolved at ITS OWN link step. Defined
+// out-of-line, the body is compiled exactly once into libHastyCompute.so, which
+// already privately links CUDA::cudart — consumers just call the compiled-in
+// symbol and never need to know cudart exists.
 export namespace cuda {
 
     struct CUDAGuard {
-        CUDAGuard(Device device)
-            : m_guard(device.torch_device()) {}
+        CUDAGuard(Device device);
+        ~CUDAGuard();
 
         CUDAGuard(const CUDAGuard&)            = delete;
         CUDAGuard& operator=(const CUDAGuard&) = delete;
@@ -718,26 +740,27 @@ export namespace cuda {
     };
 
     struct CUDAStream {
-        CUDAStream(Device device)
-            : m_stream(hat::cuda::getDefaultCUDAStream(device.torch_device_index())) {}
+        CUDAStream(Device device);
 
-        CUDAStream(const CUDAStream&)            = delete;
-        CUDAStream& operator=(const CUDAStream&) = delete;
+        CUDAStream(const CUDAStream&)            = default;
+        CUDAStream& operator=(const CUDAStream&) = default;
 
-        inline hat::cuda::CUDAStream get_torch() const {
-            return m_stream;
-        }
+        hat::cuda::CUDAStream get_torch() const;
+        cudaStream_t stream() const;
 
-        cudaStream_t stream() const {
-            return m_stream.stream();
-        }
     private:
+        explicit CUDAStream(const hat::cuda::CUDAStream& torch_stream)
+            : m_stream(torch_stream) {}
+
         hat::cuda::CUDAStream m_stream;
+
+        friend CUDAStream get_stream_from_pool(Device, bool);
+        friend CUDAStream get_current_stream(Device);
     };
 
     struct CUDAStreamGuard {
-        CUDAStreamGuard(const CUDAStream& stream)
-            : m_guard(stream.get_torch()) {}
+        CUDAStreamGuard(const CUDAStream& stream);
+        ~CUDAStreamGuard();
 
         CUDAStreamGuard(const CUDAStreamGuard&)            = delete;
         CUDAStreamGuard& operator=(const CUDAStreamGuard&) = delete;
@@ -746,14 +769,156 @@ export namespace cuda {
         hat::cuda::CUDAStreamGuard m_guard;
     };
 
+    // A pooled (non-default) stream — e.g. dedicate one to H2D copies so they
+    // run concurrently with compute kernels issued on the default stream.
+    CUDAStream get_stream_from_pool(Device device, bool high_priority = false);
+    CUDAStream get_current_stream(Device device);
+    void set_current_stream(const CUDAStream& stream);
+
+    // Marks a point on a stream; another stream can block() on it to wait for
+    // that point to be reached, without a host-side device synchronize().
+    struct CUDAEvent {
+        CUDAEvent();
+        ~CUDAEvent();
+
+        CUDAEvent(const CUDAEvent&)            = delete;
+        CUDAEvent& operator=(const CUDAEvent&) = delete;
+
+        void record(const CUDAStream& stream);
+
+        // Makes `stream` wait until this event has been reached — enqueued on
+        // the device, does not block the calling host thread.
+        void block(const CUDAStream& stream);
+
+        bool query() const;
+        void synchronize() const;
+
+    private:
+        hat::cuda::CUDAEvent m_event;
+    };
+
+    // ── out-of-line definitions ──────────────────────────────────────────────
+
+    CUDAGuard::CUDAGuard(Device device)
+        : m_guard(device.torch_device()) {}
+
+    CUDAGuard::~CUDAGuard() = default;
+
+    CUDAStream::CUDAStream(Device device)
+        : m_stream(hat::cuda::getDefaultCUDAStream(device.torch_device_index())) {}
+
+    hat::cuda::CUDAStream CUDAStream::get_torch() const {
+        return m_stream;
+    }
+
+    cudaStream_t CUDAStream::stream() const {
+        return m_stream.stream();
+    }
+
+    CUDAStreamGuard::CUDAStreamGuard(const CUDAStream& stream)
+        : m_guard(stream.get_torch()) {}
+
+    CUDAStreamGuard::~CUDAStreamGuard() = default;
+
+    CUDAStream get_stream_from_pool(Device device, bool high_priority) {
+        return CUDAStream(hat::cuda::getStreamFromPool(high_priority, device.torch_device_index()));
+    }
+
+    CUDAStream get_current_stream(Device device) {
+        return CUDAStream(hat::cuda::getCurrentCUDAStream(device.torch_device_index()));
+    }
+
+    void set_current_stream(const CUDAStream& stream) {
+        hat::cuda::setCurrentCUDAStream(stream.get_torch());
+    }
+
+    CUDAEvent::CUDAEvent() = default;
+    CUDAEvent::~CUDAEvent() = default;
+
+    void CUDAEvent::record(const CUDAStream& stream) {
+        m_event.record(stream.get_torch());
+    }
+
+    void CUDAEvent::block(const CUDAStream& stream) {
+        m_event.block(stream.get_torch());
+    }
+
+    bool CUDAEvent::query() const {
+        return m_event.query();
+    }
+
+    void CUDAEvent::synchronize() const {
+        m_event.synchronize();
+    }
+}
+
+// <================== NVTX ==================> //
+// Profiler annotations: ranges/markers picked up by Nsight Systems (nsys) when the
+// process runs under `nsys profile`. Outside that, these calls are cheap near-no-ops.
+export namespace nvtx {
+
+    inline void range_push(const char* name) {
+        hat::nvtx::range_push(name);
+    }
+
+    inline void range_pop() {
+        hat::nvtx::range_pop();
+    }
+
+    inline void mark(const char* name) {
+        hat::nvtx::mark(name);
+    }
+
+    // RAII scoped range — annotates [construction, destruction) as one named block
+    // on the Nsight Systems timeline. Use to bracket a specific section of code:
+    //   { nvtx::ScopedRange r("toeplitz_multiplication"); toeplitz_multiplication(...); }
+    struct ScopedRange {
+        explicit ScopedRange(const char* name) { range_push(name); }
+        ~ScopedRange() { range_pop(); }
+
+        ScopedRange(const ScopedRange&)            = delete;
+        ScopedRange& operator=(const ScopedRange&) = delete;
+    };
+
+}
+
+export namespace cuda {
+
     void synchronize(Device device) {
         htorch::cuda::synchronize(device.torch_device_index());
     }
 
-    void cuda_empty_cache()
+    void empty_cache()
     {
         hat::cuda::CUDACachingAllocator::emptyCache();
     }
+
+    // Bounds the region nsys actually records when launched with
+    // `nsys profile -c cudaProfilerApi --capture-range=cudaProfilerApi ...` — only the
+    // code between profiler_start() and profiler_stop() (or a ProfilerCaptureGuard's
+    // lifetime) ends up in the trace, instead of the whole process.
+    // Not `inline`, and ProfilerCaptureGuard's ctor/dtor are declared (not defined)
+    // in-class — same reasoning as the CUDAEvent/CUDAStream wrappers above: keep the
+    // raw cudaProfilerStart/Stop symbol need inside libHastyCompute.so's own link,
+    // out of every consumer's.
+    void profiler_start() {
+        hat::cuda::cudaProfilerStart();
+    }
+
+    void profiler_stop() {
+        hat::cuda::cudaProfilerStop();
+    }
+
+    struct ProfilerCaptureGuard {
+        ProfilerCaptureGuard();
+        ~ProfilerCaptureGuard();
+
+        ProfilerCaptureGuard(const ProfilerCaptureGuard&)            = delete;
+        ProfilerCaptureGuard& operator=(const ProfilerCaptureGuard&) = delete;
+    };
+
+    ProfilerCaptureGuard::ProfilerCaptureGuard() { profiler_start(); }
+    ProfilerCaptureGuard::~ProfilerCaptureGuard() { profiler_stop(); }
 
 }
 

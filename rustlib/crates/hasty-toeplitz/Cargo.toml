@@ -1,0 +1,17 @@
+[package]
+name = "hasty-toeplitz"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hasty-cuda = { path = "../hasty-cuda" }
+hasty-fft = { path = "../hasty-fft" }
+hasty-nufft = { path = "../hasty-nufft" }
+cudarc.workspace = true
+num-complex.workspace = true
+thiserror.workspace = true
+nalgebra = "0.33"
+
+[dev-dependencies]
+hasty-testkit = { path = "../hasty-testkit" }

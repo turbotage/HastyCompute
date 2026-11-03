@@ -1,0 +1,12 @@
+[package]
+name = "hasty-mrsim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MR acquisition simulation: gradient/sequence design, field models (GNL, concomitant, B0), GPU direct-sum truth simulator"
+
+[dependencies]
+hasty-cuda = { path = "../hasty-cuda" }
+cudarc.workspace = true
+thiserror.workspace = true
+num-complex.workspace = true

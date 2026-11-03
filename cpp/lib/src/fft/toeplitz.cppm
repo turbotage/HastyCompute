@@ -41,7 +41,9 @@ export Tensor create_toeplitz_kernel(
 export Tensor create_toeplitz_kernel_standard(
     const Tensor&           coords,
     const Tensor&           weights,
-    ArrayRef<i64>           im_size
+    ArrayRef<i64>           im_size,
+    bool                    use_cpu_nufft = false  // run the NUFFT itself on CPU (finufft) instead of
+                                                    // GPU (cufinufft) — much lower GPU memory use, slower
 );
 
 export void transform_toeplitz_kernel(Tensor& kernel, bool clear_vkfft_plan = false);

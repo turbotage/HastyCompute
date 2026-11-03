@@ -139,5 +139,20 @@
     "mathover.backwardSkip": 3,
     "python-envs.defaultEnvManager": "ms-python.python:venv",
     "python-envs.defaultPackageManager": "ms-python.python:pip",
-    "python.analysis.extraPaths": ["${workspaceFolder}/python/lib"]
+    "python.analysis.extraPaths": ["${workspaceFolder}/python/lib"],
+    "remote.portsAttributes": {
+        "0-65535": {
+            "onAutoForward": "notify"
+        }
+    },
+    "workbench.externalUriOpeners": {
+        "https://*": "default",
+        "http://*": "default",
+        "https://localhost:*": "default",
+        "http://localhost:*": "default",
+        "https://127.0.0.1:*": "default",
+        "http://127.0.0.1:*": "default"
+    },
+    "remote.forwardOnOpen": false,
+    "workbench.browser.openLocalhostLinks": false
 }

@@ -20,7 +20,7 @@ void start_default_servers(
     }
 
     namespace fs = std::filesystem;
-    fs::path bin_dir = fs::canonical("/proc/self/exe").parent_path();
+    fs::path bin_dir = hasty::resolve_exe_relative_path(".");
     std::string cert_path = (bin_dir / "cert.pem").string();
     std::string key_path  = (bin_dir / "key.pem").string();
 

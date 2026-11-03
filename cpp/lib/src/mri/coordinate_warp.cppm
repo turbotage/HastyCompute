@@ -322,6 +322,21 @@ private:
     };
     mutable std::map<std::tuple<double, i64, i64>, AccuracyProfile> profile_cache_;
     const AccuracyProfile& get_or_build_profile(double tol, i64 n_subsamples, i64 refine_iters) const;
+
+public:
+    // profile_cache_ never evicts on its own -- each distinct (tol,
+    // n_subsamples, refine_iters) combination's executors (cuFINUFFT plans,
+    // raw cudaMalloc'd, invisible to PyTorch's caching allocator entirely --
+    // cuda::empty_cache() cannot touch this) stay resident for the warp's
+    // whole lifetime once built. Fine when callers reuse the same settings
+    // repeatedly (the intended case), but calling warp_field_r_to_q with
+    // SEVERAL different tol values back to back (e.g. a tight tol for
+    // magnitude, a loose one for off-resonance/concomitant fields) leaves
+    // ALL of them resident simultaneously -- at production q-grid sizes this
+    // can OOM even though no single plan is enormous on its own. Call this
+    // between such calls to free the previous profile's plan memory before
+    // building the next one.
+    void clear_profile_cache() const { profile_cache_.clear(); }
 };
 
 // ── Implementation ────────────────────────────────────────────────────────────

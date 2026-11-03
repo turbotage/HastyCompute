@@ -72,6 +72,12 @@ if(HASTY_BUILD_TEST)
     list(APPEND MERGE_DEPS HastyTest)
 endif()
 
+add_custom_target(generate_launch_json ALL
+    COMMAND ${CMAKE_COMMAND} -E echo "Generating .vscode/launch.json from launch_gen.json..."
+    COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_launch_json.py
+    COMMENT "Generating nsys launch-config variants into .vscode/launch.json"
+)
+
 add_custom_target(merge_compile_commands ALL
     COMMAND ${CMAKE_COMMAND} -E echo "Merging compile_commands.json..."
     COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/merge_compile_commands.py

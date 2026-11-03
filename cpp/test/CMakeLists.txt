@@ -58,6 +58,30 @@ set_target_properties(HastyButterflyTest PROPERTIES
 target_link_libraries(HastyButterflyTest PRIVATE HastyCompute::HastyCompute)
 install(TARGETS HastyButterflyTest RUNTIME DESTINATION bin)
 
+# <================== Normal-Toeplitz VARPRO ALS Test ==================>
+add_executable(HastyNormalToeplitzALSTest "src/normal_toeplitz_als_test.cpp")
+target_compile_features(HastyNormalToeplitzALSTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
+set_target_properties(HastyNormalToeplitzALSTest PROPERTIES
+	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
+target_link_libraries(HastyNormalToeplitzALSTest PRIVATE HastyCompute::HastyCompute)
+install(TARGETS HastyNormalToeplitzALSTest RUNTIME DESTINATION bin)
+
+# <================== Phi-Operator SVD Timing Test ==================>
+add_executable(HastyPhiSvdTimingTest "src/phi_svd_timing_test.cpp")
+target_compile_features(HastyPhiSvdTimingTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
+set_target_properties(HastyPhiSvdTimingTest PROPERTIES
+	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
+target_link_libraries(HastyPhiSvdTimingTest PRIVATE HastyCompute::HastyCompute)
+install(TARGETS HastyPhiSvdTimingTest RUNTIME DESTINATION bin)
+
+# <================== Concomitant Coordinate-Warp Absorption Test ==================>
+add_executable(HastyConcomitantCoordWarpTest "src/concomitant_coordinate_warp_test.cpp")
+target_compile_features(HastyConcomitantCoordWarpTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)
+set_target_properties(HastyConcomitantCoordWarpTest PROPERTIES
+	CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_SCAN_FOR_MODULES ON CXX_MODULE_STD ON)
+target_link_libraries(HastyConcomitantCoordWarpTest PRIVATE HastyCompute::HastyCompute)
+install(TARGETS HastyConcomitantCoordWarpTest RUNTIME DESTINATION bin)
+
 # <================== Non-Fourier Interpolator Test ==================>
 add_executable(HastyNonFourierInterpTest "src/non_fourier_interp_test.cpp")
 target_compile_features(HastyNonFourierInterpTest PRIVATE cxx_std_23 INTERFACE cxx_std_23)

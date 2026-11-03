@@ -642,7 +642,7 @@ struct NufftPlan<cpu_t, T, N, NT> {
         std::reverse_copy(im_size.begin(), im_size.end(), m_nmodes.begin());
         finufft_default_opts(&m_opts);
 
-        if (m_options.modeord != NufftOptions<cpu_t, T, NT>::eModeOrder::DEFAULT) {
+        if (m_options.mode_order != NufftOptions<cpu_t, T, NT>::eModeOrder::DEFAULT) {
             switch (m_options.mode_order) {
             case NufftOptions<cpu_t, T, NT>::eModeOrder::CMCL:
                 m_opts.modeord = 0;
@@ -784,7 +784,7 @@ struct NufftPlan<cpu_t, T, N, NT> {
         }
     }
 
-    void execute(const Tensor& input, const Tensor& output) const
+    void execute(const Tensor& input, Tensor& output) const
     {
         // Both input and output must be contiguous
         if (!input.is_contiguous())
@@ -846,43 +846,43 @@ struct NufftPlan<cpu_t, T, N, NT> {
         if constexpr(std::is_same_v<NT, fft::NTU>) {
             if constexpr(std::is_same_v<T, f32>) {
                 finufftf_execute(
-                    m_plan.plan, 
-                    (c64*)input.const_data_ptr<T>(), 
-                    (c64*)output.const_data_ptr<T>()
+                    m_plan.plan,
+                    (c64*)input.const_data_ptr<c64>(),
+                    (c64*)output.mutable_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 finufft_execute(
-                    m_plan.plan, 
-                    (c128*)input.const_data_ptr<T>(), 
-                    (c128*)output.const_data_ptr<T>()
+                    m_plan.plan,
+                    (c128*)input.const_data_ptr<c128>(),
+                    (c128*)output.mutable_data_ptr<c128>()
                 );
             }
         } else if constexpr(std::is_same_v<NT, fft::UTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 finufftf_execute(
-                    m_plan.plan, 
-                    (c64*)output.const_data_ptr<T>(), 
-                    (c64*)input.const_data_ptr<T>()
+                    m_plan.plan,
+                    (c64*)output.mutable_data_ptr<c64>(),
+                    (c64*)input.const_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 finufft_execute(
-                    m_plan.plan, 
-                    (c128*)output.const_data_ptr<T>(), 
-                    (c128*)input.const_data_ptr<T>()
+                    m_plan.plan,
+                    (c128*)output.mutable_data_ptr<c128>(),
+                    (c128*)input.const_data_ptr<c128>()
                 );
             }
         } else if constexpr(std::is_same_v<NT, fft::NTN>) {
             if constexpr(std::is_same_v<T, f32>) {
                 finufftf_execute(
                     m_plan.plan,
-                    (c64*)input.const_data_ptr<T>(),
-                    (c64*)output.const_data_ptr<T>()
+                    (c64*)input.const_data_ptr<c64>(),
+                    (c64*)output.mutable_data_ptr<c64>()
                 );
             } else if constexpr(std::is_same_v<T, f64>) {
                 finufft_execute(
                     m_plan.plan,
-                    (c128*)input.const_data_ptr<T>(),
-                    (c128*)output.const_data_ptr<T>()
+                    (c128*)input.const_data_ptr<c128>(),
+                    (c128*)output.mutable_data_ptr<c128>()
                 );
             }
         }
