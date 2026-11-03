@@ -58,6 +58,38 @@ impl Subject {
         Ok(Self { name: meta.case, dir: dir.to_path_buf(), hu, labels, body, vessel, sdf, centerline })
     }
 
+    /// Extend the 1 mm anatomy by `n` slices at both ends of the grid's third axis (head–foot) by replicating the edge
+    /// slices: the CT crop ends inside a typical FOV, a real body does not. Padded slices carry no vessel lumen (static
+    /// tissue only; the flow domain is the cropped lumen). The 0.5 mm lumen SDF is unchanged.
+    pub fn pad_z(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        fn pad<T: Copy + Default>(v: &Volume<T>, n: usize, zero: bool) -> Volume<T> {
+            let d = v.dims;
+            let mut a = v.affine;
+            for r in 0..3 {
+                a[r][3] -= a[r][2] * n as f64;
+            }
+            let mut o = Volume::new([d[0], d[1], d[2] + 2 * n], a);
+            for k in 0..d[2] + 2 * n {
+                let src = k.saturating_sub(n).min(d[2] - 1);
+                let edge = k < n || k >= d[2] + n;
+                for j in 0..d[1] {
+                    for i in 0..d[0] {
+                        let q = o.idx(i, j, k);
+                        o.data[q] = if edge && zero { T::default() } else { v.get(i, j, src) };
+                    }
+                }
+            }
+            o
+        }
+        self.hu = pad(&self.hu, n, false);
+        self.labels = pad(&self.labels, n, false);
+        self.body = pad(&self.body, n, false);
+        self.vessel = pad(&self.vessel, n, true);
+    }
+
     /// centroid of a label set (physical), e.g. the heart (51)
     pub fn label_centroid(&self, labels: &[u8]) -> Option<Vec3> {
         let (mut s, mut n) = ([0.0; 3], 0usize);

@@ -1,6 +1,7 @@
 //! Truth simulation of a spiral 4D-flow scan of a prepared subject (direct summation on the GPU).
 //!   sim4d <subject_dir> <out_dir> [--scan-time s] [--noise rel] [--bin-ms ms] [--venc m/s]
-//! Writes data.npy (complex64 [readout][adc][coil]), readouts.npy, meta.json, truth_*.npy, diagnostics.
+//! Writes data_clean.npy (complex64 [readout][adc][coil], noise-free; `--write-noisy` also data.npy), readouts.npy,
+//! meta.json (incl. noise_sigma: the loader adds Ψ-correlated noise at that level), truth_*.npy, diagnostics.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -42,6 +43,10 @@ fn main() {
     let noise_rel: f64 = take("--noise").map(|s| s.parse().unwrap()).unwrap_or(0.02);
     let bin_ms: f64 = take("--bin-ms").map(|s| s.parse().unwrap()).unwrap_or(10.0);
     let venc: f64 = take("--venc").map(|s| s.parse().unwrap()).unwrap_or(2.0);
+    // continue the body beyond the CT crop (head–foot) by this much on both ends: real bodies extend past the FOV
+    let pad_mm: f64 = take("--pad-mm").map(|s| s.parse().unwrap()).unwrap_or(120.0);
+    // also write the noisy data (data.npy); by default only data_clean.npy, the loader adds the noise (half the disk)
+    let write_noisy = args.iter().position(|a| a == "--write-noisy").map(|i| { args.remove(i); true }).unwrap_or(false);
     let static_blood = args.iter().position(|a| a == "--static-blood").map(|i| { args.remove(i); true }).unwrap_or(false);
     let no_tissue = args.iter().position(|a| a == "--no-tissue").map(|i| { args.remove(i); true }).unwrap_or(false);
     // ideal scanner: linear gradients, no susceptibility off-resonance, no concomitant fields (diagnostics)
@@ -52,7 +57,8 @@ fn main() {
     let out = PathBuf::from(&args[1]);
     std::fs::create_dir_all(&out).unwrap();
     let t0 = Instant::now();
-    let subj = Subject::load(&subj_dir).unwrap();
+    let mut subj = Subject::load(&subj_dir).unwrap();
+    subj.pad_z((pad_mm * 1e-3 / subj.hu.affine[2][2].abs()).round() as usize);
     let mut fp = FlowSpiralParams::aorta_3t_default();
     fp.scan_time = scan_time;
     fp.venc = venc;
@@ -216,22 +222,24 @@ fn main() {
     write_npy(&out.join("data_clean.npy"), "<c8", &[acq.readouts.len(), na, nc], false, &c64_bytes(&data)).unwrap();
     let rms = (data.iter().map(|c| c.norm_sqr()).sum::<f64>() / data.len() as f64).sqrt();
     let sigma = noise_rel * rms;
-    let l = cholesky(&scene.psi);
-    let mut rng = Rng(0x9E3779B97F4A7C15);
-    let mut white = vec![Complex64::new(0.0, 0.0); nc];
-    for s in data.chunks_mut(nc) {
-        for w in white.iter_mut() {
-            *w = Complex64::new(rng.gauss(), rng.gauss()) * (sigma / 2f64.sqrt());
-        }
-        for c in 0..nc {
-            let mut acc = Complex64::new(0.0, 0.0);
-            for k in 0..=c {
-                acc += white[k] * l[c][k];
+    if write_noisy {
+        let l = cholesky(&scene.psi);
+        let mut rng = Rng(0x9E3779B97F4A7C15);
+        let mut white = vec![Complex64::new(0.0, 0.0); nc];
+        for s in data.chunks_mut(nc) {
+            for w in white.iter_mut() {
+                *w = Complex64::new(rng.gauss(), rng.gauss()) * (sigma / 2f64.sqrt());
             }
-            s[c] += acc;
+            for c in 0..nc {
+                let mut acc = Complex64::new(0.0, 0.0);
+                for k in 0..=c {
+                    acc += white[k] * l[c][k];
+                }
+                s[c] += acc;
+            }
         }
+        write_npy(&out.join("data.npy"), "<c8", &[acq.readouts.len(), na, nc], false, &c64_bytes(&data)).unwrap();
     }
-    write_npy(&out.join("data.npy"), "<c8", &[acq.readouts.len(), na, nc], false, &c64_bytes(&data)).unwrap();
     let ro_tab: Vec<u8> = acq
         .readouts
         .iter()
@@ -354,7 +362,7 @@ fn main() {
         "rot_presc": fp.rot_presc, "fov_center_scanner": fp.fov_center, "iso_subject": scene.iso, "presc_center_subject": presc.center,
         "mean_rr": fp.mean_rr, "rr_rel_std": fp.rr_rel_std, "n_frames": fp.n_frames, "seed": fp.seed,
         "tr": acq.tr, "te": acq.t_ro, "n_readouts": acq.readouts.len(), "n_adc": na, "n_coils": nc,
-        "noise_sigma": sigma, "noise_rel": noise_rel, "psi": scene.psi,
+        "noise_sigma": sigma, "noise_rel": noise_rel, "pad_mm": pad_mm, "psi": scene.psi,
         "gnl": {"r0": scene.params.gnl.r0, "transverse": scene.params.gnl.transverse, "longitudinal": scene.params.gnl.longitudinal},
         "flow": {"model": "centerline Womersley (M0)", "period": period, "branches": flow.branch_info()},
         "n_tissue_sources": tsrc.len(), "n_blood_sources": pts.len(),

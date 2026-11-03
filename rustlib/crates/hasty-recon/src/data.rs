@@ -146,8 +146,11 @@ impl SimData {
         let g = &meta["gnl"];
         let gnl = GradientCoils { r0: g["r0"].as_f64().unwrap(), transverse: [g["transverse"][0].as_f64().unwrap(), g["transverse"][1].as_f64().unwrap()], longitudinal: [g["longitudinal"][0].as_f64().unwrap(), g["longitudinal"][1].as_f64().unwrap()] };
         // HASTY_NOISE_SIGMA: use the noise-free data and add Ψ-correlated noise with this σ per coil (complex, before
-        // whitening; σ/√2 per component)
-        let data = match std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()) {
+        // whitening; σ/√2 per component); 0 = noise-free
+        // without data.npy (default since sims store only the clean data): noise at the simulated level
+        let env_sigma = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok());
+        let sigma = env_sigma.or_else(|| (!dir.join("data.npy").exists()).then(|| meta["noise_sigma"].as_f64().unwrap()));
+        let data = match sigma {
             Some(sigma) if dir.join("data_clean.npy").exists() => {
                 let mut d = read_npy(&dir.join("data_clean.npy"))?.c32s();
                 let n = psi.len();
