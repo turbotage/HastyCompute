@@ -23,6 +23,7 @@ import SimpleITK as sitk
 from scipy import ndimage
 
 VENV_BIN = os.path.dirname(sys.executable)
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))  # HastyCompute
 
 
 def hu_offset(a):
@@ -72,7 +73,9 @@ def main():
 
     ts_path = os.path.join(out, "totalseg.nii")
     if not skip_ts or not os.path.exists(ts_path):
-        subprocess.run([os.path.join(VENV_BIN, "TotalSegmentator"), "-i", ct_path, "-o", os.path.join(out, "totalseg"), "--ml"], check=True)
+        # model weights inside the repository (data/hasty/totalseg), not in the home directory
+        env = dict(os.environ, TOTALSEG_HOME_DIR=os.path.join(REPO, "data", "hasty", "totalseg"))
+        subprocess.run([os.path.join(VENV_BIN, "TotalSegmentator"), "-i", ct_path, "-o", os.path.join(out, "totalseg"), "--ml"], check=True, env=env)
     ts = sitk.ReadImage(ts_path)
     ts.CopyInformation(ct)
     seg.CopyInformation(ct)

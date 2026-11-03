@@ -321,7 +321,7 @@ Design and status: `../research/synthetic_4dflow_pipeline.md` (§7). New crates:
 - `hasty-recon` — loader, whitening, coil compression, SENSE operator with a generic CUR low-rank phase model (B0 +
   concomitant), GNL via apparent-coordinate reconstruction + inverse warp + J⁻¹, CG.
 - binaries: `sim4d`, `recon_m0`, `flowcheck`, `blooddiag`.
-Python side (`rustlib/.venv`): torch 2.13 (matches tch 0.26), TotalSegmentator, kimimaro. Data under `~/hasty-data/`.
+Python side (`rustlib/.venv`): torch 2.13 (matches tch 0.26), TotalSegmentator, kimimaro. Data under `../data/hasty/` (git-ignored; kernel cache in `target/hasty-kernels`).
 
 ## 17. Segmented physics NUFFT (2026-11-03)
 `hasty-nufft::SegNufft`: multi-coil encoding operator with L time segments (B0 + τ-dependent concomitant in the

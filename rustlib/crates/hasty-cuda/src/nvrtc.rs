@@ -39,9 +39,8 @@ fn cache_dir() -> Option<PathBuf> {
     if let Ok(d) = std::env::var("HASTY_KERNEL_CACHE") {
         return Some(PathBuf::from(d));
     }
-    std::env::var("HOME")
-        .ok()
-        .map(|h| PathBuf::from(h).join(".cache/hasty/kernels"))
+    // inside the repository: rustlib/target/hasty-kernels
+    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/hasty-kernels"))
 }
 
 /// Compile CUDA C++ `src` to a cubin for `arch` (e.g. `sm_89`).

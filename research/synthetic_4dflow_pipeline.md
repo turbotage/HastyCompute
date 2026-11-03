@@ -159,7 +159,7 @@ inference from Rust (tch 0.26 ↔ torch 2.13 venv in `rustlib/.venv`).
 Built:
 - `rustlib/tools/synth/prep_subject.py`: AVT case → HU fix (some cases are stored as HU + 1024, which silently broke
   TotalSegmentator's lungs), TotalSegmentator labels, thoracic crop, 1 mm tissue grid, 0.5 mm lumen SDF, centerline
-  (kimimaro) with radii. Data in `~/hasty-data/` (outside the repo). First subject: Rider R4 (healthy, 0.62 mm slices).
+  (kimimaro) with radii. Data in `data/hasty/` (inside the repo, git-ignored). First subject: Rider R4 (healthy, 0.62 mm slices).
 - `hasty-mrsim`: exact piecewise-linear gradient moments (M0, M1, M2, ∫GGᵀ), minimum-time trapezoids/bipolars,
   Lustig time-optimal design for arbitrary k-space curves, variable-density spiral, spiral 4D-flow GRE (referenced or
   Hadamard encoding, stack-of-spirals or 3D-rotated), ECG with RR variability, synthetic harmonic GNL (−14 mm at

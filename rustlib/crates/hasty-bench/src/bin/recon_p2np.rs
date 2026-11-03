@@ -3,7 +3,7 @@
 //!   recon_p2np <sim_dir> [--model sense|seg] [--temporal off|linear|cubic] [--phys none|b0|full] [--gnl]
 //!              [--nseg L] [--order o] [--precond none,circ,zmshr1,zmshr1m] [--iters n] [--kappa k,k,..] [--block b]
 //!              [--vcoils n] [--every n] [--warm n] [--eps e] [--conc-dc] [--synthetic] [--out dir]
-//! Every run writes `dir` (default ~/hasty-data/runs/<sim>_<model>…_<unix time>): run.json, coil maps, masks, warm
+//! Every run writes `dir` (default <repo>/data/hasty/runs/<sim>_<model>…_<unix time>): run.json, coil maps, masks, warm
 //! start, final complex images and velocities per (preconditioner, κ), metrics CSV, and figures (`figs/`, made by
 //! rustlib/tools/figs/run_figs.py at the end).
 //! sense: plain NUFFT per (frame, encode) set; `--conc-dc` folds the per-encode mean concomitant phase into the coil maps.
@@ -103,7 +103,7 @@ fn main() {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
         let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
         let tag = format!("{name}_{model}{}_{phys}{}_{ts}", temporal.map_or(String::new(), |b| format!("_t{b}")), if gnl { "_gnl" } else { "" });
-        PathBuf::from(std::env::var("HOME").unwrap()).join("hasty-data/runs").join(tag)
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/hasty/runs").join(tag)
     });
     std::fs::create_dir_all(&out).unwrap();
     println!("output directory {}", out.display());
