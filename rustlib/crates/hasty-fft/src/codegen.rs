@@ -124,7 +124,7 @@ impl AxisCfg {
     }
 }
 
-fn poly_expr(table: &str, nterms: &str, x: &str, y: &str, z: &str, vox: [usize; 3]) -> String {
+pub(crate) fn poly_expr(table: &str, nterms: &str, x: &str, y: &str, z: &str, vox: [usize; 3]) -> String {
     format!(
         "poly_eval_({table}, {nterms}, ((real)({x}) - (real){:.17e}) * (real){:.17e}, ((real)({y}) - (real){:.17e}) * (real){:.17e}, ((real)({z}) - (real){:.17e}) * (real){:.17e})",
         (vox[0] as f64 - 1.0) / 2.0,
@@ -144,11 +144,53 @@ struct Pass {
     fuse_kernel: bool,
 }
 
-fn sfx(sign: i32) -> &'static str {
+pub(crate) fn sfx(sign: i32) -> &'static str {
     if sign < 0 {
         "m"
     } else {
         "p"
+    }
+}
+
+/// Type definitions and complex/polynomial/half-precision helpers shared by all generated axis kernels.
+pub(crate) fn prelude(ctype: &str) -> String {
+    let mut s = String::new();
+    writeln!(s, "typedef {ctype} real;").unwrap();
+    writeln!(s, "struct cx {{ real x, y; }};").unwrap();
+    writeln!(s, "#define RL(v) ((real)(v))").unwrap();
+    writeln!(
+        s,
+        r#"__device__ __forceinline__ cx make_cx(real x, real y) {{ cx r; r.x = x; r.y = y; return r; }}
+__device__ __forceinline__ cx cadd(cx a, cx b) {{ return make_cx(a.x + b.x, a.y + b.y); }}
+__device__ __forceinline__ cx csub(cx a, cx b) {{ return make_cx(a.x - b.x, a.y - b.y); }}
+__device__ __forceinline__ cx cscale(cx a, real c) {{ return make_cx(a.x * c, a.y * c); }}
+__device__ __forceinline__ cx cmul(cx a, cx b) {{ return make_cx(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }}
+__device__ __forceinline__ cx cmulc(cx a, cx b) {{ return make_cx(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y); }}
+__device__ __forceinline__ real ipow_(real x, int p) {{ real r = (real)1; for (int i = 0; i < p; ++i) r *= x; return r; }}
+__device__ __forceinline__ real poly_eval_(const real* t, int n, real cx_, real cy_, real cz_) {{ real acc = (real)0; for (int i = 0; i < n; ++i) acc += t[4 * i] * ipow_(cx_, (int)t[4 * i + 1]) * ipow_(cy_, (int)t[4 * i + 2]) * ipow_(cz_, (int)t[4 * i + 3]); return acc; }}
+__device__ __forceinline__ real h2r(unsigned int h) {{ float f; asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"((unsigned short)h)); return (real)f; }}
+__device__ __forceinline__ real b2r(unsigned int h) {{ return (real)__uint_as_float(h << 16); }}"#
+    )
+    .unwrap();
+    s
+}
+
+/// Parameter type of the k-space multiplier `kern` for a kernel format.
+pub(crate) fn kern_type(kfmt: KernelFormat) -> &'static str {
+    match kfmt {
+        KernelFormat::Complex => "const cx*",
+        KernelFormat::Real => "const real*",
+        KernelFormat::ComplexHalf | KernelFormat::ComplexBf16 => "const unsigned int*",
+    }
+}
+
+/// Expression for `kern` at element address `GIN(e)` scaled by `kscale`, multiplied into `v` (fused convolution).
+pub(crate) fn kern_mul(kfmt: KernelFormat, v: &str) -> String {
+    match kfmt {
+        KernelFormat::Complex => format!("cmul({v}, cscale(kern[GIN(e)], kscale))"),
+        KernelFormat::Real => format!("cscale({v}, kern[GIN(e)] * kscale)"),
+        KernelFormat::ComplexHalf => format!("cmul({v}, make_cx(h2r(kern[GIN(e)] & 0xffffu) * kscale, h2r(kern[GIN(e)] >> 16) * kscale))"),
+        KernelFormat::ComplexBf16 => format!("cmul({v}, make_cx(b2r(kern[GIN(e)] & 0xffffu) * kscale, b2r(kern[GIN(e)] >> 16) * kscale))"),
     }
 }
 
@@ -170,24 +212,7 @@ pub fn generate(cfg: &AxisCfg) -> String {
         }
     }
     let p = passes.len();
-    let mut s = String::new();
-    writeln!(s, "typedef {} real;", cfg.ctype).unwrap();
-    writeln!(s, "struct cx {{ real x, y; }};").unwrap();
-    writeln!(s, "#define RL(v) ((real)(v))").unwrap();
-    writeln!(
-        s,
-        r#"__device__ __forceinline__ cx make_cx(real x, real y) {{ cx r; r.x = x; r.y = y; return r; }}
-__device__ __forceinline__ cx cadd(cx a, cx b) {{ return make_cx(a.x + b.x, a.y + b.y); }}
-__device__ __forceinline__ cx csub(cx a, cx b) {{ return make_cx(a.x - b.x, a.y - b.y); }}
-__device__ __forceinline__ cx cscale(cx a, real c) {{ return make_cx(a.x * c, a.y * c); }}
-__device__ __forceinline__ cx cmul(cx a, cx b) {{ return make_cx(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }}
-__device__ __forceinline__ cx cmulc(cx a, cx b) {{ return make_cx(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y); }}
-__device__ __forceinline__ real ipow_(real x, int p) {{ real r = (real)1; for (int i = 0; i < p; ++i) r *= x; return r; }}
-__device__ __forceinline__ real poly_eval_(const real* t, int n, real cx_, real cy_, real cz_) {{ real acc = (real)0; for (int i = 0; i < n; ++i) acc += t[4 * i] * ipow_(cx_, (int)t[4 * i + 1]) * ipow_(cy_, (int)t[4 * i + 2]) * ipow_(cz_, (int)t[4 * i + 3]); return acc; }}
-__device__ __forceinline__ real h2r(unsigned int h) {{ float f; asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"((unsigned short)h)); return (real)f; }}
-__device__ __forceinline__ real b2r(unsigned int h) {{ return (real)__uint_as_float(h << 16); }}"#
-    )
-    .unwrap();
+    let mut s = prelude(cfg.ctype);
     let kty = match cfg.kfmt {
         KernelFormat::Complex => "const cx*",
         KernelFormat::Real => "const real*",

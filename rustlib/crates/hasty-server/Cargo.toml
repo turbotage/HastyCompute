@@ -1,0 +1,33 @@
+[package]
+name = "hasty-server"
+description = "hasty value server: gRPC + gRPC-web + the plotting website on one TLS port; value bank, commands, live viz"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hasty-value = { path = "../hasty-value" }
+num-complex.workspace = true
+rustfft.workspace = true
+rayon = "1.12"
+thiserror.workspace = true
+tonic = { version = "0.14.6", default-features = false, features = ["router", "codegen", "transport", "tls-ring"] }
+tonic-prost = "0.14.6"
+tonic-web = "0.14.6"
+prost = "0.14"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "net", "signal", "time"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+axum = "0.8"
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tower-http = { version = "0.7", features = ["fs"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
+if-addrs = "0.15"
+uuid = { version = "1", features = ["v4"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+tonic-prost-build = "0.14.6"
+protox = "0.10"

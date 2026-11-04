@@ -91,27 +91,78 @@ pub fn pcg(op: &mut impl LinOp, pre: &mut crate::precond::CirculantPrecond, st: 
 /// the rounding of its DC part; with the residual r = y − E x (DC fitted early) E^H r stays accurate.
 /// Minimises ‖E x − y‖² + λ‖x‖² (λ enters as an image-domain shift of s). Returns ‖s‖/‖s₀‖ per iteration.
 pub fn pcgls(op: &mut impl LinOp, pre: Option<&mut crate::precond::CirculantPrecond>, st: &Arc<CudaStream>, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>, lambda: f64, iters: usize) -> Result<Vec<f64>, Error> {
+    pcgls_cb(op, pre, st, y, x, lambda, iters, &mut |_, _| {})
+}
+
+/// [`pcgls`] calling `cb(k, x)` after every iteration k = 1..=iters (e.g. to track the error against a known truth).
+#[allow(clippy::too_many_arguments)]
+pub fn pcgls_cb(
+    op: &mut impl LinOp,
+    pre: Option<&mut crate::precond::CirculantPrecond>,
+    st: &Arc<CudaStream>,
+    y: &CudaSlice<C32>,
+    x: &mut CudaSlice<C32>,
+    lambda: f64,
+    iters: usize,
+    cb: &mut dyn FnMut(usize, &CudaSlice<C32>),
+) -> Result<Vec<f64>, Error> {
+    Ok(pcgls_ctl(op, pre, st, y, x, lambda, iters, cb, None)?.0)
+}
+
+/// Resumable [`pcgls_cb`]: with `ctl = (run control, state name)` it continues from a saved state (x, r, p, γ, ‖s₀‖,
+/// iteration, history), checkpoints every `ctl.every` iterations and stops cleanly on request.
+#[allow(clippy::too_many_arguments)]
+pub fn pcgls_ctl(
+    op: &mut impl LinOp,
+    pre: Option<&mut crate::precond::CirculantPrecond>,
+    st: &Arc<CudaStream>,
+    y: &CudaSlice<C32>,
+    x: &mut CudaSlice<C32>,
+    lambda: f64,
+    iters: usize,
+    cb: &mut dyn FnMut(usize, &CudaSlice<C32>),
+    ctl: Option<(&crate::checkpoint::RunCtl, &str)>,
+) -> Result<(Vec<f64>, crate::checkpoint::Outcome), Error> {
+    use crate::checkpoint::{dev_value, get, get_f64, get_usize, value_dev, Outcome};
+    use hasty_value::{Tensor, Value};
     let nv = op.len_x();
     let one = Complex64::new(1.0, 0.0);
     let mut pre = pre;
     let m_len = y.len();
-    let mut r = st.clone_dtod(y)?;
     let mut q = st.alloc_zeros::<C32>(m_len)?;
-    op.forward(st, x, &mut q)?;
-    op.kernels().axpby(st, -one, &q, one, &mut r)?;
     let mut s = st.alloc_zeros::<C32>(nv)?;
-    op.adjoint(st, &r, &mut s)?;
-    op.kernels().axpby(st, Complex64::new(-lambda, 0.0), x, one, &mut s)?;
     let mut z = st.alloc_zeros::<C32>(nv)?;
-    match pre.as_deref_mut() {
-        Some(p) => p.apply(st, &s, &mut z)?,
-        None => st.memcpy_dtod(&s, &mut z)?,
+    let saved = match ctl {
+        Some((c, name)) => c.load(name)?,
+        None => None,
+    };
+    let (mut r, mut p, mut gamma, s0, mut hist, it0);
+    if let Some(v) = saved {
+        *x = value_dev(st, get(&v, "x")?, nv)?;
+        r = value_dev(st, get(&v, "r")?, m_len)?;
+        p = value_dev(st, get(&v, "p")?, nv)?;
+        gamma = get_f64(&v, "gamma")?;
+        s0 = get_f64(&v, "s0")?;
+        it0 = get_usize(&v, "it")?;
+        hist = get(&v, "hist")?.as_tensor().map(|t| t.to_vec::<f64>()).transpose()?.unwrap_or_default();
+        eprintln!("  resuming {} at CG iteration {it0} / {iters}", ctl.unwrap().1);
+    } else {
+        r = st.clone_dtod(y)?;
+        op.forward(st, x, &mut q)?;
+        op.kernels().axpby(st, -one, &q, one, &mut r)?;
+        op.adjoint(st, &r, &mut s)?;
+        op.kernels().axpby(st, Complex64::new(-lambda, 0.0), x, one, &mut s)?;
+        match pre.as_deref_mut() {
+            Some(p) => p.apply(st, &s, &mut z)?,
+            None => st.memcpy_dtod(&s, &mut z)?,
+        }
+        p = st.clone_dtod(&z)?;
+        gamma = op.kernels().dot(st, &s, &z)?.re;
+        s0 = op.kernels().dot(st, &s, &s)?.re.sqrt();
+        hist = vec![1.0];
+        it0 = 0;
     }
-    let mut p = st.clone_dtod(&z)?;
-    let mut gamma = op.kernels().dot(st, &s, &z)?.re;
-    let s0 = op.kernels().dot(st, &s, &s)?.re.sqrt();
-    let mut hist = vec![1.0];
-    for _ in 0..iters {
+    for it in it0..iters {
         op.forward(st, &p, &mut q)?;
         let qq = op.kernels().dot(st, &q, &q)?.re + lambda * op.kernels().dot(st, &p, &p)?.re;
         let alpha = gamma / qq;
@@ -128,6 +179,28 @@ pub fn pcgls(op: &mut impl LinOp, pre: Option<&mut crate::precond::CirculantPrec
         let beta = g_new / gamma;
         gamma = g_new;
         op.kernels().axpby(st, one, &z, Complex64::new(beta, 0.0), &mut p)?;
+        cb(it + 1, x);
+        if let Some((c, name)) = ctl {
+            let next = it + 1;
+            let stop = c.stop_requested() && next < iters;
+            if stop || (c.due(next) && next < iters) {
+                c.save(name, &Value::Dict(vec![
+                    ("it".into(), Value::Int(next as i64)),
+                    ("gamma".into(), Value::Float(gamma)),
+                    ("s0".into(), Value::Float(s0)),
+                    ("hist".into(), Value::Tensor(Tensor::from_slice(&[hist.len()], &hist)?)),
+                    ("x".into(), dev_value(st, x)?),
+                    ("r".into(), dev_value(st, &r)?),
+                    ("p".into(), dev_value(st, &p)?),
+                ]))?;
+            }
+            if stop {
+                return Ok((hist, Outcome::Stopped(next)));
+            }
+        }
     }
-    Ok(hist)
+    if let Some((c, name)) = ctl {
+        c.clear(name);
+    }
+    Ok((hist, crate::checkpoint::Outcome::Finished))
 }

@@ -159,3 +159,56 @@ impl SetOp for SegSets {
         Ok(self.eng.adjoint(st, &self.segs[self.seg_of_set[t]], &self.pts[t], y, x)?)
     }
 }
+
+/// Per-sample weights around any stack of sets: E'_t = diag(w_t) E_t. Used for the voxel basis function: a rect
+/// voxel of size Δ contributes Π_a sinc(k_a Δ_a / 2) at sample k (a cubic B-spline basis: the 4th power), which the
+/// plain operators (Dirac voxels) omit (research/velocity_model_sr.md §B1).
+pub struct WeightedSets<'a> {
+    pub inner: &'a mut dyn SetOp,
+    /// per set, one complex weight per sample
+    pub w: Vec<CudaSlice<C32>>,
+}
+
+impl<'a> WeightedSets<'a> {
+    pub fn new(st: &Arc<CudaStream>, inner: &'a mut dyn SetOp, w: Vec<Vec<C32>>) -> Result<Self, Error> {
+        assert_eq!(w.len(), inner.nsets());
+        let w = w.iter().map(|v| st.clone_htod(v)).collect::<Result<_, _>>()?;
+        Ok(Self { inner, w })
+    }
+
+    /// voxel-basis weights for one set's coordinates (k·Δ, radians per voxel): Π_a sinc(c_a / 2)^power
+    pub fn basis_weights(coords: [&[f32]; 3], power: i32) -> Vec<C32> {
+        let sinc = |x: f64| if x.abs() < 1e-8 { 1.0 } else { x.sin() / x };
+        (0..coords[0].len()).map(|n| C32::new((0..3).map(|a| sinc(coords[a][n] as f64 / 2.0)).product::<f64>().powi(power) as f32, 0.0)).collect()
+    }
+}
+
+impl SetOp for WeightedSets<'_> {
+    fn nsets(&self) -> usize {
+        self.inner.nsets()
+    }
+    fn len_x(&self, t: usize) -> usize {
+        self.inner.len_x(t)
+    }
+    fn len_y(&self, t: usize) -> usize {
+        self.inner.len_y(t)
+    }
+    fn kernels(&self) -> &Kernels {
+        self.inner.kernels()
+    }
+    fn forward(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        // per-call scratch (stream-ordered allocation): no second copy of all data
+        let mut tmp = st.alloc_zeros::<C32>(y.len())?;
+        self.inner.forward(st, t, x, &mut tmp)?;
+        let m = self.w[t].len();
+        let nc = y.len() / m;
+        self.inner.kernels().sample_weight(st, &tmp, &self.w[t], y, m, nc, false, false)
+    }
+    fn adjoint(&mut self, st: &Arc<CudaStream>, t: usize, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        let m = self.w[t].len();
+        let nc = y.len() / m;
+        let mut tmp = st.alloc_zeros::<C32>(y.len())?;
+        self.inner.kernels().sample_weight(st, y, &self.w[t], &mut tmp, m, nc, true, false)?;
+        self.inner.adjoint(st, t, &tmp, x)
+    }
+}

@@ -18,7 +18,7 @@ The same anatomy + flow sets feed both the denoiser training and the reconstruct
 | AVT, Aortic Vessel Tree CTA (Radl et al. 2022, figshare 14806362) | 56 CTA scans, expert aorta + branch masks (arch branches, abdominal aorta, iliacs) | CC BY 4.0 | primary vessel trees with matching body CT |
 | TotalSegmentator (Wasserthal et al.; model Apache-2.0, data CC BY 4.0, Zenodo) | 1228 CT subjects with 117 labels (lungs, heart, aorta, carotids, subclavians, SVC/IVC, trachea, bones, organs…); the model itself can be run on AVT scans | data CC BY 4.0, code Apache-2.0 (`heartchambers_highres` and some subtasks need a licence) | whole-body context labels that match the vessel tree (run on the AVT CT scans) |
 | Vascular Model Repository (SimVascular) | ~150 projects: image + centerlines + segmentation + model + mesh, ~110 with CFD results | licence not stated on the pages found, check before use | extra geometries, CFD cross-checks |
-| RACLETTE (Dirix, Buoso, Kozerke, ETH, 2026) | public paired HR/LR synthetic aortic 4D flow (healthy + graded stenosis), OpenFOAM CFD embedded in in-vivo backgrounds | gitlab.ethz.ch/ibt-cmr/publications/raclette, licence not stated | external test set for the denoiser; sanity check of our CFD statistics |
+| RACLETTE (Dirix, Buoso, Kozerke, ETH, 2026) | public paired HR/LR synthetic aortic 4D flow (healthy + graded stenosis), OpenFOAM CFD embedded in in-vivo backgrounds | gitlab.ethz.ch/ibt-cmr/publications/raclette, CC BY-NC 4.0 (DOI 10.3929/ethz-c-000799752) | external test set for the denoiser; sanity check of our CFD statistics |
 | 4DFlowNet (Ferdian et al. 2020, MIT) + Ensemble4DFlowNet (Ericsson et al. 2024) | residual CNN for SR/denoising of (magnitude, velocity), pretrained weights (aorta, cardiac, cerebro), example data | MIT | architecture baseline, pretrained baseline denoiser |
 | Saitta et al. 2023, 4D inflow-profile SSM | 437 synthetic time-resolved aortic inlet velocity profiles + scripts | GitHub (check licence) | inlet boundary conditions with realistic skew/helicity |
 | Pajaziti et al. 2023 | SSM of coarctation aortas, 3000 synthetic shapes + CFD (code on GitHub) | check | geometry augmentation (pathology) |
@@ -57,7 +57,7 @@ mask → upsample + smooth → SDF → centerlines (VMTK) → inlet plane at the
 
 ## 2. CFD
 
-**Regime**: ascending aorta peak Re ≈ 3000–7000, Womersley α ≈ 10–20; stenotic jets up to 4 m/s and turbulent. Rigid walls first (as in 4DFlowNet and RACLETTE); wall motion later.
+**Regime**: ascending aorta peak Re ≈ 3000–7000, Womersley α ≈ 10–20; stenotic jets up to 4 m/s and turbulent. Rigid walls first (as in 4DFlowNet); wall motion later (RACLETTE simulates it in every subject: ascending-aorta area change median 6.6 %, root displacement median 4.6 mm). Moving-wall plan, motion models and training tiers: `research/cfd_training_data.md`.
 
 **Recommendation: own GPU lattice-Boltzmann solver in Rust + NVRTC** (same codegen route as the FFT/NUFFT crates), with existing solvers only as references. Reasons:
 - geometry is already an SDF on a voxel grid → no meshing pipeline; interpolated bounce-back (Bouzidi) uses the SDF wall distance directly;

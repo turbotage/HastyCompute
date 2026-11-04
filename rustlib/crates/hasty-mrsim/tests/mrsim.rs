@@ -166,3 +166,22 @@ fn gpu_direct_sum_matches_f64_cpu() {
     eprintln!("GPU direct sum vs f64 CPU: relative error {rel:.2e} over {} samples x {np} sources x {nc} coils", pick.len());
     assert!(rel < 1e-4, "relative error {rel}");
 }
+
+#[test]
+fn dual_venc_seven_point_moments() {
+    use hasty_mrsim::sequence::{Encoding, FlowSpiralParams};
+    let mut p = FlowSpiralParams::aorta_3t_default();
+    p.venc = 1.0;
+    p.encoding = Encoding::DualVenc { venc_hi: 2.5 };
+    let m = p.encode_m1();
+    assert_eq!(m.len(), 7);
+    assert_eq!(m[0], [0.0; 3]);
+    for a in 0..3 {
+        for (k, venc) in [(1 + 2 * a, 1.0), (2 + 2 * a, 2.5)] {
+            // phase difference γ M1 · v = π at |v| = VENC along the encode axis, zero on the others
+            let ph = hasty_mrsim::GAMMA * m[k][a] * venc;
+            assert!((ph - std::f64::consts::PI).abs() < 1e-9, "encode {k}: phase {ph}");
+            assert!((0..3).filter(|&b| b != a).all(|b| m[k][b] == 0.0));
+        }
+    }
+}

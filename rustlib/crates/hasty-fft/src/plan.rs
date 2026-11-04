@@ -91,11 +91,20 @@ pub struct LaunchPtrs {
     pub post: [u64; 4],
 }
 
-/// One FFT pass over lines of a row-major array. See [`AxisSpec`] and `codegen.rs`.
+/// Chirp and B̂ tables of a Bluestein pass (`bluestein.rs`).
+struct BlueTables<R: Real> {
+    ch: CudaSlice<R::Complex>,
+    bh_f: CudaSlice<R::Complex>,
+    bh_i: CudaSlice<R::Complex>,
+}
+
+/// One FFT pass over lines of a row-major array. See [`AxisSpec`] and `codegen.rs`. Lengths with a prime factor > 13
+/// use a Bluestein (chirp-z) core of smooth length m ≥ 2n − 1 with the same load / store semantics.
 pub struct AxisPlan<R: Real> {
     func: CudaFunction,
     tw_m: CudaSlice<R::Complex>,
     tw_p: CudaSlice<R::Complex>,
+    blue: Option<BlueTables<R>>,
     pub cfg: AxisCfg,
     pub addr: LineAddr,
     grid: (u32, u32, u32),
@@ -210,10 +219,32 @@ impl<R: Real> AxisPlan<R> {
                 "at most 4 pre and 4 post diagonal operands".into(),
             ));
         }
-        let radices = factorize(n).ok_or(FftError::UnsupportedLength(n))?;
         let max_smem = dev.ctx.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN)? as usize;
         let tile_cnt = spec.addr.la_cnt;
-        let (lpb, tpl) = choose_shape(n, &radices, spec.contiguous, tile_cnt, R::BYTES, max_smem);
+        // transform core: mixed radix of length n, or Bluestein of length m (two shared buffers of m per line)
+        let (radices, m) = match factorize(n) {
+            Some(r) => (r, n),
+            None => {
+                let (m, r) = crate::bluestein::conv_length(n);
+                (r, m)
+            }
+        };
+        let blue = m != n;
+        let (lpb, tpl) = if blue {
+            let rmax = *radices.iter().max().unwrap();
+            let tpl = (m / rmax).clamp(1, 512);
+            let per_line = 2 * m * 2 * R::BYTES;
+            let mut lpb = if spec.contiguous { (256 / tpl).max(1) } else { 16usize.min(tile_cnt.next_power_of_two().max(1)) };
+            while lpb > 1 && (lpb * per_line > max_smem || lpb * tpl > 1024) {
+                lpb /= 2;
+            }
+            if per_line > max_smem {
+                return Err(FftError::SharedMemory { n, need: per_line, have: max_smem });
+            }
+            (lpb, tpl)
+        } else {
+            choose_shape(n, &radices, spec.contiguous, tile_cnt, R::BYTES, max_smem)
+        };
         let cfg = AxisCfg {
             n,
             radices,
@@ -234,7 +265,7 @@ impl<R: Real> AxisPlan<R> {
             poly_post: spec.poly_post,
             vox: spec.vox,
         };
-        let smem = cfg.smem_bytes(R::BYTES);
+        let smem = if blue { 2 * m * lpb * 2 * R::BYTES } else { cfg.smem_bytes(R::BYTES) };
         if smem > max_smem {
             return Err(FftError::SharedMemory {
                 n,
@@ -242,7 +273,7 @@ impl<R: Real> AxisPlan<R> {
                 have: max_smem,
             });
         }
-        let src = generate(&cfg);
+        let src = if blue { crate::bluestein::generate(&cfg, m, &cfg.radices) } else { generate(&cfg) };
         // the generated source fully determines the kernel; the name only labels cache files / dumps
         let name = format!(
             "fft_axis_n{n}_{}{}_{}_{}_i{}o{}p{}q{}{}",
@@ -258,7 +289,7 @@ impl<R: Real> AxisPlan<R> {
         ) + &format!(
             "{:?}p{}q{}",
             spec.kfmt, spec.poly_pre as u8, spec.poly_post as u8
-        );
+        ) + &if blue { format!("_blu{m}") } else { String::new() };
         let func = dev.load_function(
             &name,
             &src,
@@ -274,10 +305,11 @@ impl<R: Real> AxisPlan<R> {
                 smem as i32,
             )?;
         }
+        // twiddles of the core length (n, or m for Bluestein)
         let table = |sg: f64| -> Vec<R::Complex> {
-            (0..n)
-                .map(|m| {
-                    let a = sg * 2.0 * std::f64::consts::PI * (m as f64) / (n as f64);
+            (0..m)
+                .map(|t| {
+                    let a = sg * 2.0 * std::f64::consts::PI * (t as f64) / (m as f64);
                     R::complex(a.cos(), a.sin())
                 })
                 .collect()
@@ -285,6 +317,13 @@ impl<R: Real> AxisPlan<R> {
         let stream = dev.default_stream();
         let tw_m = stream.clone_htod(&table(-1.0))?;
         let tw_p = stream.clone_htod(&table(1.0))?;
+        let blue = if blue {
+            let (ch, bf, bi) = crate::bluestein::tables(n, m);
+            let up = |v: &[(f64, f64)]| stream.clone_htod(&v.iter().map(|&(a, b)| R::complex(a, b)).collect::<Vec<_>>());
+            Some(BlueTables { ch: up(&ch)?, bh_f: up(&bf)?, bh_i: up(&bi)? })
+        } else {
+            None
+        };
         let a = spec.addr;
         let grid = if spec.contiguous {
             ((a.la_cnt * a.lb_cnt).div_ceil(lpb) as u32, 1, 1)
@@ -295,6 +334,7 @@ impl<R: Real> AxisPlan<R> {
             func,
             tw_m,
             tw_p,
+            blue,
             cfg,
             addr: a,
             grid,
@@ -350,6 +390,10 @@ impl<R: Real> AxisPlan<R> {
                 .arg(&ola)
                 .arg(&olb)
                 .arg(&osn);
+            let guards = self.blue.as_ref().map(|t| (t.ch.device_ptr(stream), t.bh_f.device_ptr(stream), t.bh_i.device_ptr(stream)));
+            if let Some(((ch, _), (bf, _), (bi, _))) = &guards {
+                b.arg(ch).arg(bf).arg(bi);
+            }
             b.launch(cfg)?;
         }
         Ok(())

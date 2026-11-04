@@ -2,14 +2,22 @@
 //! warp, off-resonance, concomitant monomials), low-rank phase models, multi-coil NUFFT encoding operators, solvers.
 
 pub mod cg;
+pub mod checkpoint;
 pub mod data;
+pub mod flow;
 pub mod gpu;
+pub mod learned;
 pub mod llr;
 pub mod op;
 pub mod p2np;
+pub mod plan;
+pub mod vmodel;
+pub mod vobj;
+pub mod vinit;
 pub mod precond;
 pub mod segphys;
 pub mod setop;
+pub mod store;
 pub mod skeleton;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,4 +36,6 @@ pub enum Error {
     Toeplitz(#[from] hasty_toeplitz::Error),
     #[error("format error: {0}")]
     Format(String),
+    #[error(transparent)]
+    Value(#[from] hasty_value::Error),
 }

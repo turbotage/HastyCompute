@@ -1,5 +1,6 @@
 //! Runtime-generated GPU FFT (CUDA C++ via NVRTC). See `rustlib/PLAN.md`, track F.
 
+mod bluestein;
 mod codegen;
 mod conv;
 mod factor;

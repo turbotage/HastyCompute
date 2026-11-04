@@ -1,10 +1,9 @@
 import { LazyVolume, RemoteVolume } from './volume.js';
 import { Renderer, normalizeComprepConfig }   from './renderer.js';
 import { CACHE_DEPTH, CACHE_TE } from './renderer.js';
-import {
-    hexToUuid, fetchMetaString, initCommandIds,
-    deleteValue, compressUi16Default, execute, fetchRaw, COMMAND_IDS,
-} from '../../node_editor/src/grpc_client.js';
+import { HastyClient, firstTensor } from '../../common/hasty_client.js';
+
+const client = new HastyClient();
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
@@ -24,57 +23,80 @@ async function init() {
     const device = await adapter.requestDevice();
     device.lost.then(info => showError(`GPU device lost: ${info.message}`));
 
-    // ── Resolve command IDs from server ──────────────────────────────────────
-    await initCommandIds();
-
-    // ── Build volume ──────────────────────────────────────────────────────────
-    const params    = new URLSearchParams(window.location.search);
-    const uuidHex   = params.get('uuid');
-    let originalUuid = null;
-    const configStr = params.get('config');
-    const comprepConfig = configStr ? JSON.parse(decodeURIComponent(configStr)) : null;
+    // ── Resolve the value: ?id=<hex> (or legacy ?uuid=), optional &path=["key"][0] ────────────────────────────
+    const params = new URLSearchParams(window.location.search);
+    const idHex  = params.get('id') ?? params.get('uuid');
+    const temps  = [];                                       // derived values, deleted when the page closes
+    let statsId  = null;
     let volume;
-    if (uuidHex) {
-        let uuid16 = hexToUuid(uuidHex);
-        originalUuid = uuid16;
-        const meta = await fetchMetaString(uuid16);
-        if (!meta) { showError('Could not fetch tensor metadata for UUID: ' + uuidHex); return; }
-
-        let resolvedUuid   = uuid16;
-        let resolvedDtype  = meta.dtype;
-        let resolvedConfig = comprepConfig;
-        let tempUuid       = null;  // UUID to delete on page unload
-
-        // Auto-comprep: delegate entirely to compress_ui16_default (C++ computes
-        // min/max and q01/q99 internally, returns config as JSON in msg).
-        const AUTOCOMPRESS = new Set(['f32', 'f64', 'f16', 'i8', 'u8', 'i16', 'i32', 'i64']);
-        if (!resolvedConfig && AUTOCOMPRESS.has(meta.dtype)) {
-            setStatus('Auto-compressing…');
-            const { compressedUuid, config } = await compressUi16Default(uuid16);
-            resolvedUuid   = compressedUuid;
-            resolvedDtype  = 'i16';
-            resolvedConfig = config;
-            tempUuid       = resolvedUuid;
-
-            document.getElementById('win-min').value = (config.a ?? 0).toFixed(4);
-            document.getElementById('win-max').value = (config.b ?? 1).toFixed(4);
+    if (idHex) {
+        let info;
+        try { info = await client.info(idHex); } catch (e) { showError(`No value ${idHex}: ${e.message}`); return; }
+        let path = params.get('path') ?? '';
+        let sum  = info.summary;
+        if (!path) { const ft = firstTensor(sum); if (!ft) { showError(`Value ${info.name} contains no tensor`); return; } [path, sum] = ft; }
+        else { const ft = firstTensor(sum); sum = ft && ft[0] === path ? ft[1] : null; }
+        let tid = idHex;
+        if (path) {
+            setStatus(`Selecting ${path}…`);
+            tid = (await client.execute('slice', { path }, [idHex], `${info.name}${path}`)).outputs[0];
+            temps.push(tid);
+            if (!sum) sum = (await client.info(tid)).summary;
         }
-
-        window.addEventListener('unload', () => {
-            if (tempUuid) deleteValue(tempUuid).catch(() => {});
+        statsId = tid;
+        const complex = sum.dtype.startsWith('complex');
+        const mode = params.get('mode') ?? (complex ? 'abs' : 'real');
+        // compressed u16 representation (comprep): ?config={...} full or partial (focus, left/right_mode, ...), else auto.
+        // &prepped=1: the value already is a comprep u16 tensor and ?config is its full config (node editor)
+        const userCfg = params.get('config') ? JSON.parse(decodeURIComponent(params.get('config'))) : {};
+        const prepped = params.get('prepped') === '1';
+        let dispId, config, stats;
+        if (prepped) {
+            if (sum.dtype !== 'uint16' || !('a' in userCfg)) { showError('prepped=1 needs a uint16 comprep tensor and its full config'); return; }
+            dispId = tid;
+            config = userCfg;
+            stats = JSON.parse((await client.execute('stats', { mode: 'real' }, [tid])).message);
+        } else {
+            setStatus('Building the u16 display representation…');
+            const [q, st] = await Promise.all([
+                client.execute('comprep_u16', { mode, ...userCfg }, [tid], `${info.name} (display)`),
+                client.execute('stats', { mode }, [tid]),
+            ]);
+            temps.push(q.outputs[0]);
+            dispId = q.outputs[0];
+            config = JSON.parse(q.message);
+            stats = JSON.parse(st.message);
+        }
+        document.getElementById('win-min').value = Number(config.a).toFixed(4);
+        document.getElementById('win-max').value = Number(config.b).toFixed(4);
+        window.addEventListener('pagehide', () => { for (const t of temps) client.delete(t).catch(() => {}); });
+        volume = new RemoteVolume(client, dispId, sum.shape, { dtype: 'i16', comprepConfig: config });
+        setStatus(`${info.name}${path}: ${sum.shape.join('×')} ${sum.dtype}${complex ? ` (${mode})` : ''} — slices on demand`);
+        document.title = `${info.name} — orthoslicer`;
+        showStats(stats);
+        // follow: switch to every newly shown value, reload when this one changes
+        const follow = params.get('follow') !== '0';
+        let reloadTimer = null;
+        client.watch((e) => {
+            if (follow && e.kind === 'show' && e.id && e.id !== idHex && (e.message || 'orthoslicer') === 'orthoslicer') {
+                window.location.search = `?id=${e.id}`;
+            } else if (e.kind === 'update' && e.id === idHex) {
+                clearTimeout(reloadTimer);
+                reloadTimer = setTimeout(() => window.location.reload(), 300);
+            } else if (e.kind === 'delete' && e.id === idHex) {
+                setStatus(`${info.name} was deleted on the server`);
+            }
         });
-
-        volume = new RemoteVolume(resolvedUuid, meta.shape, { dtype: resolvedDtype, comprepConfig: resolvedConfig });
-        setStatus(`Remote tensor ${meta.shape.join('×')} [${meta.dtype}${resolvedConfig ? ' → comprep' : ''}] — fetching slices on demand`);
     } else {
         const shape = [8, 3, 400, 400, 400];
         volume = new LazyVolume(shape);
-        setStatus(`LazyVolume ${shape.join('×')} — TE cache slots: ${CACHE_TE}, spatial depth: ${CACHE_DEPTH}`);
+        setStatus(`LazyVolume ${shape.join('×')} — TE cache slots: ${CACHE_TE}, spatial depth: ${CACHE_DEPTH} (open with ?id=<value id>)`);
     }
     await nextFrame();
 
     // ── Create renderer ───────────────────────────────────────────────────────
     const renderer = new Renderer(device, volume);
+    window.hasty = { volume, renderer, client };   // debug / headless-test handle
     if (volume instanceof RemoteVolume) {
         volume.onUpdate = () => { renderer.invalidateCache(); renderer.setPosition({...renderer.pos}); };
     }
@@ -109,14 +131,7 @@ async function init() {
     updateStatsUI(renderer.lastStats);
     setStatus('Ready');
 
-    // Fetch full-volume statistics once (non-compressed units) for remote tensors.
-    if (originalUuid) {
-        try {
-            await fetchAndDisplayStatistics(originalUuid);
-        } catch (e) {
-            console.warn('Failed to fetch statistics:', e);
-        }
-    }
+
 
     // ── Cursor state ──────────────────────────────────────────────────────────
     let showCursor = true;
@@ -250,46 +265,6 @@ async function init() {
         // Intentionally left blank. Full-volume statistics are fetched once
         // via gRPC and displayed by `fetchAndDisplayStatistics` to avoid
         // repeated expensive computations on mouse move.
-    }
-
-    // Parse a GenericValue string raw response (same format used in grpc_client).
-    function parseGVStringRaw(raw) {
-        if (!raw || raw.length < 9 || raw[0] !== 5) return null;
-        const dv = new DataView(raw.buffer, raw.byteOffset + 1);
-        const len = Number(dv.getBigUint64(0, true));
-        return new TextDecoder().decode(raw.subarray(9, 9 + len));
-    }
-
-    async function fetchAndDisplayStatistics(uuid16) {
-        if (!uuid16) return;
-        if (!('statistics_string' in COMMAND_IDS)) {
-            // COMMAND_IDS is in grpc_client; if not available, skip.
-            // Try to refer to it dynamically to avoid import cycle.
-        }
-        try {
-            const outIds = await execute(COMMAND_IDS.statistics_string, [uuid16]);
-            if (!outIds || outIds.length === 0) throw new Error('No output from statistics_string');
-            const tmp = outIds[0];
-            const raw = await fetchRaw(tmp);
-            const s = parseGVStringRaw(raw) ?? '';
-            try { deleteValue(tmp).catch(() => {}); } catch {}
-            // Parse numbers from the statistics string.
-            const m = { min: '—', max: '—', mean: '—', std: '—' };
-            const minM = s.match(/min=([^\n]+)/);
-            const maxM = s.match(/max=([^\n]+)/);
-            const meanM = s.match(/mean=([^\n]+)/);
-            const stdM = s.match(/std=([^\n]+)/);
-            if (minM) m.min = parseFloat(minM[1]).toFixed(4);
-            if (maxM) m.max = parseFloat(maxM[1]).toFixed(4);
-            if (meanM) m.mean = parseFloat(meanM[1]).toFixed(4);
-            if (stdM) m.std = parseFloat(stdM[1]).toFixed(4);
-            const el = document.getElementById('image-stats');
-            if (el) el.textContent = `min: ${m.min} max: ${m.max} mean: ${m.mean} std: ${m.std}`;
-        } catch (e) {
-            const el = document.getElementById('image-stats');
-            if (el) el.textContent = 'min: — max: — mean: — std: —';
-            throw e;
-        }
     }
 
     // ── Mouse interaction ─────────────────────────────────────────────────────
@@ -535,3 +510,10 @@ init().catch(err => {
     const msg = err.message ?? String(err);
     showError(`Initialisation failed:\n${msg.slice(0, 300)}${msg.length > 300 ? '\n…(see console for full error)' : ''}`);
 });
+
+function showStats(st) {
+    const el = document.getElementById('image-stats');
+    if (!el) return;
+    const f = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toPrecision(5) : '—');
+    el.textContent = `min: ${f(st.min)} max: ${f(st.max)} mean: ${f(st.mean)} std: ${f(st.std)}`;
+}

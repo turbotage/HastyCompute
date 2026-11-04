@@ -1,0 +1,11 @@
+[package]
+name = "hasty-denoise"
+description = "Learned 4D-flow prior for P²nP: torch-free layout adapter for the exported equivariant 7-point denoiser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+num-complex.workspace = true
+thiserror.workspace = true
+serde_json = "1"

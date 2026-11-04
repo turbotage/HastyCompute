@@ -11,7 +11,7 @@
  * setting `static _skipCache = true` on the node class.
  */
 
-import { fetchMeta } from './grpc_client.js';
+import { fetchMeta, isId } from './hasty.js';
 
 // ── Topological sort ──────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ export async function runGraph(graph, canvas) {
 
             // Fetch metadata in the background — triggers redraw when ready
             const firstVal = values?.[0];
-            if (firstVal instanceof Uint8Array) {
+            if (isId(firstVal)) {
                 fetchMeta(firstVal).then(meta => {
                     node._execMeta = meta;
                     canvas.setDirty(true, true);

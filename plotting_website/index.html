@@ -23,8 +23,65 @@
                     <span class="tool-name">Ortho Slicer</span>
                     <span class="tool-desc">Multi-axis volume viewer</span>
                 </a>
+                <a class="tool-card" href="flow/">
+                    <span class="tool-icon">≋</span>
+                    <span class="tool-name">Flow</span>
+                    <span class="tool-desc">4D flow: PC-MRA, streamlines, pathlines, flow curves</span>
+                </a>
             </nav>
+            <section id="bank">
+                <div class="bank-head">
+                    <span class="bank-title">Values</span>
+                    <span id="bank-status" class="bank-status">connecting…</span>
+                    <a class="bank-ca" href="/hasty-ca.pem" title="Import once into the browser / OS trust store of each LAN viewer">CA certificate</a>
+                </div>
+                <div class="bank-scroll">
+                    <table id="bank-table">
+                        <thead><tr><th>name</th><th>value</th><th>size</th><th>updated</th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <p id="bank-empty" class="bank-empty">No values yet: call <code>hasty_server::viz::show(…)</code> from a binary, or
+                        <code>hastycompute.v2.show(…)</code> from Python.</p>
+                </div>
+            </section>
         </main>
     </div>
+    <script type="module">
+        import { HastyClient } from './common/hasty_client.js';
+        const c = new HastyClient();
+        const body = document.querySelector('#bank-table tbody');
+        const status = document.getElementById('bank-status');
+        const empty = document.getElementById('bank-empty');
+        const size = (n) => n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(1)} KiB` : n < 1 << 30 ? `${(n / (1 << 20)).toFixed(1)} MiB` : `${(n / (1 << 30)).toFixed(2)} GiB`;
+        const ago = (ms) => { const s = (Date.now() - ms) / 1000; return s < 60 ? `${s.toFixed(0)} s` : s < 3600 ? `${(s / 60).toFixed(0)} min` : `${(s / 3600).toFixed(1)} h`; };
+        const describe = (sum) => {
+            if (!sum || typeof sum !== 'object') return JSON.stringify(sum);
+            if (sum.type === 'tensor') return `${sum.dtype} ${sum.shape.join('×') || 'scalar'}`;
+            if (sum.type === 'dict') return `dict {${Object.keys(sum.items).join(', ')}}`;
+            if (sum.type === 'list' || sum.type === 'tuple') return `${sum.type}[${sum.items.length}]`;
+            return sum.type ?? '';
+        };
+        const hasTensor = (sum) => sum && (sum.type === 'tensor' || (sum.items && Object.values(sum.items).some(hasTensor)));
+        async function refresh() {
+            const list = await c.list();
+            body.replaceChildren(...list.reverse().map((e) => {
+                const tr = document.createElement('tr');
+                const isFlow = e.summary?.type === 'dict' && e.summary.items?.vel;
+                const view = (isFlow ? `<a href="flow/index.html?id=${e.id}">flow</a> ` : '') + (hasTensor(e.summary) ? `<a href="orthoslicer/index.html?id=${e.id}${isFlow ? '&path=' + encodeURIComponent('["vel"]') : ''}">view</a>` : '');
+                tr.innerHTML = `<td class="n"></td><td class="v"></td><td>${size(e.nbytes)}</td><td>${ago(e.updated_ms)}</td><td class="a">${view} <button title="delete">×</button></td>`;
+                tr.querySelector('.n').textContent = e.name;
+                tr.querySelector('.v').textContent = describe(e.summary);
+                tr.querySelector('button').onclick = () => c.delete(e.id).catch((x) => alert(x.message));
+                return tr;
+            }));
+            empty.hidden = list.length > 0;
+            status.textContent = `${list.length} on ${location.host}`;
+        }
+        let t = null;
+        const soon = () => { clearTimeout(t); t = setTimeout(() => refresh().catch((e) => { status.textContent = e.message; }), 150); };
+        c.watch(soon, (e) => { status.textContent = `disconnected (${e.message}), retrying…`; });
+        refresh().catch((e) => { status.textContent = `server not reachable: ${e.message}`; });
+        setInterval(soon, 30000);
+    </script>
 </body>
 </html>

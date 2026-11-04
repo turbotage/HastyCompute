@@ -4,7 +4,7 @@
 pub const RADICES: &[usize] = &[2, 3, 4, 5, 7, 8, 11, 13];
 
 /// Factor `n` into radices from [`RADICES`], fewest passes first (large power-of-two radices), then odd primes.
-/// Returns `None` if `n` has a prime factor > 13 (needs Bluestein, not implemented yet).
+/// Returns `None` if `n` has a prime factor > 13 (those lengths use the Bluestein core, see `bluestein.rs`).
 pub fn factorize(mut n: usize) -> Option<Vec<usize>> {
     if n < 2 {
         return None;

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow viewer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        { "imports": { "three": "../vendor/three-0.186.1/three.module.js", "three/addons/": "../vendor/three-0.186.1/addons/" } }
+    </script>
+</head>
+<body>
+    <header>
+        <a class="home-link" href="../">HastyEdit</a>
+        <span class="sep">/</span>
+        <span class="title">Flow</span>
+        <span id="name" class="name"></span>
+        <button id="play" class="hdr-btn" title="Play / pause (space)">▶</button>
+        <input id="frame" type="range" min="0" max="0" value="0" step="1">
+        <span id="frame-label" class="mono">t 0 / 0</span>
+        <label class="hdr-label">speed <select id="rate" class="hdr-select">
+            <option value="0.25">¼×</option><option value="0.5" selected>½×</option><option value="1">1×</option><option value="2">2×</option>
+        </select></label>
+        <span id="status" class="status"></span>
+    </header>
+    <main>
+        <div id="view">
+            <canvas id="canvas"></canvas>
+            <div id="legend"><div id="legend-bar"></div><span id="legend-lo">0</span><span id="legend-title">speed m/s</span><span id="legend-hi">1</span></div>
+            <div id="readout" class="mono" hidden></div>
+            <div id="picker" hidden></div>
+        </div>
+        <aside id="side">
+            <section>
+                <h3>Display</h3>
+                <label>colormap <select id="cmap"></select></label>
+                <label>v max (m/s) <input id="vmax" type="number" step="0.05" value="1"></label>
+                <label><input id="mip-on" type="checkbox" checked> PC-MRA MIP</label>
+                <label class="sub">level <input id="mip-lo" type="range" min="0" max="0.9" step="0.01" value="0.15"></label>
+                <label class="sub">opacity <input id="mip-op" type="range" min="0" max="1" step="0.01" value="0.6"></label>
+            </section>
+            <section>
+                <h3>Slices</h3>
+                <div class="slice-row"><label><input id="s2-on" type="checkbox" checked> axial z</label><input id="s2" type="range" min="0" max="0" value="0"></div>
+                <div class="slice-row"><label><input id="s1-on" type="checkbox"> coronal y</label><input id="s1" type="range" min="0" max="0" value="0"></div>
+                <div class="slice-row"><label><input id="s0-on" type="checkbox"> sagittal x</label><input id="s0" type="range" min="0" max="0" value="0"></div>
+                <label class="sub">opacity <input id="s-op" type="range" min="0.1" max="1" step="0.01" value="1"></label>
+                <label>overlay <select id="overlay"><option value="speed">speed</option><option value="vx">v_x</option><option value="vy">v_y</option><option value="vz">v_z</option><option value="">none</option></select></label>
+                <label class="sub">threshold (m/s) <input id="thr" type="number" step="0.02" value="0.1"></label>
+                <label><input id="glyph-on" type="checkbox" checked> vector glyphs</label>
+                <label class="sub">every <input id="stride" type="number" min="1" max="10" value="3"> voxels</label>
+            </section>
+            <section>
+                <h3>Streamlines</h3>
+                <label><input id="sl-on" type="checkbox"> show (per frame)</label>
+                <label class="sub">seeds <input id="sl-n" type="number" value="600" step="100"></label>
+                <label class="sub">region quantile <input id="sl-q" type="number" value="0.97" step="0.005" min="0" max="1"></label>
+                <label class="sub"><input id="sl-disc" type="checkbox"> seed from the active plane</label>
+                <button id="sl-go">recompute</button>
+            </section>
+            <section>
+                <h3>Pathlines</h3>
+                <label><input id="pl-on" type="checkbox"> show (animated)</label>
+                <label class="sub">seeds <input id="pl-n" type="number" value="400" step="100"></label>
+                <label class="sub">releases / cycle <input id="pl-rel" type="number" value="4" min="1" max="20"></label>
+                <label class="sub">tail (cycle fraction) <input id="pl-tail" type="range" min="0.02" max="1" step="0.01" value="0.15"></label>
+                <label class="sub"><input id="pl-disc" type="checkbox"> emit from the active plane</label>
+                <button id="pl-go">recompute</button>
+            </section>
+            <section>
+                <h3>Analysis planes</h3>
+                <p class="hint">Click a slice to set the cursor; the plane normal follows the local velocity.</p>
+                <label class="sub">radius (mm) <input id="pa-r" type="number" value="18" step="1"></label>
+                <label class="sub">lumen quantile <input id="pa-q" type="number" value="0.95" step="0.01" min="0" max="1"></label>
+                <button id="pa-add">plane at cursor</button> <button id="pa-clear">clear</button>
+                <canvas id="plot"></canvas>
+                <table id="pa-table"></table>
+            </section>
+        </aside>
+    </main>
+    <pre id="selftest" hidden></pre>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

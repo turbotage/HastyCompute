@@ -37,9 +37,13 @@ header {
 
 main {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 2rem;
+    padding: 2.5rem 1.2rem 1.2rem;
     flex: 1;
+    min-height: 0;
 }
 
 /* ── Tool grid ───────────────────────────────────────────── */
@@ -90,3 +94,40 @@ main {
     text-align: center;
     line-height: 1.35;
 }
+
+/* ── Value bank ──────────────────────────────────────────── */
+#bank {
+    width: min(980px, 100%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    background: #141820;
+    border: 1px solid #242c3a;
+    border-radius: 8px;
+}
+
+.bank-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid #1e2330;
+}
+
+.bank-title { font-weight: 700; color: #c8d8e8; letter-spacing: 0.03em; }
+.bank-status { font-size: 0.75rem; color: #5a6a7a; flex: 1; }
+.bank-ca { font-size: 0.75rem; color: #5a9abc; }
+.bank-scroll { overflow: auto; min-height: 0; }
+
+#bank-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+#bank-table th { text-align: left; font-weight: 600; color: #5a6a7a; padding: 0.4rem 1rem; position: sticky; top: 0; background: #141820; }
+#bank-table td { padding: 0.35rem 1rem; border-top: 1px solid #1a2030; white-space: nowrap; }
+#bank-table td.v { color: #8aa0b8; font-family: ui-monospace, monospace; font-size: 0.75rem; white-space: normal; }
+#bank-table td.a { text-align: right; }
+#bank-table a { color: #7ab4d8; text-decoration: none; }
+#bank-table a:hover { text-decoration: underline; }
+#bank-table button { background: none; border: 1px solid #2a3344; color: #8a6a6a; border-radius: 4px; cursor: pointer; padding: 0 0.4rem; margin-left: 0.6rem; }
+#bank-table button:hover { color: #e08080; border-color: #6a3a3a; }
+.bank-empty { padding: 1.2rem 1rem; font-size: 0.8rem; color: #5a6a7a; }
+.bank-empty code { color: #8aa0b8; }

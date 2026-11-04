@@ -1,0 +1,86 @@
+// hasty server API v2. Values travel as hasty value streams (rustlib/crates/hasty-value/FORMAT.md) split into Chunk
+// messages at arbitrary boundaries. Errors are gRPC status codes. Browsers (grpc-web) use the unary variants of the
+// client-streaming calls.
+syntax = "proto3";
+
+package hasty.v2;
+
+message Id { bytes value = 1; }                 // 16-byte UUID
+message Chunk { bytes data = 1; }
+message Empty {}
+
+// how the server encodes values it sends
+message Encoding {
+    string codec      = 1;    // "lz4" (default), "zstd", "none"
+    int32  level      = 2;    // zstd level (0 → 3)
+    bool   delta      = 3;    // integer delta filter (quantised images)
+    uint32 block_size = 4;    // raw bytes per block (0 → 1 MiB)
+}
+
+message PutHeader {
+    Id     id       = 1;      // unset: create a new entry; set: replace that entry (or a slice of it)
+    string slice    = 2;      // with id: slice path to overwrite, e.g. ["recon"][3, :, :]
+    string name     = 3;      // display name (new entries)
+    string metadata = 4;      // JSON (new entries)
+}
+message PutRequest {
+    oneof part {
+        PutHeader header = 1;   // first message
+        bytes     data   = 2;   // then the encoded value, any chunking
+    }
+}
+message PutUnaryRequest { PutHeader header = 1; bytes data = 2; }
+message PutResponse { Id id = 1; }
+
+message GetRequest {
+    Id       id       = 1;
+    string   slice    = 2;    // empty: whole value
+    Encoding encoding = 3;
+}
+
+message Entry {
+    Id     id         = 1;
+    string name       = 2;
+    string summary    = 3;    // JSON tree summary (types, shapes, dtypes)
+    string metadata   = 4;    // JSON
+    uint64 nbytes     = 5;
+    int64  created_ms = 6;
+    int64  updated_ms = 7;
+}
+message ListResponse { repeated Entry entries = 1; }
+
+message MetadataRequest { Id id = 1; string metadata = 2; }   // replaces the metadata JSON
+
+message CommandInfo { string name = 1; string doc = 2; }
+message CommandsResponse { repeated CommandInfo commands = 1; }
+
+message ExecuteRequest {
+    string      command = 1;
+    string      options = 2;  // JSON (command specific)
+    repeated Id inputs  = 3;
+    string      name    = 4;  // name for the outputs (default: command)
+}
+message ExecuteResponse { repeated Id outputs = 1; string message = 2; }
+
+message ShowRequest { Id id = 1; string view = 2; }       // ask open viewers to display a value
+
+message Event {
+    string kind    = 1;       // put | update | delete | metadata | show | log
+    Id     id      = 2;
+    string name    = 3;
+    string message = 4;       // show: view; log: text
+}
+
+service Hasty {
+    rpc Put       (stream PutRequest) returns (PutResponse);
+    rpc PutUnary  (PutUnaryRequest)   returns (PutResponse);
+    rpc Get       (GetRequest)        returns (stream Chunk);
+    rpc List      (Empty)             returns (ListResponse);
+    rpc Info      (Id)                returns (Entry);
+    rpc Delete    (Id)                returns (Empty);
+    rpc SetMetadata (MetadataRequest) returns (Entry);
+    rpc Commands  (Empty)             returns (CommandsResponse);
+    rpc Execute   (ExecuteRequest)    returns (ExecuteResponse);
+    rpc Show      (ShowRequest)       returns (Empty);
+    rpc Watch     (Empty)             returns (stream Event);
+}

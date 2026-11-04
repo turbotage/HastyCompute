@@ -63,7 +63,12 @@ pub struct SimData {
     pub data: Vec<C32>,
     pub nc: usize,
     pub na: usize,
+    /// reconstruction grid (default: the native grid; [`SimData::set_recon_grid`] refines it)
     pub dims: [usize; 3],
+    /// reconstruction voxel size per axis (m)
+    pub vox: [f64; 3],
+    /// native (simulation / truth) grid and its isotropic voxel size: truth fields live here
+    pub tdims: [usize; 3],
     pub res: f64,
     pub psi: Vec<Vec<f64>>,
     pub gnl: GradientCoils,
@@ -124,7 +129,11 @@ impl SimData {
             n_int: u("n_int"),
             fov_edge_ratio: f("fov_edge_ratio"),
             venc: f("venc"),
-            encoding: if meta["encoding"] == "Hadamard" { Encoding::Hadamard } else { Encoding::Referenced },
+            encoding: match meta["encoding"].as_str().unwrap_or("Referenced") {
+                "Hadamard" => Encoding::Hadamard,
+                e if e.starts_with("DualVenc") => Encoding::DualVenc { venc_hi: meta["venc_hi"].as_f64().expect("DualVenc sim without venc_hi") },
+                _ => Encoding::Referenced,
+            },
             coverage: if meta["coverage"] == "Rotated3d" { Coverage::Rotated3d } else { Coverage::StackOfSpirals },
             t_rf: f("t_rf"),
             t_spoil: f("t_spoil"),
@@ -196,6 +205,8 @@ impl SimData {
             nc,
             na,
             dims,
+            vox: [p.res[0]; 3],
+            tdims: dims,
             res: p.res[0],
             psi,
             gnl,
@@ -212,8 +223,26 @@ impl SimData {
         })
     }
 
+    /// voxels of the reconstruction grid
     pub fn nv(&self) -> usize {
         self.dims[0] * self.dims[1] * self.dims[2]
+    }
+
+    /// Reconstruct on a finer (or coarser) grid: per-axis scale s_a, dims_a = the smallest 2·3·5·7-smooth size ≥
+    /// s_a·n_a (cheap FFTs), voxel size = native FOV / dims_a (the FOV is kept exactly). Truth fields stay on the
+    /// native grid and are sampled at the reconstruction voxels' true positions.
+    pub fn set_recon_grid(&mut self, scale: [f64; 3]) {
+        for a in 0..3 {
+            let target = (scale[a] * self.tdims[a] as f64).ceil().max(1.0) as usize;
+            let n = (target..).find(|&n| smooth7(n)).unwrap();
+            self.dims[a] = n;
+            self.vox[a] = self.tdims[a] as f64 * self.res / n as f64;
+        }
+    }
+
+    /// the reconstruction grid equals the native one
+    pub fn native_grid(&self) -> bool {
+        self.dims == self.tdims
     }
 
     /// Ψ^{-1/2}
@@ -250,7 +279,7 @@ impl SimData {
             for n in 0..na {
                 let j = r * na + n;
                 for a in 0..3 {
-                    coords[a].push((k[n][a] * self.res) as f32);
+                    coords[a].push((k[n][a] * self.vox[a]) as f32);
                 }
                 let s = &sp[n * SAMPLE_FLOATS..(n + 1) * SAMPLE_FLOATS];
                 wq.push([s[9] as f64, s[10] as f64, s[11] as f64, s[12] as f64]);
@@ -269,17 +298,17 @@ impl SimData {
         SampleSet { readouts: ros.to_vec(), coords, y, tau, wq }
     }
 
-    /// logical voxel centre of linear index q
+    /// logical centre of reconstruction voxel q
     pub fn voxel_log(&self, q: usize) -> Vec3 {
         let d = self.dims;
         let (i, j, k) = (q % d[0], (q / d[0]) % d[1], q / (d[0] * d[1]));
-        [(i as f64 - (d[0] / 2) as f64) * self.res, (j as f64 - (d[1] / 2) as f64) * self.res, (k as f64 - (d[2] / 2) as f64) * self.res]
+        [(i as f64 - (d[0] / 2) as f64) * self.vox[0], (j as f64 - (d[1] / 2) as f64) * self.vox[1], (k as f64 - (d[2] / 2) as f64) * self.vox[2]]
     }
 
-    /// trilinear sample of an f32 field on the logical grid (components: `comp` stride nv)
+    /// trilinear sample of an f32 field on the native (truth) logical grid (components: `comp` stride native nv)
     pub fn sample_log(&self, field: &[f32], comp: usize, x_log: &Vec3) -> f64 {
-        let d = self.dims;
-        let nv = self.nv();
+        let d = self.tdims;
+        let nv = d[0] * d[1] * d[2];
         let mut i0 = [0usize; 3];
         let mut fr = [0.0; 3];
         for a in 0..3 {
@@ -345,6 +374,16 @@ impl SimData {
         }
         PhysicsGrid { x_log, mono, omega, jac, smaps }
     }
+}
+
+/// only prime factors 2, 3, 5, 7
+pub fn smooth7(mut n: usize) -> bool {
+    for p in [2, 3, 5, 7] {
+        while n % p == 0 && n > 1 {
+            n /= p;
+        }
+    }
+    n == 1
 }
 
 pub fn inv3(m: &Mat3) -> Mat3 {

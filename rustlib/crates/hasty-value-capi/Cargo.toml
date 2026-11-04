@@ -1,0 +1,13 @@
+[package]
+name = "hasty-value-capi"
+description = "C ABI of hasty-value's random-access file reader (Python fast path: hastycompute.value_format)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hasty-value = { path = "../hasty-value" }
+rayon = "1.12"

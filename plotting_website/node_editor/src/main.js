@@ -15,13 +15,8 @@
  */
 
 import { runGraph }                               from './node_runner.js';
-import { execute, executeWithMsg, fetchMeta, fetchMetaString,
-         fetchSliceData, fetchRaw, uploadValue,
-         bankQuery, deleteValue, fetchGVMetadata,
-         readMetadata, writeMetadata, deleteMetadata,
-         compressUi16Default, decompressUi16,
-         initCommandIds, uuidToHex,
-         hexToUuid, COMMAND_IDS }                 from './grpc_client.js';
+import { client, fetchMeta, run, isId, DTYPE, SHORT } from './hasty.js';
+import { HTensor }                                from '../../common/value_format.js';
 
 const LG = window.LiteGraph;
 
@@ -64,7 +59,7 @@ function drawStatusBar(ctx, node) {
     } else if (node._execStatus === 'done') {
         const uuid = node._execResult?.[0];
         if (uuid) {
-            const hex  = uuidToHex(uuid).slice(0, 8);
+            const hex  = String(uuid).slice(0, 8);
             const meta = node._execMeta;
             text = meta
                 ? hex + '... ' + meta.dtype + '[' + meta.shape.join('x') + ']'
@@ -79,13 +74,10 @@ function drawStatusBar(ctx, node) {
     ctx.fillText(text, 6, y + 2 + (barH - 4) / 2);
 }
 
-/**
- * Build a tensor-creation options string for from_metadata_string().
- * Format: "Tensor[dtype=f32,device=cpu,shape=(4,4)]"
- */
+/** tensor-creation options for the server's zeros / ones / rand: { shape, dtype } (device: CPU for now) */
 function makeTensorOptions(dtype, device, shapeStr) {
-    const s = shapeStr.trim().replace(/^\(|\)$/g, '').replace(/\s+/g, ',');
-    return 'Tensor[dtype=' + dtype + ',device=' + device + ',shape=(' + s + ')]';
+    const shape = shapeStr.trim().replace(/^\(|\)$/g, '').split(/[\s,]+/).filter(Boolean).map(Number);
+    return { shape, dtype: DTYPE[dtype] ?? dtype, device };
 }
 
 // -- NIfTI helpers ------------------------------------------------------------
@@ -161,7 +153,8 @@ async function parseNifti(file) {
          16: { dtype: 'f32', bytes: 4 },
          64: { dtype: 'f64', bytes: 8 },
         256: { dtype: 'i8',  bytes: 1 },
-        512: { dtype: 'i16', bytes: 2 }, // UINT16 → i16 (same bit pattern)
+        512: { dtype: 'u16', bytes: 2 },
+         32: { dtype: 'c32', bytes: 8 }, // complex64
     };
     const dtInfo = NIFTI_DTYPE_MAP[datatype];
     if (!dtInfo) throw new Error('Unsupported NIfTI datatype code: ' + datatype);
@@ -187,46 +180,6 @@ async function parseNifti(file) {
     return { shape, dtype: dtInfo.dtype, data };
 }
 
-/**
- * Build the HastyCompute GenericValue wire format for a tensor.
- *
- * Wire layout:
- *   [0]       tag           u8  = 1 (TENSOR)
- *   [1]       device_type   u8  = 0 (CPU)
- *   [2]       scalar_type   u8
- *   [3]       ndim          u8
- *   [4]       device_index  i8  = 0
- *   [5..8]    padding       4 bytes (struct alignment)
- *   [9..16]   total_elements  i64 LE
- *   [17..]    shape           ndim × i64 LE
- *   [17+ndim*8..] element bytes
- *
- * @param {number[]}  shape
- * @param {string}    dtype   hasty dtype string
- * @param {Uint8Array} data   raw element bytes (C-order, matching shape)
- * @returns {Uint8Array}
- */
-function buildTensorWireFormat(shape, dtype, data) {
-    const scalarType = DTYPE_SCALAR_TYPE[dtype];
-    if (scalarType === undefined) throw new Error('Unknown dtype: ' + dtype);
-    const ndim      = shape.length;
-    const totalElem = shape.reduce((a, b) => a * b, 1);
-    const hdrSize   = 1 + 16 + ndim * 8; // tag + SerializedTensorHeader + shape
-    const out       = new Uint8Array(hdrSize + data.byteLength);
-    const dv        = new DataView(out.buffer);
-    out[0] = 1;           // TENSOR tag
-    out[1] = 0;           // device_type = CPU
-    out[2] = scalarType;
-    out[3] = ndim;
-    out[4] = 0xFF;        // device_index = -1 (CPU alias)
-    // out[5..8] = 0 (padding, already zeroed)
-    dv.setBigInt64(9,  BigInt(totalElem), true); // total_elements at raw[9]
-    for (let i = 0; i < ndim; i++) {
-        dv.setBigInt64(17 + i * 8, BigInt(shape[i]), true); // shape at raw[17+i*8]
-    }
-    out.set(data, hdrSize);
-    return out;
-}
 
 /**
  * Convert a packed Uint16Array of IEEE 754 half-precision values to Float32Array.
@@ -257,8 +210,8 @@ function f16ArrayToF32(u16) {
  * @returns {ArrayBuffer}
  */
 function buildNifti1(shape, dtype, data) {
-    const DTYPE_TO_NIFTI  = { u8:2, i8:256, i16:4, i32:8, f32:16, f64:64 };
-    const DTYPE_TO_BITPIX = { u8:8, i8:8,   i16:16, i32:32, f32:32, f64:64 };
+    const DTYPE_TO_NIFTI  = { u8:2, i8:256, i16:4, u16:512, i32:8, f32:16, f64:64, c32:32 };
+    const DTYPE_TO_BITPIX = { u8:8, i8:8,   i16:16, u16:16, i32:32, f32:32, f64:64, c32:64 };
     const niftiType = DTYPE_TO_NIFTI[dtype];
     if (!niftiType) throw new Error('Cannot save dtype "' + dtype + '" as NIfTI-1');
 
@@ -292,6 +245,25 @@ function buildNifti1(shape, dtype, data) {
     return buf;
 }
 
+/**
+ * FFT / IFFT on the server with numpy-style norm: the server's fft is unnormalised and ifft scales by 1/N
+ * ("backward"); "ortho" and "forward" rescale afterwards. axesStr: comma-separated axes (negative allowed), empty = all.
+ */
+async function fftExec(cmd, x, norm, axesStr) {
+    const axes = axesStr.trim() ? axesStr.split(/[\s,]+/).filter(Boolean).map(Number) : null;
+    let y = (await run(cmd, [x], axes ? { axes } : {})).outputs[0];
+    if (norm === 'ortho' || norm === 'forward') {
+        const { shape } = await fetchMeta(x);
+        const nd = shape.length;
+        const n = (axes ?? shape.map((_, i) => i)).map(a => shape[(a + nd) % nd]).reduce((p, q) => p * q, 1);
+        const scale = norm === 'ortho' ? (cmd === 'fft' ? 1 / Math.sqrt(n) : Math.sqrt(n)) : (cmd === 'fft' ? 1 / n : n);
+        const tmp = y;
+        y = (await run('mul', [tmp], { value: scale }, cmd)).outputs[0];
+        client.delete(tmp).catch(() => {});
+    }
+    return [y];
+}
+
 // -- Node definitions ---------------------------------------------------------
 
 function registerNodes() {
@@ -303,16 +275,15 @@ function registerNodes() {
         static category = "IO";
         constructor() {
             super();
-            this.addWidget("text", "uuid (hex)", "", v => { this.properties.uuid = v; });
+            this.addWidget("text", "id (hex)", "", v => { this.properties.uuid = v; });
             this.addOutput("tensor", "tensor_uuid");
             this.size = [240, 60];
         }
         async executeAsync(_inputs) {
-            const hex = (this.properties.uuid ?? '').replace(/\s/g, '');
-            if (hex.length !== 32) throw new Error('UUID must be 32 hex chars');
-            const uuid = hexToUuid(hex);
-            this._execMeta = await fetchMeta(uuid);
-            return [uuid];
+            const hex = (this.properties.uuid ?? '').replace(/\s/g, '').toLowerCase();
+            if (!isId(hex)) throw new Error('id must be 32 hex chars');
+            this._execMeta = await fetchMeta(hex);
+            return [hex];
         }
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
@@ -341,7 +312,7 @@ function registerNodes() {
             super();
             this._cmdId = cmdId;
             this.addWidget("combo", "dtype",  "f32", v => { this.properties.dtype  = v; },
-                { values: ["f32","f64","c32","c64","i32","i64"] });
+                { values: ["f32","f64","c32","c64"] });
             this.addWidget("combo", "device", "cpu", v => { this.properties.device = v; },
                 { values: ["cpu","cuda:0"] });
             this.addWidget("text",  "shape",  "4,4", v => { this.properties.shape  = v; });
@@ -353,22 +324,22 @@ function registerNodes() {
                 this.properties.dtype  ?? 'f32',
                 this.properties.device ?? 'cpu',
                 this.properties.shape  ?? '4,4');
-            return await execute(this._cmdId, [], opts);
+            return (await run(this._cmdId, [], opts)).outputs;
         }
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
 
     class RandTensorNode extends TensorCreationBase {
         static title = "Rand Tensor";  static category = "Create";
-        constructor() { super(COMMAND_IDS.rand); }
+        constructor() { super('rand'); }
     }
     class ZerosTensorNode extends TensorCreationBase {
         static title = "Zeros Tensor"; static category = "Create";
-        constructor() { super(COMMAND_IDS.zeros); }
+        constructor() { super('zeros'); }
     }
     class OnesTensorNode extends TensorCreationBase {
         static title = "Ones Tensor";  static category = "Create";
-        constructor() { super(COMMAND_IDS.ones); }
+        constructor() { super('ones'); }
     }
 
     // Binary arithmetic --------------------------------------------------------
@@ -385,26 +356,26 @@ function registerNodes() {
         async executeAsync([a, b]) {
             if (!a) throw new Error('Input A not connected');
             if (!b) throw new Error('Input B not connected');
-            return await execute(this._cmdId, [a, b]);
+            return (await run(this._cmdId, [a, b])).outputs;
         }
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
 
     class AddNode  extends BinaryArithBase {
         static title = "Add";  static category = "Math";
-        constructor() { super(COMMAND_IDS.add); }
+        constructor() { super('add'); }
     }
     class SubNode  extends BinaryArithBase {
         static title = "Sub";  static category = "Math";
-        constructor() { super(COMMAND_IDS.sub); }
+        constructor() { super('sub'); }
     }
     class MultNode extends BinaryArithBase {
         static title = "Mult"; static category = "Math";
-        constructor() { super(COMMAND_IDS.mult); }
+        constructor() { super('mul'); }
     }
     class DivNode  extends BinaryArithBase {
         static title = "Div";  static category = "Math";
-        constructor() { super(COMMAND_IDS.div); }
+        constructor() { super('div'); }
     }
 
     // Unary arithmetic ---------------------------------------------------------
@@ -419,18 +390,18 @@ function registerNodes() {
         }
         async executeAsync([a]) {
             if (!a) throw new Error('Input not connected');
-            return await execute(this._cmdId, [a]);
+            return (await run(this._cmdId, [a])).outputs;
         }
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
 
     class NegNode extends UnaryArithBase {
         static title = "Neg"; static category = "Math";
-        constructor() { super(COMMAND_IDS.neg); }
+        constructor() { super('neg'); }
     }
     class AbsNode extends UnaryArithBase {
         static title = "Abs"; static category = "Math";
-        constructor() { super(COMMAND_IDS.abs); }
+        constructor() { super('abs'); }
     }
 
     // Scalar (no backend) ------------------------------------------------------
@@ -454,10 +425,16 @@ function registerNodes() {
             super();
             this.addInput("in",      "tensor_uuid");
             this.addOutput("kspace", "tensor_uuid");
-            this.addWidget("combo", "norm", "ortho", null,
-                { values: ["none","ortho","forward","backward"] });
-            this.size = [160, 70];
+            this.addWidget("combo", "norm", "ortho", v => { this.properties.norm = v; },
+                { values: ["backward","ortho","forward"] });
+            this.addWidget("text", "axes (empty: all)", "", v => { this.properties.axes = v; });
+            this.size = [190, 96];
         }
+        async executeAsync([x]) {
+            if (!x) throw new Error('Input not connected');
+            return await fftExec(this.constructor.title === 'FFT' ? 'fft' : 'ifft', x, this.properties.norm ?? 'ortho', this.properties.axes ?? '');
+        }
+        onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
     class IFFTNode extends LG.LGraphNode {
         static title = "IFFT"; static category = "FFT";
@@ -465,10 +442,16 @@ function registerNodes() {
             super();
             this.addInput("kspace", "tensor_uuid");
             this.addOutput("out",   "tensor_uuid");
-            this.addWidget("combo", "norm", "ortho", null,
-                { values: ["none","ortho","forward","backward"] });
-            this.size = [160, 70];
+            this.addWidget("combo", "norm", "ortho", v => { this.properties.norm = v; },
+                { values: ["backward","ortho","forward"] });
+            this.addWidget("text", "axes (empty: all)", "", v => { this.properties.axes = v; });
+            this.size = [190, 96];
         }
+        async executeAsync([x]) {
+            if (!x) throw new Error('Input not connected');
+            return await fftExec(this.constructor.title === 'FFT' ? 'fft' : 'ifft', x, this.properties.norm ?? 'ortho', this.properties.axes ?? '');
+        }
+        onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
     class NUFFTNode extends LG.LGraphNode {
         static title = "NUFFT"; static category = "FFT";
@@ -522,8 +505,8 @@ function registerNodes() {
             this.addInput("tensor", "tensor_uuid");
             this.addOutput("compressed", "tensor_uuid");
             this.addOutput("config",     "comprep_config");
-            this.addWidget("text", "a",           "0.0",    v => { this.properties.a           = v; });
-            this.addWidget("text", "b",           "1.0",    v => { this.properties.b           = v; });
+            this.addWidget("text", "a (empty: p1)",  "",    v => { this.properties.a           = v; });
+            this.addWidget("text", "b (empty: p99)", "",    v => { this.properties.b           = v; });
             this.addWidget("text", "clampa",      "",       v => { this.properties.clampa      = v; });
             this.addWidget("text", "clampb",      "",       v => { this.properties.clampb      = v; });
             this.addWidget("text", "focus",       "1.0",    v => { this.properties.focus       = v; });
@@ -558,8 +541,8 @@ function registerNodes() {
             if (!uuid) throw new Error('No tensor connected');
             const cfg    = this._buildConfig();
             this._lastConfig = cfg;
-            const result = await execute(COMMAND_IDS.compress_ui16_config, [uuid], JSON.stringify(cfg));
-            return [result[0], cfg];
+            const r = await run('comprep_u16', [uuid], cfg, 'comprep');
+            return [r.outputs[0], JSON.parse(r.message)];     // the full config (auto values filled in)
         }
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
@@ -576,63 +559,21 @@ function registerNodes() {
             this.addWidget("text", "Comprep Config JSON", '', v => { this._configStr = v; });
             this.addWidget("button", "Open Viewer", null, () => {
                 if (!this._uuid) { alert('Connect a tensor and run the graph first.'); return; }
-                let url = '../orthoslicer/?uuid=' + uuidToHex(this._uuid);
-                const cfg = this._effectiveConfigStr();
-                if (cfg) url += '&config=' + encodeURIComponent(cfg);
+                let url = '../orthoslicer/index.html?id=' + this._uuid;
+                if (this._wiredConfig) url += '&prepped=1&config=' + encodeURIComponent(JSON.stringify(this._wiredConfig));
+                else if (this._configStr.trim()) url += '&config=' + encodeURIComponent(this._configStr.trim());
                 window.open(url, '_blank');
             });
             this.size = [220, 110];
         }
-        _effectiveConfigStr() {
-            if (this._wiredConfig) return JSON.stringify(this._wiredConfig);
-            return this._configStr.trim();
-        }
+        /** the viewer builds the comprep display copy itself; a wired config means the input already is one */
         async executeAsync([uuid, config]) {
-            if (uuid && !config) {
-                // fetchMetaString: metadata only, no tensor download, cleans temp
-                const meta = await fetchMetaString(uuid);
-                if (meta) {
-                    const AUTOCOMPRESS = new Set(['f32','f64','f16','i8','u8','i16','i32','i64']);
-                    if (AUTOCOMPRESS.has(meta.dtype)) {
-                        // Convert everything to f32 first:
-                        // - fetchSliceData only correctly reads f32 scalars
-                        // - compress_ui16_config needs float arithmetic
-                        // - min/max on non-f32 returns wrong dtype scalar
-                        let workUuid  = uuid;
-                        let f32TempId = null;
-                        if (meta.dtype !== 'f32') {
-                            const opts = makeTensorOptions('f32', meta.device, meta.shape.join(','));
-                            const convIds = await execute(COMMAND_IDS.to, [uuid], opts);
-                            if (convIds[0]) { workUuid = convIds[0]; f32TempId = convIds[0]; }
-                        }
-
-                        const [minIds, maxIds] = await Promise.all([
-                            execute(COMMAND_IDS.min, [workUuid]),
-                            execute(COMMAND_IDS.max, [workUuid]),
-                        ]);
-                        const [minRes, maxRes] = await Promise.all([
-                            fetchSliceData(minIds[0], ''),
-                            fetchSliceData(maxIds[0], ''),
-                        ]);
-                        [...minIds, ...maxIds].forEach(id => deleteValue(id).catch(() => {}));
-
-                        const cfg = { a: minRes.data[0], b: maxRes.data[0] };
-                        const compressed = await execute(COMMAND_IDS.compress_ui16_config, [workUuid], JSON.stringify(cfg));
-                        if (f32TempId) deleteValue(f32TempId).catch(() => {});
-
-                        this._uuid        = compressed[0];
-                        this._wiredConfig = cfg;
-                        return [this._uuid];
-                    }
-                }
-            }
-            if (uuid)   this._uuid        = uuid;
-            if (config) this._wiredConfig = config;
+            this._uuid        = uuid ?? null;
+            this._wiredConfig = config ?? null;
             return this._uuid ? [this._uuid] : [];
         }
+        onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
-
-    // NIfTI IO -----------------------------------------------------------------
 
     /**
      * NiftiLoadNode — browse for a .nii/.nii.gz file, upload it to the server,
@@ -682,13 +623,9 @@ function registerNodes() {
                 this._pendingFile = null;
 
                 const { shape, dtype, data } = await parseNifti(file);
-                // Pad shape to 5D (T,E,Z,Y,X) with leading 1s.
-                // RemoteVolume always slices with [t,e,z,:,:] — a 3D tensor
-                // would get INVALID_ARGUMENT on the server for those 5 indices.
-                // Raw bytes are C-order contiguous, so prepending 1s is safe.
-                while (shape.length < 5) shape.unshift(1);
-                const wireBytes = buildTensorWireFormat(shape, dtype, data);
-                const uuid      = await uploadValue(wireBytes);
+                const tensor    = HTensor.fromBytes(DTYPE[dtype], shape, data);
+                const axes      = shape.map((_, i) => ['x', 'y', 'z', 't', 'e'][shape.length - 1 - i] ?? `d${i}`);
+                const uuid      = await client.put(tensor, { name: file.name, metadata: { source: file.name, axes } });
                 this._uuid      = uuid;
                 this._execMeta  = { dtype, shape, device: 'cpu' };
                 return [uuid];
@@ -743,29 +680,15 @@ function registerNodes() {
         }
 
         async _doSave() {
-            const raw  = await fetchRaw(this._uuid);
-            // Parse wire format: tag(1) + header(16) + shape(ndim*8) + data
-            if (raw[0] !== 1) throw new Error('Not a tensor GV');
-            const ndim     = raw[3];
-            const dv       = new DataView(raw.buffer, raw.byteOffset + 1);
-            const dtype    = Object.entries(DTYPE_SCALAR_TYPE)
-                .find(([, v]) => v === raw[2])?.[0];
-            if (!dtype) throw new Error('Unknown scalar type: ' + raw[2]);
-            const shape    = [];
-            for (let i = 0; i < ndim; i++) {
-                shape.push(Number(dv.getBigInt64(16 + i * 8, true)));
-            }
-            const dataStart = 1 + 16 + ndim * 8;
-            let   data      = raw.subarray(dataStart);
-
-            // NIfTI-1 has no f16; promote to f32
-            let saveDtype = dtype;
-            if (dtype === 'f16') {
-                const u16 = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2);
-                data      = new Uint8Array(f16ArrayToF32(u16).buffer);
+            const t = await client.get(this._uuid, { codec: 'lz4' });
+            if (!(t instanceof HTensor)) throw new Error('value is not a tensor');
+            const shape   = t.shape;
+            let saveDtype = SHORT[t.dtype];
+            let data      = t.bytes;
+            if (saveDtype === 'f16') {
+                data      = new Uint8Array(f16ArrayToF32(new Uint16Array(t.data.buffer, t.data.byteOffset, t.numel)).buffer);
                 saveDtype = 'f32';
             }
-
             const niftiBytes = buildNifti1(shape, saveDtype, data);
             const filename   = (this.properties.filename ?? 'tensor.nii')
                 .replace(/\.gz$/i, '').replace(/\.nii$/i, '') + '.nii';
@@ -892,13 +815,7 @@ function setupToolbar(graph, lgCanvas) {
         btnBankMeta.disabled    = true;
         btnBankMeta.textContent = 'Loading…';
         try {
-            const { success, error_msg, uuids } = await bankQuery(0);
-            if (!success) { alert('BankQuery failed: ' + error_msg); return; }
-            const entries = await Promise.all(uuids.map(async uuid => {
-                const hex  = uuidToHex(uuid);
-                const meta = await fetchGVMetadata(uuid);
-                return { uuid: hex, meta };
-            }));
+            const entries = await client.list();
             showBankModal(entries);
         } catch (e) {
             alert('Bank meta error: ' + e.message);
@@ -914,9 +831,8 @@ function setupToolbar(graph, lgCanvas) {
         btnBankClear.disabled    = true;
         btnBankClear.textContent = 'Clearing…';
         try {
-            const { success, error_msg, uuids } = await bankQuery(0);
-            if (!success) { alert('BankQuery failed: ' + error_msg); return; }
-            await Promise.all(uuids.map(uuid => deleteValue(uuid)));
+            const entries = await client.list();
+            await Promise.all(entries.map(e => client.delete(e.id)));
         } catch (e) {
             alert('Clear bank error: ' + e.message);
         } finally {
@@ -977,7 +893,6 @@ function showBankModal(entries) {
 // -- Init ---------------------------------------------------------------------
 
 async function init() {
-    await initCommandIds();
     registerNodes();
 
     const graph    = new LG.LGraph();
@@ -1012,8 +927,52 @@ async function init() {
         note.properties.text =
             "Drag nodes from the sidebar or double-click them.\n" +
             "Connect outputs to inputs, then press Run\n" +
-            "to execute against the C++ backend.";
+            "to execute on the hasty server.";
         graph.add(note);
+    }
+    if (new URLSearchParams(location.search).get('selftest') === '1') selfTest(graph, _lgCanvas);
+}
+
+/**
+ * ?selftest=1: build Rand → Add(·, Ones) → FFT(ortho) → IFFT(ortho) → Sub(·, sum) and Rand → Compress UI16 →
+ * Ortho Slicer, run the graph, verify the round trip on the server, and report JSON in <pre id="selftest">
+ * (used by the headless browser test).
+ */
+async function selfTest(graph, canvas) {
+    const out = document.createElement('pre');
+    out.id = 'selftest';
+    document.body.appendChild(out);
+    const report = (r) => { out.textContent = JSON.stringify(r); };
+    window.addEventListener('error', (e) => report({ ok: false, errors: [`uncaught: ${e.message}`] }));
+    window.addEventListener('unhandledrejection', (e) => report({ ok: false, errors: [`unhandled: ${e.reason}`] }));
+    report({ stage: 'building graph' });
+    try {
+        const add = (type, props = {}) => { const n = LG.createNode(type); Object.assign(n.properties, props); graph.add(n); return n; };
+        const rand = add('Create/Rand Tensor', { shape: '4,6,8', dtype: 'c32' });
+        const ones = add('Create/Ones Tensor', { shape: '4,6,8', dtype: 'c32' });
+        const sum = add('Math/Add');
+        const fft = add('FFT/FFT', { norm: 'ortho', axes: '-1,-2' });
+        const ifft = add('FFT/IFFT', { norm: 'ortho', axes: '-1,-2' });
+        const diff = add('Math/Sub');
+        const comp = add('Viz/Compress UI16', { focus: '0.9', right_mode: 'log', right_logc: '10' });
+        const view = add('Viz/Ortho Slicer');
+        rand.connect(0, sum, 0); ones.connect(0, sum, 1);
+        sum.connect(0, fft, 0); fft.connect(0, ifft, 0);
+        ifft.connect(0, diff, 0); sum.connect(0, diff, 1);
+        rand.connect(0, comp, 0); comp.connect(0, view, 0); comp.connect(1, view, 1);
+        report({ stage: 'running graph' });
+        await runGraph(graph, canvas);
+        report({ stage: 'checking results' });
+        const nodes = [rand, ones, sum, fft, ifft, diff, comp, view];
+        const errors = nodes.filter((n) => n._execStatus !== 'done').map((n) => `${n.title}: ${n._execError}`);
+        const d = await client.get(diff._execResult[0]);
+        const s = await client.get(sum._execResult[0]);
+        let maxDiff = 0, maxSum = 0;
+        for (let i = 0; i < d.data.length; i++) { maxDiff = Math.max(maxDiff, Math.abs(d.data[i])); maxSum = Math.max(maxSum, Math.abs(s.data[i])); }
+        const q = await client.get(comp._execResult[0]);
+        report({ ok: errors.length === 0 && maxDiff < 1e-5 * maxSum && q.dtype === 'uint16', errors, maxDiff, maxSum, comprep: comp._execResult[1], viewerId: view._uuid, meta: sum._execMeta });
+    } catch (e) {
+        report({ ok: false, errors: [String(e.stack ?? e)] });
     }
 }
 

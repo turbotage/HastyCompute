@@ -332,3 +332,546 @@ L=8 order 2 at 180×180×28, 2.2e5 samples, 12 coils: 31.7 / 30.1 ms (first vers
 Status, numbers, dead ends and the next levers: `../research/concomitant_segmented_first_order.md` §7.
 - Next: temporal interpolation over frames (channels = segments × frame slots), accuracy tests vs direct sums, P²nP
   integration; multi-channel pruned FFT with fused pad/crop (≈ half of the call is FFT/pad/crop).
+
+## 18. Operator validation and Bluestein (2026-11-03)
+- `hasty-fft`: Bluestein (chirp-z) core for axis lengths with a prime factor > 13 (`bluestein.rs`): same load/store
+  semantics as the mixed-radix kernel (strides, pruning, pre/post/polynomial diagonals, scale, accumulate, fused
+  convolution), core = FFT_m · B̂ · IFFT_m in shared memory, m ≥ 2n − 1 smooth. f32 1.2–1.9e-7, f64 ~1e-15 (tests
+  `tests/bluestein.rs`, `conv_bluestein_lengths`). The fused multi-field Z pass declines such lengths (unfused path).
+- Operator validation on RACLETTE n001 (`tools/raclette/export_case.py` → `simimg` → `opval`): dense model-exact data
+  with B0 + concomitant + GNL; full model 4.3e-3 image error (CG-limited), velocity RMSE 2.4 mm/s, bias 0.0000.
+
+## 19. Learned prior: equivariant 7-point denoiser (2026-11-03)
+Design: `../research/denoiser_design.md` §10; training data: `../research/cfd_training_data.md`.
+
+**Data**
+- `tools/raclette/build_training.py` streams RACLETTE into `../data/hasty/train/raclette`: download, fp16 cases, delete
+  the raw files.
+- `index.json` splits by background patient.
+- `tools/raclette/train_figs.py` writes QA montages.
+
+**Python** (`tools/denoiser`, plain PyTorch, no equivariance library):
+- `oh.py`: O_h / O equivariant kernels for monomial field types. Orbits are computed once; each layer is a signed gather
+  + conv3d / conv_transpose3d / einsum, and `freeze()` makes the weights constants.
+- `model.py`: 7p lift to reference-relative features, then a bias-free regular-field U-Net with temporal mixing and
+  multiplicative FiLM on (VENC_lo, VENC_hi, h), then the inverse lift. `denoise_volume` evaluates the whole volume or
+  exact overlap tiles.
+- `dataset.py`: encode-aligned on-the-fly B-spline patches (RACLETTE encodes are about 20° oblique to its grid). The
+  `Patches` stage is device-agnostic, meant to run on the GPU.
+- `train.py`: run dirs with metrics, checkpoints and figures.
+- `export.py`: TorchScript; `torch.export` .pt2 with dynamic shapes; AOTInductor package; reference volume for Rust.
+- `_env.py`: torch / inductor / triton caches and TMPDIR go to `target/`.
+
+**Tests** (`test_model.py`, `test_dataset.py`, CPU)
+- Equivariance and exactness, all at machine precision:
+  - kernel constraint for every g ∈ O_h and O;
+  - O_h equivariance in raw 7p space (incl. the flip conjugation);
+  - positive homogeneity D(µx) = µD(x);
+  - cyclic time shift;
+  - untrained model = identity;
+  - tiled = whole volume.
+- Export paths:
+  - TorchScript traced at one shape and run at another: exact;
+  - `torch.compile` (CPU inductor): exact;
+  - torch.export .pt2 at a new shape: exact vs TorchScript.
+- 3-level U-Net: structural receptive field ±26 voxels / ±3 frames.
+
+**Rust**
+- `hasty-denoise` (workspace, torch-free) converts layouts: the x-fastest stack is read as C-order [Z, Y, X], which is
+  exact thanks to O_h equivariance; encode pairs are reordered, axes zero-padded to ≡ 1 mod 2^(levels−1), and the
+  exp(−ikv) convention of hasty-mrsim is mapped by the exact involution x_e → conj(x_e) x_ref/conj(x_ref).
+- `hasty-denoise-torch` is a separate cargo workspace: a C ABI shim (`csrc/shim.cpp`, C++20) over libtorch's C++ API,
+  compiled against the venv's libtorch.
+  - It loads TorchScript or an AOTInductor package. Both reproduce Python on the reference volume with rel. error
+    9e-7, including the −1 phase-convention path.
+  - tch-rs 0.26 is unusable: it only supports libtorch 2.13, its generated shim does not compile against 2.14 (the
+    venv's torch, pinned by TotalSegmentator / nnU-Net / torchvision), and it only loads TorchScript, which is
+    deprecated upstream.
+  - Build: `CARGO_HOME=$PWD/target/cargo-home CARGO_TARGET_DIR=$PWD/target/torch TMPDIR=$PWD/target/tmp cargo test --release --manifest-path crates/hasty-denoise-torch/Cargo.toml`
+
+**hasty-mrsim:** `Encoding::DualVenc { venc_hi }` (7 encodes in the denoiser layout) and `sim4d --venc-hi`.
+
+**Not done yet**
+- AOTI CUDA package (export on CUDA, bf16);
+- running the denoiser on the P²nP CUDA stream with device pointers instead of the host round trip.
+- Done since: training (§24), `recon_p2np` with any encoding and the learned prior (§24).
+
+## 20. Services, IO, visualisation: transition plan for the C++ server stack (2026-11-03)
+
+### Inventory of the C++ / Python / web side
+
+| C++ module | lines | what it does |
+|---|---|---|
+| `generic_value` | ~1700 | value tree None / Tensor / Vector / Dict / Tuple / String; chunked binary wire format; slice-path language (`["key"][0][1:5, :, ...]`); HDF5 (gv_type attributes) and blosc2 file formats |
+| `server` | ~1400 | `hasty.HastyService` (`protos/hasty_service.proto`) |
+| `io` | ~600 | NIfTI read/write, blosc2 streams, HDF5 → JSON, default directories |
+| `python` | ~270 | runs venv scripts as subprocesses |
+| `viz` | ~470 | plotlypp line/heatmap figures; `orthoslicer(volume)` |
+| `threading` | ~1100 | thread pool, dependency-graph pool, storage pool, thread streams, CUDA load balancer |
+| `tensor` | 14 files | libtorch tensor wrapper, comprep (ui16 quantisation for transfer), disk-cached tensors, masking |
+| `plotting_website` | ~3700 JS | orthoslicer (WebGPU/WGSL, lazy remote volume with ring-buffer slice cache); node editor (litegraph graph of commands); hand-written grpc-web client (Push, Read, ExecuteCommand, BankQuery, Delete, metadata) |
+| `python/lib/hastycompute` | | grpcio client; GenericValue (de)serialiser |
+
+Details of the `server` module:
+- **RPCs:** Push / Read / Write are chunked streams; Read and Write accept a slice string. Also BankQuery, ExecuteCommand (int id + options string + input UUIDs → output UUIDs), Delete, and metadata read / write / delete.
+- **Value bank:** UUID → (value, metadata string, per-key hooks).
+- **Command registry:** int ids; base arithmetic / creation / reduction / FFT and ui16 compress commands.
+- **HTTP side:** cpp-httplib HTTPS server serving the website, plus a hand-rolled grpc-web proxy over a loopback channel.
+
+Details of the `python` module:
+- It pre-registers output UUID slots and a log "mailbox" value; the script writes back over gRPC.
+- NIfTI registration.
+
+Details of `orthoslicer(volume)`:
+- It pushes the volume to the bank, writes metadata, and opens `https://localhost:<port>/orthoslicer/index.html?uuid=…`.
+
+### Rust targets (CPU-only work: can proceed while the GPU is off limits)
+
+1. **`hasty-value`.** `enum Value { None, Tensor, List, Dict, Tuple, Str }`.
+   - `Tensor` = dtype (torch ScalarType codes) + shape + host bytes or a device buffer.
+   - Serialisation is byte-compatible with the C++/Python GenericValue wire format, and the slice-path parser is ported.
+   - comprep ui16 quantisation lives here too.
+   - Tested against `python/lib/hastycompute/generic_value.py`.
+2. **`hasty-io`.**
+   - One N-D npy reader/writer (C/F order, complex) replacing the ad-hoc readers in hasty-phantom / hasty-recon.
+   - NIfTI.
+   - Zarr v3 via `zarrs` for our own chunked, compressed volumes. It supports partial reads (what the viewer's slice fetching wants), is readable from Python, and replaces blosc `.gv` / HDF5 dumps.
+   - Content-addressed disk cache (CachedTensor).
+   - HDF5 (`hdf5-metno`) only behind a feature: ISMRMRD raw data and legacy gv files.
+   - Later: twix / ISMRMRD readers for scanner data.
+3. **`hasty-server`.**
+   - tonic + prost on the *same proto*, so the existing website and Python client work unchanged.
+   - axum on the same port: static files (`tower-http` ServeDir) and `tonic-web` for unary/server-streaming. tonic-web cannot do client streaming, so a small axum route buffers grpc-web frames for Push / Write, which the website uses, as the C++ proxy did.
+   - Bank = `RwLock<HashMap<Uuid, Entry>>` plus a `broadcast` event channel. The channel replaces per-key callbacks; the script log mailbox becomes a subscriber.
+   - Registry keyed by name, with stable legacy ids served by `get_available_commands`.
+   - Commands run on a tokio blocking pool (CPU) or on one worker thread per GPU that owns its CUDA context and streams (actor + job queue). This replaces the thread pools and the load balancer.
+   - Additive proto extensions: job submit / status and a server-streaming `Watch` (bank events, recon progress).
+   - `tracing` logs to `data/hasty/logs`.
+   - TLS optional (rustls). `http://localhost` is already a secure context for WebGPU; reach a remote GPU box through an SSH tunnel.
+4. **Scripts / Python.**
+   - Same subprocess pattern: server address and output UUIDs passed in the environment; logs via the event channel.
+   - Later a pyo3 module, so research scripts call the Rust operators in-process (numpy zero-copy).
+5. **Viz.**
+   - `viz::show(value, meta)` → bank + viewer URL, from any binary; recon runs can publish iterates live.
+   - matplotlib run-dir figures stay for reports.
+   - The website gains a run browser (metrics, figures) and recon/denoiser nodes once the GPU commands exist.
+
+### Order
+1. hasty-value + hasty-io npy/NIfTI, with cross-language round-trip tests.
+2. hasty-server serving the unchanged website and Python client, with base commands on the host; e2e tests with the Python client.
+3. Zarr volumes and the viewer on runs.
+4. GPU commands (FFT, NUFFT, P²nP, denoiser) through GPU workers.
+5. pyo3; scanner-data readers.
+
+## 21. Values, server and LAN viewer: implemented (2026-11-03)
+
+**`hasty-value`**
+- Value tree: None / Bool / Int / Float / Str / Tensor / List / Tuple / Dict.
+- Streaming, block-compressed format v1 (`crates/hasty-value/FORMAT.md`):
+  - independent blocks, each with its own header (codec, filter, word size, raw length, compressed length, optional CRC32);
+  - filters: byte shuffle (complex values by component) and integer delta;
+  - codecs: stored, LZ4, zstd; raw fallback for blocks that don't compress;
+  - parallel encoding in bounded groups;
+  - an incremental decoder that decodes complete blocks as soon as they arrive (in parallel when several are ready).
+- Also: numpy-style slice paths with assignment, u16 display quantisation, N-D npy (C or Fortran order).
+- `hvtool` (info / digest / convert / gen).
+- Sizes: smooth complex64 volume, shuffle + LZ4 63 % of raw, zstd 60 %; u16 display volume, delta + shuffle + LZ4 26 %.
+
+**Cross-language implementations**, verified against Rust files by digest, both directions:
+- Python `python/lib/hastycompute/value_format.py`, all codecs;
+- JS `plotting_website/common/value_format.js`, stored and LZ4 (zstd is rejected in the browser).
+
+**`hasty-server`** (proto `hasty.v2`, `crates/hasty-server/proto/hasty.proto`; codegen via protox, no protoc)
+- One TLS port serves native gRPC (HTTP/2), gRPC-web (tonic-web; browsers use `PutUnary`), the website (`ServeDir`) and `/hasty-ca.pem`.
+- Bank with copy-on-write slice writes and broadcast events; `Watch` streams them to clients.
+- Name-keyed command registry on the blocking pool: summary, slice, quantize_u16, stats, abs, real, imag, angle, neg, conj, add, sub, mul, div, zeros, ones, rand, fft, ifft (rustfft).
+- TLS: a persistent local CA in `data/hasty/certs` (created once; import `ca.pem` once per viewing machine) signs a fresh server certificate each start for localhost, the host name and every interface IP.
+- Binaries:
+  - `hasty-serve [--bind 0.0.0.0:8443] [--no-tls]`;
+  - `hasty-show <file.npy|.hv> [--slice …]`.
+- `viz::show(name, value)` / `viz::volume(name, dims, data)` from any binary: publishes to `HASTY_SERVER`, or to a server already running locally, or starts an embedded LAN server. `viz::wait()` keeps it alive.
+- Async Rust `client::Client`.
+
+**Clients and website**
+- Python `hastycompute.v2` (`Client`, `show`; stubs via `v2/generate.sh`).
+- Browser `plotting_website/common/hasty_client.js` (minimal protobuf + gRPC-web over fetch, incremental value decoding).
+- The orthoslicer is ported:
+  - `?id=` (legacy `?uuid=`), `&path=` for a sub-value, `&mode=` for complex data;
+  - u16 display copy plus `stats` for the window;
+  - LZ4 + delta slice fetches;
+  - follows `show` events, reloads on updates.
+- The landing page lists the bank live and links the CA.
+
+**Tests**
+- `cargo test -p hasty-value -p hasty-server`.
+- `python -I python/tests/value_format/test_value_format.py`.
+- `node plotting_website/common/test_value_format.js`.
+- With a running `hasty-serve`:
+  - `node plotting_website/common/test_client.js https://<lan-ip>:<port>` (`NODE_EXTRA_CA_CERTS=ca.pem`);
+  - `python -I python/tests/client/test_client_v2.py`.
+- `test_orthoslicer_flow.js` replays the viewer's calls. On RACLETTE n001 it fetches a display slice in 7 ms with a dequantisation error of half a step.
+
+**Pending**
+- The node editor still speaks the old C++ protocol and value layout (its NIfTI upload and raw parsing need porting to the v2 client).
+- GPU commands via per-device workers.
+- `recon_p2np --viz` (iterates live).
+- Zarr volumes.
+- Build note: new crates were fetched into `CARGO_HOME=rustlib/target/cargo-home`.
+
+## 22. comprep, node editor, compressed training store (2026-11-04)
+
+**comprep** (`hasty_value::quant`): exact port of the C++ `tensor_comprep`, plus the inverse of the orthoslicer
+shader.
+- Transfer: piecewise `[clampa, a] → [0, t0]` (linear / gamma / log tail), `[a, b] → [t0, t1]` linear,
+  `[b, clampb] → [t1, 1]` tail; `t0 = (1 − focus)/2`.
+- Auto config as in C++: p1 / p99 window, [min, max] clamp, ≤ 16-bit integers mapped directly.
+- Server commands `comprep_u16` (full or partial config; the message returns the full one) and `decomprep_u16`.
+- The orthoslicer passes `?config=` and `?prepped=1`.
+- The earlier linear `quantize_u16` and the viewer's use of it were wrong (the window was decoded as the full range),
+  and are replaced.
+
+**Node editor:** ported to v2 (`node_editor/src/hasty.js`; ids are hex strings; the old gRPC client is deleted).
+- FFT / IFFT nodes now work (numpy-style `norm`, axes).
+- NIfTI load / save, uint16 and complex64 included.
+- Compress UI16 → `comprep_u16`.
+- Bank meta / clear go through List / Delete.
+- `?selftest=1` runs a test graph. `tools/web/headless.py` drives headless Chrome over the DevTools pipe (software
+  rendering) and reports it: whole graph ok, FFT/IFFT round trip 1.2e-7.
+- Headless WebGPU canvases fail even with SwiftShader, so orthoslicer rendering can only be checked in a real browser.
+  Its data path (comprep, stats, slice streaming) passes headless.
+
+**Chunked tensors** (format tag 9; `FORMAT.md`): N-D chunks with an index.
+- `encode_with(value, o, plan)`.
+- Random access: `LazyFile::read_box` in Rust, `open_lazy()[...]` in Python. The Python fast path calls the Rust
+  reader through `crates/hasty-value-capi` (ctypes, one thread pool per process); a pure-Python fallback remains.
+- A training patch box (50×50×26 voxels × 12 frames × 7 × 2, f16, 21.8 MB) reads in 80 ms on 1 thread and 21 ms on
+  8 (Python and Rust alike).
+
+**RACLETTE store:** `hvtool pack-tree` → one `case.hv` per case.
+- zstd-19 + byte shuffle; `x` chunked `[16,16,16,1,E,2]`, `mask` `[16,16,16,1]`.
+- Verified byte-exact before the npy files are deleted; `case.json` gains a `storage` section.
+- `dataset.py` and `train_figs.py` read it lazily (npy fallback).
+- Done 2026-11-04 (8 threads, 39 min): all 314 cases verified, 114.7 GB → 76.4 GB (0.666); free disk 120 → 154 GB.
+- Still npy: the breathing motion fields of the 200 image-less bins (2.1 GB).
+- `test_dataset.py` passes on case.hv. Worker cost is 182 ms/sample including the first open of each case, against
+  82 ms from npy in the page cache. Use ≥ 8 DataLoader workers (HASTY_VALUE_THREADS=2–4 each).
+
+Lossless compression measured on fp16 images with in-vivo backgrounds:
+
+| setting | ratio |
+|---|---|
+| shuffle + LZ4 | ≈ 0.91 |
+| shuffle + zstd-3 | ≈ 0.87 |
+| shuffle + zstd-19 | ≈ 0.72 per case with mask / maps (0.78 for x alone) |
+
+- Bitshuffle gains < 1 % at level 19, so it isn't implemented.
+- Lossy option (not applied): rounding the fp16 mantissa to 8 / 7 bits gives 0.64 / 0.57. The error stays below the
+  training noise: median relative error 0.07 / 0.15 %, phase error ≤ 2 / 4 mrad.
+
+## 23. Interruptible, resumable runs (2026-11-04)
+
+Every long task can be paused and continued: Ctrl-C, SIGTERM or `touch <run dir>/STOP` → finish the current step,
+write a checkpoint, exit 0. The same command line resumes.
+
+**Denoiser training** (`tools/denoiser/train.py`)
+- The run directory is `runs/denoiser/<name>` (stable); it auto-resumes from `ckpt_last.pt`. `run.json` holds the
+  hyperparameters, so a resume can't silently change them. `--fresh` starts over.
+- Atomic checkpoints every `--ckpt-every` steps, plus `status.json` (iteration / target / it/s / ETA).
+- The sample stream is deterministic: sample k is a function of (seed, k), so the resumed stream continues exactly.
+- DataLoader workers ignore SIGINT.
+- Tested: SIGINT at 21, STOP at 43, completion at 80, no errors.
+
+**Reconstruction** (`hasty_recon::checkpoint::RunCtl`)
+- State files `state_<name>.hv` (LZ4, atomic). `P2np::run_from` saves k, x, x_prev, g_prev (the ZMSHR1 secant pair)
+  and α. `cg::pcgls_ctl` saves x, r, p, γ, ‖s₀‖ and its history.
+- `recon_p2np` defaults to a stable run directory:
+  - warm start resumable per encode (finished encodes kept);
+  - each preconditioner / κ configuration resumes and appends its metrics CSV;
+  - finished configurations are skipped;
+  - `--fresh`, `--ckpt-every n` (default 10).
+- The LLR cycle-spinning shift is a function of the iteration (`Llr::set_iteration`), so it repeats after a resume.
+- GPU reductions are not bit-deterministic: λ_max differs in the 7th digit between runs, and ZMSHR1 amplifies this to
+  ~1.4 % max image difference after 12 iterations, between two *uninterrupted* runs. A resumed run must agree with an
+  uninterrupted one to within that spread.
+- GPU sharing: training (12.6 GB) and a full recon (> 11 GB) don't fit together on 24 GB. Pause training with its
+  STOP file, run the reconstruction, then rerun the training command.
+
+## 24. Denoiser training restart, 7-point reconstruction, learned prior plugin (2026-11-04)
+
+**Training NaN (first 7p_v1 run, NaN from iteration ~340)**
+- Cause 1: `inv_abs` (1/|x_ref| in the lift / unlift) has derivative ~|z|⁻³. Near-zero (but nonzero) reference voxels
+  — resampled patch edges outside the FOV — overflow it; 0 · ∞ then turns masked-out gradients into NaN.
+  Fix: |z|² is floored at 1e-12 × its per-sample mean. That keeps degree-2 homogeneity and O_h invariance exact, and
+  tiling stays exact (tests).
+- Cause 2: the noise σ was derived from each patch's own lumen / p90 level, so air patches got σ ≈ 1e-8, and the
+  σ²-normalised loss then weighted them 10⁴×.
+  Fix: σ = (case blood level, mean |x_ref| in the lumen over 4 frames) × |gain| / SNR. The blood level is computed
+  per case in the worker and passed with the sample — a property of the acquisition, not of the patch.
+- Guard: a step whose loss or gradient norm is non-finite is skipped and logged; 20 in a row stop the run.
+- Verified: 800-iteration reproduction, 0 skipped steps. 7p_v1 was then restarted `--fresh`: 2.9 it/s alone,
+  2.2 it/s while sharing the GPU.
+- Learning rate. The 1000-iteration train mean rose 9.6 → 30 while val improved (0.98).
+  - Per-iteration log (`loss_iter.csv`: loss, gradient norm, per-sample loss / SNR / case): the loss is
+    heavy-tailed. At iteration 3, two Adam steps from the identity init already cost 130 σ².
+  - Sensitivity: a 1e-3 perturbation of the head weights moves the output by 0.3–2.6 σ (orbit-shared parameters
+    drive many weights coherently), so Adam at lr 1e-3 jitters several σ on high-SNR samples.
+  - 7p_v1 is paused at 3303 (resumable). `7p_v2` runs with peak lr 3e-4, otherwise the same.
+
+**Reconstruction with any encoding** (`hasty_recon::flow::FlowDecoder`)
+- Velocity from phase differences to encode 0, φ_e = k_e·v mod 2π, k_e = γ(M1_e − M1_0), by hierarchical unwrapping:
+  1. the least-sensitive group spanning 3D gives the first estimate;
+  2. each more sensitive group is unwrapped against the current estimate and joins the least-squares solve.
+- Tests cover referenced, Hadamard and dual-VENC: dual-VENC unwraps exactly up to 2.5 VENC_lo, and its noise
+  matches the ML prediction σ_φ/(π √(1 + (VENC_lo/VENC_hi)²)).
+- `recon_p2np` no longer assumes 4 encodes: sets, warm start, segments, synthetic data, outputs and metrics all
+  follow `encode_m1()`. It writes `warm_vel.npy`, and `run_figs.py` uses it.
+- `sim4d` is interruptible and resumable: one `state_sim_bins_<b0>_<b1>.hv` per finished chunk of flow-time bins;
+  rerunning the same command skips those chunks.
+- 7-point R4 simulation: `R4_dv_ideal_noro_pad` (`--venc 1.0 --venc-hi 3.5 --ideal --no-readout-motion`). Truth peak
+  speed is 3.1 m/s; the RACLETTE 7p training data has VENC_lo = 1.0 and VENC_hi 1.5–7.0 at 2.0–2.5 mm, so this sits
+  inside the training distribution.
+
+**Learned prior in P²nP** (`--learned <export_dir>`)
+- Plugin: `hasty-denoise-torch` also builds a cdylib, `libhasty_denoise_torch.so`, with a C ABI (v2):
+  `hdt_open`, `hdt_denoise`, `hdt_set_autocast`, `hdt_on_cuda`, `hdt_close`. `hasty_recon::learned` dlopens it, so
+  libtorch stays out of the main build.
+- Update rule: x ← x + κ (D(x) − x) per iteration, on the host stack in `images[frame·7 + e]` order (the temporal
+  model's encode-major stack is reordered).
+- Exact tiling (`hasty_denoise::tiled`) bounds memory, with the same result as the whole volume:
+  - spatial overlap tiles, margin 28 on the coarsest lattice;
+  - cyclic time windows, margin ±3 frames, because the temporal convs have no stride and only the margin frames
+    see the window's circular pad.
+  - Measured: 0.0 relative difference, Rust TorchScript CPU, tiles × windows.
+- Memory: about 6 full-resolution 96-channel tensors per voxel-frame (fp32), so a 61² × 29 × 20-frame tile needs
+  more than 5 GB. With 28-voxel margins small spatial tiles are inefficient (tile 61 keeps 5 voxels), so time
+  windows are the cheap lever.
+- bf16 autocast is the default on CUDA: the training regime, half the activation memory.
+- Export fixes: checkpoints load with `weights_only=False` (our own files); the reference volume is read from
+  `case.hv`.
+- Early checkpoint (iteration 2.5k) exported to `data/hasty/denoiser/7p_v1_early`: Rust reproduces Python to 8e-8.
+
+## 25. 4D flow visualisation (2026-11-04)
+
+**Backend** (`hasty-server/src/flow.rs`, CPU / rayon, so it runs next to GPU work; registered in `Registry::base`)
+
+Flow value: a dict with
+- `kind = "flow4d"`;
+- `vel`: f32, hasty `[X, Y, Z, 3, F]`, m/s along the array axes;
+- `mag` (optional): `[X, Y, Z, F]`;
+- `spacing` (m), `dt` (s per frame, cyclic), `venc` (optional);
+- `mask` (optional): `[X, Y, Z]`.
+
+Commands:
+
+| command | what it does |
+|---|---|
+| `flow_make` | builds a flow value from tensors |
+| `flow_info` | dims, p99 / p99.9 speed, mean speed per frame in the vessel region, peak frame |
+| `flow_pcmra` | PC-MRA: time mean of \|mag\|·speed, mean speed, or max speed |
+| `flow_streamlines` | per frame, RK4 on the unit direction field, traced both ways from the seeds |
+| `flow_pathlines` | RK4 in space and cyclic time; several releases per cycle; exact end time |
+| `flow_plane` | analysis disc (see below) |
+
+- Interpolation: trilinear in space, linear and cyclic in time.
+- Seeding: the PC-MRA region above a quantile (or the mask), a disc, or explicit points. Tracing stops outside that
+  region, dilated by one voxel.
+- `flow_plane` reports Q(t) in ml/s, mean and peak through-plane velocity, forward / backward / net volume, regurgitant
+  fraction and area. It also returns the through-plane velocity image per frame and the disc basis.
+- Tests use analytic fields: uniform-flow pathlines are exact; solid-body rotation closes (< 0.05 voxel after one period)
+  and its streamlines stay at constant radius (< 1e-3); cyclic time interpolation; Poiseuille Q(t) within 1 % for every
+  frame, plus reversed normal and peak velocity; region seeding and value round trip.
+- Publishers:
+  - Rust `viz::show_flow`;
+  - Python `hastycompute.v2.flow_value` / `show_flow` (hasty or C layout);
+  - `tools/flow/show_run.py <run_dir>`: simulator truth plus every finished reconstruction of a `recon_p2np` run;
+  - `train.py --show`: validation sample 0 (clean / noisy / denoised, dual-VENC unwrapped), overwritten in place at
+    every validation so open viewers reload.
+
+**Frontend** (`plotting_website/flow/`): three.js 0.186.1, vendored under `plotting_website/vendor/` (MIT); WebGL2.
+- Why WebGL2: headless Chrome renders it in software (SwiftShader), so `tools/web/headless.py --screenshot` can test
+  the page. WebGPU canvases cannot be tested headless here.
+- PC-MRA MIP: a ray-marched 3D texture with level and opacity.
+- Axial / coronal / sagittal slice planes:
+  - magnitude with an overlay of speed or a single component (signed colormap), a threshold and an opacity;
+  - instanced cone glyphs on the first visible slice.
+- Streamlines per frame, cached, following the cine.
+- Animated pathlines:
+  - screen-space wide instanced segments with comet tails and particle heads;
+  - the cycle wraps, so a release late in the cycle continues at the start.
+- Analysis planes:
+  - click a slice to set the cursor; the normal follows the local velocity;
+  - the disc is coloured by through-plane velocity per frame;
+  - a Q(t) plot with a frame cursor, plus net / forward volume, RF, area and peak.
+- Streamlines and pathlines can be seeded from the active plane (emitter).
+- Cine: play / pause (space), ← / →, ¼×–2× cardiac speed.
+- Colormaps: turbo / viridis / inferno / coolwarm / gray, with a legend.
+- Live: switches to newly shown flow values; reloads when the current value is updated.
+- `?selftest=1&layers=…` runs the whole pipeline and reports JSON. On R4 truth: 600 streamlines, 1598 pathlines,
+  plane net 108.6 ml per cycle (aortic stroke-volume range).
+- The index page has a Flow card; flow values in the live bank list get a "flow" link.
+
+**First 7-point reconstruction** (G1: R4 dual-VENC 1.0 / 3.5, same scan time, configuration and LLR as the 4-point F1)
+
+| | 4-point F1 | 7-point G1 |
+|---|---|---|
+| velocity RMSE at true positions | 0.160 | 0.183 |
+| on-grid median \|e\| | 0.046 | 0.043 |
+| RMSE without \|e\| > 0.8 m/s | 0.091 | 0.087 |
+| voxels with unwrap failures (\|e\| > 0.8) | 0.03 % | 0.18 % |
+
+- Typical errors are lower with 7 points, but dual-VENC unwrap failures (2·VENC_lo jumps) dominate the RMSE.
+- The lever is the joint 7-point prior, or spatial / ML unwrapping instead of per-voxel rounding.
+
+## 26. Next research thread: velocity-parametrised reconstruction + finer grids (2026-11-04)
+Plan: `../research/velocity_model_sr.md`.
+- Unknowns z (complex reference), v (spline / Fourier in cardiac time) and a per-encode residual-phase polynomial.
+- Same P²nP algorithm: pointwise Gauss–Newton blocks plus ZMSHR1 in the block metric.
+- Learned prior in (|z|, p = |z|·v): O_h scalar + vector fields, exact intensity equivariance.
+- `--grid-scale` (anisotropic, non-integer), `--voxel-basis`, coarse-to-fine, ROI dual grid.
+- Milestones S0 / V0–V5 / B0–B2 with gates.
+
+## 27. Velocity model and memory planner: implemented (2026-11-04)
+
+**Velocity model** (`hasty-recon`)
+- `vmodel.rs` / `vmodel.cu`:
+  - periodic B-spline time bases for z and v (any K_z, K_v, degree 0–3, independent of the operator frames);
+  - a Legendre residual-phase basis (degree ≤ 3, per encode);
+  - GPU kernels: evaluation, vector–Jacobian product, Jacobian–vector product, the polynomial reduction, and the
+    Gauss–Newton weights and metric;
+  - parameters packed into `Stack` chunks, so the P²nP algebra and checkpointing apply unchanged.
+- `vobj.rs` `VelProblem`, a P²nP `Objective`:
+  - the data term through any `SetOp` (per-frame sets t = f·E + e);
+  - the gradient, the Gauss–Newton Hessian-vector product, and λ_max(MH);
+  - the pointwise Gauss–Newton metric (z scalar, v (c·σ_k)⁻¹(Σ k_e k_eᵀ)⁻¹, residual phase diagonal, Levenberg
+    damping, refreshed every 5 gradients);
+  - per-set weights for VENC continuation.
+- `p2np.rs`: the loop is generic over an `Objective` (`run_objective[_with]`); the complex model is one
+  implementation.
+- **Tests:**
+  - CPU f64 finite differences: gradient, JVP, adjoint;
+  - GPU vs CPU < 2e-6;
+  - full objective through NUFFT `SenseSets` (gradient vs finite differences, Hessian symmetry);
+  - solve from a perturbed start: exact recovery (0.0865 → 0.0000 m/s) when identifiable. With a free degree-1
+    residual phase the data term converges, but the time-mean linear velocity trades against it, as predicted
+    (§A3 of the plan).
+- `recon_p2np --vmodel KZ,KV [--vdeg DZ,DV] [--vpoly d] [--vcont n]`:
+  - initialised from the warm start (decoder);
+  - stages for VENC continuation;
+  - resumable;
+  - writes vel / recon / vparams and the metrics (incl. wrap fraction) and figures.
+
+**Memory planner** (`plan.rs`, `store.rs`)
+- `probe`: free / total VRAM and pinned H2D / D2H bandwidth.
+- `Need` / `choose`:
+  - placeable buffers: k-space data (device or host), the ZMSHR1 secant pair (device or host), the rank-one direction
+    w (device, host, or recomputed in a third pass);
+  - the cost model is gradient time + bytes / bandwidth;
+  - it picks the fastest plan that fits the budget, and prints a clear error with remedies when nothing fits.
+- The ZMSHR1 / ZMSHR1-M step is evaluated chunk by chunk in 2–3 passes over a device / pinned-host `Store`. The device
+  minimum is x, g and the step plus chunk scratch; the previous loop kept 10 full stacks.
+- `VelProblem::data_to_host`: streamed k-space data. `lambda_max` uses two stacks.
+- `recon_p2np`: `--vram-budget 8G` (emulates smaller cards) and `--plan auto|device|host`. Data placement is decided at
+  setup; state placement is refined with the measured gradient time.
+- **Tests:** every placement (host secant + host w, host secant + recomputed w, device + recomputed w, host-streamed
+  data) reproduces the all-device solve to float rounding.
+- Not placeable yet: operator tables (SegPoints), coil maps, NUFFT grids. The coil batch and segment count are the
+  operator's own knobs, through the SegNufft planner's `max_grid_bytes`.
+
+**First velocity-model results** (R4 7-point dual-VENC 1.0 / 3.5, 60 s, R ≈ 8 per frame; 30 iterations; no prior;
+ZMSHR1 in the Gauss–Newton metric; initialised from the 30-iteration time-averaged warm start).
+Reference: the complex model with the LLR prior (G1) reaches 0.183 m/s.
+
+| z (nodes, degree) | v (nodes, degree) | VENC continuation | velocity RMSE | wrapped (\|e\| > 0.8 m/s) |
+|---|---|---|---|---|
+| 1 (static) | 20, linear | – | 0.343 (semi-convergent: 0.248 at iteration 5) | 0.61 % |
+| 20, linear | 20, linear | – | 0.237 | 0.51 % |
+| 20, linear | 8, cubic | – | 0.182 | 0.39 % |
+| 8, cubic | 8, cubic | – | 0.229 | 0.46 % |
+| 8, cubic | 8, cubic | first 10 iterations reference + high-VENC only | **0.138** | **0.11 %** |
+
+- Fewer, smoother velocity unknowns plus continuation beat complex + LLR by 25 % without any prior, and the wrap
+  failures drop 4×.
+- A static z can't follow pulsatile magnitude: its data term stalls at 7.3e11 against 4.7e11.
+- Gradient cost: 1.33 s (140 sets, SegNufft L = 1).
+
+**Residual-phase injection (S0, degree ≤ 1, exact):**
+- Convention, measured by test (residual 5e-7): E_k(x·e^{i g·(r − n/2)}) = E_{k−g}(x).
+- Implementation: a per-encode phase c + g·(r − n/2) shifts that encode's sample coordinates by +g and multiplies its
+  data by e^{ic}. `recon_p2np --inject-phase SEED,AMP` draws Legendre P0 / P1 coefficients per encode, applies them
+  before the operators and the warm start are built, and records them in run.json.
+- Degree 2 needs the simulator (the concomitant slots of the sample parameters).
+- Static-tissue anchor: `--vanchor μ` adds ½λ Σ w |v_k|². λ = μ × the mean Gauss–Newton curvature of one velocity
+  node; the mask is simulator truth for now (pulsatility-based estimate next).
+
+**Residual phase (S0): first results** (injected amplitude 0.6 rad, degree 1; 8×8 cubic, continuation 10, 30 iterations)
+
+| | velocity RMSE (m/s) | wrapped | residual-phase error (rad) |
+|---|---|---|---|
+| not modelled | 0.847 | 6.0 % | — |
+| `--vpoly 1` | 0.283 | 0.37 % | 0.295 (degenerate) |
+| + anchor, metric without the anchor curvature | 0.338 | 0.59 % | 0.270 |
+| + anchor, curvature in the v metric | 0.370 | 1.06 % | **0.099** |
+
+- **Normal-operator scale.** The anchor needs an absolute scale. `VelProblem` estimates n̂ = mean diagonal of EᴴE per
+  unit coil energy with a random probe; it came out at 1.18e5 here. λ = μ n̂ c σ tr/3, and λ w goes into the v
+  metric block (trace-matched), otherwise λ_max(MH) is set by static tissue.
+- **The residual phase is identified once the anchor is in the metric.** Velocity is still worse: in continuation
+  stage 0 the high-VENC encodes carry the unestimated residual phase (×3.5 velocity bias), which then misguides the
+  low-VENC unwrapping.
+- **Next:**
+  - initialise a by a static-tissue least-squares fit to the warm-start encode phase differences (plan §A3 step 1)
+    before iterating;
+  - estimate the static mask from pulsatility instead of the simulator truth;
+  - degree 2 via the simulator.
+
+**Added 2026-11-04 (evening)**
+- `vinit.rs`: robust static-tissue fit of the residual phase to the warm-start encode phase differences.
+  - IRLS with Tukey weights on the wrapped residual, signal-weighted. Vessels and noise become outliers.
+  - The accepted voxels form the static mask, which replaces the simulator truth.
+  - `remove_phase` and `decode` complete the initialisation.
+  - Test: coefficients < 5e-3 rad, no vessel voxel in the mask, > 90 % of static tissue kept.
+  - `recon_p2np --vpoly d` starts from it; `--vanchor μ[,auto|truth]`.
+- `--vkappa k,…`: LLR prior in the velocity loop.
+  - It runs separately on the z nodes and on p = |z̄|·v (3K_v real images), so units never mix; then v = p / |z̄|.
+- `--grid-scale s | sx,sy,sz` (`SimData::set_recon_grid`).
+  - The reconstruction grid (`dims`, per-axis `vox`) is separate from the native truth grid (`tdims`, `res`).
+  - Smooth 2·3·5·7 sizes, FOV kept exactly; sample coordinates k·Δ_a follow the reconstruction voxel.
+  - Truth is always sampled at true positions; `--synthetic` (direct truth indexing) is native-grid only.
+- `--voxel-basis dirac|rect|bspline3`: `setop::WeightedSets` wraps any SetOp with per-sample weights
+  Π sinc(k_a Δ_a / 2)^p (p = 1 rect, 4 cubic B-spline). The scratch is allocated per call, with no data copy.
+
+**Results 2026-11-04 (night)** (7-point R4 unless stated; 30 iterations; velocity RMSE at true positions)
+
+| experiment | RMSE (m/s) | note |
+|---|---|---|
+| 8×8 cubic + continuation, native grid, no prior | 0.138 | reference |
+| + LLR on (z, p), κ 0.5 / 1 / 2 | 0.138 / 0.182 / 0.179 | LLR is not a useful prior here |
+| grid 1.25× (1.6 mm), Dirac / rect voxels | **0.130** / 0.133 | gradient 2.0 s vs 1.34 s |
+| native grid, rect voxels | 0.139 | voxel basis neutral at this resolution |
+| continuous time (`--temporal linear`) | 0.142 | 20 bins are already fine |
+| injected residual phase 0.6 rad, `--vpoly 1`: no init / robust init | 0.283 / 0.191 | init error 0.206 rad |
+| … + anchor, auto mask (fit only) | 0.254 | 29k blood voxels in the mask |
+| … + anchor, refined by pulsatility, 1.5× median, dilated 3 (now default) | **0.166** | 1.5k blood voxels; oracle mask 0.157 |
+| 4-point ideal (vs complex + LLR F1 0.160) | 0.165 | no dual-VENC advantage |
+| 4-point full physics + GNL (vs complex F2 0.196) | 0.690 | diverges, see below |
+
+Notes:
+- The LLR NaN came from nalgebra's f32 Hermitian eigensolver on exactly rank-deficient blocks (identical spline
+  nodes). The Gram matrices are now decomposed in f64, and non-finite blocks are skipped.
+- The velocity path no longer builds the unused circulant kernels (≈ 8 GB at the native grid, OOM at 1.25×).
+- **Full-physics divergence: an encode-common phase error leaks into v.**
+  - The v gradient contains −|z|² sin φ_common Σ_e k_e. For referenced and dual-VENC encodings Σ_e k_e ≠ 0, and
+    the block-diagonal Gauss–Newton metric drops this z–v cross term.
+  - Fix: **centred encodings** k̃_e = k_e − mean_e k_e. z becomes the mean-encode reference, the cross term vanishes
+    exactly, and velocity is unchanged. `HASTY_VM_UNCENTRED=1` restores the old parametrisation.
+- `DenoiserZP` (tools/denoiser/model.py): the velocity-space prior is an O_h scalar ⊕ vector field U-Net on
+  [|z|, p = |z| v] per node, bias-free (D(µ·) = µD(·)), conditioned on h only. Tested: equivariance 6e-16,
+  homogeneity 1e-15, identity at init. Training waits for the CFD truth data.
+- **Centred encodings: rejected as the default.** z must then carry the velocity-dependent mean-encode phase k̄·v(t),
+  which breaks its temporal smoothness: 7-point 0.138 → 0.174 m/s; full physics only 0.69 → 0.49.
+- **z warm-up (`--vzwarm n`)** runs n iterations updating z only (v and the residual phase frozen: a linear
+  subproblem), so z matches the operator before velocity moves.
+  - Full-physics 4-point: 0.69 → **0.232** m/s with 10 z-only + 30 joint iterations, wraps 0.01 %. The complex model
+    with LLR (F2) reaches 0.196.
+  - 7-point ideal: 0.135 m/s, wraps 0.06 % (5 z-only), no harm.
+  - A z-only stage of 10 iterations had not converged yet (data term 7.4e12 → 3.6e12).

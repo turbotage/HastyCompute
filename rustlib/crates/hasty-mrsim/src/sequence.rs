@@ -13,6 +13,9 @@ pub enum Encoding {
     Referenced,
     /// balanced four-point (Hadamard): M1_e = ΔM1/2 · h_e
     Hadamard,
+    /// seven-point dual-VENC [ref, x_lo, x_hi, y_lo, y_hi, z_lo, z_hi]: per axis one encode at `venc` (the sensitive,
+    /// low VENC) and one at `venc_hi`; the layout of the learned denoiser (rustlib/tools/denoiser)
+    DualVenc { venc_hi: f64 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -104,6 +107,18 @@ impl FlowSpiralParams {
         match self.encoding {
             Encoding::Referenced => vec![[0.0; 3], [d, 0.0, 0.0], [0.0, d, 0.0], [0.0, 0.0, d]],
             Encoding::Hadamard => [[-1.0, -1.0, -1.0], [1.0, 1.0, -1.0], [1.0, -1.0, 1.0], [-1.0, 1.0, 1.0]].iter().map(|h| [0, 1, 2].map(|a| 0.5 * d * h[a])).collect(),
+            Encoding::DualVenc { venc_hi } => {
+                let dh = std::f64::consts::PI / (GAMMA * venc_hi);
+                let mut m = vec![[0.0; 3]];
+                for a in 0..3 {
+                    for step in [d, dh] {
+                        let mut v = [0.0; 3];
+                        v[a] = step;
+                        m.push(v);
+                    }
+                }
+                m
+            }
         }
     }
 }

@@ -8,4 +8,4 @@ logs/
 external_impl/
 .nsys-reports/
 # synthetic 4D-flow datasets, simulations, reconstruction runs, model weights (rustlib tools)
-data/hasty/
+data/hasty

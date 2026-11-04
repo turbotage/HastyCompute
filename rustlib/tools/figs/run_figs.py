@@ -24,7 +24,8 @@ sim = Path(info["sim_dir"])
 figs = run / "figs"
 figs.mkdir(exist_ok=True)
 venc = info["venc"]
-vlim = 0.75 * venc
+# colour range: 0.75 VENC (single VENC); dual-VENC runs resolve up to the high VENC (run.json venc_range)
+vlim = 0.75 * venc if "venc_range" not in info else 0.5 * max(info["venc_range"])
 truth = np.load(sim / "truth_vel_logical.npy")  # [x,y,z,3,nf]
 frac = np.load(sim / "truth_lumen_fraction.npy")
 lum = frac > 0.9
@@ -107,9 +108,12 @@ save(fig, "02_coilmaps.png", "Virtual coil maps (magnitude top, phase bottom), a
 # ---------------------------------------------------------------- warm start
 tavg = truth.mean(axis=-1)
 if warm is not None:
-    wv = np.stack([-np.angle(warm[..., a + 1] * np.conj(warm[..., 0])) * venc / np.pi for a in range(3)], axis=3)
-    fig, ax = plt.subplots(3, 4, figsize=(12, 9))
-    for e in range(4):
+    ne = warm.shape[3]
+    # velocity decoded by recon_p2np (any encoding; hasty_recon::flow); referenced 4-point fallback for old runs
+    wv = np.load(run / "warm_vel.npy") if (run / "warm_vel.npy").exists() else np.stack([-np.angle(warm[..., a + 1] * np.conj(warm[..., 0])) * venc / np.pi for a in range(3)], axis=3)
+    ncol = max(ne, 4)
+    fig, ax = plt.subplots(3, ncol, figsize=(3 * ncol, 9))
+    for e in range(ne):
         gshow(ax[0, e], axial(np.abs(warm[..., e])), ref=np.abs(warm[..., e])[m_sup])
         ax[0, e].set_title(f"warm |x|, encode {e}", fontsize=8)
         ax[1, e].imshow(axial(np.angle(warm[..., e])), cmap="twilight", vmin=-np.pi, vmax=np.pi, origin="lower")

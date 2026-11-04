@@ -311,3 +311,13 @@ fn conv_kernel_formats() {
         eprintln!("{fmt:?}: rel err {e:e}");
     }
 }
+
+#[test]
+fn conv_bluestein_lengths() {
+    // padded lengths with prime factors > 13 (Bluestein core inside the fused / pruned passes)
+    let dev = Device::new(0).unwrap();
+    case::<f32>(&dev, &[29], &[58], &[DiagOp::Mult], &[DiagOp::MultConj], true, 2e-5);
+    case::<f32>(&dev, &[10, 12], &[17, 29], &[DiagOp::Mult], &[], false, 2e-5);
+    case::<f32>(&dev, &[6, 8, 9], &[12, 17, 18], &[], &[DiagOp::Mult], true, 2e-5);
+    case::<f64>(&dev, &[10, 12], &[17, 29], &[DiagOp::MultConj], &[DiagOp::Mult], true, 1e-11);
+}

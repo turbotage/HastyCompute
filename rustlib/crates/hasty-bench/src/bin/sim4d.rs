@@ -1,7 +1,10 @@
 //! Truth simulation of a spiral 4D-flow scan of a prepared subject (direct summation on the GPU).
-//!   sim4d <subject_dir> <out_dir> [--scan-time s] [--noise rel] [--bin-ms ms] [--venc m/s]
+//!   sim4d <subject_dir> <out_dir> [--scan-time s] [--noise rel] [--bin-ms ms] [--venc m/s] [--venc-hi m/s]
 //! Writes data_clean.npy (complex64 [readout][adc][coil], noise-free; `--write-noisy` also data.npy), readouts.npy,
 //! meta.json (incl. noise_sigma: the loader adds Ψ-correlated noise at that level), truth_*.npy, diagnostics.
+//! Interruptible: Ctrl-C / SIGTERM / `touch <out_dir>/STOP` stops after the current chunk of flow-time bins; each
+//! finished chunk is kept as `state_sim_bins_<b0>_<b1>.hv` (complex64), so the same command line resumes. The chunk
+//! grid is a function of the arguments only; the states are removed when the run completes.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -43,6 +46,8 @@ fn main() {
     let noise_rel: f64 = take("--noise").map(|s| s.parse().unwrap()).unwrap_or(0.02);
     let bin_ms: f64 = take("--bin-ms").map(|s| s.parse().unwrap()).unwrap_or(10.0);
     let venc: f64 = take("--venc").map(|s| s.parse().unwrap()).unwrap_or(2.0);
+    // seven-point dual-VENC (the learned denoiser's layout): --venc is the low (sensitive) VENC
+    let venc_hi: Option<f64> = take("--venc-hi").map(|s| s.parse().unwrap());
     // continue the body beyond the CT crop (head–foot) by this much on both ends: real bodies extend past the FOV
     let pad_mm: f64 = take("--pad-mm").map(|s| s.parse().unwrap()).unwrap_or(120.0);
     // also write the noisy data (data.npy); by default only data_clean.npy, the loader adds the noise (half the disk)
@@ -56,12 +61,16 @@ fn main() {
     let subj_dir = PathBuf::from(&args[0]);
     let out = PathBuf::from(&args[1]);
     std::fs::create_dir_all(&out).unwrap();
+    let ctl = hasty_recon::checkpoint::RunCtl::new(&out, 1);
     let t0 = Instant::now();
     let mut subj = Subject::load(&subj_dir).unwrap();
     subj.pad_z((pad_mm * 1e-3 / subj.hu.affine[2][2].abs()).round() as usize);
     let mut fp = FlowSpiralParams::aorta_3t_default();
     fp.scan_time = scan_time;
     fp.venc = venc;
+    if let Some(venc_hi) = venc_hi {
+        fp.encoding = hasty_mrsim::sequence::Encoding::DualVenc { venc_hi };
+    }
     let heart = subj.label_centroid(&[51]).unwrap();
     let wave = AorticWaveform::healthy(fp.mean_rr);
     let flow = CenterlineFlow::new(subj.centerline.clone(), subj.sdf.clone(), heart, wave, 30, 3.3e-6, 5.0);
@@ -138,6 +147,7 @@ fn main() {
     // chunks of consecutive bins (≤ max_chunk samples): tissue summed once per chunk at full occupancy, blood per bin
     let max_chunk = (1usize << 31) / (nc * 16); // ≤ 2 GiB of f64 output
     let mut b0 = 0;
+    let mut chunk_states = vec![];
     while b0 < nb {
         let mut b1 = b0;
         let mut ns = 0;
@@ -180,6 +190,23 @@ fn main() {
             }
             ranges.push((b, start, order.len() * na));
         }
+        let state = format!("sim_bins_{b0}_{b1}");
+        chunk_states.push(state.clone());
+        if let Some(v) = ctl.load(&state).unwrap() {
+            let o: Vec<num_complex::Complex32> = v.as_tensor().expect("chunk state").to_vec().unwrap();
+            assert_eq!(o.len(), ns * nc, "{state}: stale chunk state (other arguments?), delete the state_sim_* files");
+            for (k, &r) in order.iter().enumerate() {
+                for n in 0..na {
+                    for c in 0..nc {
+                        let v = o[(k * na + n) * nc + c];
+                        data[(r * na + n) * nc + c] = Complex64::new(v.re as f64, v.im as f64);
+                    }
+                }
+            }
+            println!("  bins {b0}..{b1} of {nb}: {} readouts, from the saved chunk", order.len());
+            b0 = b1;
+            continue;
+        }
         let d_smp = stream.clone_htod(&smp).unwrap();
         let mut d_out = stream.alloc_zeros::<C64>(ns * nc).unwrap();
         sim.accumulate(&stream, &d_smp, ns, &d_tsrc, &d_tamp, tsrc.len(), &mut d_out).unwrap();
@@ -205,8 +232,15 @@ fn main() {
                 }
             }
         }
+        // complex64 like the final data_clean.npy
+        let o32: Vec<num_complex::Complex32> = o.iter().map(|v| num_complex::Complex32::new(v.re as f32, v.im as f32)).collect();
+        ctl.save(&state, &hasty_value::Value::Tensor(hasty_value::Tensor::from_slice(&[ns, nc], &o32).unwrap())).unwrap();
         println!("  bins {b0}..{b1} of {nb}: {} readouts, elapsed {:.1}s", order.len(), t2.elapsed().as_secs_f64());
         b0 = b1;
+        if b0 < nb && ctl.stop_requested() {
+            println!("stopped after bins ..{b0} of {nb}: chunks saved in {}, rerun the same command to resume", out.display());
+            std::process::exit(0);
+        }
     }
     let gpu_terms = (acq.n_samples() as f64) * ((tsrc.len() + pts.len()) as f64) * nc as f64;
     println!(
@@ -355,7 +389,7 @@ fn main() {
     write_npy_f32(&out.join("field_ppm_recon.npy"), &fv).unwrap();
     let meta = serde_json::json!({
         "subject": subj.name,
-        "b0": fp.b0, "venc": fp.venc, "encoding": format!("{:?}", fp.encoding), "coverage": format!("{:?}", fp.coverage),
+        "b0": fp.b0, "venc": fp.venc, "venc_hi": venc_hi, "encoding": format!("{:?}", fp.encoding), "coverage": format!("{:?}", fp.coverage),
         "fov": fp.fov, "res": fp.res, "recon_dims": dims, "n_int": fp.n_int, "fov_edge_ratio": fp.fov_edge_ratio,
         "dt": fp.dt, "dwell": fp.dwell, "t_rf": fp.t_rf, "t_spoil": fp.t_spoil, "scan_time": fp.scan_time,
         "gmax": fp.lim.gmax, "smax": fp.lim.smax,
@@ -368,5 +402,8 @@ fn main() {
         "n_tissue_sources": tsrc.len(), "n_blood_sources": pts.len(),
     });
     std::fs::write(out.join("meta.json"), serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+    for s in &chunk_states {
+        ctl.clear(s);
+    }
     println!("done in {:.1}s -> {}", t0.elapsed().as_secs_f64(), out.display());
 }

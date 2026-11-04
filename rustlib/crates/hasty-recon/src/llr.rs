@@ -24,6 +24,11 @@ impl Llr {
     }
 
     /// in-place on `x` laid out [t][v] (t = 0..nt)
+    /// make the block shift of the next `apply` a function of the iteration `k` only (reproducible after a resume)
+    pub fn set_iteration(&mut self, k: u64) {
+        self.seed = 0x1234_5678 ^ k.wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+
     pub fn apply(&mut self, x: &mut [C32], nt: usize) {
         let d = self.dims;
         let nv = d[0] * d[1] * d[2];
@@ -76,14 +81,21 @@ impl Llr {
                     sc.spawn(move || {
                         bl.iter()
                             .map(|idx| {
-                                let a = DMatrix::<Complex32>::from_fn(idx.len(), nt, |r, t| {
+                                // f64: the f32 Hermitian eigensolver breaks down on exactly rank-deficient Gram
+                                // matrices (identical columns, e.g. equal spline nodes) and returns NaN
+                                let a = DMatrix::<num_complex::Complex64>::from_fn(idx.len(), nt, |r, t| {
                                     let v = xs[t * nv + idx[r]];
-                                    Complex32::new(v.re, v.im)
+                                    num_complex::Complex64::new(v.re as f64, v.im as f64)
                                 });
                                 let g = a.adjoint() * &a;
                                 let e = SymmetricEigen::new(g);
-                                let sv: Vec<f32> = e.eigenvalues.iter().map(|&l| l.max(0.0).sqrt()).collect();
-                                (sv, e.eigenvectors)
+                                let ok = e.eigenvalues.iter().all(|l| l.is_finite()) && e.eigenvectors.iter().all(|c| c.re.is_finite() && c.im.is_finite());
+                                if !ok {
+                                    // leave the block unchanged (empty singular values = skip)
+                                    return (vec![], DMatrix::<Complex32>::zeros(0, 0));
+                                }
+                                let sv: Vec<f32> = e.eigenvalues.iter().map(|&l| l.max(0.0).sqrt() as f32).collect();
+                                (sv, e.eigenvectors.map(|c| Complex32::new(c.re as f32, c.im as f32)))
                             })
                             .collect::<Vec<_>>()
                     })
@@ -94,6 +106,7 @@ impl Llr {
         // σ̂: median over blocks of the median of each block's lower half of singular values
         let mut lows: Vec<f32> = decomp
             .iter()
+            .filter(|(sv, _)| !sv.is_empty())
             .map(|(sv, _)| {
                 let mut s = sv.clone();
                 s.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -101,6 +114,9 @@ impl Llr {
             })
             .collect();
         lows.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if lows.is_empty() {
+            return;
+        }
         let sigma = lows[lows.len() / 2] as f64;
         let thr = (self.kappa * sigma) as f32;
         // pass 2: A ← A V diag(shrink(s)/s) V^H, written back
@@ -110,6 +126,9 @@ impl Llr {
             for (bl, de) in blocks.chunks(chunk).zip(decomp.chunks(chunk)) {
                 sc.spawn(move || {
                     for (idx, (sv, v)) in bl.iter().zip(de) {
+                        if sv.is_empty() {
+                            continue;
+                        }
                         let w: Vec<f32> = sv.iter().map(|&s| if s > thr { (s - thr) / s } else { 0.0 }).collect();
                         // filter F = V diag(w) V^H
                         let mut vw = v.clone();
@@ -134,5 +153,30 @@ impl Llr {
                 });
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod rank_deficient_tests {
+    use super::*;
+
+    #[test]
+    fn identical_columns_stay_finite() {
+        // 24 images, 3 distinct (all velocity nodes equal at initialisation): exactly rank-deficient blocks
+        let dims = [16usize, 16, 8];
+        let nv = 16 * 16 * 8;
+        let mut x = vec![C32::new(0.0, 0.0); 24 * nv];
+        for t in 0..24 {
+            for q in 0..nv {
+                let c = if t < 8 { 0 } else { t % 3 };
+                // complex, as the z nodes are (the case that produced NaN in f32)
+                let v = ((q * 7 + c * 13) % 17) as f32 * 0.1 * (q % 5 != 0) as u8 as f32;
+                x[t * nv + q] = C32::new(v * 0.8, v * 0.6 - 0.01 * c as f32);
+            }
+        }
+        let mut l = Llr::new(dims, 8, 1.0, vec![true; nv]);
+        l.apply(&mut x, 24);
+        let bad = x.iter().filter(|c| !c.re.is_finite() || !c.im.is_finite()).count();
+        assert_eq!(bad, 0, "{bad} non-finite values after LLR");
     }
 }

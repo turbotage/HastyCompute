@@ -166,9 +166,10 @@ __device__ __forceinline__ cx cmul(cx a, cx b) {{ return make_cx(a.x * b.x - a.y
 }
 
 impl<R: Real> MixZPlan<R> {
-    /// returns `Ok(None)` if the working set does not fit in shared memory (use the unfused path)
+    /// returns `Ok(None)` if the working set does not fit in shared memory or `z2` has a prime factor > 13 (use the
+    /// unfused path, whose axis passes handle any length via Bluestein)
     pub fn new(dev: &Device, z2: usize, zn: usize, x2: usize, y2: usize, nf: usize, entries: &[MixEntry]) -> Result<Option<Self>, FftError> {
-        let radices = factorize(z2).ok_or(FftError::UnsupportedLength(z2))?;
+        let Some(radices) = factorize(z2) else { return Ok(None) };
         let rmax = *radices.iter().max().unwrap();
         let tpl = (z2 / rmax).max(1);
         let max_smem = dev.ctx.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN)? as usize;

@@ -336,12 +336,14 @@ export class LazyVolume {
  * receives correct indexing regardless of how many leading dims were virtual.
  */
 export class RemoteVolume {
-    constructor(uuid16, shape, options = {}) {
+    /** @param {import('../../common/hasty_client.js').HastyClient} client  @param {string} id  value id (hex) */
+    constructor(client, id, shape, options = {}) {
         this._ndim         = shape.length;           // actual server-side ndim
         const s = shape.slice();
         while (s.length < 5) s.unshift(1);
         this.shape         = s;
-        this._uuid         = uuid16;
+        this._client       = client;
+        this._uuid         = id;
         this._cache        = new Map();
         this._pending      = new Set();
         this.dtype         = options.dtype         ?? 'f32';
@@ -384,26 +386,15 @@ export class RemoteVolume {
     _fetch(key, sliceInfo) {
         if (this._pending.has(key)) return;
         this._pending.add(key);
-        import('../../node_editor/src/grpc_client.js').then(async ({ fetchSliceData }) => {
-            try {
-                const { data } = await fetchSliceData(this._uuid, sliceInfo);
-                this._cache.set(key, data);
-                if (this.onUpdate) this.onUpdate();
-            } catch (e) {
-                // Avoid spamming the console when the UUID is missing in the bank.
-                const msg = (e && e.message) ? e.message : String(e);
-                if (msg.includes('UUID not found in bank')) {
-                    if (!this._missingUuidLogged) {
-                        console.warn('RemoteVolume: UUID not found in bank — will not retry fetches for this volume');
-                        this._missingUuidLogged = true;
-                    }
-                } else {
-                    console.error('RemoteVolume fetch error', key, e);
-                }
-            } finally {
-                this._pending.delete(key);
-            }
-        });
+        this._client.get(this._uuid, { slice: sliceInfo, codec: 'lz4', delta: true }).then((tensor) => {
+            this._cache.set(key, tensor.data);
+            if (this.onUpdate) this.onUpdate();
+        }).catch((e) => {
+            const msg = (e && e.message) ? e.message : String(e);
+            if (/grpc 5/.test(msg)) {             // NOT_FOUND: the display copy was deleted
+                if (!this._missingUuidLogged) { console.warn('RemoteVolume: value not found — not retrying'); this._missingUuidLogged = true; }
+            } else console.error('RemoteVolume fetch error', key, e);
+        }).finally(() => this._pending.delete(key));
     }
 
     getAxialSlice(t, e, z) {

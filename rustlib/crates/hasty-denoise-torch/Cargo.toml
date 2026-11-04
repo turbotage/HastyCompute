@@ -1,0 +1,24 @@
+# Standalone cargo workspace (own Cargo.lock): libtorch stays out of the main build. A C ABI shim (csrc/shim.cpp) is
+# compiled against the training venv's libtorch (build.rs). Build and test with repo-local cargo caches:
+#   cd rustlib && CARGO_HOME=$PWD/target/cargo-home CARGO_TARGET_DIR=$PWD/target/torch \
+#     cargo test --release --manifest-path crates/hasty-denoise-torch/Cargo.toml
+[workspace]
+
+[package]
+name = "hasty-denoise-torch"
+description = "libtorch (TorchScript / AOTInductor) backend of the hasty 4D-flow denoiser"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+# rlib for Rust users and tests; cdylib = the dlopen plugin of hasty_recon::learned
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+hasty-denoise = { path = "../hasty-denoise" }
+num-complex = "0.4"
+serde_json = "1"
+
+[build-dependencies]
+cc = "1"
