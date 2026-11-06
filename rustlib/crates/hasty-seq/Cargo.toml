@@ -1,0 +1,10 @@
+[package]
+name = "hasty-seq"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sequence designer: gradient moments, velocity encoding, time-optimal 3D readouts (yarnball), GIRF (LTI) and SAFE PNS models, design metrics and optimizer"
+
+[dependencies]
+num-complex.workspace = true
+rustfft.workspace = true

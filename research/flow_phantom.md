@@ -202,12 +202,129 @@ vessels' anatomical entry points. Tissue parameters come from 3T literature tabl
 - No aortic-valve leaflet mesh matched the connector regex (the root stays at the coronary ostia).
 - No oesophagus mesh in the atlas (to add as a tube).
 
-**Next (P0, needs compute — paused while the machine must stay quiet):**
-1. Vessel lumens into the label volume (capsule distance to the centrelines; artery / vein / pulmonary labels,
-   vessel wall).
-2. Womersley profiles per segment from the network harmonics → Eulerian truth v(x, t) at any grid (junction
-   blending) → `flow4d` export → flow viewer (gates: Q(t) through planes = network; divergence ≈ 0 in straight
-   segments).
-3. Finer label grids (1 mm / 0.5 mm: GPU, or a CPU fast winding number with a tree + dipole far field).
-4. Fine-vessel growth into organs from the atlas terminals.
-5. Phantom layer in the viewer.
+**Truth export (2026-11-05, later):** `rustlib/tools/phantom/run_p0.sh [--graph] [--labels] [--publish]` runs the
+chain; outputs in `data/hasty/phantom/p0/`.
+- *Graph fixes* (`vessel_graph.py`):
+  - radius corrections and floors for undersized named vessels;
+  - aortic-valve connector (leaflets are "Left/Right coronary leaflet", "Non-coronary leaflet");
+  - Hermite valve connectors along the valve axis;
+  - pulmonary-root separation from the aorta (≈ 8 mm, Gaussian-weighted over the pulmonary tree);
+  - bridges prefer targets ≥ 1.5 × the fragment radius; renal fragments bridge to the renal vessels;
+  - de-overlap (`deoverlap.py`): side-by-side lumens of non-adjacent vessels shrink ≤ 15 %.
+- *Network* (`network_flow.py`):
+  - viscoelastic wall (loss tangent 0.15);
+  - physiological territory fractions (≈ 7 % unassigned);
+  - two Murray-floor iterations (`murray_floor.py`): r ≥ 0.75 c Q̄^{1/3} fixes atlas segments that are too thin for
+    their subtree's flow.
+- *Pack* (`pack_vessels.py`):
+  - Womersley profile table g(ξ; α);
+  - branches the atlas draws inside their parent hand their flow to the parent until they emerge.
+- *Truth* (`phantomflow`, CUDA):
+  - capsules along the centrelines; S³ sub-samples per voxel;
+  - ownership by signed depth (min d − r);
+  - per-capsule, per-harmonic contact compensation (∫g dA / ∫_owned g dA, ≤ 2×), so pressed vessels keep their flux;
+  - output: sparse per-voxel velocity harmonics (continuous in time), blood and wall fractions, class, owning sample.
+  - Thorax at 1 mm in 1 s; heart at 0.5 mm (400 × 400 × 480) in 3 s.
+- *Assembly* (`phantom_truth.py`): final labels (vessel lumens / walls over the tissue labels), gates, figures, and a
+  flow-viewer export (box-averaged).
+- *Gates:*
+  - plane flux, i.e. mass conservation through a junction-free disk, vs Σ network Q;
+  - at 0.5 mm: aorta 0.1–0.4 %, carotid / subclavian / brachiocephalic < 0.1 %, RPA / LPA 0.5–0.9 %, right coronary
+    0.9 % (r/h 3);
+  - vessels pressed together (pulmonary trunk vs aorta, SVC, IVC, right superior pulmonary vein): 3–6 %;
+  - divergence |∇·v| h / |v| median 0.4 %, p95 13 % (junction and contact zones).
+
+**P1 — motion (2026-11-05):** outputs in `data/hasty/phantom/p1/`.
+- **Cardiac kinematics** (`cardiac_motion.py` → `motion/cardiac_motion.hv`): displacement of the atlas pose on a
+  2 mm heart grid at 48 samples per cycle (float16 mm, periodic Catmull-Rom in time).
+  - Modes:
+    - AV-plane descent, 14 mm;
+    - twist, 9°;
+    - per-chamber volume modes B_c = ∇Γ_c with ΔΓ_c = 1_c (Newtonian potential by FFT: divergence only inside
+      the chamber).
+  - AV descent and twist are Helmholtz-projected so the myocardium stays incompressible.
+  - Per time sample: Newton on the four chamber volumes, then a nonlinear correction U ← U + ∇ψ with
+    Δψ = −log det(I + ∇U) on the myocardium and valves.
+  - Results:
+    - volumes hit their targets to 0.001 mL; myocardium volume change ≤ 0.4 %;
+    - EF 67 / 58 % (LV / RV);
+    - mitral annulus travel 14 mm, tricuspid 19 mm, apex 2 mm, annulus velocity ≈ 10 cm/s;
+    - wall thickening visible.
+  - Volume curves are mass-consistent with the network:
+    - V_LV = EDV + ∫(Q_MV − Q_AO), V_LA from the pulmonary-vein inflow;
+    - right heart alike;
+    - E/A filling lobes.
+- **Respiration** (`resp_motion.py` → `motion/resp_motion.hv`, 4 mm trunk grid):
+  - internal organs SI (diaphragm 15 mm; heart 10.7 mm; lung apex 0; abdomen tapering), AP 7 mm (spine fixed),
+    lower-rib LR 3 mm;
+  - Lujan cos⁴ breaths with period and depth variability (`motion.Breathing`).
+- `motion.py`: position / velocity / inverse at arbitrary points and times (composition Φ_r ∘ Φ_c).
+- **Moving truth** (`phantom_4d.py`, GPU / torch; connected components on the CPU):
+  - vessels move with the tissue and distend with the network pressure (aortic radius swing ≈ 10 %);
+    `phantomflow --frames` voxelises each frame (wall velocity added to the Womersley flow).
+  - Tissue labels are pulled back through the inverse motion from a high-resolution label source (1 mm thorax,
+    0.5 mm heart); tissue velocity is Eulerian.
+  - Chambers carry potential flow v = ∇φ, solved by matrix-free Jacobi-CG:
+    - walls: the tissue velocity, corrected per chamber to dV/dt taken from the defining flows
+      (Q_MV − Q_AO, …);
+    - ostia: each heart root's network flow (only roots within 10 mm of a chamber; fragment roots are fed by
+      their tree);
+    - valve planes cut the outflow tracts; mitral / tricuspid faces open while filling > 0;
+    - chambers cleaned with a 2 mm opening.
+  - Network fix: detached fragments now draw their flow from the main tree at their feeding node (coupled), so the
+    pulmonary root carries the full RV output.
+  - Speed: 1 mm thorax (20 M voxels) in 1–2 s per frame; 0.5 mm heart (53.5 M voxels) in 4–11 s per frame.
+  - Gates:
+
+    | gate | gated 1 mm | 0.5 mm heart | real-time 1 mm (8 s, breathing r 0–1.07) |
+    |---|---|---|---|
+    | max per-component mass imbalance [mL/s] | 7.9 (end-diastole valve transition; else < 2) | 7.9 | 7.9 |
+    | mitral / tricuspid flux vs filling model | 0.17 % | < 0.5 % | 0.11 % |
+    | chamber speed p99.9 / max [m/s] | 1.65 / 3.9 | 1.63 / 5.3 | 1.65 / 4.1 |
+    | vessel flux through moving planes (thoracic aorta, brachiocephalic, carotid) | 0.1–0.24 % | 0.04–0.28 % | 0.07–0.23 % |
+    | same, vessels pressed against the aorta (RPA, IVC, SVC) | 4.6 / 1.7 / 11 % | 4.5 / 1.7 / 10.8 % | 4.1 / 1.7 / 9.9 % |
+
+    The moving-plane gate does not yet filter voxel ownership, so aortic blood contaminates the RPA and SVC disks.
+  - Known limitations:
+    - The atlas mitral orifice is small (3.8 cm² of faces at peak E), so E-wave speeds are 1–1.6 m/s
+      (physiological 0.6–1.0).
+    - Potential flow has singular velocities at orifice rims (max 4–5 m/s in a few voxels).
+    - No vortices, turbulence or jets: that is the CFD tier.
+
+**P3 — phantom factory (`make_phantom.py <seed>`):** `data/hasty/phantom/factory/ph<seed>`. Seed 9001 is held out
+(never in training / validation).
+- Sampled per seed:
+  - heart: HR 55–85, SV 60–85 mL, E share, AV descent, twist;
+  - circulation: mean systemic / pulmonary pressure, compliance, territory jitter 15 %;
+  - vessels: radius jitter 6 % per vessel;
+  - breathing: period, cos^{2n} shape, variability, SI / AP / LR depths;
+  - tissue (`tissue_variation.py`): PD / T1 / T2 / T2* / ff jitter, contrast native / gadolinium / ferumoxytol,
+    texture gain;
+  - textures: random Fourier modes per tissue class in the atlas frame, resolution-free, moving with the tissue,
+    modulating PD (field a) and T2* / T1 (field b).
+- Pipeline: graph copy + jitter → network (+ Murray floor) → pack → cardiac motion → respiratory motion →
+  `phantom_4d` truths (gated / real-time; the truth carries the textures `tex`).
+- Cost: ≈ 6 min per phantom (cardiac calibration on the CPU), ≈ 1.5 min per 1 mm truth.
+
+**k-space from the moving phantom:**
+- `prep_sim.py`:
+  - tissue sources in the reference pose: 1 mm, lumen-excluded, water / fat split, the phantom's table and
+    textures;
+  - B0 from the χ map (FFT dipole, 2nd-order shim) attached to the tissue;
+  - Eulerian blood frames from `phantom_4d --blood-export`;
+  - the breathing table, body mask, prescription.
+- `simphantom` (Rust / CUDA):
+  - readouts are binned in absolute time (10 ms); per bin, tissue moves by cardiac (ECG phase) and respiratory
+    motion, and blood comes from the nearest cardiac frame, shifted by respiration and advanced by v Δ;
+  - gradient nonlinearity, slab profile and coil sensitivities are applied at the moved positions;
+  - the direct sum is split over source chunks (f64 atomics), with k·(u + δ J v) moving the position to each
+    excitation;
+  - outputs follow the `sim4d` format (recon_p2np, show_run); resumable chunks.
+- `sim_truth.py`: the truth on the reconstruction grid (gated, mean breathing state, 2 × box average).
+
+**Next:**
+1. Chamber flow beyond potential flow: diastolic vortex ring (divergence-free add-on), then LBM (Tier B).
+2. Moving sources in `sim4d` (GPU particles / tissue points through `motion.py`) → k-space from the moving phantom,
+   5D reconstruction tests.
+3. 1 mm moving truth (GPU label pull-back), respiratory modulation of venous return.
+4. Fine-vessel growth; phantom layer in the viewer.

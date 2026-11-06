@@ -30,6 +30,24 @@ E = Path(sys.argv[1])
 v = np.load(E / "vessels.npz")
 P, R, V, S = v["points"].astype(np.float64), v["radius"].astype(np.float64), v["vessel"], v["spline"]
 names = [x["name"] for x in json.loads((E / "vessels.json").read_text())["vessels"]]
+# radius corrections: atlas radii (bevel × point radius) that are far below adult values; target = the vessel's maximum
+# radius after scaling (all its samples scale by the same factor). Sources: typical adult CT/MR diameters.
+RFIX = {"Hepatic portal vein": 6.0e-3, "Superior mesenteric vein": 4.5e-3, "Splenic vein": 4.0e-3, "Left subclavian artery": 4.5e-3,
+        "Right superior pulmonary vein": 6.5e-3, "Right inferior pulmonary vein": 6.0e-3, "Left superior pulmonary vein": 6.0e-3, "Left inferior pulmonary vein": 5.5e-3}
+rfix_applied = {}
+for vi, nm in enumerate(names):
+    if nm in RFIX:
+        m = V == vi
+        f = RFIX[nm] / R[m].max()
+        R[m] *= f
+        rfix_applied[nm] = round(float(f), 3)
+RMIN = {"Splenic artery": 2.0e-3, "Common hepatic artery": 2.2e-3, "Proper hepatic artery": 1.8e-3}  # thin atlas stretches
+for vi, nm in enumerate(names):
+    if nm in RMIN:
+        m = V == vi
+        R[m] = np.maximum(R[m], RMIN[nm])
+        rfix_applied[nm + " (floor)"] = RMIN[nm] * 1e3
+print("radius corrections:", rfix_applied)
 key = V.astype(np.int64) * 1000 + S
 starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]])
 ends = np.r_[starts[1:], len(P)]
@@ -212,10 +230,24 @@ for _ in range(3):  # a few rounds: fragments may chain through other fragments
         target_pts = np.flatnonzero(np.isin(ecomp[np.searchsorted(E_off, np.arange(len(pts_out)), side="right") - 1], bigger))
         if len(target_pts) == 0:
             continue
-        tt = cKDTree(pts_out[target_pts])
-        d, j = tt.query(npos[n0])
-        if d > (60e-3 if sysc[1] else 25e-3):  # lungs: segmental trees sit far from the lobar artery in this atlas
+        lim_b = 60e-3 if sysc[1] else 25e-3  # lungs: segmental trees sit far from the lobar artery in this atlas
+        tnames = np.array([E_name[q_] for q_ in np.searchsorted(E_off, target_pts, side="right") - 1])
+        fr_names = " ".join(c["members_sample"])
+        pref = None
+        if "Intrarenal arteries" in fr_names:
+            pref, lim_b = np.char.find(tnames.astype(str), "renal artery") >= 0, 60e-3
+        elif "Intrarenal veins" in fr_names:
+            pref, lim_b = np.char.find(tnames.astype(str), "renal vein") >= 0, 60e-3
+        dist = np.linalg.norm(pts_out[target_pts] - npos[n0], axis=1)
+        j = None
+        for ok_ in ([pref] if pref is not None else []) + [rad_out[target_pts] >= 1.5 * rad_at(n0), np.ones(len(target_pts), bool)]:
+            dd_ = np.where(ok_, dist, np.inf)
+            if dd_.min() <= lim_b:
+                j = int(np.argmin(dd_))
+                break
+        if j is None:
             continue
+        d = dist[j]
         # nearest node of the target edge (bridge to its closer end node, keeps the graph simple)
         g = target_pts[j]
         k = np.searchsorted(E_off, g, side="right") - 1
@@ -332,7 +364,7 @@ def mesh_vertices(rx):
     return np.concatenate(vs).astype(np.float64) if vs else None
 
 
-TARGET = {"av": mesh_vertices(r"leaflet of aortic valve|^Aortic valve"), "pv": mesh_vertices(r"leaflet of pulmonary valve"),
+TARGET = {"av": mesh_vertices(r"^(Left coronary|Right coronary|Non-coronary) leaflet$"), "pv": mesh_vertices(r"leaflet of pulmonary valve"),
           "ra": mesh_vertices(r"^Right atrium$"), "la": mesh_vertices(r"^Left atrium$")}
 CONNECT = [("Ascending aorta", "av", "systemic_arterial"), ("Bifurcation of pulmonary trunk", "pv", "pulmonary_arterial"),
            ("Superior vena cava", "ra", "systemic_venous"), ("Inferior vena cava (thoracic part)", "ra", "systemic_venous"),
@@ -358,12 +390,79 @@ for nm, tg, cl in CONNECT:
     m = max(2, int(np.ceil(gap / 0.5e-3)) + 1)
     E_a.append(t)  # heart end first: the connector runs away from the heart
     E_b.append(n)
-    EP.append(np.linspace(tp, npos[n], m))
-    ER.append(np.full(m, rn))
+    if tg in ("av", "pv"):
+        # Hermite curve leaving the valve along its axis (normal of the leaflet plane, toward the vessel) and entering
+        # the vessel along its own direction: the pulmonary trunk wraps around the aortic root instead of cutting it
+        _, _, vt = np.linalg.svd(tv - ref, full_matrices=False)
+        nv = vt[2] * np.sign(vt[2] @ (npos[n] - tp))
+        kk = next(k for k in ks if E_a[k] == n or E_b[k] == n)
+        q_ = EP[kk][min(4, len(EP[kk]) - 1)] - EP[kk][0] if E_a[kk] == n else EP[kk][-1 - min(4, len(EP[kk]) - 1)] - EP[kk][-1]
+        lv = q_ / max(np.linalg.norm(q_), 1e-12)  # from the vessel end into the vessel: the curve arrives along it
+        L_ = 1.2 * gap
+        ss = np.linspace(0, 1, m)[:, None]
+        h00, h10, h01, h11 = 2 * ss**3 - 3 * ss**2 + 1, ss**3 - 2 * ss**2 + ss, -2 * ss**3 + 3 * ss**2, ss**3 - ss**2
+        cv = h00 * tp + h10 * L_ * nv + h01 * npos[n] + h11 * L_ * lv
+        m = max(2, int(np.ceil(np.linalg.norm(np.diff(cv, axis=0), axis=1).sum() / 0.5e-3)) + 1)
+        ss = np.linspace(0, 1, m)[:, None]
+        h00, h10, h01, h11 = 2 * ss**3 - 3 * ss**2 + 1, ss**3 - 2 * ss**2 + ss, -2 * ss**3 + 3 * ss**2, ss**3 - ss**2
+        EP.append(h00 * tp + h10 * L_ * nv + h01 * npos[n] + h11 * L_ * lv)
+    else:
+        EP.append(np.linspace(tp, npos[n], m))
+    ER.append(np.full(len(EP[-1]), rn))
     E_name.append(f"connector: {nm}")
     heart_roots.append(t)
     connectors.append({"vessel": nm, "to": tg, "gap_mm": round(gap * 1e3, 1), "r_mm": round(float(rn * 1e3), 2)})
 print("heart connectors:", connectors)
+
+# ── root separation: the atlas places the pulmonary bifurcation and trunk within ~15 mm of the ascending-aortic axis
+#    (radii 12–14 mm each). Push vectors from the overlap of the trunk / bifurcation samples with the aorta (target
+#    axis distance 0.9 (r_i + r_j)) spread over the pulmonary arterial tree with a Gaussian falloff (σ 20 mm); iterated.
+def _sep(moving_names, fixed_names, carry_pred, sigma=20e-3, iters=8):
+    mv = [k for k in range(len(E_a)) if E_name[k] in moving_names]
+    fx = [k for k in range(len(E_a)) if E_name[k] in fixed_names]
+    carry = [k for k in range(len(E_a)) if carry_pred(E_name[k])]
+    if not mv or not fx:
+        return 0.0
+    FP = np.concatenate([EP[k] for k in fx])
+    FR = np.concatenate([ER[k] for k in fx])
+    ft = cKDTree(FP)
+    total = 0.0
+    for _ in range(iters):
+        C_ = np.concatenate([EP[k] for k in mv])
+        CR = np.concatenate([ER[k] for k in mv])
+        push = np.zeros_like(C_)
+        for i_, p_ in enumerate(C_):
+            for j_ in ft.query_ball_point(p_, CR[i_] + FR.max()):
+                d_ = np.linalg.norm(p_ - FP[j_])
+                ov = 0.9 * (CR[i_] + FR[j_]) - d_
+                if ov > 0:
+                    v_ = ov * (p_ - FP[j_]) / max(d_, 1e-9)
+                    if np.linalg.norm(v_) > np.linalg.norm(push[i_]):
+                        push[i_] = v_
+        on = np.linalg.norm(push, axis=1) > 0
+        if not on.any():
+            break
+        Cp, Pp = C_[on], push[on]
+        step = 0.0
+        for k in carry:
+            d2 = ((EP[k][:, None, :] - Cp[None]) ** 2).sum(-1)
+            w = np.exp(-d2 / (2 * sigma**2))
+            u = (w @ Pp) / np.maximum(w.sum(1, keepdims=True), 1e-12) * w.max(1, keepdims=True)
+            EP[k] = EP[k] + 0.5 * u
+            step = max(step, float(np.linalg.norm(0.5 * u, axis=1).max()))
+        total += step
+    return total
+
+
+_pa = {"connector: Bifurcation of pulmonary trunk", "Bifurcation of pulmonary trunk"}
+_ao = {"Ascending aorta", "connector: Ascending aorta", "Aortic arch"}
+_pa_comp_names = {E_name[k] for k in range(len(E_a)) if "pulmonary" in E_name[k].lower() and "vein" not in E_name[k].lower() or "of left lung" in E_name[k] or "of right lung" in E_name[k] and "vein" not in E_name[k]}
+moved_pa = _sep(_pa, _ao, lambda n: n in _pa_comp_names and "vein" not in n.lower())
+for k in range(len(E_a)):  # node positions follow their edges' end samples
+    npos[E_a[k]] = EP[k][0]
+    npos[E_b[k]] = EP[k][-1]
+print(f"root separation: pulmonary trunk / bifurcation moved up to ~{moved_pa * 1e3:.1f} mm (cumulative) away from the aorta")
+
 print(f"{len(joins)} proximal free-end joins:")
 for jn in joins:
     print("  ", jn)
@@ -426,8 +525,25 @@ diag = {
     "joins": len(joins), "bridges": len(bridges), "bridge_length_mm_p50_max": [float(np.median([b["length_mm"] for b in bridges])) if bridges else 0.0, float(max([b["length_mm"] for b in bridges], default=0.0))],
     "classes_by_length_m": {k: round(sum(c["length_m"] for c in comps if c["class"] == k), 2) for k in sorted({c["class"] for c in comps})},
 }
+# ── de-overlap: shrink radii where non-adjacent lumens intersect (deoverlap.py) ───────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from deoverlap import deoverlap  # noqa: E402
+
+venous_s = np.array([system_of(E_name[k].split(": ", 1)[-1])[0] for k in range(ne) for _ in range(E_off[k + 1] - E_off[k])])
+r_before = rad_out.copy()
+rad_out, dor = deoverlap(pts_out, rad_out, np.asarray(E_off), E_a, E_b, npos, lambda r: np.maximum(np.where(venous_s, 0.06, 0.12) * r, 0.1e-3), floor=0.85)
+chg = r_before - rad_out
+shr = {}
+for k in range(ne):
+    a, b = E_off[k], E_off[k + 1]
+    if chg[a:b].max() > 1e-5:
+        nm = E_name[k].split(": ", 1)[-1]
+        shr[nm] = max(shr.get(nm, 0.0), float((chg[a:b] / r_before[a:b]).max()))
+dor["vessels"] = {k: round(v, 3) for k, v in sorted(shr.items(), key=lambda kv: -kv[1])}
+diag["deoverlap"] = {k: v for k, v in dor.items() if k != "vessels"}
+print("de-overlap:", diag["deoverlap"], "largest shrinks:", list(dor["vessels"].items())[:12])
 np.savez_compressed(E / "graph.npz", node_pos=npos.astype(np.float32), edge_a=E_a.astype(np.int32), edge_b=E_b.astype(np.int32), edge_offsets=np.array(E_off, np.int64), points=pts_out.astype(np.float32), radius=rad_out.astype(np.float32), direction=direction, edge_comp=ecomp.astype(np.int32))
-(E / "graph.json").write_text(json.dumps({"diagnostics": diag, "components": comps, "edge_names": E_name, "joins": joins, "connectors": connectors, "source": "Z-Anatomy (CC BY-SA 4.0)"}, indent=1))
+(E / "graph.json").write_text(json.dumps({"diagnostics": diag, "components": comps, "edge_names": E_name, "joins": joins, "connectors": connectors, "radius_corrections": rfix_applied, "deoverlap_max_shrink": dor["vessels"], "source": "Z-Anatomy (CC BY-SA 4.0)"}, indent=1))
 print(json.dumps(diag, indent=1))
 for c in comps[:14]:
     print(f"{c['class']:20s} edges {c['edges']:5d} length {c['length_m']:6.2f} m  vessels {c['vessels']:4d}  rmax {c['max_radius_mm']:5.1f} mm  e.g. {c['members_sample'][:3]}")

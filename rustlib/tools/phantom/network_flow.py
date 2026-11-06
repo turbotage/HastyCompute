@@ -14,7 +14,8 @@ Model (classic linearised 1D / transmission-line theory, e.g. Womersley 1957; Ol
 - Veins: the atrial ends (venae cavae, coronary sinus / pulmonary veins) carry the atrial pressure waveform (a, c, v
   waves) as a pressure boundary; terminals are capillary sources with the Murray share of the cardiac output and no
   pulsation — the caval / pulmonary-venous pulsatility comes from the atrial waves through the compliant veins.
-- Arterial fragments not connected to their main tree are fed by the main tree's pressure at the nearest node.
+- Arterial fragments not connected to their main tree are fed by the main tree's pressure at the nearest node and draw
+  their root flow from it there (coupled fixed-point iteration), so the main root carries the full ventricular output.
 Output (<out_dir>/network_flow.npz + .json + figs/): per centreline sample of graph.npz the complex flow and pressure
 harmonics (flow positive along the sample order), per-edge summaries, waveforms, and gates (Kirchhoff residuals).
 """
@@ -44,6 +45,9 @@ def opt(name, default):
 
 HR = opt("--hr", 70.0)
 SV = opt("--sv", 75.0) * 1e-6  # m³
+P_SYS, P_PUL = opt("--p-sys", 93.0), opt("--p-pul", 15.0)  # mean arterial pressures [mmHg]
+C_SCALE = opt("--ctot-scale", 1.0)  # total arterial compliance factor (both circulations)
+TERR_SIGMA, TERR_SEED = opt("--terr-sigma", 0.0), int(opt("--seed", 0))  # lognormal jitter of the territory fractions
 NH = int(opt("--harmonics", 25))
 T = 60.0 / HR
 W = 2 * np.pi / T * np.arange(NH + 1)  # angular frequencies, W[0] = 0
@@ -51,6 +55,7 @@ RHO, MU = 1060.0, 3.5e-3
 MMHG = 133.322
 K1, K2, K3 = 2.0e6, -2253.0, 8.65e4  # Olufsen 2000 (SI): Eh/r0 = k1 exp(k2 r0) + k3
 SEG = 5e-3
+PHI_VE = 0.15  # wall viscoelastic loss tangent (≈ 8.5°; damps the high-frequency reflections)
 
 g = np.load(E / "graph.npz")
 gj = json.loads((E / "graph.json").read_text())
@@ -111,8 +116,8 @@ H = {k: harm(v) for k, v in WAVE.items()}
 
 # ── classes and boundary nodes ─────────────────────────────────────────────────────────────────────────────────────
 CLASS = {
-    "systemic_arterial": dict(kind="artery", ehr=1.0, inflow="Q_aorta", p_mean=93.0, p_out=5.0, c_tot=1.3),
-    "pulmonary_arterial": dict(kind="artery", ehr=0.35, inflow="Q_pulmonary", p_mean=15.0, p_out=8.0, c_tot=3.5),
+    "systemic_arterial": dict(kind="artery", ehr=1.0, inflow="Q_aorta", p_mean=P_SYS, p_out=5.0, c_tot=1.3 * C_SCALE),
+    "pulmonary_arterial": dict(kind="artery", ehr=0.35, inflow="Q_pulmonary", p_mean=P_PUL, p_out=8.0, c_tot=5.0 * C_SCALE),
     "systemic_venous": dict(kind="vein", ehr=0.1, p_root="P_RA"),
     "pulmonary_venous": dict(kind="vein", ehr=0.15, p_root="P_LA"),
 }
@@ -197,7 +202,7 @@ def z_long(w, r):
 
 def assemble(w, extra_diag):
     ys = 1.0 / (z_long(w, seg_r) * seg_l)
-    yt = 1j * w * CP * seg_l / 2
+    yt = 1j * w * CP * seg_l / 2 / (1 + 1j * PHI_VE * (w > 0))  # viscoelastic wall: complex modulus E(1 + iφ)
     rows = np.r_[seg_u, seg_v, seg_u, seg_v]
     cols = np.r_[seg_u, seg_v, seg_v, seg_u]
     vals = np.r_[ys + yt, ys + yt, -ys, -ys]
@@ -245,9 +250,10 @@ for cid, c in comps.items():
 # brain ~14 %, coronary ~4.5 %, kidneys ~19 %, splanchnic ~22 %, legs ~16 %, arms ~ part of the subclavians), split
 # inside each territory ∝ r³ (Murray); terminals outside every territory share the rest ∝ r³
 TERR = {
+    # (≈ 7 % of the output is left for the unnamed terminals: chest / abdominal wall, bronchial, oesophageal, spinal)
     "systemic_arterial": {"Left coronary artery": 0.025, "Right coronary artery": 0.02, "Right common carotid artery": 0.065, "Left common carotid artery": 0.065,
-                          "Right subclavian artery": 0.05, "Left subclavian artery": 0.05, "Coeliac trunk": 0.10, "Superior mesenteric artery": 0.10,
-                          "Inferior mesenteric artery": 0.02, "Right renal artery": 0.095, "Left renal artery": 0.095, "Common iliac artery.r": 0.08, "Common iliac artery.l": 0.08},
+                          "Right subclavian artery": 0.06, "Left subclavian artery": 0.06, "Coeliac trunk": 0.11, "Superior mesenteric artery": 0.11,
+                          "Inferior mesenteric artery": 0.025, "Right renal artery": 0.095, "Left renal artery": 0.095, "Common iliac artery.r": 0.10, "Common iliac artery.l": 0.10},
     "systemic_venous": {"Hepatic portal vein": 0.20, "Right renal vein": 0.095, "Left renal vein": 0.095, "Internal jugular vein.l": 0.065, "Internal jugular vein.r": 0.065,
                         "Left subclavian vein": 0.05, "Right subclavian vein": 0.05, "Common iliac vein.l": 0.08, "Common iliac vein.r": 0.08, "Coronary sinus": 0.045, "Azygos vein": 0.03},
     # lungs: right ~55 %, left ~45 % (the disconnected left-upper segmental fragment takes the rest)
@@ -261,6 +267,16 @@ Gw = sp.coo_matrix((np.r_[elen_g, elen_g] + 1e-9, (np.r_[ea, eb], np.r_[eb, ea])
 edge_of = {}
 for k in range(ne):
     edge_of.setdefault((int(min(ea[k], eb[k])), int(max(ea[k], eb[k]))), k)
+if TERR_SIGMA > 0:  # per-phantom territory fractions: lognormal jitter, the unassigned rest kept ≥ 4 %
+    rng_t = np.random.default_rng(TERR_SEED)
+    for cls_, tv in TERR.items():
+        tot0 = sum(tv.values())
+        for k_ in sorted(tv):
+            tv[k_] *= float(np.exp(rng_t.normal(0, TERR_SIGMA)))
+        tot = sum(tv.values())
+        cap = min(tot0, 0.96) if cls_.endswith("arterial") and cls_.startswith("systemic") else tot0
+        for k_ in tv:
+            tv[k_] *= cap / tot
 share, territory = {}, {}
 for cls in CLASS:
     cids = [cid for cid, s in setup.items() if comps[cid]["class"] == cls]
@@ -320,23 +336,28 @@ for cls in ("systemic_arterial", "pulmonary_arterial"):
         for n, qq in zip(s["terms"], q):
             term_R[n] = max(p[n], 0.25 * dp) / qq
         p_dc[act] = p[act]
-    # rescale so that the root mean pressure is the target with the root current = CO (main) and fed fragments
-    for it in range(6):
+    # rescale so that the root mean pressure is the target with the root current = CO; fed fragments draw their root
+    # flow from the main tree at their feeding node (coupled by fixed-point iteration)
+    qf = {cid: CO * sum(share[n] for n in setup[cid]["terms"]) for cid in cids if setup[cid]["fed"] is not None}
+    for it in range(10):
         for cid in cids:
             s = setup[cid]
             act = node_comp == cid
             diag = np.zeros(NN)
             diag[s["terms"]] = [1 / term_R[n] for n in s["terms"]]
-            Yd = Y0 + sp.diags(diag)
+            Yd = (Y0 + sp.diags(diag)).tocsr()
             if s["fed"] is None:
                 inj = np.zeros(NN, complex)
-                inj[s["root"]] = CO * (1 - sum(share[n] for c2 in cids if c2 != cid for n in setup[c2]["terms"]))
+                inj[s["root"]] = CO
+                for c2, q2 in qf.items():
+                    inj[setup[c2]["fed"]] -= q2
                 p = solve(Yd, inj, [], [], act).real
                 f = p[s["root"]] / dp
                 for n in s["terms"]:
                     term_R[n] /= f
             else:
                 p = solve(Yd, np.zeros(NN, complex), [s["root"]], [p_dc[s["fed"]]], act).real
+                qf[cid] = float((Yd[s["root"]] @ p)[0])  # current entering the fragment at its root
             p_dc[act] = p[act]
     for cid in cids:
         s = setup[cid]
@@ -367,24 +388,39 @@ for h, w in enumerate(W):
                 rc, r, c = term_Rc[n], term_R[n] - term_Rc[n], term_C[n]
                 diag[n] = 1.0 / (rc + r / (1 + 1j * w * r * c))
     Yh, ys, yt = assemble(w, diag)
-    for cid in order:
-        s = setup[cid]
-        act = node_comp == cid
-        inj = np.zeros(NN, complex)
-        cfg = s["cfg"]
-        if cfg["kind"] == "artery":
+    Yh = Yh.tocsr()
+    art = [cid for cid in order if setup[cid]["cfg"]["kind"] == "artery"]
+    ven = [cid for cid in order if setup[cid]["cfg"]["kind"] != "artery"]
+    qfh, injs = {}, {}
+    for it in range(5 if any(setup[c]["fed"] is not None for c in art) else 1):  # fragments ↔ main tree
+        for cid in art:
+            s = setup[cid]
+            act = node_comp == cid
+            inj = np.zeros(NN, complex)
             if s["fed"] is None:
-                frag = sum(share[n] for c2, s2 in setup.items() if c2 != cid and comps[c2]["class"] == comps[cid]["class"] for n in s2["terms"])
-                inj[s["root"]] = H[cfg["inflow"]][h] * (1 - frag)
+                inj[s["root"]] = H[s["cfg"]["inflow"]][h]
+                for c2, q2 in qfh.items():
+                    if comps[c2]["class"] == comps[cid]["class"]:
+                        inj[setup[c2]["fed"]] -= q2
                 p = solve(Yh, inj, [], [], act)
             else:
                 p = solve(Yh, inj, [s["root"]], [P[h, s["fed"]]], act)
-        else:
-            if h == 0:
-                inj[s["terms"]] = [share[n] * CO for n in s["terms"]]
-            p = solve(Yh, inj, s["roots"], [H[cfg["p_root"]][h]] * len(s["roots"]), act)
+                qfh[cid] = complex((Yh[s["root"]] @ p)[0])
+            P[h, act] = p[act]
+            injs[cid] = inj
+    for cid in ven:
+        s = setup[cid]
+        act = node_comp == cid
+        inj = np.zeros(NN, complex)
+        if h == 0:
+            inj[s["terms"]] = [share[n] * CO for n in s["terms"]]
+        p = solve(Yh, inj, s["roots"], [H[s["cfg"]["p_root"]][h]] * len(s["roots"]), act)
         P[h, act] = p[act]
-        # residual on the free nodes
+        injs[cid] = inj
+    for cid in order:
+        s = setup[cid]
+        act = node_comp == cid
+        inj = injs[cid]
         dn = s.get("roots", [s.get("root")] if s.get("fed") is not None else [])
         free = np.flatnonzero(act & ~np.isin(np.arange(NN), dn))
         r_ = (Yh[free] @ P[h] - inj[free])
@@ -400,7 +436,7 @@ for cid, s in setup.items():
 kir = np.zeros(NN)
 np.add.at(kir, seg_u, -QS[0].real)
 np.add.at(kir, seg_v, QS[0].real)
-bnodes = {n for s_ in setup.values() for n in s_.get("roots", []) + ([s_["root"]] if "root" in s_ else []) + s_["terms"]}
+bnodes = {n for s_ in setup.values() for n in s_.get("roots", []) + ([s_["root"]] if "root" in s_ else []) + ([s_["fed"]] if s_.get("fed") is not None else []) + s_["terms"]}
 junc = np.array([n for n in np.flatnonzero(deg >= 2) if n not in bnodes])
 kir_rel = float(np.abs(kir[junc]).max() / CO)
 

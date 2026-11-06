@@ -529,6 +529,7 @@ dependencies = [
  "hasty-nufft",
  "hasty-phantom",
  "hasty-recon",
+ "hasty-seq",
  "hasty-testkit",
  "hasty-toeplitz",
  "hasty-value",
@@ -616,6 +617,14 @@ dependencies = [
  "num-complex",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "hasty-seq"
+version = "0.1.0"
+dependencies = [
+ "num-complex",
+ "rustfft",
 ]
 
 [[package]]
