@@ -38,6 +38,40 @@ export class HTensor {
     }
 }
 
+/** wrap a transferred ArrayBuffer as a tensor (used by the decode workers) */
+export function tensorFromBuffer(dtype, shape, buffer) {
+    const [, , , T] = DTYPES[CODE[dtype]];
+    return new HTensor(dtype, shape, new T(buffer, 0, buffer.byteLength / T.BYTES_PER_ELEMENT));
+}
+
+/** FIFO of byte chunks; take(n) is zero-copy when the bytes sit in one chunk, else coalesces just those bytes once */
+export class ByteQueue {
+    constructor() { this.q = []; this.off = 0; this.length = 0; }
+    push(chunk) { if (chunk.length) { this.q.push(chunk); this.length += chunk.length; } }
+    take(n) {
+        if (n === 0) return new Uint8Array(0);
+        if (n > this.length) throw new Error('ByteQueue underflow');
+        this.length -= n;
+        const first = this.q[0];
+        if (first.length - this.off >= n) {
+            const s = first.subarray(this.off, this.off + n);
+            this.off += n;
+            if (this.off === first.length) { this.q.shift(); this.off = 0; }
+            return s;
+        }
+        const out = new Uint8Array(n);
+        let o = 0;
+        while (o < n) {
+            const c = this.q[0];
+            const k = Math.min(c.length - this.off, n - o);
+            out.set(c.subarray(this.off, this.off + k), o);
+            o += k; this.off += k;
+            if (this.off === c.length) { this.q.shift(); this.off = 0; }
+        }
+        return out;
+    }
+}
+
 // ── block codec ─────────────────────────────────────────────────────────────────────────────────────────────────
 export function lz4Decompress(src, dst) {
     let s = 0, d = 0;
@@ -46,7 +80,8 @@ export function lz4Decompress(src, dst) {
         const token = src[s++];
         let lit = token >>> 4;
         if (lit === 15) { let b; do { b = src[s++]; lit += b; } while (b === 255); }
-        dst.set(src.subarray(s, s + lit), d);
+        if (lit <= 24) { for (let k = 0; k < lit; k++) dst[d + k] = src[s + k]; }   // short literal runs: no subarray allocation
+        else dst.set(src.subarray(s, s + lit), d);
         s += lit; d += lit;
         if (s >= n) break;                       // the last sequence carries literals only
         const off = src[s] | (src[s + 1] << 8);
@@ -56,27 +91,42 @@ export function lz4Decompress(src, dst) {
         ml += 4;
         let m = d - off;
         if (off === 0 || m < 0) throw new Error('lz4: bad match offset');
-        if (off >= ml) { dst.copyWithin(d, m, m + ml); d += ml; }
-        else { for (let k = 0; k < ml; k++) dst[d++] = dst[m++]; }   // overlapping: repeat the pattern
+        if (ml >= 64 && off >= ml) { dst.copyWithin(d, m, m + ml); d += ml; }
+        else { for (let k = 0; k < ml; k++) dst[d++] = dst[m++]; }   // forward copy is also right for overlapping matches
     }
     if (d !== dst.length) throw new Error(`lz4: decoded ${d} of ${dst.length} bytes`);
 }
 
 function unshuffle(src, word, dst) {
     const n = Math.floor(src.length / word);
-    for (let b = 0; b < word; b++) {
-        const o = b * n;
-        for (let i = 0; i < n; i++) dst[i * word + b] = src[o + i];
+    const aligned = dst.byteOffset % word === 0;
+    if (word === 2 && aligned) {
+        const d = new Uint16Array(dst.buffer, dst.byteOffset, n);
+        for (let i = 0; i < n; i++) d[i] = src[i] | (src[n + i] << 8);
+    } else if (word === 4 && aligned) {
+        const d = new Uint32Array(dst.buffer, dst.byteOffset, n);
+        const n2 = 2 * n, n3 = 3 * n;
+        for (let i = 0; i < n; i++) d[i] = (src[i] | (src[n + i] << 8) | (src[n2 + i] << 16) | (src[n3 + i] << 24)) >>> 0;
+    } else {
+        for (let b = 0; b < word; b++) {
+            const o = b * n;
+            for (let i = 0; i < n; i++) dst[i * word + b] = src[o + i];
+        }
     }
     dst.set(src.subarray(n * word), n * word);
 }
 
 function undelta(buf, word) {
     const n = Math.floor(buf.length / word);
+    if (word === 1) { for (let i = 1; i < n; i++) buf[i] = (buf[i] + buf[i - 1]) & 255; return; }
+    if ((word === 2 || word === 4) && buf.byteOffset % word === 0) {   // in place on a typed view
+        const v = word === 2 ? new Uint16Array(buf.buffer, buf.byteOffset, n) : new Uint32Array(buf.buffer, buf.byteOffset, n);
+        for (let i = 1; i < n; i++) v[i] = v[i] + v[i - 1];
+        return;
+    }
     const a = new Uint8Array(n * word);
     a.set(buf.subarray(0, n * word));
-    if (word === 1) { for (let i = 1; i < n; i++) a[i] = (a[i] + a[i - 1]) & 255; }
-    else if (word === 2 || word === 4) {
+    if (word === 2 || word === 4) {
         const v = word === 2 ? new Uint16Array(a.buffer) : new Uint32Array(a.buffer);
         for (let i = 1; i < n; i++) v[i] = v[i] + v[i - 1];
     } else if (word === 8) {
@@ -112,9 +162,10 @@ function decodeBlock(codec, filter, word, payload, out) {
 const NEED = Symbol('need');
 
 export class Decoder {
-    constructor() {
-        this.buf = new Uint8Array(0);
-        this.pos = 0;
+    /** @param {{verify?: boolean}} opts  verify: check per-block CRC32 (default true; the browser client skips it over TLS/TCP) */
+    constructor({ verify = true } = {}) {
+        this.q = new ByteQueue();
+        this.verify = verify;
         this.value = undefined;
         this.done = false;
         this.gen = this.#stream();
@@ -123,27 +174,20 @@ export class Decoder {
 
     push(chunk) {
         if (this.done) { if (chunk.length) throw new Error('data after the end of the value'); return; }
-        const rest = this.buf.length - this.pos;
-        const nb = new Uint8Array(rest + chunk.length);
-        nb.set(this.buf.subarray(this.pos));
-        nb.set(chunk, rest);
-        this.buf = nb;
-        this.pos = 0;
+        this.q.push(chunk);
         const r = this.gen.next();
         if (r.done) { this.done = true; this.value = r.value; }
     }
 
     finish() {
         if (!this.done) throw new Error('truncated stream');
-        if (this.pos !== this.buf.length) throw new Error('trailing bytes');
+        if (this.q.length !== 0) throw new Error('trailing bytes');
         return this.value;
     }
 
     *#need(n) {
-        while (this.buf.length - this.pos < n) yield NEED;
-        const s = this.buf.subarray(this.pos, this.pos + n);
-        this.pos += n;
-        return s;
+        while (this.q.length < n) yield NEED;
+        return this.q.take(n);
     }
 
     *#stream() {
@@ -206,7 +250,7 @@ export class Decoder {
                     const crc = flags & 1 ? new DataView((yield* this.#need(4)).slice().buffer).getUint32(0, true) : null;
                     if (raw !== Math.min(blockSize, nbytes - off)) throw new Error('block raw length mismatch');
                     const payload = yield* this.#need(comp);
-                    if (crc !== null && crc32(payload) !== crc) throw new Error('block checksum mismatch');
+                    if (crc !== null && this.verify && crc32(payload) !== crc) throw new Error('block checksum mismatch');
                     decodeBlock(codec, filter, word, payload, out.subarray(off, off + raw));
                     off += raw;
                 }
@@ -217,8 +261,8 @@ export class Decoder {
     }
 }
 
-export function decode(bytes) {
-    const d = new Decoder();
+export function decode(bytes, opts) {
+    const d = new Decoder(opts);
     d.push(bytes);
     return d.finish();
 }

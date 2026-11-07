@@ -1,7 +1,7 @@
 // Browser client of the hasty server (proto: rustlib/crates/hasty-server/proto/hasty.proto) over gRPC-web.
 // Values arrive as hasty value streams (value_format.js); server streams are decoded frame by frame as they arrive.
 // Ids are 32-character hex strings.
-import { Decoder, encode } from './value_format.js';
+import { ByteQueue, Decoder, HTensor, encode, tensorFromBuffer } from './value_format.js';
 
 // ── minimal protobuf ────────────────────────────────────────────────────────────────────────────────────────────
 class W {
@@ -104,23 +104,26 @@ export class HastyClient {
         const hs = r.headers.get('grpc-status');
         if (hs !== null && hs !== '0') throw new GrpcError(Number(hs), decodeURIComponent(r.headers.get('grpc-message') ?? ''));
         const reader = r.body.getReader();
-        let buf = new Uint8Array(0);
+        const q = new ByteQueue();        // network chunks are queued, never re-copied per read
+        let need = -1, flag = 0;          // need = payload length of the frame whose header was read, -1 = header pending
         for (;;) {
             const { value, done } = await reader.read();
-            if (value) { const nb = new Uint8Array(buf.length + value.length); nb.set(buf); nb.set(value, buf.length); buf = nb; }
-            let p = 0;
-            while (buf.length - p >= 5) {
-                const flag = buf[p];
-                const n = new DataView(buf.buffer, buf.byteOffset + p + 1, 4).getUint32(0, false);
-                if (buf.length - p - 5 < n) break;
-                const payload = buf.subarray(p + 5, p + 5 + n);
-                p += 5 + n;
+            if (value) q.push(value);
+            for (;;) {
+                if (need < 0) {
+                    if (q.length < 5) break;
+                    const h = q.take(5);
+                    flag = h[0];
+                    need = new DataView(h.buffer, h.byteOffset + 1, 4).getUint32(0, false);
+                }
+                if (q.length < need) break;
+                const payload = q.take(need);
+                need = -1;
                 if (flag & 0x80) {
                     const [code, msg] = trailerStatus(td.decode(payload));
                     if (code !== 0) throw new GrpcError(code, msg);
-                } else onMessage(payload.slice());
+                } else onMessage(payload);
             }
-            buf = buf.subarray(p);
             if (done) break;
         }
     }
@@ -138,18 +141,65 @@ export class HastyClient {
     async commands() { return many(parse(await this.#unary('Commands', new W())), 1).map((b) => { const m = parse(b); return { name: str(m, 1), doc: str(m, 2) }; }); }
     async show(id, view = 'orthoslicer') { await this.#unary('Show', new W().msg(1, idMsg(id)).str(2, view)); }
 
-    /** fetch a value (or a slice of it); decoded incrementally as chunks arrive. onBytes(n) reports progress */
-    async get(id, { slice = '', codec = 'lz4', delta = false, onBytes } = {}) {
+    /**
+     * fetch a value (or a slice of it); decoded incrementally as chunks arrive. onBytes(n) reports progress.
+     * verify: check block CRCs (default off: the transport is TCP/TLS). signal: AbortSignal to cancel the request.
+     */
+    async get(id, { slice = '', codec = 'lz4', delta = false, onBytes, verify = false, signal } = {}) {
         const enc = new W().str(1, codec).bool(3, delta);
-        const d = new Decoder();
+        const d = new Decoder({ verify });
         let n = 0;
         await this.#call('Get', new W().msg(1, idMsg(id)).str(2, slice).msg(3, enc), (m) => {
             const data = one(parse(m), 1, new Uint8Array());
             n += data.length;
             d.push(data);
             if (onBytes) onBytes(n);
-        });
+        }, signal);
         return d.finish();
+    }
+
+    /** start `n` decode workers: getTensor() then fetches and decodes off the main thread (no-op without Worker support) */
+    enableWorkers(n = Math.max(1, Math.min(3, (globalThis.navigator?.hardwareConcurrency ?? 4) - 1))) {
+        if (this.#pool || typeof Worker === 'undefined') return this;
+        try {
+            const url = new URL('./hasty_worker.js', import.meta.url);
+            this.#pool = Array.from({ length: n }, () => ({ w: new Worker(url, { type: 'module' }), load: 0 }));
+            this.#pending = new Map();
+            for (const p of this.#pool) {
+                p.w.onmessage = (ev) => {
+                    const m = ev.data, h = this.#pending.get(m.rid);
+                    if (!h) return;
+                    this.#pending.delete(m.rid);
+                    h.pool.load--;
+                    if (m.error !== undefined) h.reject(m.aborted ? Object.assign(new Error('aborted'), { name: 'AbortError' }) : new Error(m.error));
+                    else h.resolve(tensorFromBuffer(m.dtype, m.shape, m.buf));
+                };
+                p.w.onerror = (e) => console.error('hasty worker', e.message ?? e);
+            }
+        } catch (e) { console.warn('hasty: decode workers unavailable, decoding on the main thread', e); this.#pool = null; }
+        return this;
+    }
+    #pool = null;
+    #pending = null;
+    #rid = 0;
+
+    /** like get() for tensors (slices); decoded in a worker when enableWorkers() was called. Transfers the buffer, no copy. */
+    async getTensor(id, opts = {}) {
+        if (!this.#pool) {
+            const v = await this.get(id, opts);
+            if (!(v instanceof HTensor)) throw new Error('getTensor: value is not a tensor');
+            return v;
+        }
+        const { signal, slice = '', codec = 'lz4', delta = false, verify = false } = opts;
+        if (signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        const pool = this.#pool.reduce((a, b) => (b.load < a.load ? b : a));
+        const rid = ++this.#rid;
+        pool.load++;
+        return new Promise((resolve, reject) => {
+            this.#pending.set(rid, { resolve, reject, pool });
+            if (signal) signal.addEventListener('abort', () => pool.w.postMessage({ op: 'abort', rid }), { once: true });
+            pool.w.postMessage({ op: 'get', rid, base: this.base || globalThis.location?.origin || '', id, slice, codec, delta, verify });
+        });
     }
 
     /** upload a value (stored blocks); returns its id */

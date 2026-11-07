@@ -6,3 +6,7 @@ pub fn median(v: &[f32]) -> f32 {
     s.sort_by(|a, b| a.partial_cmp(b).unwrap());
     s[s.len() / 2]
 }
+
+pub mod seqsched;
+pub mod b0data;
+pub mod physio;

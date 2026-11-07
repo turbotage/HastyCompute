@@ -138,7 +138,8 @@ pub struct ReadoutRec {
 
 /// Per-ADC-sample parameters for the direct-sum simulator (f32, 16 per sample):
 /// k = γM0 (rad/m), m1 = γM1 (rad·s/m), m2h = γM2/2 (rad·s²/m), w = concomitant coefficients of [z², x²+y², xz, yz]
-/// (rad/m²), tau = time since excitation (s), delta = excitation time minus the flow-state time (s, set by the driver).
+/// (rad/m²), tau = time since excitation (s), delta = excitation time minus the flow-state time (s, set by the driver),
+/// phi0 = a spatially constant phase (rad; the B0 terms of a played GIRF chain, 0 otherwise).
 pub const SAMPLE_FLOATS: usize = 16;
 
 #[derive(Clone, Debug)]
@@ -309,4 +310,82 @@ impl Acquisition {
     pub fn k_logical(&self, i: usize) -> Vec<Vec3> {
         (0..self.n_adc()).map(|n| self.moments_logical(i, n).m0.map(|v| GAMMA * v)).collect()
     }
+}
+
+/// What the direct-sum simulator needs from any sequence: the readout schedule (one record per excitation, a fixed
+/// number of ADC samples each) and the per-sample parameters in the [`SAMPLE_FLOATS`] layout. Implemented by the spiral
+/// [`Acquisition`] here and by the `hasty-seq` designs (hasty-bench `seqsched`).
+pub trait Schedule: Sync {
+    fn n_readouts(&self) -> usize;
+    fn n_adc(&self) -> usize;
+    fn tr(&self) -> f64;
+    /// first echo time after the excitation, s
+    fn te(&self) -> f64;
+    fn t_exc(&self, i: usize) -> f64;
+    /// row of readouts.npy: t_exc, enc, part, frame, cardiac phase, rotation (9, row-major)
+    fn readout_row(&self, i: usize) -> [f64; 14];
+    /// [readout][adc sample][SAMPLE_FLOATS] for readouts `range` (delta = 0; the driver sets it)
+    fn sample_params(&self, range: std::ops::Range<usize>) -> Vec<f32>;
+    /// one-line description for logs
+    fn describe(&self) -> String;
+}
+
+impl Schedule for Acquisition {
+    fn n_readouts(&self) -> usize {
+        self.readouts.len()
+    }
+    fn n_adc(&self) -> usize {
+        self.adc_times.len()
+    }
+    fn tr(&self) -> f64 {
+        self.tr
+    }
+    fn te(&self) -> f64 {
+        self.t_ro
+    }
+    fn t_exc(&self, i: usize) -> f64 {
+        self.readouts[i].t_exc
+    }
+    fn readout_row(&self, i: usize) -> [f64; 14] {
+        let r = &self.readouts[i];
+        let mut v = [0.0; 14];
+        v[..5].copy_from_slice(&[r.t_exc, r.enc as f64, r.part as f64, r.frame as f64, r.card.phase]);
+        for a in 0..3 {
+            for b in 0..3 {
+                v[5 + 3 * a + b] = r.rot[a][b];
+            }
+        }
+        v
+    }
+    fn sample_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
+        Acquisition::sample_params(self, range)
+    }
+    fn describe(&self) -> String {
+        format!("spiral 4D flow ({:?}, {:?}), {} encodes", self.params.encoding, self.params.coverage, self.params.encode_m1().len())
+    }
+}
+
+/// the [`SAMPLE_FLOATS`] record of one sample from physical-frame moments (time origin = excitation): M0, M1, M2 (T·s^n/m)
+/// and P = ∫G Gᵀ (xx, yy, zz, xy, xz, yz), field b0 (T), time since excitation tau (s)
+pub fn sample_record(m0: &Vec3, m1: &Vec3, m2: &Vec3, p: &[f64; 6], b0: f64, tau: f64) -> [f32; SAMPLE_FLOATS] {
+    let wc = GAMMA / (2.0 * b0);
+    let v = [
+        GAMMA * m0[0],
+        GAMMA * m0[1],
+        GAMMA * m0[2],
+        GAMMA * m1[0],
+        GAMMA * m1[1],
+        GAMMA * m1[2],
+        0.5 * GAMMA * m2[0],
+        0.5 * GAMMA * m2[1],
+        0.5 * GAMMA * m2[2],
+        wc * (p[0] + p[1]),
+        wc * p[2] / 4.0,
+        -wc * p[4],
+        -wc * p[5],
+        tau,
+        0.0,
+        0.0,
+    ];
+    v.map(|x| x as f32)
 }

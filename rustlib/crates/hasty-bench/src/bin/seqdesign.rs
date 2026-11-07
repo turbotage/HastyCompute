@@ -4,7 +4,7 @@
 //! GIRF-actual trajectory, and the encoding moments at TE from the designed waveforms. Writes arrays + summary.json into <out>; figures: tools/seq/plot_seqdesign.py <out>.
 //! Interruptible (STOP file / SIGINT) and resumable: evaluations are cached in <out>/evals.jsonl and the search is
 //! deterministic, so a rerun replays the cache and continues.
-//!   seqdesign <out> [--res 2e-3] [--fov 0.32] [--t-adc 3e-3] [--venc 1.5 | --v-ext V]
+//!   seqdesign <out> [--encode robust[:extra_ms[:slew_scale]]] [--res-girf band|<variant> [--res-weight 1]] [--res 2e-3] [--fov 0.32] [--t-adc 3e-3] [--venc 1.5 | --v-ext V]
 //!             [--scheme hadamard|referenced|dual7|coprime7|coprime8|coprime8h] [--p 2]
 //!             [--pns-target 80] [--asc FILE] [--edge 1] [--dwell S] [--rot super|fib|golden] [--n-rot-pns 400]
 //!             [--aniso-weight 0] [--spoil-cycles 2 | 0.5 with --return] [--iters 80] [--check]
@@ -55,19 +55,21 @@ struct Rec {
     part: String,
     slew: [f64; 3],
     aniso: f64,
+    /// readout resonance exposure, Nyquist cells (0 when not evaluated)
+    res: f64,
 }
 
 impl Rec {
     fn of(e: &Eval) -> Rec {
-        Rec { shape: e.shape, objective: e.objective, feasible: e.feasible, n: e.n_eff, tr: e.tr.tr(), te: e.tr.te(), t_adc: e.tr.spoke.t_adc, pns: e.pns.max, part: format!("{:?}", e.pns.part), slew: e.slew, aniso: e.aniso }
+        Rec { shape: e.shape, objective: e.objective, feasible: e.feasible, n: e.n_eff, tr: e.tr.tr(), te: e.tr.te(), t_adc: e.tr.spoke.t_adc, pns: e.pns.max, part: format!("{:?}", e.pns.part), slew: e.slew, aniso: e.aniso, res: e.res }
     }
     fn infeasible(s: Shape) -> Rec {
-        Rec { shape: s, objective: f64::INFINITY, feasible: false, n: 0.0, tr: 0.0, te: 0.0, t_adc: 0.0, pns: 0.0, part: "none".into(), slew: [0.0; 3], aniso: 0.0 }
+        Rec { shape: s, objective: f64::INFINITY, feasible: false, n: 0.0, tr: 0.0, te: 0.0, t_adc: 0.0, pns: 0.0, part: "none".into(), slew: [0.0; 3], aniso: 0.0, res: 0.0 }
     }
     fn json(&self) -> Value {
         json!({"bits": key(&self.shape).map(|b| format!("{b:016x}")), "kg0": self.shape.kg0, "wobble": self.shape.wobble, "wobble_freq": self.shape.wobble_freq,
                "objective": if self.objective.is_finite() { self.objective } else { -1.0 }, "feasible": self.feasible, "n": self.n,
-               "tr": self.tr, "te": self.te, "t_adc": self.t_adc, "pns": self.pns, "part": self.part, "slew": self.slew, "aniso": self.aniso})
+               "tr": self.tr, "te": self.te, "t_adc": self.t_adc, "pns": self.pns, "part": self.part, "slew": self.slew, "aniso": self.aniso, "res": self.res})
     }
     fn from_json(v: &Value) -> Rec {
         let f = |k: &str| v[k].as_f64().unwrap();
@@ -93,6 +95,7 @@ impl Rec {
             part: v["part"].as_str().unwrap().to_string(),
             slew: [sl[0], sl[1], sl[2]],
             aniso: f("aniso"),
+            res: v["res"].as_f64().unwrap_or(0.0),
         }
     }
 }
@@ -239,6 +242,10 @@ fn main() {
     };
     let n_rot_pns: usize = take("--n-rot-pns").map(|s| s.parse().unwrap()).unwrap_or(400);
     let aniso_weight: f64 = take("--aniso-weight").map(|s| s.parse().unwrap()).unwrap_or(0.0);
+    // resonance exposure of the readout in the objective: --res-girf band (generic 0.5–2 kHz) | <Girf::variants name>
+    // (its resonances, as if measured), weight --res-weight per Nyquist cell of exposure
+    let res_girf = take("--res-girf");
+    let res_weight: f64 = take("--res-weight").map(|s| s.parse().unwrap()).unwrap_or(1.0);
     let ret: Option<f64> = take("--return").map(|s| s.parse().unwrap());
     // --spoil physical (constant z moment, per-rotation tail) | endpoint (no tail: the readout end point, rotating)
     //         | radial (the trajectory continues out along its end direction to the spoil moment, rotating)
@@ -247,6 +254,9 @@ fn main() {
     assert!(!spoil_endpoint || ret.is_some(), "--spoil endpoint needs --return (the readout must end at rest)");
     let threads: usize = take("--threads").map(|s| s.parse().unwrap()).unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()));
     let spoil_cycles: f64 = take("--spoil-cycles").map(|s| s.parse().unwrap()).unwrap_or(if ret.is_some() { 0.5 } else { 2.0 });
+    // encode blocks of the final TR: two-lobe (default, also the search) or robust[:extra_ms[:slew_scale]] (GIRF-robust
+    // QP blocks, `hasty_seq::robust`, extra_ms longer than the two-lobe block, encode slew × slew_scale)
+    let encode_arg = take("--encode");
     let iters: usize = take("--iters").map(|s| s.parse().unwrap()).unwrap_or(80);
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let check = flag(&mut args, "--check");
@@ -284,6 +294,15 @@ fn main() {
         rot_kind,
         n_rot_pns,
         aniso_weight,
+        res_weight: if res_girf.is_some() { res_weight } else { 0.0 },
+        res_band: match res_girf.as_deref() {
+            None => vec![],
+            Some("band") => hasty_seq::robust::rotation_band(&hasty_seq::robust::RobustOpts::default()),
+            Some(name) => {
+                let g = hasty_seq::girf::Girf::variants().into_iter().find(|v| v.0 == name).unwrap_or_else(|| panic!("--res-girf {name}: band | a Girf::variants() name")).1;
+                hasty_seq::robust::rotation_band(&hasty_seq::robust::RobustOpts { band: None, ..Default::default() }.with_resonances(&g, 300.0, 3000.0, 10.0))
+            }
+        },
         curve_pts: 60_000,
     };
     assert!(spoil_mode != "flowcomp" || ret == Some(0.0), "--spoil flowcomp needs --return 0");
@@ -293,7 +312,7 @@ fn main() {
     println!("seqdesign: res {:.2} mm, FOV {:.0} mm, kmax {kmax:.0} /m, T_adc {:.2} ms, VENC {venc} m/s {scheme:?}, PNS ≤ {pns_target}% ({hw_note})", res * 1e3, fov * 1e3, t_adc * 1e3);
     let rots = p.pns_rotations();
     // the cache is only valid for the same problem
-    let fp = format!("{:?}|{:?}|{pns_target}|{kmax}|{fov}|{edge}|{t_adc}|{:?}|{scheme:?}|{venc}|{:?}|{rot_kind:?}|{n_rot_pns}|{aniso_weight}|{}{}", sys, p.hw, p.vmax, p.spoil, p.curve_pts, ret.map_or(String::new(), |r| format!("|ret{r}")));
+    let fp = format!("{:?}|{:?}|{pns_target}|{kmax}|{fov}|{edge}|{t_adc}|{:?}|{scheme:?}|{venc}|{:?}|{rot_kind:?}|{n_rot_pns}|{aniso_weight}|{}{}{}", sys, p.hw, p.vmax, p.spoil, p.curve_pts, ret.map_or(String::new(), |r| format!("|ret{r}")), res_girf.as_ref().map_or(String::new(), |g| format!("|res{g}:{res_weight}")));
     let fpf = out.join("problem.txt");
     match std::fs::read_to_string(&fpf) {
         Ok(old) if old != fp => {
@@ -343,11 +362,11 @@ fn main() {
         return;
     }
     let grid_recs: Vec<Rec> = grid.iter().map(|s| cache.get(s).unwrap()).collect();
-    println!("  grid ({:.0} s):  kg0  wobble  freq |     N   TR ms  T_adc  PNS%  part     aniso  N·TR s", t0.elapsed().as_secs_f64());
+    println!("  grid ({:.0} s):  kg0  wobble  freq |     N   TR ms  T_adc  PNS%  part     aniso  res[cells]  objective", t0.elapsed().as_secs_f64());
     for r in &grid_recs {
         println!(
-            "    {:5.2} {:6.2} {:5.2} | {:6.0} {:6.3} {:5.2} {:5.1} {:8} {:5.2} {}",
-            r.shape.kg0, r.shape.wobble, r.shape.wobble_freq, r.n, r.tr * 1e3, r.t_adc * 1e3, r.pns, r.part, r.aniso,
+            "    {:5.2} {:6.2} {:5.2} | {:6.0} {:6.3} {:5.2} {:5.1} {:8} {:5.2} {:9.3} {}",
+            r.shape.kg0, r.shape.wobble, r.shape.wobble_freq, r.n, r.tr * 1e3, r.t_adc * 1e3, r.pns, r.part, r.aniso, r.res,
             if r.objective.is_finite() { format!("{:.2}", r.objective) } else { "infeasible".into() }
         );
     }
@@ -380,14 +399,49 @@ fn main() {
     // ── final check with a denser PNS rotation set ──
     let pf = Problem { n_rot_pns: n_rot_pns * 8, ..p.clone() };
     let rots_f = pf.pns_rotations();
-    let best = pf.evaluate(&best_shape, &rots_f).expect("best shape infeasible on the dense check");
+    let mut best = pf.evaluate(&best_shape, &rots_f).expect("best shape infeasible on the dense check");
+    let mut encode_desc = json!({"shape": "two-lobe"});
+    if let Some(a) = &encode_arg {
+        let parts: Vec<&str> = a.split(':').collect();
+        assert_eq!(parts[0], "robust", "--encode robust[:extra_ms[:slew_scale]]");
+        let extra_ms: f64 = parts.get(1).map_or(0.5, |s| s.parse().unwrap());
+        let sc: f64 = parts.get(2).map_or(1.0, |s| s.parse().unwrap());
+        let mut slew = best.slew;
+        slew[0] *= sc;
+        let n_orig = (best.tr.i_ro - best.tr.i_enc) as i64;
+        let dtr = sys.grad_raster;
+        // `extra` is relative to the two-lobe block at the (scaled) encode slew; the target is n_orig + extra_ms
+        let spec0 = pf.tr_spec(&slew);
+        let es = hasty_seq::encode::EncodeSpec { m0: [0.0; 3], m1_offset: [0.0; 3], scheme: spec0.scheme, venc: spec0.venc, balanced: spec0.balanced, t_start: 0.0, t_ref: 0.0 };
+        let n0s = hasty_seq::encode::design(&es, &System { smax: sys.smax * slew[0], ..sys.clone() }).waves[0].len() as i64 - 1;
+        let extra = n_orig + (extra_ms * 1e-3 / dtr).round() as i64 - n0s;
+        let (_, wb, wv) = hasty_seq::robust::readout_weights(&best.tr.spoke.grad, 1e-6);
+        let opts = hasty_seq::robust::RobustOpts::default().persist(&hasty_seq::robust::persist_weights(&wb, &wv), 1e-6);
+        let spec = hasty_seq::tr::TrSpec { encode_shape: hasty_seq::tr::EncodeShape::Robust { opts, extra }, ..spec0 };
+        let tr2 = hasty_seq::tr::Tr::build(&spec, best.tr.spoke.clone(), &rots_f);
+        let pns2 = hasty_seq::tr::pns_sequence(&tr2, &rots_f, &pf.hw);
+        println!(
+            "  encode → robust: block {:.2} → {:.2} ms (encode slew ×{sc}), TE {:.3} → {:.3} ms, TR {:.3} → {:.3} ms, PNS {:.1}% → {:.1}% (encode part {:.1}% → {:.1}%)",
+            n_orig as f64 * dtr * 1e3, (tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3, best.tr.te() * 1e3, tr2.te() * 1e3, best.tr.tr() * 1e3, tr2.tr() * 1e3,
+            best.pns.max, pns2.max, best.pns.part_max[1], pns2.part_max[1]
+        );
+        if pns2.max > pns_target {
+            println!("  warning: PNS {:.1}% above the target {pns_target}% with the robust encode", pns2.max);
+        }
+        encode_desc = json!({"shape": "robust", "extra_ms": extra_ms, "slew_scale": sc, "two_lobe_block_ms": n_orig as f64 * dtr * 1e3,
+                             "block_ms": (tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3, "two_lobe_te": best.tr.te(), "two_lobe_tr": best.tr.tr()});
+        best.slew = slew;
+        best.objective = best.n_eff * tr2.tr() * (1.0 + aniso_weight * best.aniso) * (1.0 + pf.res_weight * best.res);
+        best.tr = tr2;
+        best.pns = pns2;
+    }
     let tr = &best.tr;
     let sp = &tr.spoke;
     let n_enc = tr.n_enc();
     println!(
-        "  final: N {:.0} (yarn design {:.0}), TR {:.3} ms, TE {:.3} ms, T_adc {:.3} ms, encode {:.3} ms, tail {:.3} ms, PNS {:.1}% ({:?}) slew factors {:?}",
+        "  final: N {:.0} (yarn design {:.0}), TR {:.3} ms, TE {:.3} ms, T_adc {:.3} ms, encode {:.3} ms, tail {:.3} ms, PNS {:.1}% ({:?}) slew factors {:?}, readout resonance exposure {:.3} cells",
         best.n_eff, best.n_design, tr.tr() * 1e3, tr.te() * 1e3, sp.t_adc * 1e3, (tr.i_ro - tr.i_enc) as f64 * tr.dt * 1e3, tr.n_tail as f64 * tr.dt * 1e3,
-        best.pns.max, best.pns.part, best.slew
+        best.pns.max, best.pns.part, best.slew, best.res
     );
 
     // ── encoding at the echo, from the designed waveforms ──
@@ -563,16 +617,78 @@ fn main() {
         gt.extend_from_slice(&[r.shape.kg0, r.shape.wobble, r.shape.wobble_freq, r.n, r.tr, r.pns, r.aniso, if r.objective.is_finite() { r.objective } else { f64::NAN }]);
     }
     f8(&out.join("grid.npy"), &[grid_recs.len(), 8], &gt);
+    // ── uniform export for the final-design figures (tools/seq/plot_final.py): 2 rotations of the played sequence with
+    // part codes and its SAFE trace, one TR per encode with moments, 6 rotated readouts in k, one TR through the GIRF ──
+    {
+        let nr = 2.min(rots_f.len());
+        let sq = sequence(tr, &rots_f[..nr]);
+        f8(&out.join("seq_grad.npy"), &[sq.len(), 3], &flat3(&sq.g));
+        let part_code = |i: usize| match tr.part(i % tr.n) {
+            hasty_seq::tr::Part::Rf => 0.0,
+            hasty_seq::tr::Part::Encode => 1.0,
+            hasty_seq::tr::Part::Readout => 2.0,
+            hasty_seq::tr::Part::Tail => 3.0,
+        };
+        let sp_codes: Vec<f64> = (0..sq.len()).map(part_code).collect();
+        f8(&out.join("seq_part.npy"), &[sq.len()], &sp_codes);
+        let pr = pns(&sq, &p.hw);
+        let mut a = vec![];
+        for (ax, nn) in pr.axis.iter().zip(&pr.norm).skip(pr.pad).take(sq.len() - 1) {
+            a.extend_from_slice(ax);
+            a.push(*nn);
+        }
+        f8(&out.join("seq_pns.npy"), &[a.len() / 4, 4], &a);
+        let mut tg = vec![];
+        let mut tm = vec![];
+        for e in 0..n_enc {
+            let g = tr.physical(e, &rots_f[0]);
+            let m = g.moments(tr.t_rf);
+            let k = m.k();
+            tg.extend(flat3(&g.g));
+            for i in 0..k.len() {
+                tm.extend_from_slice(&k[i]);
+                tm.extend_from_slice(&m.m1[i]);
+            }
+        }
+        f8(&out.join("tr_grad.npy"), &[n_enc, tr.n + 1, 3], &tg);
+        f8(&out.join("tr_moments.npy"), &[n_enc, tr.n + 1, 6], &tm);
+        let ns = 6.min(rots_f.len());
+        let kb = sp.grad.moments(0.0).k();
+        let mut ks = vec![];
+        for r in &rots_f[..ns] {
+            for q in &kb[..=sp.i_adc] {
+                ks.extend_from_slice(&hasty_seq::mat_vec(r, q));
+            }
+        }
+        f8(&out.join("k_spokes.npy"), &[ns, sp.i_adc + 1, 3], &ks);
+        let g0 = tr.physical(0, &rots_f[0]);
+        let (ga, _) = Girf::clinical_example().apply(&g0);
+        let off = Girf::PRE;
+        let mut gi = vec![];
+        for i in 0..g0.len() {
+            gi.push(i as f64 * g0.dt);
+            gi.extend_from_slice(&g0.g[i]);
+            gi.extend_from_slice(&ga.g[i + off]);
+        }
+        f8(&out.join("girf.npy"), &[g0.len(), 7], &gi);
+        let fin = json!({"kind": "flow", "dt": tr.dt, "tr": tr.tr(), "te": [tr.te()], "t_rf": tr.t_rf, "kmax": kmax, "res": res, "gmax": sys.gmax, "smax": sys.smax,
+                         "slew_factors": {"encode": best.slew[0], "readout": best.slew[1], "tail": best.slew[2]}, "pns_limit": pns_target, "pns_hw": p.hw.name,
+                         "n_rot_window": nr, "n_enc": n_enc, "variants": (0..n_enc).map(|e| format!("encode {e}")).collect::<Vec<_>>(),
+                         "parts": ["RF", "encode (navigator ADC)", "readout (ADC)", "tail / spoiler"], "girf": "clinical_example (illustrative)", "encode": encode_desc,
+                         "title": format!("4D-flow TR: out-and-back yarn {:.1} mm, T_adc {:.2} ms, {scheme_name} p={p_cop}", res * 1e3, sp.t_adc * 1e3)});
+        std::fs::write(out.join("final.json"), serde_json::to_string_pretty(&fin).unwrap()).unwrap();
+    }
     let summary = json!({
         "problem": {"res": res, "fov": fov, "kmax": kmax, "t_adc_budget": t_adc, "venc": venc, "scheme": format!("{scheme:?}"), "pns_target": pns_target,
                     "pns_hw": p.hw.name, "pns_hw_note": hw_note, "edge_density": edge, "dwell": dwell, "rot": format!("{rot_kind:?}"),
                     "gmax": sys.gmax, "smax": sys.smax, "dt": sys.grad_raster, "b0": sys.b0},
+        "encode": encode_desc,
         "best": {"shape": {"kg0": best_shape.kg0, "wobble": best_shape.wobble, "wobble_freq": best_shape.wobble_freq},
                  "n_design": best.n_design, "n_star": den.n_star, "r_star": den.r_star, "tr": tr.tr(), "te": tr.te(), "t_adc": sp.t_adc,
                  "i_adc": sp.i_adc, "i_enc": tr.i_enc, "i_ro": tr.i_ro, "i_tail": tr.i_tail, "n_tail": tr.n_tail, "n_tr": tr.n, "n_enc": n_enc, "spoil_cycles": spoil_cycles, "spoil_mode": spoil_mode,
                  "n_eff": best.n_eff, "ret": ret, "kmax_check": kcheck,
                  "scan_nyquist_s": best.n_eff * tr.tr() * n_enc as f64, "objective": best.objective,
-                 "pns": best.pns.max, "pns_part": format!("{:?}", best.pns.part), "slew": best.slew, "g_vec": lim.g_vec, "s_vec": lim.s_vec,
+                 "pns": best.pns.max, "pns_part": format!("{:?}", best.pns.part), "res_exposure_cells": best.res, "res_girf": res_girf, "res_weight": pf.res_weight, "slew": best.slew, "g_vec": lim.g_vec, "s_vec": lim.s_vec,
                  "aniso": concomitant_anisotropy(&p_end), "readout_gamma_m1": m1, "curve_length": sp.length, "sigma_total": yarn.sigma_total(),
                  "vmax_along": vmax_along, "girf_max_err_cells": gerr_max, "coverage": cov_json, "upsample": up},
         "encoding": {"scheme": scheme_name, "p": p_cop, "venc_lo": vlo, "venc_hi": vhi, "unaliased": scheme.unaliased(venc), "hadamard_pairs": had,

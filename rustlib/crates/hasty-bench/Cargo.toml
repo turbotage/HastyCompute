@@ -15,6 +15,7 @@ hasty-phantom = { path = "../hasty-phantom" }
 hasty-recon = { path = "../hasty-recon" }
 hasty-value = { path = "../hasty-value" }
 hasty-seq = { path = "../hasty-seq" }
+hasty-qfit = { path = "../hasty-qfit" }
 serde_json = "1"
 nalgebra = "0.33"
 num-complex.workspace = true

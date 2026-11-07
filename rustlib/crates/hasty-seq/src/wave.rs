@@ -159,6 +159,46 @@ impl Grad {
         }
         m
     }
+
+    /// exact moments (M0, M1, M2, P; time origin `t_ref`) at arbitrary times (e.g. ADC samples between raster points):
+    /// the raster moments plus the partial segment, integrated by Simpson's rule on [t_i, t] (exact: G is linear there).
+    /// Times before the waveform give zeros, after it the final moments.
+    pub fn moments_at(&self, t_ref: f64, times: &[f64]) -> Vec<(Vec3, Vec3, Vec3, [f64; 6])> {
+        let m = self.moments(t_ref);
+        let n = self.g.len();
+        times
+            .iter()
+            .map(|&t| {
+                let f = (t - self.t0) / self.dt;
+                if f <= 0.0 || n < 2 {
+                    return ([0.0; 3], [0.0; 3], [0.0; 3], [0.0; 6]);
+                }
+                if f >= (n - 1) as f64 {
+                    return m.last();
+                }
+                let i = f.floor() as usize;
+                let s = (f - i as f64) * self.dt;
+                let (mut m0, mut m1, mut m2, mut p) = (m.m0[i], m.m1[i], m.m2[i], m.p[i]);
+                if s > 0.0 {
+                    let ga = self.g[i];
+                    let gt = [0, 1, 2].map(|q| self.g[i][q] + (self.g[i + 1][q] - self.g[i][q]) * s / self.dt);
+                    let gm = [0, 1, 2].map(|q| 0.5 * (ga[q] + gt[q]));
+                    let ta = self.t0 + i as f64 * self.dt - t_ref;
+                    let (tm, tb) = (ta + 0.5 * s, ta + s);
+                    let w = s / 6.0;
+                    for q in 0..3 {
+                        m0[q] += w * (ga[q] + 4.0 * gm[q] + gt[q]);
+                        m1[q] += w * (ga[q] * ta + 4.0 * gm[q] * tm + gt[q] * tb);
+                        m2[q] += w * (ga[q] * ta * ta + 4.0 * gm[q] * tm * tm + gt[q] * tb * tb);
+                    }
+                    for (k, (a, b)) in [(0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2)].into_iter().enumerate() {
+                        p[k] += w * (ga[a] * ga[b] + 4.0 * gm[a] * gm[b] + gt[a] * gt[b]);
+                    }
+                }
+                (m0, m1, m2, p)
+            })
+            .collect()
+    }
 }
 
 /// minimum-time trapezoid (one axis) with `area` (T·s/m) on raster `dt`: samples incl. the zero end points
@@ -203,6 +243,29 @@ pub fn trap_shape(r1: usize, f: usize, r2: usize, g: f64) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moments_at_matches_a_finer_raster() {
+        // a waveform on a 10 µs raster, evaluated at times between the raster points, against the same waveform
+        // linearly upsampled ×5 (identical piecewise-linear function) evaluated on its own raster
+        let dt = 10e-6;
+        let g = Grad { dt, t0: 1e-4, g: (0..40).map(|i| { let x = i as f64; [0.01 * (0.3 * x).sin(), 0.02 * (x / 39.0), -0.005 * (0.1 * x).cos() + 0.005] }).collect() };
+        let up = 5;
+        let gf = Grad { dt: dt / up as f64, t0: g.t0, g: (0..=(39 * up)).map(|j| { let i = (j / up).min(38); let a = (j as f64 / up as f64) - i as f64; [0, 1, 2].map(|q| g.g[i][q] * (1.0 - a) + g.g[i + 1][q] * a) }).collect() };
+        let mf = gf.moments(3e-5);
+        let times: Vec<f64> = mf.t.clone();
+        let ma = g.moments_at(3e-5, &times);
+        for (j, a) in ma.iter().enumerate() {
+            for q in 0..3 {
+                assert!((a.0[q] - mf.m0[j][q]).abs() < 1e-15, "m0 {j}");
+                assert!((a.1[q] - mf.m1[j][q]).abs() < 1e-18, "m1 {j}");
+                assert!((a.2[q] - mf.m2[j][q]).abs() < 1e-21, "m2 {j}");
+            }
+            for k in 0..6 {
+                assert!((a.3[k] - mf.p[j][k]).abs() < 1e-16, "p {j}");
+            }
+        }
+    }
 
     #[test]
     fn trapezoid_moments_closed_form() {

@@ -1,7 +1,7 @@
 """Prepare the k-space simulation of a factory phantom (input of `simphantom`).
 
     python -I prep_sim.py <phantom_dir> <blood_frames.hv> <out_dir> [--center x,y,z] [--fov fx,fy,fz] [--res r]
-        [--scan-time 60] [--margin 25]
+        [--scan-time 60] [--margin 25] [--src-step 1]
 
 - tissue sources (Lagrangian, reference = atlas pose): every 1 mm voxel of the reference labels within the slab
   (± margin for motion) that is not air / airway / a heart chamber, weighted by 1 − (vessel lumen fraction at the
@@ -110,8 +110,15 @@ lumen[torch.tensor(np.asarray(RV["idx"]).astype(np.int64), device=dev)] = torch.
 lumen = lumen.view(nzc, nyc, nxc)
 CH = [ID[c] for c in ("blood_LA", "blood_LV", "blood_RA", "blood_RV")]
 keep = ~torch.isin(lab, torch.tensor([ID["air"], ID["airway"]] + CH, device=dev)) & (lumen < 0.999)
+# --src-step k (development phantoms): one source per k³ block (the block's first voxel's tissue, PD × k³, placed at the
+# block centre) → k³ fewer tissue sources for fast method iteration; final evaluations use k = 1
+step = int(opt("--src-step", 1))
+if step > 1:
+    zz, yy, xx = torch.meshgrid(*(torch.arange(n, device=dev) for n in keep.shape), indexing="ij")
+    keep &= (zz % step == 0) & (yy % step == 0) & (xx % step == 0)
 zi, yi, xi = torch.nonzero(keep, as_tuple=True)
-X = torch.stack([crop_o[0] + (xi + 0.5) * h, crop_o[1] + (yi + 0.5) * h, crop_o[2] + (zi + 0.5) * h], 1).float()
+off = 0.5 * step
+X = torch.stack([crop_o[0] + (xi + off) * h, crop_o[1] + (yi + off) * h, crop_o[2] + (zi + off) * h], 1).float()
 L = lab[zi, yi, xi].long()
 w = 1 - lumen[zi, yi, xi]
 ta = torch.zeros(len(L), device=dev)
@@ -132,7 +139,7 @@ def col(k):
 
 
 PD, T1, T2S, FF = col("pd")[L], col("t1_s")[L], col("t2s_s")[L], col("ff")[L]
-pd = PD * torch.clamp(1 + ta, 0.2, 2.0) * w
+pd = PD * torch.clamp(1 + ta, 0.2, 2.0) * w * step**3
 t1 = T1 * torch.clamp(1 + tb / 3, 0.5, 1.5)
 t2s = T2S * torch.clamp(1 + tb, 0.2, 2.0)
 fld = field[z0:z1][zi, yi, xi]

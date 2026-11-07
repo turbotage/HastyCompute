@@ -1,5 +1,10 @@
 # Sequence designer (2026-11-05)
 
+> Run directories of superseded designs (example_hw, adc_{thorax,head}, {thorax,head}_coprime7, sweep_ret, sweep_final,
+> radial_spoil_8ms) were removed on 2026-11-06; the numbers below remain. Current designs: `data/hasty/seq/flow_thorax`
+> (was flowcomp_8ms) and `data/hasty/seq/b0_multiecho`; studies in `data/hasty/seq/studies/` (see its README).
+
+
 Goal: a Rust sequence calculator and optimizer for our own 4D/5D flow sequence. The readout is a 3D **yarnball-type
 spoke**: every readout is a rotation of one base spoke. The design should extract as much information per spoke as the
 gradient system and PNS allow. One crate, `rustlib/crates/hasty-seq`, shared later by the simulator (`hasty-mrsim`),

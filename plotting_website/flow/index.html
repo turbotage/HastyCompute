@@ -21,11 +21,14 @@
         <label class="hdr-label">speed <select id="rate" class="hdr-select">
             <option value="0.25">¼×</option><option value="0.5" selected>½×</option><option value="1">1×</option><option value="2">2×</option>
         </select></label>
+        <span id="compute" class="mono" title="where particles and planes are computed"></span>
         <span id="status" class="status"></span>
     </header>
     <main>
         <div id="view">
             <canvas id="canvas"></canvas>
+            <div id="hwwarn" hidden><b>⚠ Slow graphics.</b> <span></span> <button onclick="this.parentNode.hidden=true">dismiss</button></div>
+            <div id="perf" class="mono" hidden></div>
             <div id="legend"><div id="legend-bar"></div><span id="legend-lo">0</span><span id="legend-title">speed m/s</span><span id="legend-hi">1</span></div>
             <div id="readout" class="mono" hidden></div>
             <div id="picker" hidden></div>
@@ -35,7 +38,9 @@
                 <h3>Display</h3>
                 <label>colormap <select id="cmap"></select></label>
                 <label>v max (m/s) <input id="vmax" type="number" step="0.05" value="1"></label>
-                <label><input id="mip-on" type="checkbox" checked> PC-MRA MIP</label>
+                <label>colour lines by <select id="lcolor" autocomplete="off"><option value="speed">speed</option><option value="age">age / time</option><option value="line">seed (each line)</option></select></label>
+                <label><input id="mip-on" type="checkbox" checked> volume (MIP)</label>
+                <label class="sub">quantity <select id="vq"><option value="pcmra">PC-MRA</option></select></label>
                 <label class="sub">level <input id="mip-lo" type="range" min="0" max="0.9" step="0.01" value="0.15"></label>
                 <label class="sub">opacity <input id="mip-op" type="range" min="0" max="1" step="0.01" value="0.6"></label>
             </section>
@@ -56,6 +61,8 @@
                 <label class="sub">seeds <input id="sl-n" type="number" value="600" step="100"></label>
                 <label class="sub">region quantile <input id="sl-q" type="number" value="0.97" step="0.005" min="0" max="1"></label>
                 <label class="sub"><input id="sl-disc" type="checkbox"> seed from the active plane</label>
+                <label class="sub"><input id="sl-vessel" type="checkbox"> seed from the vessel lumen</label>
+                <label class="sub"><input id="sl-live" type="checkbox"> update every frame while playing</label>
                 <button id="sl-go">recompute</button>
             </section>
             <section>
@@ -65,7 +72,27 @@
                 <label class="sub">releases / cycle <input id="pl-rel" type="number" value="4" min="1" max="20"></label>
                 <label class="sub">tail (cycle fraction) <input id="pl-tail" type="range" min="0.02" max="1" step="0.01" value="0.15"></label>
                 <label class="sub"><input id="pl-disc" type="checkbox"> emit from the active plane</label>
+                <label class="sub"><input id="pl-vessel" type="checkbox"> emit from the vessel lumen</label>
                 <button id="pl-go">recompute</button>
+            </section>
+            <section id="cl-section" hidden>
+                <h3>Centerlines</h3>
+                <label><input id="cl-on" type="checkbox"> show centerlines <span id="cl-info" class="hint"></span></label>
+            </section>
+            <section>
+                <h3>Vessel tool</h3>
+                <label><input id="vt-on" type="checkbox"> pick a vessel (click in the 3D view)</label>
+                <p class="hint" id="vt-hint">Click a bright vessel in the volume: a plane stack is laid along it, the lumen is segmented and the flow is averaged over the planes.</p>
+                <label class="sub">planes to average <input id="vt-n" type="number" min="1" max="31" step="2" value="5"></label>
+                <label class="sub">plane spacing (mm) <input id="vt-step" type="number" min="0.2" step="0.25" value="1.5"></label>
+                <label class="sub">lumen threshold (× PC-MRA at the click; lower = wider) <input id="vt-frac" type="number" min="0.02" max="0.95" step="0.01" value="0.15"></label>
+                <label class="sub">search radius (mm) <input id="vt-r" type="number" min="3" step="1" value="18"></label>
+                <label class="sub"><input id="vt-orient" type="checkbox" checked> orient with the net flow</label>
+                <div class="btn-row"><button id="vt-redo">re-measure</button> <button id="vt-seed">seed particles here</button> <button id="vt-clear">clear</button></div>
+                <canvas id="vt-profile"></canvas>
+                <canvas id="vt-diam"></canvas>
+                <canvas id="vt-plot"></canvas>
+                <table id="vt-table"></table>
             </section>
             <section>
                 <h3>Analysis planes</h3>

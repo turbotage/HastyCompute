@@ -528,6 +528,7 @@ dependencies = [
  "hasty-mrsim",
  "hasty-nufft",
  "hasty-phantom",
+ "hasty-qfit",
  "hasty-recon",
  "hasty-seq",
  "hasty-testkit",
@@ -598,6 +599,16 @@ dependencies = [
  "rustfft",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "hasty-qfit"
+version = "0.1.0"
+dependencies = [
+ "cudarc",
+ "hasty-cuda",
+ "num-complex",
  "thiserror",
 ]
 

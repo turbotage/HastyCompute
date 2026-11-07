@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/hasty-cuda", "crates/hasty-fft", "crates/hasty-nufft", "crates/hasty-toeplitz", "crates/hasty-testkit", "crates/hasty-bench", "crates/hasty-mrsim", "crates/hasty-phantom", "crates/hasty-recon", "crates/hasty-denoise", "crates/hasty-value", "crates/hasty-server", "crates/hasty-value-capi", "crates/hasty-seq"]
+members = ["crates/hasty-cuda", "crates/hasty-fft", "crates/hasty-nufft", "crates/hasty-toeplitz", "crates/hasty-testkit", "crates/hasty-bench", "crates/hasty-mrsim", "crates/hasty-phantom", "crates/hasty-recon", "crates/hasty-denoise", "crates/hasty-value", "crates/hasty-server", "crates/hasty-value-capi", "crates/hasty-seq", "crates/hasty-qfit"]
 
 [workspace.package]
 version = "0.1.0"

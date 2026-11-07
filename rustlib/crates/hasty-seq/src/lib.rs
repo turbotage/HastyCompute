@@ -9,6 +9,8 @@
 //! - [`pns`]: SAFE peripheral-nerve-stimulation model.
 //! - [`traj`]: time-optimal traversal of k-space curves, yarnball-type base spokes, rotation sets.
 //! - [`tr`]: one TR (RF, encode, rotated spoke, spoiler) on physical axes; PNS of the played sequence.
+//! - [`robust`]: GIRF-robust encode blocks (eddy / low-pass sensitivities E(τ), resonance band; QP by ADMM).
+//! - [`multiecho`]: short out-and-back multi-echo train (B0 / R2* / fat mapping), flow moments, PNS-fitted slew.
 //! - [`metrics`]: information per spoke (rotation-averaged density, spokes to Nyquist), concomitant anisotropy.
 //! - [`optim`]: parametric search over base spokes under G_max / S_max / PNS.
 //!
@@ -17,8 +19,10 @@
 pub mod encode;
 pub mod girf;
 pub mod metrics;
+pub mod multiecho;
 pub mod optim;
 pub mod pns;
+pub mod robust;
 pub mod spoil;
 pub mod system;
 pub mod tr;

@@ -702,9 +702,9 @@ if opt("--viewer-step"):
         a = a[..., : cz * k, : cy * k, : cx * k]
         return a.reshape(a.shape[:-3] + (cz, k, cy, k, cx, k)).mean(axis=(-5, -3, -1))
 
-    isbl = blood4d >= 128
-    b_ = box(isbl.astype(np.float32))
-    vb_ = np.stack([box(vel4d[:, c].astype(np.float32) * isbl) for c in range(3)], 1)
+    # frame by frame (a 0.5 mm real-time truth is ~34 GB; whole-array float32 temporaries would not fit in RAM)
+    b_ = np.stack([box((blood4d[f_] >= 128).astype(np.float32)) for f_ in range(NFR)])
+    vb_ = np.stack([np.stack([box(vel4d[f_, c].astype(np.float32) * (blood4d[f_] >= 128)) for c in range(3)]) for f_ in range(NFR)])
     vb_ = np.where(b_[:, None] >= 0.25, vb_ / np.maximum(b_, 1e-6)[:, None], 0).astype(np.float32)
     mag = np.stack([box(spgr(f_)) for f_ in range(NFR)]).astype(np.float32)
     fv = {"kind": "flow4d", "vel": vb_, "mag": mag, "spacing": [vox * k] * 3, "dt": float(np.diff([f[3] for f in frames]).mean()) if NFR > 1 else Tp,

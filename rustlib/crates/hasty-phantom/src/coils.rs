@@ -1,4 +1,5 @@
-//! Receive arrays of circular loops: quasi-static Biot–Savart sensitivities (B1⁻ ∝ B_x − i B_y, B0 ∥ z) and the
+//! Receive arrays of circular loops: quasi-static Biot–Savart sensitivities (B1⁻ ∝ B_x − i B_y, B0 ∥ z; near field
+//! softened over 5 mm, loops clear the curved body surface by ≥ 1.2 cm over their whole footprint) and the
 //! body-loss noise covariance Ψ_ij ∝ ∫_body A_i · A_j dV (+ a small diagonal for coil/preamp noise).
 
 use hasty_mrsim::Vec3;
@@ -14,7 +15,10 @@ pub struct Loop {
     pub radius: f64,
 }
 
-const NSEG: usize = 48;
+const NSEG: usize = 96;
+/// near-field softening (m): the wire has a finite cross-section and sits in a housing, so the field at tissue
+/// points is never the singular 1/r of an ideal filament; Plummer softening r² → r² + a²
+const SOFT: f64 = 0.005;
 
 fn cross(a: &Vec3, b: &Vec3) -> Vec3 {
     [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
@@ -47,7 +51,7 @@ impl Loop {
         let mut b = [0.0; 3];
         for (m, dl) in self.segments() {
             let r = [x[0] - m[0], x[1] - m[1], x[2] - m[2]];
-            let r2 = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).max(1e-8);
+            let r2 = r[0] * r[0] + r[1] * r[1] + r[2] * r[2] + SOFT * SOFT;
             let c = cross(&dl, &r);
             let f = 1.0 / (r2 * r2.sqrt());
             for q in 0..3 {
@@ -60,7 +64,7 @@ impl Loop {
     pub fn a_field(&self, x: &Vec3) -> Vec3 {
         let mut a = [0.0; 3];
         for (m, dl) in self.segments() {
-            let r = ((x[0] - m[0]).powi(2) + (x[1] - m[1]).powi(2) + (x[2] - m[2]).powi(2)).sqrt().max(1e-4);
+            let r = ((x[0] - m[0]).powi(2) + (x[1] - m[1]).powi(2) + (x[2] - m[2]).powi(2) + SOFT * SOFT).sqrt();
             for q in 0..3 {
                 a[q] += dl[q] / r;
             }
@@ -106,7 +110,18 @@ pub fn body_arrays(body: &Volume<u8>, n_lr: usize, n_si: usize, radius: f64, z0:
             for b in 0..n_si {
                 let x = xc + span_x * ((a as f64 + 0.5) / n_lr as f64 - 0.5);
                 let z = z0 + (z1 - z0) * (b as f64 + 0.5) / n_si as f64;
-                let (ya, yp) = col(x, z).unwrap_or((-0.12, 0.12));
+                // the whole loop (not only its centre) clears the curved body surface by `gap`: the most anterior /
+                // posterior surface point under the loop's footprint
+                let (mut ya, mut yp) = col(x, z).unwrap_or((-0.12, 0.12));
+                for s in 0..16 {
+                    for f in [0.5, 1.0] {
+                        let a = 2.0 * std::f64::consts::PI * s as f64 / 16.0;
+                        if let Some((y0, y1)) = col(x + f * radius * a.cos(), z + f * radius * a.sin()) {
+                            ya = ya.min(y0);
+                            yp = yp.max(y1);
+                        }
+                    }
+                }
                 let (y, nrm) = if side == 0 { (ya - gap, [0.0, -1.0, 0.0]) } else { (yp + gap, [0.0, 1.0, 0.0]) };
                 loops.push(Loop { center: [x, y, z], normal: nrm, radius });
             }
