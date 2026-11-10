@@ -95,7 +95,7 @@ save(fig, "01_masks.png", "Object support (green) and coil-map mask (cyan) over 
 
 # ---------------------------------------------------------------- coil maps
 nvc = smaps.shape[3]
-fig, ax = plt.subplots(2, nvc, figsize=(1.6 * nvc, 3.6))
+fig, ax = plt.subplots(2, nvc, figsize=(1.6 * nvc, 3.6), squeeze=False)
 for c in range(nvc):
     gshow(ax[0, c], axial(np.abs(smaps[..., c])))
     ax[1, c].imshow(axial(np.angle(smaps[..., c])), cmap="twilight", vmin=-np.pi, vmax=np.pi, origin="lower")
@@ -147,7 +147,7 @@ for tag in info["runs"]:
     vel = np.load(run / f"vel_{tag}.npy")
     rec = np.load(run / f"recon_{tag}.npy")
     # velocity per frame: truth / recon / error, all components
-    fig, ax = plt.subplots(len(frames), 9, figsize=(18, 2.1 * len(frames)))
+    fig, ax = plt.subplots(len(frames), 9, figsize=(18, 2.1 * len(frames)), squeeze=False)
     for r, f in enumerate(frames):
         for a in range(3):
             vimshow(ax[r, 3 * a], axial(truth[..., a, f]), f"truth v{comp_names[a]} f{f}")
@@ -212,6 +212,29 @@ for tag in info["runs"]:
             outline(ax[a, k], coronal)
             ax[a, k].set_aspect("auto")
     save(fig, f"14_{tag}_coronal.png", f"{tag}: coronal slice y={ys} at peak systole.")
+
+# ---------------------------------------------------------------- static / dynamic tissue map (--static-lock)
+for mp in sorted(run.glob("static_map_*.npy")):
+    tag = mp.stem[len("static_map_"):]
+    m = np.load(mp)  # [x,y,z,6]: s_card, s_resp, s_flow, w_card, w_resp, sigma_raw
+    meta = json.loads((run / f"static_map_{tag}.json").read_text()) if (run / f"static_map_{tag}.json").exists() else {}
+    names = ["s_card", "s_resp", "s_flow", "w_card", "w_resp"]
+    locked_lumen = [float((m[..., k][lum] > 0.5).mean()) if lum.any() else float("nan") for k in (3, 4)]
+    fig, ax = plt.subplots(2, 5, figsize=(17, 6.5))
+    for k, nm in enumerate(names):
+        for r, sl in enumerate((axial, coronal)):
+            a = ax[r, k]
+            if k < 3:
+                im = a.imshow(sl(m[..., k]), cmap="magma", vmin=0, vmax=6, origin="lower", aspect="auto", interpolation="nearest")
+            else:
+                im = a.imshow(sl(m[..., k]), cmap="viridis", vmin=0, vmax=1, origin="lower", aspect="auto", interpolation="nearest")
+            outline(a, sl, color="c")
+            a.set_title(f"{nm} ({'axial' if r == 0 else 'coronal'})", fontsize=8)
+            a.axis("off")
+            if r == 0:
+                plt.colorbar(im, ax=a, fraction=0.046)
+    fig.suptitle(f"{tag}: static map of iteration {meta.get('iteration', '?')}; static over the cardiac cycle {100 * meta.get('static_card', float('nan')):.1f} %, over breathing {100 * meta.get('static_resp', float('nan')):.1f} %; truth lumen locked: cardiac {100 * locked_lumen[0]:.1f} %, resp {100 * locked_lumen[1]:.1f} %", fontsize=9)
+    save(fig, f"20_{tag}_static_map.png", f"{tag}: scores (temporal variation / noise, cardiac and respiratory; mean-velocity significance) and static weights (1 = locked); cyan: truth lumen. Lumen voxels locked (w > 0.5): cardiac {100 * locked_lumen[0]:.1f} %, respiratory {100 * locked_lumen[1]:.1f} %.")
 
 with open(figs / "index.md", "w") as fh:
     fh.write(f"# {run.name}\n\n`{info['cmdline']}`\n\n")

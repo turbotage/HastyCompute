@@ -19,23 +19,57 @@ use crate::gpu::Kernels;
 use crate::Error;
 
 pub struct CirculantPrecond {
-    fwd: FftPlan<f32>,
-    inv: FftPlan<f32>,
-    /// 1/(λ + ε) on the N grid (real, stored complex)
-    pinv: CudaSlice<C32>,
-    /// λ + ε (for M⁻¹)
-    lam_eps: CudaSlice<C32>,
-    /// D^{1/2}
-    dsq: CudaSlice<C32>,
-    /// D^{-1/2}
-    dinv: CudaSlice<C32>,
-    tmp: CudaSlice<C32>,
+    parts: Parts,
     kern: Arc<Kernels>,
     pub nv: usize,
     /// λ_max / λ_min after flooring (condition number the preconditioner targets)
     pub dyn_range: f64,
     /// λ on the N grid (FFT order, x fastest), for diagnostics
     pub lambda: Vec<f32>,
+}
+
+enum Parts {
+    /// everything on the device (FFT plans and a temporary per preconditioner)
+    Device {
+        fwd: FftPlan<f32>,
+        inv: FftPlan<f32>,
+        /// 1/(λ + ε) on the N grid (real, stored complex)
+        pinv: CudaSlice<C32>,
+        /// λ + ε (for M⁻¹)
+        lam_eps: CudaSlice<C32>,
+        /// D^{1/2}
+        dsq: CudaSlice<C32>,
+        /// D^{-1/2}
+        dinv: CudaSlice<C32>,
+        tmp: CudaSlice<C32>,
+    },
+    /// the four N-grid arrays in host memory, uploaded per application into a workspace shared by all
+    /// preconditioners of the same grid ([`CircShared`]): no device memory per set
+    Host { pinv: Vec<C32>, lam_eps: Vec<C32>, dsq: Vec<C32>, dinv: Vec<C32>, ws: Arc<std::sync::Mutex<CircShared>> },
+}
+
+/// Device workspace shared by host-resident circulant preconditioners of one grid: FFT plans, a temporary and two
+/// upload slots (stream-ordered: an application's uploads follow the previous application's kernels on the stream).
+pub struct CircShared {
+    fwd: FftPlan<f32>,
+    inv: FftPlan<f32>,
+    tmp: CudaSlice<C32>,
+    a: CudaSlice<C32>,
+    b: CudaSlice<C32>,
+}
+
+impl CircShared {
+    pub fn new(dev: &Device, st: &Arc<CudaStream>, dims: [usize; 3]) -> Result<Arc<std::sync::Mutex<Self>>, Error> {
+        let nv = dims[0] * dims[1] * dims[2];
+        let sdims = [dims[2], dims[1], dims[0]];
+        Ok(Arc::new(std::sync::Mutex::new(Self {
+            fwd: FftPlan::<f32>::new(dev, &sdims, Direction::Forward, Norm::None)?,
+            inv: FftPlan::<f32>::new(dev, &sdims, Direction::Inverse, Norm::Inverse)?,
+            tmp: st.alloc_zeros(nv)?,
+            a: st.alloc_zeros(nv)?,
+            b: st.alloc_zeros(nv)?,
+        })))
+    }
 }
 
 impl CirculantPrecond {
@@ -175,28 +209,75 @@ impl CirculantPrecond {
         };
         let lam_eps: Vec<C32> = lam.iter().map(|z| C32::new(z.re.max(eps) * lam_scale, 0.0)).collect();
         let dsq: Vec<C32> = d.iter().map(|v| C32::new(1.0 / v.re, 0.0)).collect();
-        Ok(Self { fwd, inv, lam_eps: st.clone_htod(&lam_eps)?, dsq: st.clone_htod(&dsq)?, pinv: st.clone_htod(&pinv)?, dinv: st.clone_htod(&d)?, tmp: st.alloc_zeros(nv)?, kern, nv, dyn_range: (lmax / lmin) as f64, lambda: lam.iter().map(|z| z.re).collect() })
+        Ok(Self { parts: Parts::Device { fwd, inv, lam_eps: st.clone_htod(&lam_eps)?, dsq: st.clone_htod(&dsq)?, pinv: st.clone_htod(&pinv)?, dinv: st.clone_htod(&d)?, tmp: st.alloc_zeros(nv)? }, kern, nv, dyn_range: (lmax / lmin) as f64, lambda: lam.iter().map(|z| z.re).collect() })
+    }
+
+    /// move the N-grid arrays to host memory and use the shared workspace `ws` (same grid) from now on: frees the
+    /// device memory of this preconditioner (four arrays, a temporary, two FFT plans); each application then uploads
+    /// two arrays (2 × 8 nv bytes)
+    pub fn to_host(self, st: &Arc<CudaStream>, ws: &Arc<std::sync::Mutex<CircShared>>) -> Result<Self, Error> {
+        let parts = match self.parts {
+            Parts::Device { pinv, lam_eps, dsq, dinv, .. } => Parts::Host { pinv: st.clone_dtoh(&pinv)?, lam_eps: st.clone_dtoh(&lam_eps)?, dsq: st.clone_dtoh(&dsq)?, dinv: st.clone_dtoh(&dinv)?, ws: ws.clone() },
+            h => h,
+        };
+        Ok(Self { parts, ..self })
+    }
+
+    pub fn on_host(&self) -> bool {
+        matches!(self.parts, Parts::Host { .. })
     }
 
     /// z = M r
     pub fn apply(&mut self, st: &Arc<CudaStream>, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>) -> Result<(), Error> {
-        self.kern.mul_real(st, r, &self.dinv, &mut self.tmp)?;
-        self.fwd.execute_inplace(st, &mut self.tmp)?;
-        self.kern.mul_real(st, &self.tmp, &self.pinv, z)?;
-        self.inv.execute_inplace(st, z)?;
-        self.kern.mul_real(st, z, &self.dinv, &mut self.tmp)?;
-        st.memcpy_dtod(&self.tmp, z)?;
+        match &mut self.parts {
+            Parts::Device { fwd, inv, pinv, dinv, tmp, .. } => {
+                self.kern.mul_real(st, r, dinv, tmp)?;
+                fwd.execute_inplace(st, tmp)?;
+                self.kern.mul_real(st, tmp, pinv, z)?;
+                inv.execute_inplace(st, z)?;
+                self.kern.mul_real(st, z, dinv, tmp)?;
+                st.memcpy_dtod(tmp, z)?;
+            }
+            Parts::Host { pinv, dinv, ws, .. } => {
+                let mut g = ws.lock().unwrap();
+                let w = &mut *g;
+                st.memcpy_htod(dinv.as_slice(), &mut w.a)?;
+                st.memcpy_htod(pinv.as_slice(), &mut w.b)?;
+                self.kern.mul_real(st, r, &w.a, &mut w.tmp)?;
+                w.fwd.execute_inplace(st, &mut w.tmp)?;
+                self.kern.mul_real(st, &w.tmp, &w.b, z)?;
+                w.inv.execute_inplace(st, z)?;
+                self.kern.mul_real(st, z, &w.a, &mut w.tmp)?;
+                st.memcpy_dtod(&w.tmp, z)?;
+            }
+        }
         Ok(())
     }
 
     /// z = M⁻¹ r = D^{1/2} F⁻¹ diag(λ + ε) F D^{1/2} r (the circulant approximation of E^H E itself)
     pub fn apply_inv(&mut self, st: &Arc<CudaStream>, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>) -> Result<(), Error> {
-        self.kern.mul_real(st, r, &self.dsq, &mut self.tmp)?;
-        self.fwd.execute_inplace(st, &mut self.tmp)?;
-        self.kern.mul_real(st, &self.tmp, &self.lam_eps, z)?;
-        self.inv.execute_inplace(st, z)?;
-        self.kern.mul_real(st, z, &self.dsq, &mut self.tmp)?;
-        st.memcpy_dtod(&self.tmp, z)?;
+        match &mut self.parts {
+            Parts::Device { fwd, inv, lam_eps, dsq, tmp, .. } => {
+                self.kern.mul_real(st, r, dsq, tmp)?;
+                fwd.execute_inplace(st, tmp)?;
+                self.kern.mul_real(st, tmp, lam_eps, z)?;
+                inv.execute_inplace(st, z)?;
+                self.kern.mul_real(st, z, dsq, tmp)?;
+                st.memcpy_dtod(tmp, z)?;
+            }
+            Parts::Host { lam_eps, dsq, ws, .. } => {
+                let mut g = ws.lock().unwrap();
+                let w = &mut *g;
+                st.memcpy_htod(dsq.as_slice(), &mut w.a)?;
+                st.memcpy_htod(lam_eps.as_slice(), &mut w.b)?;
+                self.kern.mul_real(st, r, &w.a, &mut w.tmp)?;
+                w.fwd.execute_inplace(st, &mut w.tmp)?;
+                self.kern.mul_real(st, &w.tmp, &w.b, z)?;
+                w.inv.execute_inplace(st, z)?;
+                self.kern.mul_real(st, z, &w.a, &mut w.tmp)?;
+                st.memcpy_dtod(&w.tmp, z)?;
+            }
+        }
         Ok(())
     }
 }

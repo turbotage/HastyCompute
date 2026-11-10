@@ -9,6 +9,9 @@
 //! - ZMSHR1 secant pair x_prev / g_prev (read twice, written once per iteration): device or host;
 //! - rank-one direction w (written once, read once): device, host, or recomputed from the secant pair.
 //!
+//! - per-set sample tables of the operator (`SegPoints`, [`choose_tables`]): device, or pinned host memory uploaded
+//!   into two device slots per set use (`SetOp::place_tables`).
+//!
 //! Always on the device: x, ∇f and the step (three parameter stacks), the operator, coil maps and model scratch.
 
 use std::sync::Arc;
@@ -79,6 +82,10 @@ pub struct Plan {
     pub predicted_s: f64,
     /// every candidate: (description, device bytes, predicted s / iteration, fits)
     pub table: Vec<(String, usize, f64, bool)>,
+    /// the operator's sample tables streamed from pinned host memory ([`choose_tables`]; false from [`choose`])
+    pub tables_on_host: bool,
+    /// the plan placed the sample tables (made by [`choose_tables`])
+    pub tables_planned: bool,
 }
 
 impl Plan {
@@ -88,8 +95,9 @@ impl Plan {
 
     pub fn describe(&self) -> String {
         let gb = |b: usize| b as f64 / (1u64 << 30) as f64;
+        let tables = if self.tables_planned { format!("sample tables {}, ", if self.tables_on_host { "host (streamed)" } else { "device" }) } else { String::new() };
         let mut s = format!(
-            "memory plan: data {}, secant pair {}, w {:?}; device {:.2} / {:.2} GiB budget, transfers {:.3} s, predicted {:.3} s / iteration\n",
+            "memory plan: {tables}data {}, secant pair {}, w {:?}; device {:.2} / {:.2} GiB budget, transfers {:.3} s, predicted {:.3} s / iteration\n",
             if self.data_on_host { "host (streamed)" } else { "device" },
             if self.prev_on_host { "host (streamed)" } else { "device" },
             self.w_mode,
@@ -163,7 +171,7 @@ pub fn choose(need: &Need, probe: &Probe, budget: usize, force_data: Option<bool
                 let desc = format!("data {}, secant {}, w {w:?}", if dh { "host" } else { "dev" }, if ph { "host" } else { "dev" });
                 table.push((desc, dev, t, fits));
                 if fits && best.as_ref().is_none_or(|b| t < b.predicted_s - 1e-12) {
-                    best = Some(Plan { data_on_host: dh, prev_on_host: ph, w_mode: w, device_bytes: dev, budget, transfer_s: tr, predicted_s: t, table: vec![] });
+                    best = Some(Plan { data_on_host: dh, prev_on_host: ph, w_mode: w, device_bytes: dev, budget, transfer_s: tr, predicted_s: t, table: vec![], tables_on_host: false, tables_planned: false });
                 }
             }
         }
@@ -176,6 +184,50 @@ pub fn choose(need: &Need, probe: &Probe, budget: usize, force_data: Option<bool
             budget as f64 / (1u64 << 30) as f64
         ))
     })?;
+    p.table = table;
+    Ok(p)
+}
+
+/// The operator's per-set sample tables (`SetOp::table_bytes`): all sets, the largest set, and what they occupy on
+/// the device now (all of it when resident, the two slots when streamed) — `Need::fixed` measured now includes it.
+#[derive(Clone, Debug)]
+pub struct TableNeed {
+    pub bytes: usize,
+    pub set_max: usize,
+    pub device_now: usize,
+}
+
+/// [`choose`] with the sample tables as one more placeable buffer: resident (`bytes` on the device) or streamed from
+/// pinned host memory into two device slots (2 × `set_max`), costing one upload of every set's tables per gradient,
+/// `bytes` / h2d (charged in full: the uploads can overlap the compute with `SegNufft::stream_prefetch`, but share
+/// the bus with streamed data). `need.fixed` is the measured device use including the tables' `device_now`.
+/// `force_tables`: keep a decision (e.g. when re-planning with the measured gradient time).
+pub fn choose_tables(need: &Need, tab: &TableNeed, probe: &Probe, budget: usize, force_data: Option<bool>, force_tables: Option<bool>) -> Result<Plan, Error> {
+    let opts: Vec<bool> = force_tables.map(|t| vec![t]).unwrap_or_else(|| vec![false, true]);
+    let mut best: Option<Plan> = None;
+    let mut table = vec![];
+    let mut err = None;
+    for &th in &opts {
+        let mut n = need.clone();
+        let upload = if th { tab.bytes as f64 / probe.h2d } else { 0.0 };
+        n.fixed = need.fixed.saturating_sub(tab.device_now) + if th { 2 * tab.set_max } else { tab.bytes };
+        n.gradient_s = need.gradient_s + upload;
+        match choose(&n, probe, budget, force_data) {
+            Ok(mut p) => {
+                for (d, b, t, ok) in p.table.drain(..) {
+                    table.push((format!("tables {}, {d}", if th { "host" } else { "dev" }), b, t, ok));
+                }
+                p.tables_on_host = th;
+                p.tables_planned = true;
+                p.transfer_s += upload;
+                if best.as_ref().is_none_or(|b| p.predicted_s < b.predicted_s - 1e-12) {
+                    best = Some(p);
+                }
+            }
+            Err(e) => err = Some(e),
+        }
+    }
+    let mut p = best.ok_or_else(|| err.unwrap_or_else(|| Error::Format("memory plan: no candidate".into())))?;
     p.table = table;
     Ok(p)
 }
@@ -213,5 +265,40 @@ mod tests {
         assert!(choose(&n, &probe(), 6 << 30, None).is_err());
         assert_eq!(parse_bytes("8G"), Some(8 << 30));
         assert_eq!(parse_bytes("512M"), Some(512 << 20));
+    }
+
+    #[test]
+    fn sample_tables_stream_only_when_they_do_not_fit() {
+        // tables resident now: 6 GiB measured in `fixed` (4 GiB other + 6 GiB tables)
+        let mut n = need();
+        n.fixed = 10 << 30;
+        let tab = TableNeed { bytes: 6 << 30, set_max: 300 << 20, device_now: 6 << 30 };
+        // a large card keeps everything resident and costs no upload
+        let p = choose_tables(&n, &tab, &probe(), 40 << 30, None, None).unwrap();
+        assert!(!p.tables_on_host && p.tables_planned && !p.data_on_host, "{}", p.describe());
+        assert!((p.predicted_s - choose(&n, &probe(), 40 << 30, None).unwrap().predicted_s).abs() < 1e-12);
+        // 14 GiB: streaming the tables (2 slots, 6 GiB / 20 GB/s ≈ 0.32 s) beats swapping the state
+        let p = choose_tables(&n, &tab, &probe(), 14 << 30, None, None).unwrap();
+        assert!(p.device_bytes <= p.budget, "{}", p.describe());
+        let fastest = p.table.iter().filter(|t| t.3).map(|t| t.2).fold(f64::INFINITY, f64::min);
+        assert!((p.predicted_s - fastest).abs() < 1e-12, "{}", p.describe());
+        assert!(p.describe().contains("sample tables"));
+        // 9 GiB: only streamed tables + host data fit; the upload is in the transfer time
+        let p = choose_tables(&n, &tab, &probe(), 9 << 30, None, None).unwrap();
+        assert!(p.tables_on_host, "{}", p.describe());
+        assert!(p.transfer_s >= tab.bytes as f64 / probe().h2d - 1e-12);
+        // tables already streamed (device_now = the two slots): the same decision from the other side
+        let mut n2 = need();
+        n2.fixed = (4 << 30) + 2 * (300 << 20);
+        let tab2 = TableNeed { device_now: 2 * (300 << 20), ..tab.clone() };
+        let q = choose_tables(&n2, &tab2, &probe(), 9 << 30, None, None).unwrap();
+        assert_eq!((q.tables_on_host, q.data_on_host, q.prev_on_host), (p.tables_on_host, p.data_on_host, p.prev_on_host));
+        // forced
+        assert!(!choose_tables(&n, &tab, &probe(), 40 << 30, None, Some(false)).unwrap().tables_on_host);
+        assert!(choose_tables(&n, &tab, &probe(), 40 << 30, None, Some(true)).unwrap().tables_on_host);
+        assert!(choose_tables(&n, &tab, &probe(), 5 << 30, None, None).is_err());
+        // `choose` itself is unchanged: no table placement in its plan
+        let c = choose(&n, &probe(), 40 << 30, None).unwrap();
+        assert!(!c.tables_planned && !c.describe().contains("sample tables"));
     }
 }

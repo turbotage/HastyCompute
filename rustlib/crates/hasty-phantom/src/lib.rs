@@ -7,6 +7,7 @@ pub mod coils;
 pub mod flow;
 pub mod prescription;
 pub mod scene;
+pub mod shimfit;
 pub mod subject;
 pub mod tissue;
 pub mod volume;

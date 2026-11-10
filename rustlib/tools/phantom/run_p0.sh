@@ -3,7 +3,9 @@
 #   rustlib/tools/phantom/run_p0.sh [--graph] [--labels] [--publish]
 # --graph: rebuild the vessel graph from the Blender export; --labels: rebuild the tissue labels (winding numbers);
 # --publish: send the 1 mm thorax truth to the flow viewer (hasty server on HASTY_SERVER or https://localhost:8443).
-# Grids: 2 mm and 1 mm thorax (400 × 300 × 360 mm), 0.5 mm heart (200 × 200 × 240 mm). Outputs: data/hasty/phantom/p0.
+# Grids: 2 mm and 1 mm thorax with the arms (520 × 320 × 360 mm; until 2026-11-07 400 × 300 × 360, which cut the arms
+# and shoulders off at x = ±200 mm and the back at y = +130 mm — a scanner excites everything in x, y), 0.5 mm heart
+# (200 × 200 × 240 mm). Outputs: data/hasty/phantom/p0.
 set -euo pipefail
 R=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$R"
@@ -26,8 +28,8 @@ for _ in 1 2; do
 done
 $PY $T/pack_vessels.py $E $P/flow $P/vessels.hv
 
-declare -A CENTER=([2mm]="0.0,-0.02,1.30" [1mm]="0.0,-0.02,1.30" [0.5mm_heart]="0.02,-0.03,1.31")
-declare -A SIZE=([2mm]="0.40,0.30,0.36" [1mm]="0.40,0.30,0.36" [0.5mm_heart]="0.20,0.20,0.24")
+declare -A CENTER=([2mm]="0.0,0.0,1.30" [1mm]="0.0,0.0,1.30" [0.5mm_heart]="0.02,-0.03,1.31")
+declare -A SIZE=([2mm]="0.52,0.32,0.36" [1mm]="0.52,0.32,0.36" [0.5mm_heart]="0.20,0.20,0.24")
 declare -A VOX=([2mm]=0.002 [1mm]=0.001 [0.5mm_heart]=0.0005)
 declare -A SUB=([2mm]=4 [1mm]=4 [0.5mm_heart]=3)
 for G in 2mm 1mm 0.5mm_heart; do

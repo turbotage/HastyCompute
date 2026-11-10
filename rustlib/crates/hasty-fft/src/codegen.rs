@@ -57,6 +57,10 @@ pub struct AxisCfg {
     pub scale: f64,
     pub n_in: usize,
     pub n_out: usize,
+    /// also read the last `n_in_tail` entries of every line (wrapped zero padding: data at [0, n_in) ∪ [n − n_in_tail, n))
+    pub n_in_tail: usize,
+    /// also write the last `n_out_tail` entries (wrapped crop)
+    pub n_out_tail: usize,
     /// forward -> multiply by `kern` -> inverse inside one kernel
     pub conv: bool,
     pub pre: Vec<DiagOp>,
@@ -92,6 +96,8 @@ impl AxisCfg {
             scale,
             n_in: n,
             n_out: n,
+            n_in_tail: 0,
+            n_out_tail: 0,
             conv: false,
             pre: vec![],
             post: vec![],
@@ -227,13 +233,13 @@ pub fn generate(cfg: &AxisCfg) -> String {
     }
     writeln!(
         s,
-        "#define N {n}\n#define N_IN {}\n#define N_OUT {}\n#define LPB {}\n#define TPL {}",
-        cfg.n_in, cfg.n_out, cfg.lpb, cfg.tpl
+        "#define N {n}\n#define N_IN {}\n#define N_OUT {}\n#define N_IN_TAIL {}\n#define N_OUT_TAIL {}\n#define LPB {}\n#define TPL {}",
+        cfg.n_in, cfg.n_out, cfg.n_in_tail, cfg.n_out_tail, cfg.lpb, cfg.tpl
     )
     .unwrap();
     writeln!(
         s,
-        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {kty} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn) {{",
+        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {kty} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn,\n  long lb1_cnt, long lb1_hi, long lb1_gap, long lb2_hi, long lb2_gap, long in_lb2, long out_lb2) {{",
         cfg.block_threads()
     )
     .unwrap();
@@ -246,7 +252,10 @@ pub fn generate(cfg: &AxisCfg) -> String {
   const long line = (long)blockIdx.x * LPB + li;
   const bool act = line < la_cnt * lb_cnt;
   const long la = line % la_cnt, lb = line / la_cnt;
-  const long ib = la * in_la + lb * in_lb, ob_ = la * out_la + lb * out_lb;
+  long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;
+  if (lb1 >= lb1_hi) lb1 += lb1_gap;
+  if (lb2 >= lb2_hi) lb2 += lb2_gap;
+  const long ib = la * in_la + lb1 * in_lb + lb2 * in_lb2, ob_ = la * out_la + lb1 * out_lb + lb2 * out_lb2;
 #define SIDX(n) (li * N + (n))"#
         )
         .unwrap();
@@ -258,7 +267,10 @@ pub fn generate(cfg: &AxisCfg) -> String {
   const long la = (long)blockIdx.x * LPB + li;
   const long lb = blockIdx.y;
   const bool act = la < la_cnt;
-  const long ib = la * in_la + lb * in_lb, ob_ = la * out_la + lb * out_lb;
+  long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;
+  if (lb1 >= lb1_hi) lb1 += lb1_gap;
+  if (lb2 >= lb2_hi) lb2 += lb2_gap;
+  const long ib = la * in_la + lb1 * in_lb + lb2 * in_lb2, ob_ = la * out_la + lb1 * out_lb + lb2 * out_lb2;
 #define SIDX(n) ((n) * LPB + li)"#
         )
         .unwrap();
@@ -314,7 +326,9 @@ pub fn generate(cfg: &AxisCfg) -> String {
             .unwrap();
             if first {
                 writeln!(s, "        const int e = {jj} + t * {m};").unwrap();
-                if cfg.n_in < n {
+                if cfg.n_in_tail > 0 {
+                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && (e < N_IN || e >= N - N_IN_TAIL)) {{ x = in[GIN(e)];").unwrap();
+                } else if cfg.n_in < n {
                     writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && e < N_IN) {{ x = in[GIN(e)];").unwrap();
                 } else {
                     writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act) {{ x = in[GIN(e)];").unwrap();
@@ -354,7 +368,9 @@ pub fn generate(cfg: &AxisCfg) -> String {
             .unwrap();
             if last {
                 writeln!(s, "        const int e = ob + u * {ns};").unwrap();
-                let guard = if cfg.n_out < n {
+                let guard = if cfg.n_out_tail > 0 {
+                    "act && (e < N_OUT || e >= N - N_OUT_TAIL)"
+                } else if cfg.n_out < n {
                     "act && e < N_OUT"
                 } else {
                     "act"

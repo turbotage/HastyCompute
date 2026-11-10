@@ -4,6 +4,7 @@
 
 mod complex;
 mod nvrtc;
+pub mod pace;
 
 pub use complex::{Real, C32, C64};
 

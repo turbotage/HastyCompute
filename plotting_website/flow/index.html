@@ -89,6 +89,18 @@
                 <label class="sub">search radius (mm) <input id="vt-r" type="number" min="3" step="1" value="18"></label>
                 <label class="sub"><input id="vt-orient" type="checkbox" checked> orient with the net flow</label>
                 <div class="btn-row"><button id="vt-redo">re-measure</button> <button id="vt-seed">seed particles here</button> <button id="vt-clear">clear</button></div>
+                <label class="sub"><input id="vw-on" type="checkbox"> wall surface of this vessel (inside the box around the click)</label>
+                <label class="sub"><input id="vw-tree" type="checkbox"> whole vessel tree connected to the click (display resolution, grey)</label>
+                <div id="vw-opts" hidden>
+                    <label class="sub">colour by <select id="vw-by" autocomplete="off"><option value="twss" selected>time-mean wall shear stress (Pa)</option><option value="wss">wall shear stress, this frame (Pa)</option><option value="osi">oscillatory shear index</option><option value="ke">kinetic energy density, time-mean, at the sampling depth (J/m³)</option><option value="ke_f">kinetic energy density, this frame (J/m³)</option><option value="diss">viscous dissipation, time-mean, at the sampling depth (W/m³)</option><option value="diss_f">viscous dissipation, this frame (W/m³)</option><option value="none">surface only</option></select></label>
+                    <label class="sub">estimator <select id="vw-order" autocomplete="off"><option value="2" selected>2nd order (two samples, exact for a parabolic profile)</option><option value="1">1st order (one sample)</option></select></label>
+                    <label class="sub">sampling distance inside the wall (mm) <input id="vw-d" type="number" min="0.05" step="0.05"></label>
+                    <label class="sub">viscosity (mPa·s) <input id="vw-mu" type="number" min="0.5" step="0.1" value="3.5"></label>
+                    <label class="sub">colour scale max (blank = auto, 98th percentile) <input id="vw-max" type="number" min="0" step="0.1"></label>
+                    <label class="sub">opacity <input id="vw-op" type="range" min="0.15" max="1" step="0.05" value="0.7"></label>
+                    <div id="vw-legend"><div id="vw-bar"></div><span id="vw-lo">0</span><span id="vw-hi"></span></div>
+                    <p class="hint" id="vw-info"></p>
+                </div>
                 <canvas id="vt-profile"></canvas>
                 <canvas id="vt-diam"></canvas>
                 <canvas id="vt-plot"></canvas>

@@ -1,9 +1,14 @@
 //! B0 / R2* / fat maps from a simulated multi-echo train scan (`simphantom --seq b0`), stage 1 of WP3:
 //! echo images by P²nP with an LLR prior across echo times, then the voxel-wise water–fat fit (hasty-qfit, GPU).
 //!
-//!     recon_b0 <sim_dir> <out_dir> [--vcoils 12] [--iters 40] [--kappa 0.3] [--block 8] [--every 5] [--clean]
+//!     recon_b0 <sim_dir> <out_dir> [--vcoils auto|n] [--coil-energy 0.999] [--iters 40] [--kappa 0.3] [--block 8] [--every 5] [--clean]
 //!              [--no-conc] [--support 0.05] [--resp-bins 1] [--resp gate|bellows|truth] [--grid-scale 1] [--moco <motionfit run>]
-//!              [--precond zmshr1m|circ|zmshr1|none] [--eps 1e-3]
+//!              [--precond zmshr1m|circ|zmshr1|none] [--eps 1e-3] [--state auto|device|host]
+//!
+//! `--state host`: the solver stacks live in host memory (sets streamed through two device slots, hasty-recon
+//! `hoststack`) and the circulant preconditioners keep their N-grid arrays on the host (uploaded per application into
+//! one shared workspace); only the data, coordinates and the operator stay on the device. `auto` (default): host when
+//! the device estimate (data + preconditioners + five stacks) exceeds 80 % of the free device memory.
 //!
 //! Support (LLR blocks): coil energy above `support` × its median (the whole body; true maps peak strongly at the
 //! coils). Fitted voxels: support ∩ first-echo magnitude > 5 % of its 99th percentile. Preconditioning (no density
@@ -109,7 +114,9 @@ fn down(x: &[Complex64], d: [usize; 3], g: usize) -> Vec<Complex64> {
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut take = |n: &str| -> Option<String> { args.iter().position(|a| a == n).map(|i| { args.remove(i); args.remove(i) }) };
-    let nvc: usize = take("--vcoils").map_or(12, |s| s.parse().unwrap());
+    // virtual coils: a number, or auto = the fewest holding --coil-energy (default 99.9 %) of the whitened map energy
+    let coil_energy: f64 = take("--coil-energy").map_or(hasty_recon::coils::CoilRule::DEFAULT_ENERGY, |s| s.parse().unwrap());
+    let coil_rule = hasty_recon::coils::CoilRule::parse(&take("--vcoils").unwrap_or("auto".into()), coil_energy).unwrap();
     let iters: usize = take("--iters").map_or(40, |s| s.parse().unwrap());
     let kappa: f64 = take("--kappa").map_or(0.3, |s| s.parse().unwrap());
     let block: usize = take("--block").map_or(8, |s| s.parse().unwrap());
@@ -121,6 +128,7 @@ fn main() {
     let moco_dir: Option<PathBuf> = take("--moco").map(PathBuf::from);
     let pre_name = take("--precond").unwrap_or_else(|| "zmshr1m".into());
     let eps: f64 = take("--eps").map_or(1e-3, |s| s.parse().unwrap());
+    let state_arg = take("--state").unwrap_or_else(|| "auto".into());
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let clean = flag(&mut args, "--clean");
     let no_conc = flag(&mut args, "--no-conc");
@@ -190,20 +198,13 @@ fn main() {
             sw[c * nv_f + q] = acc;
         }
     }
-    let mut g = DMatrix::<Complex64>::zeros(nc, nc);
-    for q in (0..nv_f).step_by(7) {
-        for a in 0..nc {
-            for b in 0..nc {
-                g[(a, b)] += sw[a * nv_f + q] * sw[b * nv_f + q].conj();
-            }
-        }
-    }
-    let ge = SymmetricEigen::new(g);
-    let mut order: Vec<usize> = (0..nc).collect();
-    order.sort_by(|&a, &b| ge.eigenvalues[b].partial_cmp(&ge.eigenvalues[a]).unwrap());
-    let tot: f64 = ge.eigenvalues.iter().sum();
-    let kept: f64 = order[..nvc].iter().map(|&i| ge.eigenvalues[i]).sum();
-    let comp: Vec<Vec<Complex64>> = order[..nvc].iter().map(|&i| (0..nc).map(|c| ge.eigenvectors[(c, i)].conj()).collect()).collect();
+    let mut gram = hasty_recon::coils::CoilGram::new(nc);
+    gram.add_c64(&sw, nv_f, 7);
+    let ccx = hasty_recon::coils::CoilCompression::from_gram(&gram, coil_rule);
+    println!("coil compression (whitened maps): {}", ccx.report());
+    let nvc = ccx.nvc();
+    let (kept, tot) = (ccx.retained, 1.0);
+    let comp: Vec<Vec<Complex64>> = ccx.rows.clone();
     let mut smaps_f = vec![Complex64::new(0.0, 0.0); nvc * nv_f];
     for v in 0..nvc {
         for q in 0..nv_f {
@@ -380,6 +381,23 @@ fn main() {
         None => (vec![], vec![]),
     };
     let need_circ = pre_name == "circ" || pre_name == "zmshr1m";
+    // device budget: data + coordinates, the preconditioners (4 arrays + a temporary + 2 plans ≈ 7 images each) and five
+    // solver stacks; above 80 % of the free memory the stacks and the preconditioner arrays go to host memory
+    let host_state = {
+        let n_x = if moco_dir.is_some() { nd } else { nset };
+        let data_b: usize = ys.iter().map(|y| y.len() * 8).sum::<usize>() + coords.iter().map(|c| c[0].len() * 12).sum::<usize>();
+        let circ_b = if need_circ { n_x * 7 * nv * 8 } else { 0 };
+        let stack_b = 5 * n_x * nv * 8;
+        let (free, _) = dev.ctx.mem_get_info().unwrap();
+        let h = match state_arg.as_str() {
+            "host" => true,
+            "device" => false,
+            _ => data_b + circ_b + stack_b > free / 10 * 8,
+        };
+        println!("device budget: data {:.1} GiB, preconditioners {:.1} GiB, stacks {:.1} GiB, free {:.1} GiB → solver state and preconditioners on the {}", data_b as f64 / 1073741824.0, circ_b as f64 / 1073741824.0, stack_b as f64 / 1073741824.0, free as f64 / 1073741824.0, if h { "host" } else { "device" });
+        h
+    };
+    let circ_ws = if host_state && need_circ { Some(hasty_recon::precond::CircShared::new(&dev, &st, dims).unwrap()) } else { None };
     let circ: Vec<Vec<hasty_recon::precond::CirculantPrecond>> = if need_circ {
         (0..if moco_dir.is_some() { nd } else { nset })
             .map(|t| {
@@ -388,7 +406,8 @@ fn main() {
                 } else {
                     [0, 1, 2].map(|a| coords[t][a].clone())
                 };
-                vec![hasty_recon::precond::CirculantPrecond::new(&dev, &st, kern.clone(), dims, [&cat[0], &cat[1], &cat[2]], &smaps, nvc, eps).unwrap()]
+                let c = hasty_recon::precond::CirculantPrecond::new(&dev, &st, kern.clone(), dims, [&cat[0], &cat[1], &cat[2]], &smaps, nvc, eps).unwrap();
+                vec![match &circ_ws { Some(ws) => c.to_host(&st, ws).unwrap(), None => c }]
             })
             .collect()
     } else {
@@ -436,7 +455,6 @@ fn main() {
     println!("λ_max(N) = {lmax:.3e}, λ_max(M N) = {lmax_c:.3e}, preconditioner {pre_name} ({:.0}s)", t0.elapsed().as_secs_f64());
     let ctl = RunCtl::new(&out, every);
     let tag = format!("p2np_{pre_name}_k{kappa}{}", if moco_dir.is_some() { "_moco" } else { "" });
-    let mut x = Stack::zeros(&st, nset_x, nv).unwrap();
     let mut llr = Llr::new(dims, block, kappa, support.clone());
     let mut denoise = |k: usize, h: &mut Vec<C32>| {
         if kappa > 0.0 {
@@ -445,17 +463,29 @@ fn main() {
         }
     };
     let tr = Instant::now();
-    let mut report = |k: usize, _x: &Stack, f: f64| {
+    let report_k = |k: usize, f: f64| {
         let k = k.wrapping_add(1);
         if k % every == 0 || k == iters {
             println!("  iter {k:3}: f {f:.5e} ({:.1}s)", tr.elapsed().as_secs_f64());
         }
     };
-    if let Outcome::Stopped(k) = p.run_from(&st, &mut x, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap() {
-        println!("stopped before iteration {k}; rerun to continue");
-        return;
-    }
-    let imgs: Vec<Vec<C32>> = x.v.iter().map(|v| st.clone_dtoh(v).unwrap()).collect();
+    let imgs: Vec<Vec<C32>> = if host_state {
+        let mut xh = hasty_recon::hoststack::HostStack::zeros(&vec![nv; nset_x]);
+        let mut report = |k: usize, _x: &hasty_recon::hoststack::HostStack, f: f64| report_k(k, f);
+        if let Outcome::Stopped(k) = hasty_recon::hoststack::run_objective_host(&mut p, &st, &mut xh, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap() {
+            println!("stopped before iteration {k}; rerun to continue");
+            return;
+        }
+        (0..nset_x).map(|t| xh.chunk(t).to_vec()).collect()
+    } else {
+        let mut x = Stack::zeros(&st, nset_x, nv).unwrap();
+        let mut report = |k: usize, _x: &Stack, f: f64| report_k(k, f);
+        if let Outcome::Stopped(k) = p.run_from(&st, &mut x, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap() {
+            println!("stopped before iteration {k}; rerun to continue");
+            return;
+        }
+        x.v.iter().map(|v| st.clone_dtoh(v).unwrap()).collect()
+    };
     println!("echo images done ({:.0}s)", t0.elapsed().as_secs_f64());
 
     // ── concomitant correction and the voxel fit ──

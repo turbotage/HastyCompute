@@ -1,12 +1,14 @@
-//! Simulator output (`sim4d`) → reconstruction inputs: sequence (regenerated deterministically from the parameters),
-//! whitened multi-coil data per encode/frame, per-sample phase parameters, and physics on the reconstruction grid.
+//! Simulator output (`sim4d`, `simphantom`) → reconstruction inputs: sequence (the spiral regenerated deterministically
+//! from the parameters, or a schedule-based sim's stored readouts and per-sample records), whitened multi-coil data per
+//! encode/frame, per-sample phase parameters, and physics on the reconstruction grid.
 
 use std::path::{Path, PathBuf};
 
 use hasty_cuda::C32;
 use hasty_mrsim::gnl::GradientCoils;
+use hasty_mrsim::physio::{CardiacTime, Ecg};
 use hasty_mrsim::sequence::{Acquisition, Coverage, Encoding, FlowSpiralParams, SAMPLE_FLOATS};
-use hasty_mrsim::{mat_vec, transpose, GradLimits, Mat3, Vec3, GAMMA_BAR};
+use hasty_mrsim::{mat_vec, transpose, GradLimits, Mat3, Vec3, GAMMA, GAMMA_BAR};
 use nalgebra::{DMatrix, SymmetricEigen};
 use serde_json::Value;
 
@@ -55,10 +57,30 @@ fn m3(v: &Value) -> Mat3 {
     [0, 1, 2].map(|r| [0, 1, 2].map(|c| v[r][c].as_f64().unwrap()))
 }
 
+/// per-readout schedule data every reconstruction needs (from the spiral `Acquisition` or a sim's readouts.npy)
+pub struct ReadoutInfo {
+    pub enc: Vec<usize>,
+    pub frame: Vec<usize>,
+    pub card: Vec<CardiacTime>,
+    pub t_exc: Vec<f64>,
+}
+
+/// per-sample records of a schedule-based sim (`simphantom --seq flow`): [readout][adc][SAMPLE_FLOATS], physical axes,
+/// the nominal trajectory (`sched_nominal.npy`) or the one played through the simulated GIRF (`sched_played.npy`)
+pub struct SchedSamples {
+    pub rec: Vec<f32>,
+    pub traj: String,
+}
+
 pub struct SimData {
     pub dir: PathBuf,
     pub meta: Value,
-    pub acq: Acquisition,
+    /// the spiral acquisition (`sequence.kind` spiral); None for schedule-based sims ([`SimData::spiral`])
+    pub acq: Option<Acquisition>,
+    pub ro: ReadoutInfo,
+    pub sched: Option<SchedSamples>,
+    /// velocity-encoding first moments per encode at the echo, logical frame (T·s²/m)
+    pub encode_m1: Vec<Vec3>,
     /// [readout][adc][coil]
     pub data: Vec<C32>,
     pub nc: usize,
@@ -85,6 +107,8 @@ pub struct SimData {
     pub truth_vel: Vec<f32>,
     pub truth_frac: Vec<f32>,
     pub n_frames: usize,
+    /// data and per-sample records read on demand ([`SimData::load_lazy`], `kload`); None: in memory (`data`)
+    pub lazy: Option<std::sync::Arc<crate::kload::LazySource>>,
 }
 
 /// Per-encode (or per-frame) sample set ready for an operator.
@@ -115,10 +139,28 @@ pub struct PhysicsGrid {
 }
 
 impl SimData {
+    /// load a sim; schedule-based sims use the nominal trajectory unless `HASTY_TRAJ=played` (the GIRF-played one,
+    /// i.e. a reconstruction that models the chain exactly)
     pub fn load(dir: &Path) -> Result<Self, Error> {
+        let traj = std::env::var("HASTY_TRAJ").unwrap_or_else(|_| "nominal".into());
+        Self::load_traj(dir, &traj)
+    }
+
+    /// the spiral acquisition (panics for schedule-based sims: spiral-only tools)
+    pub fn spiral(&self) -> &Acquisition {
+        self.acq.as_ref().expect("this tool needs a spiral sim (sequence.kind = spiral)")
+    }
+
+    pub fn load_traj(dir: &Path, traj: &str) -> Result<Self, Error> {
+        Self::load_traj_opts(dir, traj, false)
+    }
+
+    /// `lazy`: leave the k-space data and the per-sample records on disk (see `kload`)
+    pub fn load_traj_opts(dir: &Path, traj: &str, lazy: bool) -> Result<Self, Error> {
         let meta: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("meta.json"))?).map_err(|e| Error::Format(e.to_string()))?;
         let f = |k: &str| meta[k].as_f64().unwrap();
         let u = |k: &str| meta[k].as_u64().unwrap() as usize;
+        let kind = meta["sequence"]["kind"].as_str().unwrap_or("spiral").to_string();
         let p = FlowSpiralParams {
             b0: f("b0"),
             lim: GradLimits { gmax: f("gmax"), smax: f("smax") },
@@ -145,11 +187,76 @@ impl SimData {
             n_frames: u("n_frames"),
             seed: meta["seed"].as_u64().unwrap(),
         };
-        let acq = Acquisition::new(p.clone());
         let nc = u("n_coils");
         let na = u("n_adc");
-        assert_eq!(acq.readouts.len(), u("n_readouts"), "regenerated schedule differs from the simulated one");
-        assert_eq!(acq.n_adc(), na);
+        let n_ro = u("n_readouts");
+        let mut lazy_sched: Option<crate::kload::NpyFile> = None;
+        let (acq, ro, sched, encode_m1, venc) = match kind.as_str() {
+            "spiral" => {
+                let acq = Acquisition::new(p.clone());
+                assert_eq!(acq.readouts.len(), n_ro, "regenerated schedule differs from the simulated one");
+                assert_eq!(acq.n_adc(), na);
+                let ro = ReadoutInfo {
+                    enc: acq.readouts.iter().map(|r| r.enc).collect(),
+                    frame: acq.readouts.iter().map(|r| r.frame).collect(),
+                    card: acq.readouts.iter().map(|r| r.card).collect(),
+                    t_exc: acq.readouts.iter().map(|r| r.t_exc).collect(),
+                };
+                let m1 = acq.params.encode_m1();
+                (Some(acq), ro, None, m1, p.venc)
+            }
+            "flow" => {
+                let tab = read_npy(&dir.join("readouts.npy"))?.f64s();
+                assert_eq!(tab.len(), n_ro * 14, "readouts.npy");
+                let ecg = Ecg::new(p.scan_time + 2.0, p.mean_rr, p.rr_rel_std, p.seed);
+                let t_exc: Vec<f64> = (0..n_ro).map(|i| tab[14 * i]).collect();
+                let ro = ReadoutInfo {
+                    enc: (0..n_ro).map(|i| tab[14 * i + 1] as usize).collect(),
+                    frame: (0..n_ro).map(|i| tab[14 * i + 3] as usize).collect(),
+                    card: t_exc.iter().map(|&t| ecg.at(t)).collect(),
+                    t_exc,
+                };
+                let name = match traj {
+                    "nominal" => "sched_nominal.npy",
+                    "played" => "sched_played.npy",
+                    other => return Err(Error::Format(format!("trajectory {other}: nominal | played"))),
+                };
+                let (rec, sched_file) = if lazy {
+                    let f = crate::kload::NpyFile::open(&dir.join(name))?;
+                    assert_eq!(f.numel(), n_ro * na * SAMPLE_FLOATS, "{name}");
+                    (vec![], Some(f))
+                } else {
+                    let rec = read_npy(&dir.join(name))?.f32s();
+                    assert_eq!(rec.len(), n_ro * na * SAMPLE_FLOATS, "{name}");
+                    (rec, None)
+                };
+                // first ADC sample of every readout (k, M1)
+                let first: Vec<[f32; 6]> = match &sched_file {
+                    None => (0..n_ro).map(|i| std::array::from_fn(|j| rec[i * na * SAMPLE_FLOATS + j])).collect(),
+                    Some(f) => {
+                        use rayon::prelude::*;
+                        (0..n_ro).into_par_iter().map(|i| { let mut b = [0f32; 6]; f.read_f32(i * na * SAMPLE_FLOATS, &mut b).map(|_| b) }).collect::<Result<_, _>>()?
+                    }
+                };
+                lazy_sched = sched_file;
+                // encode M1 at the echo (first ADC sample), mean over the encode's readouts, physical → logical
+                let ne = ro.enc.iter().max().map_or(0, |e| e + 1);
+                let rt = transpose(&p.rot_presc);
+                let mut m1 = vec![[0.0f64; 3]; ne];
+                let mut cnt = vec![0usize; ne];
+                for i in 0..n_ro {
+                    let r0 = &first[i];
+                    for a in 0..3 {
+                        m1[ro.enc[i]][a] += r0[3 + a] as f64 / GAMMA;
+                    }
+                    cnt[ro.enc[i]] += 1;
+                }
+                let m1: Vec<Vec3> = m1.iter().zip(&cnt).map(|(m, &c)| mat_vec(&rt, &m.map(|x| x / c.max(1) as f64))).collect();
+                let venc = meta["sequence"]["encoding"]["venc_lo"].as_f64().unwrap_or(p.venc);
+                (None, ro, Some(SchedSamples { rec, traj: traj.into() }), m1, venc)
+            }
+            other => return Err(Error::Format(format!("sequence kind {other}: SimData reads spiral and flow sims (b0: hasty-bench b0data)"))),
+        };
         let dims = [0, 1, 2].map(|i| meta["recon_dims"][i].as_u64().unwrap() as usize);
         let psi: Vec<Vec<f64>> = meta["psi"].as_array().unwrap().iter().map(|r| r.as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect()).collect();
         let g = &meta["gnl"];
@@ -159,7 +266,19 @@ impl SimData {
         // without data.npy (default since sims store only the clean data): noise at the simulated level
         let env_sigma = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok());
         let sigma = env_sigma.or_else(|| (!dir.join("data.npy").exists()).then(|| meta["noise_sigma"].as_f64().unwrap()));
+        let mut lazy_src = None;
         let data = match sigma {
+            _ if lazy => {
+                // noise (if any) is added on load, after whitening (kload)
+                let (file, sg) = match sigma {
+                    Some(sg) if dir.join("data_clean.npy").exists() => ("data_clean.npy", Some(sg).filter(|&v| v > 0.0)),
+                    _ => ("data.npy", None),
+                };
+                let f = crate::kload::NpyFile::open(&dir.join(file))?;
+                assert_eq!(f.numel(), n_ro * na * nc, "{file}");
+                lazy_src = Some(std::sync::Arc::new(crate::kload::LazySource { data: f, sigma: sg, seed: 0x9E37_79B9_7F4A_7C15, sched: lazy_sched.take() }));
+                vec![]
+            }
             Some(sigma) if dir.join("data_clean.npy").exists() => {
                 let mut d = read_npy(&dir.join("data_clean.npy"))?.c32s();
                 let n = psi.len();
@@ -201,6 +320,9 @@ impl SimData {
         Ok(Self {
             dir: dir.to_path_buf(),
             acq,
+            ro,
+            sched,
+            encode_m1,
             data,
             nc,
             na,
@@ -213,13 +335,14 @@ impl SimData {
             rot: p.rot_presc,
             fov_c: p.fov_center,
             b0: p.b0,
-            venc: p.venc,
+            venc,
             smaps_true,
             field_ppm,
             truth_vel,
             truth_frac,
             n_frames: p.n_frames,
             meta,
+            lazy: lazy_src,
         })
     }
 
@@ -262,8 +385,36 @@ impl SimData {
         w
     }
 
+    pub fn n_readouts(&self) -> usize {
+        self.ro.enc.len()
+    }
+
     pub fn readouts_of(&self, enc: usize, frame: Option<usize>) -> Vec<usize> {
-        (0..self.acq.readouts.len()).filter(|&i| self.acq.readouts[i].enc == enc && frame.map_or(true, |f| self.acq.readouts[i].frame == f)).collect()
+        (0..self.n_readouts()).filter(|&i| self.ro.enc[i] == enc && frame.map_or(true, |f| self.ro.frame[i] == f)).collect()
+    }
+
+    /// k (rad/m, logical frame) and the SAMPLE_FLOATS record of readout `ro`
+    pub(crate) fn readout_samples(&self, ro: usize) -> (Vec<Vec3>, Vec<f32>) {
+        match &self.sched {
+            None => {
+                let a = self.spiral();
+                (a.k_logical(ro), a.sample_params(ro..ro + 1))
+            }
+            Some(sc) => {
+                let (na, nf) = (self.na, SAMPLE_FLOATS);
+                let rec = if sc.rec.is_empty() {
+                    let f = self.lazy.as_ref().and_then(|l| l.sched.as_ref()).expect("lazy sim without its sample records");
+                    let mut r = vec![0f32; na * nf];
+                    f.read_f32(ro * na * nf, &mut r).expect("sample records");
+                    r
+                } else {
+                    sc.rec[ro * na * nf..(ro + 1) * na * nf].to_vec()
+                };
+                let rt = transpose(&self.rot);
+                let k = (0..na).map(|n| mat_vec(&rt, &[rec[n * nf] as f64, rec[n * nf + 1] as f64, rec[n * nf + 2] as f64])).collect();
+                (k, rec)
+            }
+        }
     }
 
     pub fn sample_set(&self, ros: &[usize], w: &[Vec<f64>]) -> SampleSet {
@@ -274,8 +425,7 @@ impl SimData {
         let mut tau = Vec::with_capacity(m);
         let mut wq = Vec::with_capacity(m);
         for (r, &ro) in ros.iter().enumerate() {
-            let k = self.acq.k_logical(ro);
-            let sp = self.acq.sample_params(ro..ro + 1);
+            let (k, sp) = self.readout_samples(ro);
             for n in 0..na {
                 let j = r * na + n;
                 for a in 0..3 {
@@ -285,13 +435,16 @@ impl SimData {
                 wq.push([s[9] as f64, s[10] as f64, s[11] as f64, s[12] as f64]);
                 tau.push(s[13] as f64);
                 let src = &self.data[(ro * na + n) * nc..(ro * na + n + 1) * nc];
+                // a known spatially constant phase of the sample (the GIRF's B0 terms on the played trajectory; 0
+                // otherwise): the signal carries e^{−iφ0}, removed here
+                let (ps, pc) = (s[15] as f64).sin_cos();
                 for c in 0..nc {
                     let (mut re, mut im) = (0.0f64, 0.0f64);
                     for c2 in 0..nc {
                         re += w[c][c2] * src[c2].re as f64;
                         im += w[c][c2] * src[c2].im as f64;
                     }
-                    y[c * m + j] = C32::new(re as f32, im as f32);
+                    y[c * m + j] = C32::new((re * pc - im * ps) as f32, (re * ps + im * pc) as f32);
                 }
             }
         }
@@ -394,4 +547,95 @@ pub fn inv3(m: &Mat3) -> Mat3 {
         [-c(1, 0, 2, 2) / det, c(0, 0, 2, 2) / det, -c(0, 0, 1, 2) / det],
         [c(1, 0, 2, 1) / det, -c(0, 0, 2, 1) / det, c(0, 0, 1, 1) / det],
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn npy(path: &Path, descr: &str, shape: &[usize], bytes: &[u8]) {
+        let hdr = format!("{{'descr': '{descr}', 'fortran_order': False, 'shape': ({}{}), }}", shape.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(", "), if shape.len() == 1 { "," } else { "" });
+        let mut h = hdr.into_bytes();
+        while (10 + h.len() + 1) % 64 != 0 {
+            h.push(b' ');
+        }
+        h.push(b'\n');
+        let mut out = vec![0x93u8, b'N', b'U', b'M', b'P', b'Y', 1, 0];
+        out.extend_from_slice(&(h.len() as u16).to_le_bytes());
+        out.extend_from_slice(&h);
+        out.extend_from_slice(bytes);
+        std::fs::write(path, out).unwrap();
+    }
+    fn f4(v: &[f32]) -> Vec<u8> {
+        v.iter().flat_map(|x| x.to_le_bytes()).collect()
+    }
+
+    #[test]
+    fn schedule_based_flow_sim_loads() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-tmp/simdata_flow");
+        std::fs::create_dir_all(&dir).unwrap();
+        let (n_ro, na, nc, d) = (4usize, 3usize, 2usize, 4usize);
+        let nv = d * d * d;
+        // logical → scanner: 90° about z (logical x = scanner y)
+        let rp = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
+        let meta = serde_json::json!({
+            "b0": 2.89, "gmax": 0.08, "smax": 200.0, "dt": 1e-5, "dwell": 2e-6, "fov": [0.2, 0.2, 0.2], "res": [0.05, 0.05, 0.05],
+            "n_int": 1, "fov_edge_ratio": 1.0, "venc": 1.5, "encoding": "Referenced", "coverage": "Rotated3d", "t_rf": 1.5e-4,
+            "t_spoil": 1e-3, "scan_time": 0.04, "rot_presc": rp, "fov_center_scanner": [0.0, 0.0, 0.0], "mean_rr": 1.0,
+            "rr_rel_std": 0.0, "n_frames": 2, "seed": 1, "n_coils": nc, "n_adc": na, "n_readouts": n_ro, "recon_dims": [d, d, d],
+            "psi": [[1.0, 0.0], [0.0, 1.0]], "gnl": {"r0": 0.25, "transverse": [0.0, 0.0], "longitudinal": [0.0, 0.0]},
+            "noise_sigma": 0.0, "sequence": {"kind": "flow", "encoding": {"venc_lo": 1.0}},
+        });
+        std::fs::write(dir.join("meta.json"), serde_json::to_string(&meta).unwrap()).unwrap();
+        let tab: Vec<u8> = (0..n_ro).flat_map(|i| {
+            let mut r = [0.0f64; 14];
+            r[0] = i as f64 * 0.01;
+            r[1] = (i % 2) as f64;
+            r[3] = (i / 2) as f64;
+            r.into_iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>()
+        }).collect();
+        npy(&dir.join("readouts.npy"), "<f8", &[n_ro, 14], &tab);
+        let (m1z, phi) = (1e-8f64, 0.3f32);
+        let mut rec = vec![0f32; n_ro * na * SAMPLE_FLOATS];
+        for i in 0..n_ro {
+            for n in 0..na {
+                let r = &mut rec[(i * na + n) * SAMPLE_FLOATS..(i * na + n + 1) * SAMPLE_FLOATS];
+                r[0] = 10.0 * (n + 1) as f32;
+                r[1] = 20.0 * (n + 1) as f32;
+                r[2] = 30.0 * (n + 1) as f32;
+                r[5] = (if i % 2 == 0 { 1.0 } else { -1.0 } * GAMMA * m1z) as f32;
+                r[13] = 1e-3 + n as f32 * 1e-5;
+                r[15] = phi;
+            }
+        }
+        npy(&dir.join("sched_nominal.npy"), "<f4", &[n_ro, na, SAMPLE_FLOATS], &f4(&rec));
+        // data: 1 · e^{−iφ0} on every coil
+        let data: Vec<f32> = (0..n_ro * na * nc).flat_map(|_| [phi.cos(), -phi.sin()]).collect();
+        npy(&dir.join("data.npy"), "<c8", &[n_ro, na, nc], &f4(&data));
+        npy(&dir.join("smaps_true.npy"), "<c8", &[nc, d, d, d], &f4(&vec![0.0; 2 * nc * nv]));
+        npy(&dir.join("field_ppm_recon.npy"), "<f4", &[d, d, d], &f4(&vec![0.0; nv]));
+        npy(&dir.join("truth_vel_logical.npy"), "<f4", &[6 * nv], &f4(&vec![0.0; 6 * nv]));
+        npy(&dir.join("truth_lumen_fraction.npy"), "<f4", &[nv], &f4(&vec![0.0; nv]));
+
+        let sd = SimData::load_traj(&dir, "nominal").unwrap();
+        assert!(sd.acq.is_none() && sd.n_readouts() == n_ro && sd.venc == 1.0);
+        assert_eq!(sd.readouts_of(1, None), vec![1, 3]);
+        assert_eq!(sd.readouts_of(0, Some(1)), vec![2]);
+        assert!((sd.encode_m1[0][2] - m1z).abs() < 1e-14 && (sd.encode_m1[1][2] + m1z).abs() < 1e-14, "{:?}", sd.encode_m1);
+        let w = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let set = sd.sample_set(&[1], &w);
+        for n in 0..na {
+            // logical = Rpᵀ physical: logical x = scanner y, logical y = −scanner x
+            let want = [20.0 * (n + 1) as f64, -10.0 * (n + 1) as f64, 30.0 * (n + 1) as f64].map(|k| k * 0.05);
+            for a in 0..3 {
+                assert!((set.coords[a][n] as f64 - want[a]).abs() < 1e-5, "sample {n} axis {a}: {} vs {}", set.coords[a][n], want[a]);
+            }
+            for c in 0..nc {
+                let y = set.y[c * na + n];
+                assert!((y.re - 1.0).abs() < 1e-6 && y.im.abs() < 1e-6, "B0-term phase not removed: {y:?}");
+            }
+        }
+        assert!((set.tau[1] - (1e-3 + 1e-5)).abs() < 1e-9);
+        assert!(SimData::load_traj(&dir, "played").is_err());
+    }
 }

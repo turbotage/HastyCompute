@@ -3,9 +3,17 @@
 
 pub mod cg;
 pub mod checkpoint;
+pub mod coils;
+pub mod espirit;
+pub mod fieldmap;
+pub mod kload;
+pub mod kstage;
+pub mod kstore;
 pub mod data;
+pub mod dfwavelet;
 pub mod flow;
 pub mod gpu;
+pub mod hoststack;
 pub mod learned;
 pub mod llr;
 pub mod moco;
@@ -16,12 +24,16 @@ pub mod p2np;
 pub mod plan;
 pub mod vmodel;
 pub mod vobj;
+pub mod wavelet;
 pub mod vinit;
 pub mod precond;
 pub mod segphys;
 pub mod selfgate;
+pub mod sepwt;
 pub mod setop;
 pub mod store;
+pub mod sysmem;
+pub mod tlock;
 pub mod skeleton;
 
 #[derive(Debug, thiserror::Error)]

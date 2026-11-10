@@ -22,6 +22,13 @@ Voxel velocity = blood fraction × blood velocity + (1 − blood fraction) × ti
 Gates: per-component mass imbalance, staircase wall capture, mitral / tricuspid flux vs the filling model, chamber
 speed (max, p99.9), vessel flux through planes moving with the vessel (relative velocity) vs the network Q(tc).
 `--blood-export`: also blood_frames.hv (sparse blood voxels per frame, for the k-space simulator `simphantom`).
+`--chamber-flow lbm:<run>`: chamber blood velocity from a cardiac lattice-Boltzmann run (`cardiac_lbm`, hasty-cfd;
+case from lbm_case.py) instead of the potential flow: the phase-binned Eulerian mean (flow_bins.f32), linear between
+bins, sampled at the frame's voxels pulled back through the respiration (the LBM runs in the cardiac frame), plus the
+respiratory velocity; voxels the LBM does not cover keep the potential flow (`--chamber-flow potential`, default).
+`--lbm-vessels`: also the vessel blood the LBM covers (great-vessel stubs with the valve jets).
+`--ref-flow <run>[,<run>]`: LBM runs solved in the heart's reference frame (lbm_coronary.py: the coronary arteries), on
+the vessel blood at X = φ⁻¹(x), as F v_rel + u_wall.
 Writes <out_dir>/frames_geom.hv, flow_frames.hv, truth4d.hv (labels u8 [F, Z, Y, X], vel f16 [F, 3, Z, Y, X] m/s,
 blood u8 [F, Z, Y, X] /255, tc, r, t), gates.json, figs/, and with --viewer-step a flow-viewer value (box-averaged).
 """
@@ -44,6 +51,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 sys.path.insert(0, str(REPO / "python/lib"))
 sys.path.insert(0, str(HERE))
+from hastycompute.pace import pace  # noqa: E402
 from hastycompute import value_format as vf  # noqa: E402
 from motion import Breathing  # noqa: E402
 from tissue_variation import modes as tex_modes  # noqa: E402
@@ -136,6 +144,71 @@ class FrameMotion:
         for _ in range(iters):
             X = x - (self.position(X) - X)
         return X
+
+
+class LbmFlow:
+    """phase-binned Eulerian velocity of a cardiac LBM run (hasty-cfd flow_bins.f32 / .json): mean u = Σwu / Σw per
+    output cell, dense on the cell grid (voxel centres at origin − dx/2 + (i + ½) fct dx), linear between phase bins"""
+
+    def __init__(self, run):
+        self.meta = json.loads((run / "flow_bins.json").read_text())
+        m = self.meta
+        self.nb, self.T, self.fct, self.dx = int(m["bins"]), float(m["period"]), int(m["out_factor"]), float(m["dx"])
+        self.c1 = 8 // self.fct
+        nt, cells = int(m["tiles"]), int(m["cells_per_tile"])
+        self.acc = np.memmap(run / "flow_bins.f32", np.float32, "r", shape=(self.nb, nt, cells, int(m.get("acc_stride", 10))))
+        txyz = np.asarray(m["tile_xyz"], np.int64).reshape(-1, 3)
+        c = np.arange(cells)
+        cz, cy, cx = c // (self.c1 * self.c1), (c // self.c1) % self.c1, c % self.c1
+        gx = (txyz[:, 0:1] * self.c1 + cx[None]).ravel()
+        gy = (txyz[:, 1:2] * self.c1 + cy[None]).ravel()
+        gz = (txyz[:, 2:3] * self.c1 + cz[None]).ravel()
+        self.dims = (int(gz.max()) + 1, int(gy.max()) + 1, int(gx.max()) + 1)
+        self.flat = torch.tensor((gz * self.dims[1] + gy) * self.dims[2] + gx, device=dev)
+        o = np.asarray(m["origin"], float) - self.dx / 2
+        self.grid = GField(None, o, self.fct * self.dx, "zeros", (self.dims[2], self.dims[1], self.dims[0]))
+        self.cache = {}
+        print(f"LBM flow {run}: {self.nb} bins, cells of {self.fct * self.dx * 1e3:.1f} mm on {self.dims[::-1]}, cycles averaged per bin {np.round(m['counts'], 0).tolist()[:4]}…")
+
+    def field(self, b):
+        b %= self.nb
+        if b not in self.cache:
+            a = torch.tensor(np.asarray(self.acc[b, :, :, :4]).reshape(-1, 4), device=dev)
+            w = a[:, 0]
+            F = torch.zeros((4, self.dims[0] * self.dims[1] * self.dims[2]), device=dev)
+            ok = w > 0
+            F[:3, self.flat[ok]] = (a[ok, 1:4] / w[ok, None]).T
+            F[3, self.flat[ok]] = 1.0
+            if len(self.cache) > 3:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[b] = F.view(4, *self.dims)
+        return self.cache[b]
+
+    def sample(self, tc, P):
+        """velocity (m/s) at cardiac-frame points P [n, 3] and a validity mask"""
+        s = (tc % self.T) / self.T * self.nb - 0.5
+        b0 = int(np.floor(s))
+        f = s - b0
+        A = self.grid.at(P, self.field(b0)) * (1 - f) + self.grid.at(P, self.field(b0 + 1)) * f
+        cov = A[:, 3]
+        return A[:, :3] / cov.clamp(min=1e-6)[:, None], cov > 0.5
+
+
+LBM = LbmFlow(Path(opt("--chamber-flow")[4:])) if (opt("--chamber-flow") or "").startswith("lbm:") else None
+# LBM runs solved in the heart's reference frame (static geometry: the coronary trees, lbm_coronary.py): sampled at the
+# reference position X = φ⁻¹(x) of vessel-blood voxels, mapped to the lab as F v_rel + u_wall (F = ∂φ/∂X of the frame's
+# motion incl. respiration); they override the vessel model where they have data
+LBM_REF = [LbmFlow(Path(x)) for x in opt("--ref-flow").split(",")] if opt("--ref-flow") else []
+
+
+def to_cardiac(x, r_, iters=6):
+    """lab position → the cardiac-frame position Xc (x = Xc + r S(Xc)), the frame the LBM runs in"""
+    if r_ == 0:
+        return x
+    Xc = x.clone()
+    for _ in range(iters):
+        Xc = x - r_ * GR.at(Xc)
+    return Xc
 
 
 # ── frames ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -391,6 +464,7 @@ r_open = max(1, int(round(2.0e-3 / vox)))  # chamber cleaning radius ≈ 2 mm at
 nvox = nz * ny * nx
 ONLY = {int(x) for x in opt("--only").split(",")} if opt("--only") else None
 for f, (tc, r_, rdot, tabs_f) in enumerate(frames):
+    pace()  # GPU pacing (HASTY_GPU_DUTY / HASTY_GPU_WATTS; a no-op unless set)
     if ONLY is not None and f not in ONLY:
         continue
     tf = time.time()
@@ -543,6 +617,38 @@ for f, (tc, r_, rdot, tabs_f) in enumerate(frames):
         PHI[bb] = torch.where(Fl, phi, PHI[bb])
         inflow = sum(float(torch.where(Fl & ~nbr(Fl, *s) & ~ww[s], -gg[s], 0.0).sum()) for s in SIDES) * vox * vox
         comps.append({"chambers": grp, "imbalance_ml_s": imb * 1e6, "ostia_inflow_ml_s": inflow * 1e6, "staircase_wall_flux_vs_dVdt_ml_s": cap, "cg_iters": its, "cg_res": res})
+    if LBM is not None:
+        # chambers (and with --lbm-vessels the vessel blood) from the LBM where it has data, respiration on top
+        sel = chamber | (vessel_blood if "--lbm-vessels" in A else torch.zeros_like(chamber))
+        xs_ = XG[sel]
+        Xc_ = to_cardiac(xs_, r_)
+        vl, okl = LBM.sample(tc, Xc_)
+        if r_ != 0 or rdot != 0:
+            dt_ = 2e-3
+            vl = vl + rdot * GR.at(Xc_) + r_ * (GR.at(Xc_ + dt_ * vl) - GR.at(Xc_ - dt_ * vl)) / (2 * dt_)
+        cur = torch.where(chamber[..., None], VCH, vbm)[sel]
+        new = torch.where(okl[:, None], vl, cur)
+        idx_ = torch.nonzero(sel, as_tuple=True)
+        VCH[idx_] = torch.where(chamber[idx_][:, None], new, VCH[idx_])
+        if "--lbm-vessels" in A:
+            vbm[idx_] = torch.where(vessel_blood[idx_][:, None] & okl[:, None], new, vbm[idx_])
+        # coverage of the chamber voxels (the vessel blood includes every vessel in the box; the LBM has the stubs)
+        lbm_cov = float(okl[chamber[idx_]].float().mean()) if bool(chamber[idx_].any()) else 0.0
+    ref_cov = []
+    for LR in LBM_REF:
+        selr = vessel_blood & ~chamber
+        if not bool(selr.any()):
+            continue
+        xs_ = XG[selr]
+        Xr = fm.inverse(xs_)
+        vr, okr = LR.sample(tc, Xr)
+        if bool(okr.any()):
+            e_ = 2e-4
+            J = torch.stack([(fm.position(Xr + e_ * ev) - fm.position(Xr - e_ * ev)) / (2 * e_) for ev in torch.eye(3, device=dev)], -1)  # [n, 3, 3]: ∂x/∂X
+            vlab = torch.einsum("nij,nj->ni", J, vr) + fm.velocity(Xr)
+            idr = torch.nonzero(selr, as_tuple=True)
+            vbm[idr] = torch.where(okr[:, None], vlab, vbm[idr])
+        ref_cov.append(int(okr.sum()))
     mv_area = sum(int(((Lc == ID["blood_LA"]) & nbr(Lc == ID["blood_LV"], *s_)).sum()) for s_ in SIDES) * vox * vox
     tv_area = sum(int(((Lc == ID["blood_RA"]) & nbr(Lc == ID["blood_RV"], *s_)).sum()) for s_ in SIDES) * vox * vox
     mv_flux = face_flux(PHI, Lc == ID["blood_LA"], Lc == ID["blood_LV"]) if open_mv else 0.0
@@ -598,7 +704,7 @@ for f, (tc, r_, rdot, tabs_f) in enumerate(frames):
         tex4d[fs_, 0] = torch.where(nob, TA, torch.zeros_like(TA)).view(nz, ny, nx).cpu().numpy()
         tex4d[fs_, 1] = torch.where(nob, TB, torch.zeros_like(TB)).view(nz, ny, nx).cpu().numpy()
     sp_sub = spd[:: max(1, len(spd) // 2000000)]
-    gates.append({"tc": tc, "r": r_, "t": tabs_f, "ostia": ost_report, "Q_MV_ml_s": qmv * 1e6, "mitral_flux_ml_s": mv_flux * 1e6, "Q_TV_ml_s": qtv * 1e6,
+    gates.append({"tc": tc, "r": r_, "t": tabs_f, "ostia": ost_report, "lbm_coverage": lbm_cov if LBM is not None else None, "ref_flow_voxels": ref_cov if LBM_REF else None, "Q_MV_ml_s": qmv * 1e6, "mitral_flux_ml_s": mv_flux * 1e6, "Q_TV_ml_s": qtv * 1e6,
                   "tricuspid_flux_ml_s": tv_flux * 1e6, "mitral_face_area_cm2": mv_area * 1e4, "tricuspid_face_area_cm2": tv_area * 1e4, "components": comps, "chamber_volumes_ml": {c: float((L == ID[c]).sum()) * vox**3 * 1e6 for c in CH},
                   "chamber_speed_m_s": {"max": float(spd.max()), "p999": float(torch.quantile(sp_sub, 0.999))},
                   "vessel_flux_ml_s": vg, "secs": time.time() - tf})

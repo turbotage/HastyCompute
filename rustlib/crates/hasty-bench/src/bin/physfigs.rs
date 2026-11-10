@@ -40,7 +40,7 @@ fn main() {
     // B0
     let hz: Vec<f32> = gg.omega.iter().map(|w| (w / (2.0 * std::f64::consts::PI)) as f32).collect();
     save("b0_hz.npy", &d, &hz);
-    let ro_dur = sd.acq.adc_times.last().unwrap() - sd.acq.adc_times[0];
+    let ro_dur = sd.spiral().adc_times.last().unwrap() - sd.spiral().adc_times[0];
     // GNL
     let disp: Vec<f32> = (0..nv).map(|q| ((0..3).map(|a| (gg.x_log[q][a] - gn.x_log[q][a]).powi(2)).sum::<f64>().sqrt() * 1e3) as f32).collect();
     let vscale: Vec<f32> = (0..nv)
@@ -60,12 +60,12 @@ fn main() {
     save("gnl_disp_mm.npy", &d, &disp);
     save("gnl_vscale_pct.npy", &d, &vscale);
     // concomitant: per-sample coefficients w_q (rad/m², monomials [z², x²+y², xz, yz] of the scanner-frame position)
-    let m1 = sd.acq.params.encode_m1();
+    let m1 = sd.spiral().params.encode_m1();
     let ne = m1.len();
     let dec = FlowDecoder::new(&m1);
     let kv = dec.kv();
-    let nparts = sd.acq.kz.len();
-    let ro_of = |e: usize| (0..sd.acq.readouts.len()).find(|&i| sd.acq.readouts[i].enc == e && sd.acq.readouts[i].part == nparts / 2).unwrap();
+    let nparts = sd.spiral().kz.len();
+    let ro_of = |e: usize| (0..sd.spiral().readouts.len()).find(|&i| sd.spiral().readouts[i].enc == e && sd.spiral().readouts[i].part == nparts / 2).unwrap();
     let wq_of = |ro: usize| -> Vec<[f64; 4]> { sd.sample_set(&[ro], &w).wq };
     let phase = |wq: &[f64; 4], q: usize| -> f64 { (0..4).map(|i| wq[i] * gg.mono[q][i]).sum() };
     let w0 = wq_of(ro_of(0));
@@ -85,12 +85,12 @@ fn main() {
     let psi: Vec<f32> = (0..nc * nc).map(|i| sd.psi[i % nc][i / nc] as f32).collect();
     save("psi.npy", &[nc, nc], &psi);
     // sequence
-    let nint = sd.acq.params.n_int;
-    let mid: Vec<usize> = (0..sd.acq.readouts.len()).filter(|&i| sd.acq.readouts[i].part == nparts / 2 && sd.acq.readouts[i].enc == 0).take(nint).collect();
+    let nint = sd.spiral().params.n_int;
+    let mid: Vec<usize> = (0..sd.spiral().readouts.len()).filter(|&i| sd.spiral().readouts[i].part == nparts / 2 && sd.spiral().readouts[i].enc == 0).take(nint).collect();
     let na = sd.na;
     let mut kt = vec![0f32; mid.len() * na * 3];
     for (r, &ro) in mid.iter().enumerate() {
-        let k = sd.acq.k_logical(ro);
+        let k = sd.spiral().k_logical(ro);
         for n in 0..na {
             for a in 0..3 {
                 // hasty layout [R, N, 3] Fortran: index r + R (n + N a)
@@ -99,7 +99,7 @@ fn main() {
         }
     }
     save("k_traj.npy", &[mid.len(), na, 3], &kt);
-    let wave = &sd.acq.readout.wave;
+    let wave = &sd.spiral().readout.wave;
     let mg = wave.g.len();
     let mut rg = vec![0f32; mg * 3];
     for (i, g) in wave.g.iter().enumerate() {
@@ -112,7 +112,7 @@ fn main() {
     let nf = sd.n_frames;
     let mut cov = vec![0f32; nf * ne];
     let mut covz = vec![0f32; nf * nparts];
-    for r in &sd.acq.readouts {
+    for r in &sd.spiral().readouts {
         cov[r.frame + nf * r.enc] += 1.0;
         if r.enc == 0 {
             covz[r.frame + nf * r.part] += 1.0;
@@ -120,7 +120,7 @@ fn main() {
     }
     save("coverage.npy", &[nf, ne], &cov);
     save("coverage_kz.npy", &[nf, nparts], &covz);
-    save("card_phase.npy", &[sd.acq.readouts.len()], &sd.acq.readouts.iter().map(|r| r.card.phase as f32).collect::<Vec<_>>());
+    save("card_phase.npy", &[sd.spiral().readouts.len()], &sd.spiral().readouts.iter().map(|r| r.card.phase as f32).collect::<Vec<_>>());
     // summary
     let stat = |v: &[f32], m: Option<&[bool]>| -> serde_json::Value {
         let mut s: Vec<f32> = v.iter().enumerate().filter(|(q, x)| x.is_finite() && m.is_none_or(|m| m[*q % nv])).map(|(_, &x)| x).collect();
@@ -130,14 +130,14 @@ fn main() {
     };
     let full = vec![true; nv];
     let per_frame: Vec<f64> = (0..nf).map(|f| (0..ne).map(|e| cov[f + nf * e] as f64).sum::<f64>() / ne as f64).collect();
-    let full_vol = (sd.acq.params.n_int * nparts) as f64;
+    let full_vol = (sd.spiral().params.n_int * nparts) as f64;
     let voxel_mm = sd.vox.map(|v| v * 1e3);
     let fov_mm: [f64; 3] = [0, 1, 2].map(|a| d[a] as f64 * sd.vox[a] * 1e3);
     let j = serde_json::json!({
         "sim": dir, "ideal_flag_in_name": ideal, "encoding": meta["encoding"], "venc": sd.venc, "kv_rad_per_mps": kv,
-        "m1_logical": m1, "tr_s": sd.acq.tr, "te_s": sd.acq.t_ro, "readout_s": ro_dur, "dwell_s": sd.acq.params.dwell, "n_adc": na,
-        "n_interleaves": nint, "n_partitions": nparts, "n_readouts": sd.acq.readouts.len(), "scan_time_s": sd.acq.params.scan_time,
-        "frames": nf, "rr_mean_s": sd.acq.params.mean_rr, "readouts_per_frame_encode": per_frame.iter().sum::<f64>() / nf as f64,
+        "m1_logical": m1, "tr_s": sd.spiral().tr, "te_s": sd.spiral().t_ro, "readout_s": ro_dur, "dwell_s": sd.spiral().params.dwell, "n_adc": na,
+        "n_interleaves": nint, "n_partitions": nparts, "n_readouts": sd.spiral().readouts.len(), "scan_time_s": sd.spiral().params.scan_time,
+        "frames": nf, "rr_mean_s": sd.spiral().params.mean_rr, "readouts_per_frame_encode": per_frame.iter().sum::<f64>() / nf as f64,
         "acceleration_per_frame": full_vol / (per_frame.iter().sum::<f64>() / nf as f64),
         "dims": d, "voxel_mm": voxel_mm, "fov_mm": fov_mm, "coils": nc,
         "b0_hz_fov": stat(&hz, Some(&full)), "b0_hz_lumen": stat(&hz, Some(&lumen)),

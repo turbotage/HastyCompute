@@ -184,7 +184,7 @@ void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix 
 const MIP_FS = /* glsl */ `
 precision highp sampler3D;
 uniform sampler3D vol; uniform sampler2D lut; uniform vec3 camObj; uniform float lo; uniform float hi;
-uniform float opacity; uniform int steps;
+uniform float opacity; uniform int steps; uniform int maxSteps; uniform float stepVox; uniform vec3 dims;
 varying vec3 vPos;
 vec2 box(vec3 o, vec3 d) {
     vec3 inv = 1.0 / d;
@@ -198,9 +198,14 @@ void main() {
     t.x = max(t.x, 0.0);
     if (t.x >= t.y) discard;
     float m = 0.0;
-    float dt = (t.y - t.x) / float(steps);
-    for (int i = 0; i < 512; i++) {
-        if (i >= steps) break;
+    // steps = 0: one sample per stepVox texture voxels of the ray's actual length inside the volume (a corner-to-corner
+    // ray is sqrt(3)·N voxels long, so it gets sqrt(3)·N/stepVox samples); steps > 0: that many samples whatever the size
+    int n = steps;
+    if (n <= 0) n = int(ceil((t.y - t.x) * length(d * dims) / stepVox));
+    n = clamp(n, 1, maxSteps);
+    float dt = (t.y - t.x) / float(n);
+    for (int i = 0; i < 4096; i++) {
+        if (i >= n) break;
         m = max(m, texture(vol, camObj + d * (t.x + (float(i) + 0.5) * dt)).r);
     }
     float v = clamp((m - lo) / max(hi - lo, 1e-6), 0.0, 1.0);
@@ -212,14 +217,20 @@ export class MipLayer {
     /** replace the volume by a new u8 [Z, Y, X] (same size): derived quantities per frame */
     setData(u8) { this.tex.image.data = u8; this.tex.needsUpdate = true; }
 
-    /** data: Float32Array [Z, Y, X] (C-order, x fastest) */
-    constructor(dims, spacing, data, lutTex) {
+    /** data: Float32Array [Z, Y, X] (C-order, x fastest), or null with `pre` = {u8, dims, factor, scale}: a volume that was already
+     *  max-pooled by `factor` and quantised (common/pool.js); dims are then the pooled sizes and `spacing` the full-resolution one. */
+    constructor(dims, spacing, data, lutTex, pre = null) {
+        let u8, scale;
+        const factor = pre?.factor ?? 1;
+        if (pre) { ({ u8, scale } = pre); dims = pre.dims; } else {
+            scale = percentile(data, 0.999) || 1;             // PC-MRA value that maps to 1 in the shader
+            const k = 255 / scale;
+            u8 = new Uint8Array(data.length);
+            for (let i = 0; i < data.length; i++) { const q = data[i] * k; u8[i] = q >= 255 ? 255 : q > 0 ? (q + 0.5) | 0 : 0; }
+        }
         const [X, Y, Z] = dims;
-        const p999 = percentile(data, 0.999) || 1;
-        this.scale = p999;                                // PC-MRA value that maps to 1 in the shader
-        const k = 255 / p999;
-        const u8 = new Uint8Array(data.length);
-        for (let i = 0; i < data.length; i++) { const q = data[i] * k; u8[i] = q >= 255 ? 255 : q > 0 ? (q + 0.5) | 0 : 0; }
+        this.scale = scale;
+        this.factor = factor;
         const tex = new THREE.Data3DTexture(u8, X, Y, Z);
         tex.format = THREE.RedFormat;
         tex.type = THREE.UnsignedByteType;
@@ -230,7 +241,8 @@ export class MipLayer {
         this.u8 = u8;                                     // the PC-MRA volume (restored by setData(layer.u8))
         this.uniforms = {
             vol: { value: tex }, lut: { value: lutTex }, camObj: { value: new THREE.Vector3() },
-            lo: { value: 0.15 }, hi: { value: 1.0 }, opacity: { value: 0.6 }, steps: { value: 256 },
+            lo: { value: 0.15 }, hi: { value: 1.0 }, opacity: { value: 0.6 },
+            steps: { value: 0 }, maxSteps: { value: 2048 }, stepVox: { value: 1 }, dims: { value: new THREE.Vector3(X, Y, Z) },
         };
         const g = new THREE.BoxGeometry(1, 1, 1);
         g.translate(0.5, 0.5, 0.5);
@@ -239,7 +251,7 @@ export class MipLayer {
             transparent: true, depthWrite: false, side: THREE.BackSide,
         }));
         // unit cube → the voxel-centre box [−½, n − ½] · spacing
-        this.mesh.scale.set(X * spacing[0], Y * spacing[1], Z * spacing[2]);
+        this.mesh.scale.set(X * factor * spacing[0], Y * factor * spacing[1], Z * factor * spacing[2]);   // pooled: the last cell may reach past the data (zeros)
         this.mesh.position.set(-0.5 * spacing[0], -0.5 * spacing[1], -0.5 * spacing[2]);
         this.mesh.renderOrder = -1;
         this.mesh.onBeforeRender = (r, s, camera) => {

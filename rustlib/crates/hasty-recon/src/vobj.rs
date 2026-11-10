@@ -21,6 +21,8 @@ use crate::Error;
 pub enum YData {
     Dev(CudaSlice<C32>),
     Host(cudarc::driver::PinnedHostSlice<C32>),
+    /// in the problem's host k-space store, staged per set ([`VelProblem::data_from_store`]); its length
+    Staged(usize),
 }
 
 impl YData {
@@ -28,6 +30,7 @@ impl YData {
         match self {
             YData::Dev(d) => d.len(),
             YData::Host(h) => h.len(),
+            YData::Staged(n) => *n,
         }
     }
     pub fn is_empty(&self) -> bool {
@@ -71,6 +74,8 @@ pub struct VelProblem<'a> {
     v_scale: f64,
     /// mean diagonal of E_tᴴE_t per unit coil energy (absolute scale of the data curvature; 0 = not estimated)
     pub nhat: f64,
+    /// host store of the data (`YData::Staged` sets), staged per gradient with prefetch
+    stage: Option<crate::kstage::Stager>,
 }
 
 fn inv3(m: &[f64; 9]) -> [f64; 9] {
@@ -141,6 +146,7 @@ impl<'a> VelProblem<'a> {
             anchor_lam: 0.0,
             v_scale: 1.0,
             nhat: 0.0,
+            stage: None,
             op,
             ys,
             model,
@@ -189,6 +195,18 @@ impl<'a> VelProblem<'a> {
         let s = &self.model.s;
         let nv = s.nv();
         2 * nv * 8 + (s.ne() + s.kv + 1) * nv * 4
+    }
+
+    /// Keep the k-space data in a host store (`kstore`), staged per set in `gradient` with prefetch; device / pinned
+    /// copies are dropped. The store's sets must match the operator's.
+    pub fn data_from_store(&mut self, stage: crate::kstage::Stager) {
+        let k = stage.store();
+        assert_eq!(k.n_sets(), self.op.nsets());
+        self.ys = (0..k.n_sets()).map(|t| {
+            assert_eq!(k.len(t) * k.nvc(), self.op.len_y(t), "k-space store set {t} does not match the operator");
+            YData::Staged(k.len(t) * k.nvc())
+        }).collect();
+        self.stage = Some(stage);
     }
 
     /// move the k-space data to pinned host memory (frees the device copies); staged per set in `gradient`
@@ -416,15 +434,33 @@ impl Objective for VelProblem<'_> {
             st.memset_zeros(s)?;
         }
         let mut fval = 0.0;
+        if let Some(mut sg) = self.stage.take() {
+            // data from the host store: the next set is decoded while the GPU works on this one
+            let order: Vec<usize> = (0..self.op.nsets()).filter(|&t| self.weights[t] != 0.0).collect();
+            let r = sg.for_each(st, &order, None, &mut |t, y| {
+                let w = self.weights[t];
+                let x = self.set_image(st, th, None, t)?;
+                let mut buf = unsafe { st.alloc::<C32>(self.op.len_y(t))? };
+                self.op.forward_residual(st, t, &x, y, &mut buf)?;
+                fval += 0.5 * w as f64 * self.kern.dot(st, &buf, &buf)?.re;
+                let mut g = st.alloc_zeros::<C32>(x.len())?;
+                self.op.adjoint(st, t, &buf, &mut g)?;
+                self.set_vjp(st, th, t, &g, w, grad)
+            });
+            self.stage = Some(sg);
+            r?;
+        }
         for t in 0..self.op.nsets() {
+            if matches!(self.ys[t], YData::Staged(_)) {
+                continue;
+            }
             let w = self.weights[t];
             if w == 0.0 {
                 continue;
             }
             let x = self.set_image(st, th, None, t)?;
             let ny = self.op.len_y(t);
-            let mut buf = st.alloc_zeros::<C32>(ny)?;
-            self.op.forward(st, t, &x, &mut buf)?;
+            let mut buf = unsafe { st.alloc::<C32>(ny)? };
             let staged;
             let y: &CudaSlice<C32> = match &self.ys[t] {
                 YData::Dev(d) => d,
@@ -434,8 +470,9 @@ impl Objective for VelProblem<'_> {
                     staged = d;
                     &staged
                 }
+                YData::Staged(_) => unreachable!(),
             };
-            self.kern.axpby(st, Complex64::new(-1.0, 0.0), y, Complex64::new(1.0, 0.0), &mut buf)?;
+            self.op.forward_residual(st, t, &x, y, &mut buf)?;
             fval += 0.5 * w as f64 * self.kern.dot(st, &buf, &buf)?.re;
             let mut g = st.alloc_zeros::<C32>(x.len())?;
             self.op.adjoint(st, t, &buf, &mut g)?;

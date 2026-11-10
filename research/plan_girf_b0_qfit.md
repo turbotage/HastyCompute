@@ -181,6 +181,24 @@ Steps:
   resonance part (≈ 500 mm/s on this chain) comes from the encode and the flow-compensated tail (physical axes), which
   the readout term cannot touch → after WP2 also the tail block resonance-tuned (`robust` with the spoil M0 and the
   rewind M1 as its constraints, E/band terms at the next echo), with the encode tuned as in step 3.
+- Done (2026-11-07): the flow-compensated tail can be shaped too (`TrSpec::tail_shape`, the same spoil M0 / rewind M1
+  targets as robust / tuned QP blocks; eddy weights × e^{−Δ/τ} for the Δ = i_ro·dt to the next echo);
+  `seqdesign --encode|--tail robust|tuned=<variant>[:extra_ms[:slew_scale]]` (final build only). Everything tuned to
+  the `resonance` variant (readout μ = 1, encode +0.2 ms, tail +0.4 ms; `resaware/w1_tuned`, figures `figs/final_*`):
+
+  | design | TE / TR [ms] | Nyquist scan | resonance chain coherent body \| vessel | modelled | TR-to-TR rms | modelled | eddy-only coherent |
+  |---|---|---|---|---|---|---|---|
+  | current | 1.60 / 11.29 | 87.2 s | 486 \| 395 | 105 \| 48 | 518 \| 382 | 126 \| 82 | 158 \| 161 |
+  | readout tuned (μ = 1) | 1.60 / 11.30 | 94.5 s | 510 \| 414 | 72 \| 43 | 214 \| 213 | 40 \| 38 | 158 \| 161 |
+  | + encode and tail tuned | 1.80 / 11.90 | 99.5 s | 147 \| 152 | 23 \| 21 | 238 \| 204 | 54 \| 35 | 166 \| 169 |
+
+  (10) With all three blocks tuned the coherent resonance part is gone (147 ≈ the eddy-only floor); what is left is
+  the long-τ eddy background (modelled ≈ 18 mm/s, absorbed further by the per-encode linear phase) and the readout's
+  TR-to-TR part, which is bounded by the yarn's spectrum (main lobe 600–700 Hz) and by the f0 precision of the model
+  (res_f0 ≈ 58 mm/s per 1 %). Cost: TE +0.2 ms, TR +0.6 ms, Nyquist scan +14 %. PNS ends at 80.06 % (readout part,
+  via the SAFE history of the shaped blocks; a 0.1 % readout derating would fix it, not automated since the shaping
+  happens after the search). All of this is conditional on a *measured* GIRF; with the illustrative chains it is a
+  demonstration of the tooling, the default stays the two-lobe / untuned design until WP2.
 - Next (GPU, when allowed): simulate played (`simphantom --seq flow --girf eddy|resonance`, 30 s dev ≈ 4.4 min),
   reconstruct with `HASTY_TRAJ=nominal` vs `played`, compare the background velocity in static tissue with `girfcheck`'s
   prediction. The encode-robust treatment of the tail block is of limited use (long τ dominate after the 1.6 ms to the

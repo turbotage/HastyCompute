@@ -108,25 +108,25 @@ pub(crate) fn generate(cfg: &AxisCfg, m: usize, radices: &[usize]) -> String {
             }
         }
     }
-    writeln!(s, "#define N {n}\n#define M {m}\n#define N_IN {}\n#define N_OUT {}\n#define LPB {}\n#define TPL {}", cfg.n_in, cfg.n_out, cfg.lpb, cfg.tpl).unwrap();
+    writeln!(s, "#define N {n}\n#define M {m}\n#define N_IN {}\n#define N_OUT {}\n#define N_IN_TAIL {}\n#define N_OUT_TAIL {}\n#define LPB {}\n#define TPL {}", cfg.n_in, cfg.n_out, cfg.n_in_tail, cfg.n_out_tail, cfg.lpb, cfg.tpl).unwrap();
     writeln!(
         s,
-        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn,\n  const cx* __restrict__ ch, const cx* __restrict__ bh_f, const cx* __restrict__ bh_i) {{",
+        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn,\n  long lb1_cnt, long lb1_hi, long lb1_gap, long lb2_hi, long lb2_gap, long in_lb2, long out_lb2,\n  const cx* __restrict__ ch, const cx* __restrict__ bh_f, const cx* __restrict__ bh_i) {{",
         cfg.block_threads(),
         kern_type(cfg.kfmt)
     )
     .unwrap();
     writeln!(s, "  extern __shared__ cx smem[];").unwrap();
     if cfg.contiguous {
-        writeln!(s, "  const int tid = threadIdx.x;\n  const int li = tid / TPL, tl = tid % TPL;\n  const long line = (long)blockIdx.x * LPB + li;\n  const bool act = line < la_cnt * lb_cnt;\n  const long la = line % la_cnt, lb = line / la_cnt;\n  const long ib = la * in_la + lb * in_lb, ob_ = la * out_la + lb * out_lb;\n#define SIDX(n) (li * M + (n))").unwrap();
+        writeln!(s, "  const int tid = threadIdx.x;\n  const int li = tid / TPL, tl = tid % TPL;\n  const long line = (long)blockIdx.x * LPB + li;\n  const bool act = line < la_cnt * lb_cnt;\n  const long la = line % la_cnt, lb = line / la_cnt;\n  long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;\n  if (lb1 >= lb1_hi) lb1 += lb1_gap;\n  if (lb2 >= lb2_hi) lb2 += lb2_gap;\n  const long ib = la * in_la + lb1 * in_lb + lb2 * in_lb2, ob_ = la * out_la + lb1 * out_lb + lb2 * out_lb2;\n#define SIDX(n) (li * M + (n))").unwrap();
     } else {
-        writeln!(s, "  const int tid = threadIdx.x;\n  const int li = tid % LPB, tl = tid / LPB;\n  const long la = (long)blockIdx.x * LPB + li;\n  const long lb = blockIdx.y;\n  const bool act = la < la_cnt;\n  const long ib = la * in_la + lb * in_lb, ob_ = la * out_la + lb * out_lb;\n#define SIDX(n) ((n) * LPB + li)").unwrap();
+        writeln!(s, "  const int tid = threadIdx.x;\n  const int li = tid % LPB, tl = tid / LPB;\n  const long la = (long)blockIdx.x * LPB + li;\n  const long lb = blockIdx.y;\n  const bool act = la < la_cnt;\n  long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;\n  if (lb1 >= lb1_hi) lb1 += lb1_gap;\n  if (lb2 >= lb2_hi) lb2 += lb2_gap;\n  const long ib = la * in_la + lb1 * in_lb + lb2 * in_lb2, ob_ = la * out_la + lb1 * out_lb + lb2 * out_lb2;\n#define SIDX(n) ((n) * LPB + li)").unwrap();
     }
     writeln!(s, "#define GIN(n) (ib + (long)(n) * in_sn)\n#define GOUT(n) (ob_ + (long)(n) * out_sn)\n  cx* bufs[2] = {{ smem, smem + M * LPB }};").unwrap();
     let pre_ptr = ["p0", "p1", "p2", "p3"];
     let post_ptr = ["q0", "q1", "q2", "q3"];
     // load: diagonals, chirp, zero padding to M
-    writeln!(s, "  for (int e = tl; e < M; e += TPL) {{\n    cx x = make_cx(RL(0), RL(0));\n    if (act && e < N_IN) {{\n      x = in[GIN(e)];").unwrap();
+    writeln!(s, "  for (int e = tl; e < M; e += TPL) {{\n    cx x = make_cx(RL(0), RL(0));\n    if (act && (e < N_IN || (e >= N - N_IN_TAIL && e < N))) {{\n      x = in[GIN(e)];").unwrap();
     for (k, op) in cfg.pre.iter().enumerate() {
         let f = if *op == DiagOp::Mult { "cmul" } else { "cmulc" };
         writeln!(s, "      x = {f}(x, {}[GIN(e)]);", pre_ptr[k]).unwrap();
@@ -145,7 +145,7 @@ pub(crate) fn generate(cfg: &AxisCfg, m: usize, radices: &[usize]) -> String {
         sign = sign2;
     }
     // store: chirp, 1/M, scale, diagonals, accumulate
-    writeln!(s, "  for (int e = tl; e < N_OUT; e += TPL) {{\n    if (!act) continue;\n    cx w = cscale(bufs[{cur}][SIDX(e)], RL({:.17e}));\n    w = {};", cfg.scale / m as f64, chirp(sign, "w")).unwrap();
+    writeln!(s, "  for (int e = tl; e < N; e += TPL) {{\n    if (!act || !(e < N_OUT || e >= N - N_OUT_TAIL)) continue;\n    cx w = cscale(bufs[{cur}][SIDX(e)], RL({:.17e}));\n    w = {};", cfg.scale / m as f64, chirp(sign, "w")).unwrap();
     for (k, op) in cfg.post.iter().enumerate() {
         let f = if *op == DiagOp::Mult { "cmul" } else { "cmulc" };
         writeln!(s, "    w = {f}(w, {}[GOUT(e)]);", post_ptr[k]).unwrap();

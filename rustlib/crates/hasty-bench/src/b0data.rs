@@ -100,7 +100,10 @@ fn down_f32(x: &[f32], d: [usize; 3], g: usize) -> Vec<f32> {
 }
 
 pub struct LoadOpts {
+    /// virtual coils (used when `coil_energy` is None)
     pub nvc: usize,
+    /// Some(e): the fewest virtual coils holding a fraction e of the whitened map energy (`hasty_recon::coils`)
+    pub coil_energy: Option<f64>,
     pub grid_scale: usize,
     pub support_rel: f64,
     pub clean: bool,
@@ -128,7 +131,6 @@ pub fn load(dir: &Path, o: &LoadOpts) -> B0Data {
     let n_win = n_shift * n_echo;
     let n_group = o.group.as_ref().map_or(1, |g| g.iter().max().unwrap() + 1);
     let nset = n_group * n_win;
-    let nvc = o.nvc;
     // schedule (concomitant coefficients per sample)
     let sys = hasty_seq::system::System::prisma_xr();
     let mut spec = EchoSpec::new(sq["res"].as_f64().unwrap(), sq["n_lobe"].as_u64().unwrap() as usize);
@@ -165,18 +167,13 @@ pub fn load(dir: &Path, o: &LoadOpts) -> B0Data {
             sw[c * nv_f + q] = acc;
         }
     }
-    let mut g = DMatrix::<Complex64>::zeros(nc, nc);
-    for q in (0..nv_f).step_by(7) {
-        for a in 0..nc {
-            for b in 0..nc {
-                g[(a, b)] += sw[a * nv_f + q] * sw[b * nv_f + q].conj();
-            }
-        }
-    }
-    let ge = SymmetricEigen::new(g);
-    let mut order: Vec<usize> = (0..nc).collect();
-    order.sort_by(|&a, &b| ge.eigenvalues[b].partial_cmp(&ge.eigenvalues[a]).unwrap());
-    let comp: Vec<Vec<Complex64>> = order[..nvc].iter().map(|&i| (0..nc).map(|c| ge.eigenvectors[(c, i)].conj()).collect()).collect();
+    let rule = match o.coil_energy { Some(e) => hasty_recon::coils::CoilRule::Energy(e), None => hasty_recon::coils::CoilRule::Fixed(o.nvc) };
+    let mut gram = hasty_recon::coils::CoilGram::new(nc);
+    gram.add_c64(&sw, nv_f, 7);
+    let ccx = hasty_recon::coils::CoilCompression::from_gram(&gram, rule);
+    println!("coil compression (whitened maps): {}", ccx.report());
+    let nvc = ccx.nvc();
+    let comp: Vec<Vec<Complex64>> = ccx.rows.clone();
     let mut smaps = Vec::with_capacity(nvc * nv);
     for v in 0..nvc {
         let mut f = vec![Complex64::new(0.0, 0.0); nv_f];

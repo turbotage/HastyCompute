@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _env  # noqa: E402,F401  (caches inside the repo; before torch)
 import torch  # noqa: E402
 from dataset import REPO, Patches, Tier1, collate, interior  # noqa: E402
+from hastycompute.pace import pace  # noqa: E402  (python/lib is on the path through dataset)
 from model import Denoiser7p, receptive_field  # noqa: E402
 
 ap = argparse.ArgumentParser()
@@ -186,6 +187,9 @@ def velocity(x, kv):
 def validate(it):
     model.eval()
     acc = {"loss": 0.0, "nmse_noisy": 0.0, "nmse_den": 0.0, "vrmse_noisy": 0.0, "vrmse_den": 0.0}
+    # NMSE as a ratio of sums over the validation set: a batch of phantom patches in air (clean exactly 0, unlike
+    # RACLETTE's in-vivo backgrounds) divided by ≈ 0 and gave 5e11 from iteration 18000 on
+    num_n, num_d, den_t = 0.0, 0.0, 0.0
     for b in val:
         xn = as_real(b["noisy"])
         with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=args.amp):
@@ -193,16 +197,18 @@ def validate(it):
         acc["loss"] += float(losses(b, y)[0])
         x = as_real(b["clean"])
         w = (b["valid"][:, None] & (inner[None] if inner is not None else True))[:, None, None]
-        den = ((x ** 2) * w).sum()
-        acc["nmse_noisy"] += float((((xn - x) ** 2) * w).sum() / den)
-        acc["nmse_den"] += float((((y - x) ** 2) * w).sum() / den)
+        den_t += float(((x ** 2) * w).sum())
+        num_n += float((((xn - x) ** 2) * w).sum())
+        num_d += float((((y - x) ** 2) * w).sum())
         wl = (b["mask"] & b["valid"][:, None])[:, None]
         if wl.any():
             vt = velocity(x, b["kv"])
             acc["vrmse_noisy"] += float(((velocity(xn, b["kv"]) - vt) ** 2 * wl).sum().div(wl.sum() * 3).sqrt())
             acc["vrmse_den"] += float(((velocity(y, b["kv"]) - vt) ** 2 * wl).sum().div(wl.sum() * 3).sqrt())
     model.train()
-    return {k: v / len(val) for k, v in acc.items()}
+    out = {k: v / len(val) for k, v in acc.items()}
+    out["nmse_noisy"], out["nmse_den"] = num_n / max(den_t, 1e-30), num_d / max(den_t, 1e-30)
+    return out
 
 
 def velocity_dual(x, kv):
@@ -252,12 +258,21 @@ def show_live(it):
 
 
 def figure(it):
+    # the first validation sample, and the first one from a phantom case (data/hasty/train/phantom) if any
+    samples = [("val", val[0])]
+    ph = next((v for v in val if "train/phantom" in str(v["case"][0])), None)
+    if ph is not None:
+        samples.append(("val_ph", ph))
+    for tag, b in samples:
+        figure_one(it, tag, b)
+
+
+def figure_one(it, tag, b):
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    b = val[0]
     with torch.no_grad():
         y = fwd(as_real(b["noisy"]), b["kv"], b["h"]).float()
     x, xn = as_real(b["clean"]), as_real(b["noisy"])
@@ -281,9 +296,11 @@ def figure(it):
         a.axis("off")
     fig.suptitle(f"iter {it}: {b['case'][0]}, SNR {float(b['snr'][0]):.1f}, VENC_hi {venc:.1f} m/s, frame {t}, slice z={z}", fontsize=9)
     fig.tight_layout()
-    name = f"val_{it:07d}.png"
+    name = f"{tag}_{it:07d}.png"
     fig.savefig(out / "figs" / name, dpi=80)
     plt.close(fig)
+    if tag != "val":
+        return
     rows = list(csv.DictReader(open(out / "metrics.csv")))
     if len(rows) > 1:
         fig, ax = plt.subplots(1, 3, figsize=(15, 4))
@@ -344,6 +361,7 @@ for raw in loader:
         continue
     bad = 0
     opt.step()
+    pace()  # GPU pacing (HASTY_GPU_DUTY / HASTY_GPU_WATTS; a no-op unless set)
     sched.step()
     it += 1
     run_l, run_i, run_v, nrun = run_l + loss.item(), run_i + li.item(), run_v + lv.item(), nrun + 1

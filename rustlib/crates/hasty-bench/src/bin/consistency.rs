@@ -26,7 +26,7 @@ fn main() {
     // sample params with physics zeroed except encoding
     let mut smp = Vec::with_capacity(m * SAMPLE_FLOATS);
     for &r in &ros {
-        let mut s = sd.acq.sample_params(r..r + 1);
+        let mut s = sd.spiral().sample_params(r..r + 1);
         for n in 0..sd.na {
             for q in 9..16 {
                 s[n * SAMPLE_FLOATS + q] = 0.0;

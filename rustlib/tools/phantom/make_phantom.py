@@ -1,6 +1,7 @@
 """Phantom factory: one seed → one complete moving flow phantom on the atlas backbone.
 
     python -I make_phantom.py <seed> [--out data/hasty/phantom/factory] [--truth gated_1mm,realtime_1mm] [--nominal]
+        [--diffeo <preset|spec.json>[:seed]]
 
 Seed 9001 is the held-out phantom (never in training / validation); `--nominal` uses the reference parameters (the
 P0 / P1 phantom). Sampled per phantom (params.json):
@@ -13,6 +14,9 @@ P0 / P1 phantom). Sampled per phantom (params.json):
   10–20 mm, AP 4–9 mm, LR 2–4 mm;
 - tissue (`tissue_variation.py`): jittered PD / T1 / T2 / T2* / fat fraction, contrast native / gadolinium /
   ferumoxytol, texture gain 0.5–1.5 and texture seed.
+--diffeo: a diffeomorphic variant of the atlas first (`diffeo.py`: habitus / aneurysm / narrow presets or a spec):
+the deformed label volumes and vessel graph go to <phantom>/atlas and replace p0 and the Z-Anatomy graph in every
+later step (prep_sim, sim_truth and lbm_case pick <phantom>/atlas up by themselves).
 Steps: graph copy + radius jitter → network (+ 2 Murray-floor rounds) → pack → cardiac motion → respiratory motion →
 tissue parameters → moving truth (`phantom_4d.py`) for each requested `--truth` (gated_1mm, realtime_1mm,
 gated_0.5mm_heart, gated_2mm).
@@ -46,6 +50,7 @@ TT = REPO / "rustlib/crates/hasty-phantom/data/atlas_tissues_3t.json"
 D = Path(opt("--out", REPO / "data/hasty/phantom/factory")) / (f"ph{SEED:04d}" + ("_nominal" if "--nominal" in A else ""))
 D.mkdir(parents=True, exist_ok=True)
 t0 = time.time()
+DIFFEO = opt("--diffeo")
 
 
 def run(*args, quiet=True):
@@ -71,12 +76,22 @@ else:
          "breathing": {"period_s": float(rng.uniform(3.2, 5.5)), "n": int(rng.integers(1, 4)), "cv_period": float(rng.uniform(0.05, 0.15)),
                        "cv_depth": float(rng.uniform(0.08, 0.2)), "dsi_mm": float(rng.uniform(10, 20)), "dap_mm": float(rng.uniform(4, 9)), "dlr_mm": float(rng.uniform(2, 4))}}
 P["seed"] = SEED
+if DIFFEO:
+    P["diffeo"] = {"spec": DIFFEO.split(":")[0], "seed": int(DIFFEO.split(":")[1]) if ":" in DIFFEO else SEED}
 P["held_out"] = SEED == 9001
 P["tissue"] = sample_tissue(rng, json.loads(TT.read_text())) if "--nominal" not in A else {"contrast": "native", "texture_gain": 0.0, "texture_seed": 0, "texture": {},
                                                                                                "table": {r[0]: dict(zip(json.loads(TT.read_text())["columns"], r)) for r in json.loads(TT.read_text())["tissues"]}}
 (D / "params.json").write_text(json.dumps(P, indent=1))
 (D / "tissue_params.json").write_text(json.dumps(P["tissue"], indent=1))
 print(f"phantom {D.name}: HR {P['heart']['hr']:.0f}, SV {P['heart']['sv_ml']:.0f} mL, breathing {P['breathing']['period_s']:.1f} s / {P['breathing']['dsi_mm']:.0f} mm, contrast {P['tissue']['contrast']}")
+
+# ── diffeomorphic atlas variant ──────────────────────────────────────────────────────────────────────────────────────
+if DIFFEO:
+    if not (D / "atlas" / "diffeo.json").exists():
+        print(run(*PY, HERE / "diffeo.py", D / "atlas", "--spec", P["diffeo"]["spec"], "--seed", P["diffeo"]["seed"]).strip().splitlines()[-6:])
+    P0 = D / "atlas"
+    EXP = D / "atlas"
+    print(f"diffeo {DIFFEO}: gates {json.loads((D / 'atlas' / 'diffeo.json').read_text())['gates']} ({time.time() - t0:.0f}s)")
 
 # ── vessels: graph copy with radius jitter ─────────────────────────────────────────────────────────────────────────
 g = dict(np.load(EXP / "graph.npz"))

@@ -7,6 +7,7 @@ pub fn median(v: &[f32]) -> f32 {
     s[s.len() / 2]
 }
 
+pub mod beats;
 pub mod seqsched;
 pub mod b0data;
 pub mod physio;

@@ -4,7 +4,7 @@
 //! GIRF-actual trajectory, and the encoding moments at TE from the designed waveforms. Writes arrays + summary.json into <out>; figures: tools/seq/plot_seqdesign.py <out>.
 //! Interruptible (STOP file / SIGINT) and resumable: evaluations are cached in <out>/evals.jsonl and the search is
 //! deterministic, so a rerun replays the cache and continues.
-//!   seqdesign <out> [--encode robust[:extra_ms[:slew_scale]]] [--res-girf band|<variant> [--res-weight 1]] [--res 2e-3] [--fov 0.32] [--t-adc 3e-3] [--venc 1.5 | --v-ext V]
+//!   seqdesign <out> [--encode|--tail robust|tuned=<variant>[:extra_ms[:slew_scale]]] [--res-girf band|<variant> [--res-weight 1]] [--res 2e-3] [--fov 0.32] [--t-adc 3e-3] [--venc 1.5 | --v-ext V]
 //!             [--scheme hadamard|referenced|dual7|coprime7|coprime8|coprime8h] [--p 2]
 //!             [--pns-target 80] [--asc FILE] [--edge 1] [--dwell S] [--rot super|fib|golden] [--n-rot-pns 400]
 //!             [--aniso-weight 0] [--spoil-cycles 2 | 0.5 with --return] [--iters 80] [--check]
@@ -254,9 +254,11 @@ fn main() {
     assert!(!spoil_endpoint || ret.is_some(), "--spoil endpoint needs --return (the readout must end at rest)");
     let threads: usize = take("--threads").map(|s| s.parse().unwrap()).unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()));
     let spoil_cycles: f64 = take("--spoil-cycles").map(|s| s.parse().unwrap()).unwrap_or(if ret.is_some() { 0.5 } else { 2.0 });
-    // encode blocks of the final TR: two-lobe (default, also the search) or robust[:extra_ms[:slew_scale]] (GIRF-robust
-    // QP blocks, `hasty_seq::robust`, extra_ms longer than the two-lobe block, encode slew × slew_scale)
+    // encode / flow-compensated tail blocks of the final TR: two-lobe (default, also the search) or
+    // KIND[:extra_ms[:slew_scale]], KIND = robust (generic GIRF-robust QP blocks, `hasty_seq::robust`) | tuned=<variant>
+    // (weighted to that Girf::variants() chain's resonances, as if measured); extra_ms longer than the two-lobe block
     let encode_arg = take("--encode");
+    let tail_arg = take("--tail");
     let iters: usize = take("--iters").map(|s| s.parse().unwrap()).unwrap_or(80);
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let check = flag(&mut args, "--check");
@@ -401,35 +403,75 @@ fn main() {
     let rots_f = pf.pns_rotations();
     let mut best = pf.evaluate(&best_shape, &rots_f).expect("best shape infeasible on the dense check");
     let mut encode_desc = json!({"shape": "two-lobe"});
-    if let Some(a) = &encode_arg {
-        let parts: Vec<&str> = a.split(':').collect();
-        assert_eq!(parts[0], "robust", "--encode robust[:extra_ms[:slew_scale]]");
+    // robust / tuned shape options: (opts, extra_ms, slew_scale)
+    let shape_opts = |arg: &str, w: &[f64], delay: f64| -> (hasty_seq::robust::RobustOpts, f64, f64, String) {
+        use hasty_seq::robust::RobustOpts;
+        let parts: Vec<&str> = arg.split(':').collect();
         let extra_ms: f64 = parts.get(1).map_or(0.5, |s| s.parse().unwrap());
         let sc: f64 = parts.get(2).map_or(1.0, |s| s.parse().unwrap());
-        let mut slew = best.slew;
-        slew[0] *= sc;
-        let n_orig = (best.tr.i_ro - best.tr.i_enc) as i64;
+        let mut opts = match parts[0] {
+            "robust" => RobustOpts::default(),
+            k if k.starts_with("tuned=") => {
+                let name = &k[6..];
+                let g = hasty_seq::girf::Girf::variants().into_iter().find(|v| v.0 == name).unwrap_or_else(|| panic!("tuned={name}: not a Girf::variants() name")).1;
+                RobustOpts { band: None, ..RobustOpts::default() }.with_resonances(&g, 300.0, 3000.0, 10.0)
+            }
+            k => panic!("--encode / --tail {k}: robust | tuned=<variant>"),
+        };
+        // eddy terms of a block decay by e^{−delay/τ} before the echo they act on (the tail's: the next TR's)
+        for t in opts.taus.iter_mut() {
+            t.1 *= (-delay / t.0).exp();
+        }
+        (opts.persist(w, 1e-6), extra_ms, sc, parts[0].to_string())
+    };
+    let (_, wb, wv) = hasty_seq::robust::readout_weights(&best.tr.spoke.grad, 1e-6);
+    let pw = hasty_seq::robust::persist_weights(&wb, &wv);
+    let mut encode_desc = json!({"shape": "two-lobe"});
+    let mut tail_desc = json!({"shape": "two-lobe"});
+    if encode_arg.is_some() || tail_arg.is_some() {
         let dtr = sys.grad_raster;
-        // `extra` is relative to the two-lobe block at the (scaled) encode slew; the target is n_orig + extra_ms
-        let spec0 = pf.tr_spec(&slew);
-        let es = hasty_seq::encode::EncodeSpec { m0: [0.0; 3], m1_offset: [0.0; 3], scheme: spec0.scheme, venc: spec0.venc, balanced: spec0.balanced, t_start: 0.0, t_ref: 0.0 };
-        let n0s = hasty_seq::encode::design(&es, &System { smax: sys.smax * slew[0], ..sys.clone() }).waves[0].len() as i64 - 1;
-        let extra = n_orig + (extra_ms * 1e-3 / dtr).round() as i64 - n0s;
-        let (_, wb, wv) = hasty_seq::robust::readout_weights(&best.tr.spoke.grad, 1e-6);
-        let opts = hasty_seq::robust::RobustOpts::default().persist(&hasty_seq::robust::persist_weights(&wb, &wv), 1e-6);
-        let spec = hasty_seq::tr::TrSpec { encode_shape: hasty_seq::tr::EncodeShape::Robust { opts, extra }, ..spec0 };
+        let mut slew = best.slew;
+        let mut spec = pf.tr_spec(&slew);
+        let n_orig = (best.tr.i_ro - best.tr.i_enc) as i64;
+        let n_tail_orig = best.tr.n_tail as i64;
+        if let Some(a) = &encode_arg {
+            let (opts, extra_ms, sc, kind) = shape_opts(a, &pw, 0.0);
+            slew[0] *= sc;
+            spec = pf.tr_spec(&slew);
+            // `extra` is relative to the two-lobe block at the (scaled) encode slew; the target is n_orig + extra_ms
+            let es = hasty_seq::encode::EncodeSpec { m0: [0.0; 3], m1_offset: [0.0; 3], scheme: spec.scheme, venc: spec.venc, balanced: spec.balanced, t_start: 0.0, t_ref: 0.0 };
+            let n0s = hasty_seq::encode::design(&es, &System { smax: sys.smax * slew[0], ..sys.clone() }).waves[0].len() as i64 - 1;
+            let extra = n_orig + (extra_ms * 1e-3 / dtr).round() as i64 - n0s;
+            spec.encode_shape = hasty_seq::tr::EncodeShape::Robust { opts, extra };
+            encode_desc = json!({"shape": kind, "extra_ms": extra_ms, "slew_scale": sc, "two_lobe_block_ms": n_orig as f64 * dtr * 1e3});
+        }
+        if let Some(a) = &tail_arg {
+            // the tail's eddy terms reach the next TR's echo i_ro raster steps after the TR end
+            let (opts, extra_ms, sc, kind) = shape_opts(a, &pw, best.tr.i_ro as f64 * dtr);
+            slew[2] *= sc;
+            let es_shape = spec.encode_shape.clone();
+            spec = pf.tr_spec(&slew);
+            spec.encode_shape = es_shape;
+            // `extra` relative to the two-lobe tail at the (scaled) tail slew: measured on a two-lobe build
+            let probe = hasty_seq::tr::Tr::build(&spec, best.tr.spoke.clone(), &rots_f[..1]);
+            let extra = n_tail_orig + (extra_ms * 1e-3 / dtr).round() as i64 - probe.n_tail as i64;
+            spec.tail_shape = hasty_seq::tr::EncodeShape::Robust { opts, extra };
+            tail_desc = json!({"shape": kind, "extra_ms": extra_ms, "slew_scale": sc, "two_lobe_tail_ms": n_tail_orig as f64 * dtr * 1e3});
+        }
         let tr2 = hasty_seq::tr::Tr::build(&spec, best.tr.spoke.clone(), &rots_f);
         let pns2 = hasty_seq::tr::pns_sequence(&tr2, &rots_f, &pf.hw);
         println!(
-            "  encode → robust: block {:.2} → {:.2} ms (encode slew ×{sc}), TE {:.3} → {:.3} ms, TR {:.3} → {:.3} ms, PNS {:.1}% → {:.1}% (encode part {:.1}% → {:.1}%)",
-            n_orig as f64 * dtr * 1e3, (tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3, best.tr.te() * 1e3, tr2.te() * 1e3, best.tr.tr() * 1e3, tr2.tr() * 1e3,
-            best.pns.max, pns2.max, best.pns.part_max[1], pns2.part_max[1]
+            "  shaped blocks: encode {:.2} → {:.2} ms, tail {:.2} → {:.2} ms; TE {:.3} → {:.3} ms, TR {:.3} → {:.3} ms, PNS {:.1}% → {:.1}% (parts {:?} → {:?})",
+            n_orig as f64 * dtr * 1e3, (tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3, n_tail_orig as f64 * dtr * 1e3, tr2.n_tail as f64 * dtr * 1e3,
+            best.tr.te() * 1e3, tr2.te() * 1e3, best.tr.tr() * 1e3, tr2.tr() * 1e3, best.pns.max, pns2.max, best.pns.part_max, pns2.part_max
         );
         if pns2.max > pns_target {
-            println!("  warning: PNS {:.1}% above the target {pns_target}% with the robust encode", pns2.max);
+            println!("  warning: PNS {:.1}% above the target {pns_target}% with the shaped blocks", pns2.max);
         }
-        encode_desc = json!({"shape": "robust", "extra_ms": extra_ms, "slew_scale": sc, "two_lobe_block_ms": n_orig as f64 * dtr * 1e3,
-                             "block_ms": (tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3, "two_lobe_te": best.tr.te(), "two_lobe_tr": best.tr.tr()});
+        encode_desc["block_ms"] = json!((tr2.i_ro - tr2.i_enc) as f64 * dtr * 1e3);
+        encode_desc["two_lobe_te"] = json!(best.tr.te());
+        encode_desc["two_lobe_tr"] = json!(best.tr.tr());
+        tail_desc["tail_ms"] = json!(tr2.n_tail as f64 * dtr * 1e3);
         best.slew = slew;
         best.objective = best.n_eff * tr2.tr() * (1.0 + aniso_weight * best.aniso) * (1.0 + pf.res_weight * best.res);
         best.tr = tr2;
@@ -674,7 +716,7 @@ fn main() {
         let fin = json!({"kind": "flow", "dt": tr.dt, "tr": tr.tr(), "te": [tr.te()], "t_rf": tr.t_rf, "kmax": kmax, "res": res, "gmax": sys.gmax, "smax": sys.smax,
                          "slew_factors": {"encode": best.slew[0], "readout": best.slew[1], "tail": best.slew[2]}, "pns_limit": pns_target, "pns_hw": p.hw.name,
                          "n_rot_window": nr, "n_enc": n_enc, "variants": (0..n_enc).map(|e| format!("encode {e}")).collect::<Vec<_>>(),
-                         "parts": ["RF", "encode (navigator ADC)", "readout (ADC)", "tail / spoiler"], "girf": "clinical_example (illustrative)", "encode": encode_desc,
+                         "parts": ["RF", "encode (navigator ADC)", "readout (ADC)", "tail / spoiler"], "girf": "clinical_example (illustrative)", "encode": encode_desc, "tail": tail_desc,
                          "title": format!("4D-flow TR: out-and-back yarn {:.1} mm, T_adc {:.2} ms, {scheme_name} p={p_cop}", res * 1e3, sp.t_adc * 1e3)});
         std::fs::write(out.join("final.json"), serde_json::to_string_pretty(&fin).unwrap()).unwrap();
     }
@@ -683,6 +725,7 @@ fn main() {
                     "pns_hw": p.hw.name, "pns_hw_note": hw_note, "edge_density": edge, "dwell": dwell, "rot": format!("{rot_kind:?}"),
                     "gmax": sys.gmax, "smax": sys.smax, "dt": sys.grad_raster, "b0": sys.b0},
         "encode": encode_desc,
+        "tail": tail_desc,
         "best": {"shape": {"kg0": best_shape.kg0, "wobble": best_shape.wobble, "wobble_freq": best_shape.wobble_freq},
                  "n_design": best.n_design, "n_star": den.n_star, "r_star": den.r_star, "tr": tr.tr(), "te": tr.te(), "t_adc": sp.t_adc,
                  "i_adc": sp.i_adc, "i_enc": tr.i_enc, "i_ro": tr.i_ro, "i_tail": tr.i_tail, "n_tail": tr.n_tail, "n_tr": tr.n, "n_enc": n_enc, "spoil_cycles": spoil_cycles, "spoil_mode": spoil_mode,

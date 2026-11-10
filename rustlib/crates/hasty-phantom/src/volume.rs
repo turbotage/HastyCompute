@@ -167,17 +167,24 @@ pub fn write_npy_f32(path: &Path, v: &Volume<f32>) -> Result<(), Error> {
 /// Write raw little-endian element bytes as `.npy` with the given dtype descriptor (`<f4`, `<c8`, `<f8`, `|u1`, …).
 /// `fortran = true`: first index fastest.
 pub fn write_npy(path: &Path, descr: &str, shape: &[usize], fortran: bool, bytes: &[u8]) -> Result<(), Error> {
+    let mut out = npy_header(descr, shape, fortran);
+    out.extend_from_slice(bytes);
+    std::fs::write(path, out)?;
+    Ok(())
+}
+
+/// the `.npy` header (magic, version 1.0, dict padded to a multiple of 64 bytes) for streaming writers: the element
+/// bytes follow it, row-major (or first index fastest with `fortran`)
+pub fn npy_header(descr: &str, shape: &[usize], fortran: bool) -> Vec<u8> {
     let shp = if shape.len() == 1 { format!("({},)", shape[0]) } else { format!("({})", shape.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(", ")) };
     let mut header = format!("{{'descr': '{descr}', 'fortran_order': {}, 'shape': {shp}, }}", if fortran { "True" } else { "False" });
     let total = 10 + header.len() + 1;
     let pad = (64 - total % 64) % 64;
     header.push_str(&" ".repeat(pad));
     header.push('\n');
-    let mut out = Vec::with_capacity(10 + header.len() + bytes.len());
+    let mut out = Vec::with_capacity(10 + header.len());
     out.extend_from_slice(b"\x93NUMPY\x01\x00");
     out.extend_from_slice(&(header.len() as u16).to_le_bytes());
     out.extend_from_slice(header.as_bytes());
-    out.extend_from_slice(bytes);
-    std::fs::write(path, out)?;
-    Ok(())
+    out
 }

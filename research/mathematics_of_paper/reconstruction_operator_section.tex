@@ -1,18 +1,17 @@
 % =============================================================================
-% Paper section: physics-aware encoding operator, segmented physics NUFFT,
-% and the commutator / Weyl calculus of the normal operator.
+% Paper section: physics-aware encoding operator, chirp-aware stencils,
+% velocity parametrisation, fast gradients, and the algebra of the normal operator.
 %
 % Standalone-compilable (pdflatex). To use inside the paper, copy everything
-% between "BEGIN SECTION" and "END SECTION" plus the preamble definitions
-% (theorem environments, \newcommand block) and the bibliography entries.
+% between "BEGIN SECTION" and "END SECTION" plus the preamble definitions.
 %
-% Conventions used throughout (fixed once, checked numerically):
+% Conventions (fixed once, checked numerically):
 %   * sample j sees  e^{-i Theta_j(r)} ;  A has rows a_j(r) = e^{-i Theta_j(r)}
-%   * N = A^H A has kernel  N(r,r') = sum_j varpi_j e^{i (Theta_j(r) - Theta_j(r'))}
-%   * V(k) = sum_r v(r) e^{-i k.r}, hence  r_p v  <->  i d_p V
+%   * V(k) = sum_r v(r) e^{-i k.r}, hence  r^alpha v  <->  (i d_k)^alpha V
+%   * N = A^H A,  N(r,r') = sum_j e^{i (Theta_j(r) - Theta_j(r'))}
 %   * Q_j = e^{+i Phi_j(X)}, so that N_j = Q_j T_j Q_j^H
-% Statements marked [measured] are numbers from our own runs (RTX 4090, f32,
-% simulated spiral 4D flow, subject R4); everything else is derived here.
+% [measured] = our runs (RTX 4090, f32, simulated spiral 4D flow); everything
+% else is derived. [designed] = specified and tested on toy problems only.
 % =============================================================================
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
@@ -24,12 +23,14 @@
 \newtheorem{proposition}{Proposition}
 \newtheorem{lemma}[proposition]{Lemma}
 \newtheorem{corollary}[proposition]{Corollary}
+\newtheorem{definition}[proposition]{Definition}
 \theoremstyle{remark}
 \newtheorem{remark}[proposition]{Remark}
 
 % ---- notation ---------------------------------------------------------------
 \newcommand{\rr}{\bm r}
 \newcommand{\kk}{\bm k}
+\newcommand{\uu}{\bm u}
 \newcommand{\DD}{\bm\Delta}
 \newcommand{\ii}{\mathrm i}
 \newcommand{\ee}{\mathrm e}
@@ -44,437 +45,524 @@
 \newcommand{\CC}{\mathbb C}
 \newcommand{\RR}{\mathbb R}
 \newcommand{\ZZ}{\mathbb Z}
+\newcommand{\Fs}{\mathcal F_\sigma}
 \newcommand{\diag}{\operatorname{diag}}
 \newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Imag}{\operatorname{Im}}
+\newcommand{\Real}{\operatorname{Re}}
 \DeclareMathOperator*{\argmin}{arg\,min}
 
 \begin{document}
 
 % ========================== BEGIN SECTION ====================================
-\section{Physics-aware encoding operator and its normal operator}
+\section{Physics-aware encoding operator and fast gradients}
 \label{sec:operator}
 
-We reconstruct complex images $x$ on a Cartesian grid $\Omega\subset\RR^3$ from multi-coil spiral data acquired without density compensation. The
-data model must include everything the sequence \emph{determines}: off-resonance, the concomitant (Maxwell) fields of the \emph{whole} gradient history,
-gradient nonlinearity (GNL), and cardiac motion between the readouts of one frame. This section derives the operator $A$ that does so at the cost of $L\approx 10$
-FFT pairs per coil (\cref{sec:segnufft}), and the algebra of its normal operator $\Nop=A^\herm A$ (\cref{sec:weyl}), which explains why the correction terms are small, exact, and
-cheap, and which fixes how the operator enters the preconditioned plug-and-play iteration (\cref{sec:iteration}). The operators are model-exact up to the controlled
-truncations stated below (time-segmentation~\cite{sutton2003,fessler2005}, a Taylor series in the small per-readout remainder); none of them uses density compensation, which is replaced by preconditioning and coil-noise whitening.
+We reconstruct images $x$ on a grid $\Omega\subset\RR^3$ from whitened multi-coil spiral data, without density compensation.
+The operator $A$ contains off-resonance, $R_2^*$, fat, the concomitant field of the whole gradient history, gradient nonlinearity
+(GNL) and cardiac motion between readouts. It costs $L\approx10$ FFT pairs per coil. Everything that is not a smooth function of the
+readout time is absorbed into a per-sample \emph{chirp-aware stencil} (\cref{sec:stencil}). \Cref{sec:velmodel} puts the
+velocity parametrisation on top of $A$, \cref{sec:grad} gives the cost of one gradient $A^\herm(Ax-y)$ and the levers that reduce it,
+and \cref{sec:weyl} gives the algebra of $\Nop=A^\herm A$.
 
-\subsection{Signal model and the phase budget}
+% -----------------------------------------------------------------------------
+\subsection{Signal model and phase split}
 \label{sec:signal}
 
-Let $\rr$ be the \emph{true scanner position} of a voxel (after the GNL warp, including the FOV offset from isocentre), $S_c$ the coil sensitivities, and $j=1,\dots,M$
-the samples of one set (one frame $\times$ one encode). With $\kk_j$ the nominal trajectory (rad/m) and $\tau_j$ the time since excitation,
+With $\rr$ the true scanner position of a voxel (after GNL, including the FOV offset), $S_c$ the whitened coil maps, $\kk_j$ the nominal
+trajectory and $\tau_j$ the time since excitation,
 \begin{equation}
-  y_{cj} \;=\; \sum_{\rr\in\Omega} S_c(\rr)\,x(\rr)\,\ee^{-\ii\Theta_j(\rr)} + n_{cj},
-  \qquad
-  \Theta_j(\rr) \;=\; \kk_j\!\cdot\!\rr \;+\; \omega(\rr)\,\tau_j \;+\; \sum_{q=1}^{4} w_{jq}\, m_q(\rr),
+  y_{cj}=\sum_{\rr\in\Omega}S_c(\rr)\,x(\rr)\,\ee^{-\ii\Theta_j(\rr)}+n_{cj},\qquad
+  \Theta_j(\rr)=\kk_j\!\cdot\!\rr+\bigl(\omega(\rr)-\ii R_2^*(\rr)\bigr)\tau_j+\sum_{q=1}^4w_{jq}\,m_q(\rr),
   \label{eq:signal}
 \end{equation}
-where $\omega$ is the off-resonance map (rad/s), $m=(z^2,\;x^2{+}y^2,\;xz,\;yz)$ are the concomitant monomials in \emph{physical} coordinates, and $w_{jq}$ are
-sequence-determined coefficients (below). Noise is complex Gaussian with coil covariance $\Psi$; we whiten data and maps with $\Psi^{-1/2}$ and drop the tilde.
-$T_2^*$ decay is carried by $x$ (and by $\omega$ if one admits $\operatorname{Im}\omega\neq0$); it is a smooth function of $\tau$ and costs no extra segments.
-
-\paragraph{Concomitant coefficients.}
-A linear gradient $\bm G=(G_x,G_y,G_z)$ that satisfies Maxwell's equations has transverse components~\cite{norris1990,bernstein1998}. The field with $\nabla\!\cdot\!\bm B=0$, $\nabla\!\times\!\bm B=0$ is
+with $n\sim\mathcal{CN}(0,I)$ after whitening by $\Psi^{-1/2}$. The concomitant monomials are $m=(z^2,\,x^2{+}y^2,\,xz,\,yz)$. A field with $\nabla\!\cdot\!\bm B=\nabla\!\times\!\bm B=0$ has
+$\bm B_\perp=(G_xz-\tfrac12G_zx,\;G_yz-\tfrac12G_zy)$ and $|\bm B|\approx B_z+|\bm B_\perp|^2/2B_0$, so~\cite{norris1990,bernstein1998}
 \begin{equation}
-  \bm B \;=\; (B_0+\bm G\!\cdot\!\rr)\,\hat z \;+\; (G_x z-\tfrac12 G_z x)\,\hat x \;+\; (G_y z-\tfrac12 G_z y)\,\hat y ,
-\end{equation}
-(divergence: $G_z-\frac12G_z-\frac12G_z=0$; curl: all components vanish). Its magnitude is, to leading order in $G/B_0$,
-$|\bm B|\approx B_z + B_\perp^2/(2B_0)$, so the concomitant field is
-\begin{equation}
-  B_c \;=\; \frac{(G_xz-\frac12G_zx)^2+(G_yz-\frac12G_zy)^2}{2B_0}
-        \;=\; \frac{G_x^2+G_y^2}{2B_0}\,z^2+\frac{G_z^2}{8B_0}(x^2{+}y^2)-\frac{G_xG_z}{2B_0}\,xz-\frac{G_yG_z}{2B_0}\,yz .
-  \label{eq:Bc}
-\end{equation}
-The phase accumulated by a spin at $\rr$ from excitation to sample $j$ is therefore $\sum_q w_{jq}m_q(\rr)$ with
-\begin{equation}
-  \begin{aligned}
-  w_{j1}&=\tfrac{\gamma}{2B_0}\!\int_0^{t_j}\!(G_x^2+G_y^2)\,\dd t, &
-  w_{j2}&=\tfrac{\gamma}{8B_0}\!\int_0^{t_j}\!G_z^2\,\dd t,\\
-  w_{j3}&=-\tfrac{\gamma}{2B_0}\!\int_0^{t_j}\!G_xG_z\,\dd t, &
-  w_{j4}&=-\tfrac{\gamma}{2B_0}\!\int_0^{t_j}\!G_yG_z\,\dd t
-  \end{aligned}
+  \sum_qw_{jq}m_q(\rr)=\frac{\gamma}{2B_0}\bigl\langle W_j,\;M_{\rr}^{\!\top}M_{\rr}\bigr\rangle,\qquad
+  W_j=\int_0^{t_j}\bm G\bm G^{\!\top}\dd t,\qquad
+  M_{\rr}=\begin{psmallmatrix}z&0&-x/2\\0&z&-y/2\end{psmallmatrix},
   \label{eq:wq}
 \end{equation}
-(overall sign absorbed to match \cref{eq:signal}). Equivalently $\sum_q w_{jq}m_q=\frac{\gamma}{2B_0}\langle W_j,S(\rr)\rangle$ with the second-moment matrix
-$W_j=\int_0^{t_j}\bm G\bm G^{\!\top}\dd t$ and $S=M_{\rr}^{\!\top}M_{\rr}$, $M_{\rr}=\begin{psmallmatrix}z&0&-x/2\\0&z&-y/2\end{psmallmatrix}$. Three properties are used below.
-\begin{enumerate}
-  \item \emph{History dependence.} $W_j$ integrates from excitation, so the velocity-encoding bipolars, the $k_z$ blip and the readout all contribute. The part of
-        the bipolars that is constant over the readout is the per-encode Maxwell velocity offset; it is a time-independent phase $\varphi_e(\rr)=\sum_q w^{\rm enc}_{e,q}m_q(\rr)$ and enters the model with no special treatment (it is inside the segment diagonals).
-  \item \emph{Frame.} $\bm G$ is the \emph{physical} gradient: the logical$\to$physical rotation and the FOV offset are applied before \cref{eq:wq}. In logical voxel coordinates $\bm\rho$ each $m_q$ is a general quadratic polynomial (with linear and constant parts from the offset).
-  \item \emph{Accuracy.} \cref{eq:Bc} neglects $O(B_\perp^4/B_0^3)$; the relative error is $\sim 2\!\cdot\!10^{-4}$ at 3~T, 20~mT/m, 10~cm (checked against a direct evaluation of $|\bm B|$). The magnitude of the coefficients matters: all rank, order and accuracy statements below scale with $\Phi_{\max}$, which is set by the $z^2$ coefficient $(G_x^2{+}G_y^2)/(2B_0)$ and the cross-term signs.
-\end{enumerate}
+with relative error $O(|\bm B_\perp|^2/B_0^2)\approx2\cdot10^{-4}$ at 3~T. Here $\bm G$ is the physical gradient (after rotation and FOV offset) and $W_j$ integrates from excitation, so the bipolars, the $k_z$ blip and the readout all contribute.
 
-\paragraph{Size of the effect.} For the simulated 3~T spiral 4D-flow sequence (80~mT/m, 200~T/m/s, 36~cm in-plane FOV, 56~mm slab, 4.4~ms readout, FOV centre 3~cm off isocentre) the concomitant phase over all samples and the
-FOV, expressed in the FOV-centred logical frame $\bm\rho$ as $\phi_0+\bm b\!\cdot\!\bm\rho+\bm\rho^{\!\top}C\bm\rho$, is [measured]:
-\begin{center}
-\begin{tabular}{lc}
-\toprule
-part & max over samples and FOV\\
-\midrule
-constant $\phi_0$ & 0.08~rad\\
-linear $\bm b\!\cdot\!\bm\rho$ ($=$ k-space shift of $\le0.29$ cells) & 0.96~rad\\
-quadratic $\bm\rho^{\!\top}C\bm\rho$ (FOV corners) & 3.1~rad\\
-\bottomrule
-\end{tabular}
-\end{center}
-The constant is a sample weight, the linear part is an \emph{exact} shift of the sample location ($\kk_j'=\kk_j+\bm b_j$), and only the quadratic part needs operator work. At $3$~rad neither a global
-first-order nor a global second-order expansion of $\ee^{-\ii\Theta}$ is accurate, which motivates splitting the phase into a part carried exactly by segments and a small per-sample remainder.
-
-\subsection{Splitting the phase: time segments plus a per-sample deviation}
-\label{sec:split}
-
-Group the readouts of a set by ADC index $n$ (same $\tau_n$ in every readout) and let $\bar w_q(\tau_n)$ be the mean of $w_{jq}$ over the readouts of the set (or, better, over all frames of the encode) at that ADC index. Write
+\paragraph{Split.} Let $\bar w_q(\tau)$ be the mean of $w_{jq}$ over the readouts of an encode at ADC time $\tau$, and $\Delta w_{jq}=w_{jq}-\bar w_q(\tau_j)$. Then
 \begin{equation}
-  \Theta_j(\rr)=\kk_j\!\cdot\!\rr+\underbrace{\omega(\rr)\tau_j+\sum_q\bar w_q(\tau_j)m_q(\rr)}_{\psi(\rr,\tau_j)}+\underbrace{\sum_q\Delta w_{jq}\,m_q(\rr)}_{\Delta_j(\rr)},
-  \qquad \Delta w_{jq}=w_{jq}-\bar w_q(\tau_j).
+  \Theta_j(\rr)=\kk_j\!\cdot\!\rr+\psi(\rr,\tau_j)+\Delta_j(\rr),\qquad
+  \psi(\rr,\tau)=\bigl(\omega-\ii R_2^*\bigr)\tau+\sum_q\bar w_q(\tau)m_q,\qquad
+  \Delta_j=\sum_q\Delta w_{jq}m_q .
   \label{eq:split}
 \end{equation}
-\begin{itemize}
-  \item $\psi$ is a function of $\rr$ and the single scalar $\tau$. It holds the B0 map, the readout-time-dependent concomitant phase and the bipolar offset. It may be \emph{any} spatial function (post-shim field map, GNL-warped positions, FOV offset): no polynomial assumption.
-  \item $\Delta_j$ is the part that depends on the individual readout (rotation of the spiral about $k_z$ or in 3D, blip height). It is small and \emph{quadratic}: least-squares fit each $m_q$ over the object support to $\theta_{q}\cdot[1,\rr,\,r_pr_q]$ and set
-    \begin{equation}
-      \Delta_j(\rr)\approx \phi_{0j}+\bm b_j\!\cdot\!\rr+\rr^{\!\top}\!\Delta C_j\,\rr .
-      \label{eq:dC}
-    \end{equation}
-    The fit residual $\sum_q\max|\Delta w_{jq}|\max|m_q-\text{fit}|$ is recorded as the phase the model leaves out.
-\end{itemize}
-
-\paragraph{Time segments.}
-Choose segment times $\tau_1<\dots<\tau_L$ (uniform over the readout) and diagonals $D_\ell(\rr)=\ee^{-\ii\psi(\rr,\tau_\ell)}$. For each sample time $\tau$ the interpolation coefficients are the least-squares solution over the object support $\Omega_s$,
+$\psi$ is an arbitrary spatial function of $(\rr,\tau)$ and is carried exactly by time segments (\cref{sec:segments}). $\Delta_j$ is small and polynomial.
+In logical coordinates $\bm\rho$ (GNL-warped positions $\rr(\bm\rho)$) we fit each $m_q(\rr(\bm\rho))$ over the support with monomials of degree $\le4$:
 \begin{equation}
-  \begin{gathered}
-  \bm a(\tau)=\argmin_{\bm a\in\CC^L}\sum_{\rr\in\Omega_s}\Bigl|\ee^{-\ii\psi(\rr,\tau)}-\sum_\ell a_\ell D_\ell(\rr)\Bigr|^2
-  \;\Longleftrightarrow\; G\,\bm a(\tau)=\bm\beta(\tau),\\
-  G_{\ell\ell'}=\sum_{\rr}\overline{D_\ell}D_{\ell'},\qquad \beta_\ell(\tau)=\sum_{\rr}\overline{D_\ell(\rr)}\ee^{-\ii\psi(\rr,\tau)} .
-  \end{gathered}
-  \label{eq:lsq}
+  \Delta_j(\bm\rho)=\phi_{0j}+\bm b_j\!\cdot\!\bm\rho+\bm\rho^{\!\top}\Delta C_j\,\bm\rho+c_j(\bm\rho)+\varepsilon_j(\bm\rho),\qquad
+  c_j(\bm\rho)=\sum_q\Delta w_{jq}\!\!\sum_{3\le|\alpha|\le4}\!\!h_{q\alpha}\bm\rho^\alpha .
+  \label{eq:dC}
 \end{equation}
-This is the least-squares variant of the time-segmentation idea of Sutton--Noll--Fessler~\cite{sutton2003}, with the support-weighted $\ell_2$ criterion; the $a_{\ell}(\tau)$ are computed once per scan (a small $L\times L$ solve per ADC index).
-
-\paragraph{How many segments?} The rank of $\ee^{-\ii\psi}$ is set by the \emph{range} of $\psi$, not by resolution [measured, CUR rank on body voxels]:
-\begin{center}
-\begin{tabular}{lcc}
-\toprule
-phase in $\psi$ & $L$ at $10^{-2}$ & $L$ at $2\!\cdot\!10^{-3}$\\
-\midrule
-B0 only & 8 & 9\\
-quadratic concomitant only & 4 & 6\\
-B0 + quadratic concomitant, one global decomposition & 15 & 22\\
-\bottomrule
-\end{tabular}
-\end{center}
-The joint rank is roughly the \emph{sum} when one global decomposition has to represent both, but the segment count with the split \cref{eq:split} is set by B0 alone: the $\tau$-dependent concomitant part rides in the
-same diagonals, and the readout-dependent remainder is handled per sample (\cref{sec:segnufft}). In the CUR-segment study with the \emph{first-order} $\Delta C$ correction, $L=8,10,12$ reach $3.2\!\cdot\!10^{-3},\,8.9\!\cdot\!10^{-4},\,4.3\!\cdot\!10^{-4}$ (versus a plateau at $1.3\!\cdot\!10^{-2}$ without the correction)
-[measured]; the floor of that study is the dropped second-order term (about $4\!\cdot\!10^{-4}$ for the spiral), independent of $L$. The implemented operator of \cref{sec:segnufft} carries the correction to \emph{second} order by default (order~2), which lowers the floor to $\sim8\!\cdot\!10^{-5}$ (table there). The B0 rank grows linearly with readout length, $L\approx 2\,\Delta f\,T_{\rm ro}+4$ with $\Delta f$ the 1--99\,\% off-resonance span (here 0.7~kHz; 4.4~ms $\Rightarrow L\approx10$). Smoothing B0 into the trajectory (linear part $\to$ time-dependent $k$-shift, quadratic part $\to C$) does \emph{not} reduce $L$: post-shim B0 is local susceptibility structure, not a smooth field.
-
-\subsection{The segmented physics NUFFT}
-\label{sec:segnufft}
-
-\paragraph{Forward operator.}
-Insert \cref{eq:split}--\cref{eq:dC} and the segment expansion into \cref{eq:signal}. With $\kk_j'=\kk_j+\bm b_j$ and $v_{c\ell}(\rr)=S_c(\rr)x(\rr)D_\ell(\rr)$,
-\begin{equation}
-  (Ax)_{cj}\;\approx\;\ee^{-\ii\phi_{0j}}\sum_{\ell=1}^L a_{\ell}(\tau_j)\;\sum_{\rr}v_{c\ell}(\rr)\,\ee^{-\ii\kk_j'\cdot\rr}\,\ee^{-\ii\,\rr^{\!\top}\!\Delta C_j\rr}.
-  \label{eq:fwd1}
-\end{equation}
-Let $V_{c\ell}(\kk)=\sum_{\rr}v_{c\ell}(\rr)\ee^{-\ii\kk\cdot\rr}$. Because $\rr^{\!\top}\!\Delta C\rr$ is quadratic, the chirp is a polynomial \emph{differential operator in $\kk$}: from $\partial_{k_p}V=\sum(-\ii r_p)v\ee^{-\ii\kk\cdot\rr}$,
-\begin{equation}
-  \mathcal F\{r_pr_q\,v\}=-\partial_p\partial_qV,\qquad
-  \mathcal F\{r_pr_qr_rr_s\,v\}=\partial_p\partial_q\partial_r\partial_sV,
-\end{equation}
-and expanding $\ee^{-\ii u}=1-\ii u-\tfrac12u^2+\dots$ with $u=\rr^{\!\top}\!\Delta C\rr$,
-\begin{equation}
-  \sum_{\rr}v(\rr)\ee^{-\ii\kk\cdot\rr}\ee^{-\ii\rr^{\!\top}\!\Delta C\rr}
-  \;=\;V(\kk)+\ii\sum_{pq}\Delta C_{pq}\,\partial_p\partial_qV(\kk)-\tfrac12\sum_{pqrs}\Delta C_{pq}\Delta C_{rs}\,\partial_p\partial_q\partial_r\partial_sV(\kk)+\dots
-  \label{eq:dexp}
-\end{equation}
-(checked numerically against the exact chirped sum). No extra FFT is needed: the NUFFT evaluates $V$ at $\kk'_j$ by interpolating the oversampled FFT $G_{c\ell,\bm u}$ with a spreading kernel $\varphi$~\cite{fessler2003,barnett2019},
-$V(\kk)\approx\sum_{\bm u}\varphi(\kk-\bm u)G_{c\ell,\bm u}$ (after pre-compensation $1/\hat\varphi$), and
-\begin{proposition}[derivatives are exact on the interpolant]
-\label{prop:dweights}
-$\partial^\alpha V(\kk)\approx\sum_{\bm u}\partial^\alpha\varphi(\kk-\bm u)\,G_{c\ell,\bm u}$ is the exact derivative of the interpolant, so
-\cref{eq:dexp} turns into a single gather with a \emph{per-sample kernel}
-\begin{equation}
-  \begin{aligned}
-  \eta_{j,\bm u}&=\varphi(\kk_j'-\bm u)+\ii\sum_{pq}\Delta C_{j,pq}\,\partial_p\partial_q\varphi(\kk_j'-\bm u)\\
-  &\quad-\tfrac12\sum_{pqrs}\Delta C_{j,pq}\Delta C_{j,rs}\,\partial_{pqrs}\varphi(\kk_j'-\bm u),\\
-  (Ax)_{cj}&=\ee^{-\ii\phi_{0j}}\sum_{\bm u}\eta_{j,\bm u}\sum_\ell a_\ell(\tau_j)G_{c\ell,\bm u}.
-  \end{aligned}
-\end{equation}
-\end{proposition}
-The kernel $\eta_{j,\bm u}$ does not depend on the coil or the segment: it is evaluated \emph{once per (sample, grid point)} and reused for all $C\!\cdot\!L$ grids. It is formed in registers from the 6 numbers $\Delta C_j$: the first-order term involves the 6 distinct second derivatives, the second-order term the 15 distinct fourth derivatives (monomials of degree 4 in three variables).
-
-\paragraph{Adjoint.} $A^\herm$ is the exact transpose: scatter $\overline{\eta_{j,\bm u}}\,\overline{a_\ell(\tau_j)}\,\ee^{+\ii\phi_{0j}}\,y_{cj}$ into the $L$ grids, one batched inverse FFT, crop, multiply by $\overline{D_\ell}$, sum over $\ell$, by $\overline{S_c}$, sum over $c$ (a fused multi-input crop pass). $A^\herm$ is consistent with $A$ to f32 rounding for all temporal options below.
-
-\paragraph{Spreading kernel.} The derivative form needs $\partial^\alpha\varphi$ up to order~4 bounded. The exponential-of-semicircle kernel $\ee^{\beta(\sqrt{1-z^2}-1)}$ is $C^0$ with $\sqrt{\cdot}$ singular derivatives at $|z|=1$; we clamp its derivative weights to zero for $|z|>0.98$ (without the clamp the 4th-derivative error is $46\times$ larger, $10^{-3}$ interpolation error). The Kaiser--Bessel kernel $I_0(\beta\sqrt{1-z^2})$ is entire in $z$ and needs no clamp. The accuracy of the \emph{interpolated} derivative degrades with order and with oversampling [measured, 1-D, relative error of value / $\partial^2$]:
-\begin{center}
-\begin{tabular}{cccc}
-\toprule
-oversampling $\sigma$ (grid volume vs.\ $\sigma{=}2$) & width $W$ & value & $\partial^2$\\
-\midrule
-2.0 (1.00) & 7 & $9\!\cdot\!10^{-7}$ & $8\!\cdot\!10^{-5}$\\
-2.0 & 9 & $1\!\cdot\!10^{-8}$ & $1.4\!\cdot\!10^{-6}$\\
-1.5 (0.42) & 10 & $6\!\cdot\!10^{-8}$ & $6\!\cdot\!10^{-5}$\\
-1.25 (0.24) & 10 & $2\!\cdot\!10^{-6}$ & $3\!\cdot\!10^{-5}$\\
-\bottomrule
-\end{tabular}
-\end{center}
-Since the correction term itself is $\lesssim0.2$~rad, $\partial^2$ accuracy $10^{-3}$ suffices, so the operator runs at $\sigma=1.25$, $W=10$ on a grid with a quarter of the $\sigma=2$ volume.
-
-\paragraph{Temporal interpolation.}
-A sample acquired at cardiac time $t$ between frames: $x(\rr,t)=\sum_fB_f(t)\,x_f(\rr)$ (periodic linear or cubic B-spline in cardiac phase, nodes at the frames). The sample then gathers from the $N_f=2$ (linear) or $4$ (cubic) neighbouring frame grids, with coefficients $a_\ell(\tau_j)B_f(t_j)$ over $L\times N_f$ channels. FFTs scale with the number of frames, not with $N_f$; gather/scatter work scales with $N_f$. This removes the encode-train skew (encodes of one frame are not simultaneous) and the bin-width blur from the model; velocities are formed from $x_e(t)$ and $x_{\rm ref}(t)$ at the same $t$.
-
-\paragraph{Implementation facts relevant to cost.}
-(i)~Fine grid stored channel-interleaved, $[\text{point}][c\cdot L+\ell]$, one partial-axis FFT over all channels, pad/crop fused over channels. (ii)~Exact tile$\to$sample lists (CSR): every $4^3$ tile of the grid lists the samples whose $W^3$ support meets it; long lists are split into work items. (iii)~Per sample one 48-byte record (shifted $\kk'$, $\tau$, $\phi_0$, $\Delta C$); the $15$ second-order coefficients are formed in the kernel. (iv)~Adjoint: thread per (tile point, coil) with $L$ accumulators, no atomics. (v)~Launch shapes come from a planner bounded by 48~KB shared memory per block and are refined by a short autotune; nothing is tuned to one GPU generation (kernels are generated at run time).
-
-\paragraph{Accuracy and cost [measured].} Accuracy against an f64 direct sum (16$\times$14$\times$10 voxels, 3 coils, B0 + $\tau$-linear quadratic + per-sample $\Delta C$ + $\phi_0$):
+The constant $\phi_{0j}$ becomes a sample phase and the linear part an exact shift $\kk_j'=\kk_j+\bm b_j$. The chirp $\chi_j=\bm\rho^{\!\top}\Delta C_j\bm\rho+c_j$ goes into the stencil.
+Phase budget of the full concomitant field, simulated 3~T spiral (80~mT/m, 36~cm FOV, 4.4~ms readout, 3~cm off-centre) [measured]:
 \begin{center}
 \begin{tabular}{lccc}
 \toprule
-Taylor order of $\Delta C$ term & $L=6$ & $L=8$ & $L=10$\\
+ & constant $\phi_0$ & linear $\bm b\!\cdot\!\bm\rho$ & quadratic (corners)\\
 \midrule
-0 (no correction) & $3.8\!\cdot\!10^{-2}$ & -- & --\\
-1 & $2.4\!\cdot\!10^{-3}$ & $1.7\!\cdot\!10^{-3}$ & $1.7\!\cdot\!10^{-3}$\\
-2 & $1.8\!\cdot\!10^{-3}$ & $8.5\!\cdot\!10^{-5}$ & $7.7\!\cdot\!10^{-5}$\\
+max over samples and FOV & 0.08 rad & 0.96 rad ($\le0.29$ cells) & 3.1 rad\\
 \bottomrule
 \end{tabular}
 \end{center}
-(order 0 with $L=4$: $7.2\!\cdot\!10^{-2}$.) The floor of each order is the dropped next term of \cref{eq:dexp}, independent of $L$; $L$ controls only the $\tau$-dependent part. With temporal interpolation (L=10, order 2): static $7.9\!\cdot\!10^{-5}$, linear (5 frames) $7.4\!\cdot\!10^{-5}$, cubic (6 frames) $7.8\!\cdot\!10^{-5}$.
-Cost on an RTX~4090, 180$\times$180$\times$28 grid, $M=2.2\!\cdot\!10^5$ samples, 12 coils (ms per call):
+Without GNL the quadratic fit residual $\varepsilon_j$ is zero. At GNL-warped positions it is $4.5\cdot10^{-3}$ rad rms ($0.056$ max) for degree 2, and degree 4 removes most of it (table in \cref{sec:stencil}).
+
+% -----------------------------------------------------------------------------
+\subsection{Time segments}
+\label{sec:segments}
+
+With segment diagonals $D_\ell(\rr)=\ee^{-\ii\psi(\rr,\tau_\ell)}$, $\ell=1..L$, the interpolators are the least-squares solution over the support $\Omega_s$~\cite{sutton2003}:
+\begin{equation}
+  \begin{gathered}
+  \bm a(\tau)=\argmin_{\bm a\in\CC^L}\sum_{\rr\in\Omega_s}\Bigl|\ee^{-\ii\psi(\rr,\tau)}-\sum_\ell a_\ell D_\ell(\rr)\Bigr|^2
+  \iff G\bm a(\tau)=\bm\beta(\tau),\\
+  G_{\ell\ell'}=\langle D_\ell,D_{\ell'}\rangle_{\Omega_s},\qquad\beta_\ell(\tau)=\langle D_\ell,\ee^{-\ii\psi(\cdot,\tau)}\rangle_{\Omega_s}.
+  \end{gathered}
+  \label{eq:lsq}
+\end{equation}
+$\bm a$ is tabulated at every ADC sample, which removes a $3$--$7\cdot10^{-4}$ table floor. The rank is set by the number of phase cycles $\Delta f\,T_{\rm ro}$ ($\Delta f$ the 1--99\,\% off-resonance span), not by resolution.
+Default: $L=\lceil1.3\,\Delta f\,T_{\rm ro}+3.5\rceil$. Model error against an f64 direct sum, smooth 450~Hz field [measured]:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+$L$ & 2 ms & 4 ms & 8 ms & 12 ms\\
+\midrule
+4 & $9\cdot10^{-4}$ & & & \\
+6 & $8\cdot10^{-6}$ & $2.5\cdot10^{-4}$ & $1.5\cdot10^{-2}$ & \\
+8 & & & $6\cdot10^{-4}$ & \\
+10 & & & $2.7\cdot10^{-5}$ & $8.9\cdot10^{-4}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+\paragraph{Optimal basis.} For fixed diagonals the interpolators \cref{eq:lsq} are already least-squares optimal at every $\tau$, so a better model can only come from the diagonals. Minimising $\sum_{\rr\in\Omega_s}\sum_i|g(\rr,\tau_i)-\sum_\ell D_\ell(\rr)a_\ell(\tau_i)|^2$ over both is a truncated SVD of $G=[g(\rr,\tau_i)]$ (Eckart--Young): with $V_L$ the leading right singular vectors,
+\begin{equation}
+  D_\ell(\rr)=\sum_ig(\rr,\tau_i)\,V_{i\ell},\qquad \bm a(\tau)\ \text{from \cref{eq:lsq} with these }D_\ell,
+\end{equation}
+optionally weighted by the expected signal energy per voxel. The diagonals are complex and the operator cost is unchanged. They are built once per encode, not per frame: $\psi$ depends on the readout time and the field, not on the frame's trajectory.
+Separable-model error on the simulator's field map (2.12 phase cycles, 3.56~ms; rms / worst $\tau$) [measured, CPU]:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+$L$ & 6 & 7 & 8 & 10\\
+\midrule
+fixed times & $5.6\cdot10^{-3}$ / $1.1\cdot10^{-2}$ & $2.0\cdot10^{-3}$ / $4.5\cdot10^{-3}$ & $6.0\cdot10^{-4}$ / $1.5\cdot10^{-3}$ & $3.5\cdot10^{-5}$ / $1.1\cdot10^{-4}$\\
+SVD basis & $3.6\cdot10^{-3}$ / $9.4\cdot10^{-3}$ & $1.3\cdot10^{-3}$ / $3.3\cdot10^{-3}$ & $3.5\cdot10^{-4}$ / $9.5\cdot10^{-4}$ & $1.4\cdot10^{-5}$ / $3.4\cdot10^{-5}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+At equal $L$ the SVD basis has about $0.6\times$ the error, worth roughly half a segment. The rank itself is bounded by the time--bandwidth product $\Delta f\,T_{\rm ro}$, so no separable $\sum_\ell D_\ell(\rr)a_\ell(\tau)$ needs fewer terms than the SVD. The segments are not tied to the concomitant handling: the stencils only see the per-sample deviation from $\psi$, whatever basis represents $\psi$.
+
+\paragraph{Species and decay in the diagonals.} Complex $\psi$ carries $R_2^*$ at no cost. Water and fat with a known fat fraction $f(\rr)$ and the six-peak spectrum $c(\tau)$ share one set of segments:
+\begin{equation}
+  D_\ell(\rr)=g_{\rr}(\tau_\ell),\qquad g_{\rr}(\tau)=\ee^{-\ii\psi(\rr,\tau)}\bigl(1-f(\rr)+f(\rr)\,c(\tau)\bigr).
+\end{equation}
+With this, $L=12$ gives $5.0\cdot10^{-4}$ and $L=14$ gives $6.3\cdot10^{-5}$. Two species with separate segments ($2L=16$ paths) give $6.5\cdot10^{-4}$ [measured, CPU].
+
+% -----------------------------------------------------------------------------
+\subsection{Chirp-aware stencils}
+\label{sec:stencil}
+
+After \cref{eq:split,eq:dC}, with $v_{c\ell}=S_cD_\ell x$, sample $j$ needs the \emph{modulated row}
+\begin{equation}
+  (Ax)_{cj}=\ee^{-\ii\phi_{0j}}\sum_\ell a_\ell(\tau_j)\sum_{\rr}v_{c\ell}(\rr)\,\ee^{-\ii\kk_j'\cdot\rr}\,\ee^{-\ii\chi_j(\rr)} .
+  \label{eq:modrow}
+\end{equation}
+The NUFFT represents a plane wave on $\Omega$ through the oversampled grid $\uu\in\ZZ^3/(\sigma N)$ and a window $\varphi$ with apodisation $\hat\varphi$~\cite{fessler2003,barnett2019}:
+$\ee^{-\ii\kk\cdot\rr}=\hat\varphi(\rr)^{-1}\sum_{\uu}\varphi(\kk-\uu)\ee^{-\ii\uu\cdot\rr}+\epsilon$. A modulated row needs a different set of taps:
+
+\begin{definition}[chirp-aware stencil]
+\label{def:stencil}
+$\Gamma_j:\ZZ^3\to\CC$, supported on $\|\uu-\kk_j'\|_\infty\le J/2$, with
+\begin{equation}
+  \sum_{\uu}\Gamma_j(\uu)\,\ee^{-\ii\uu\cdot\rr}\;\approx\;\hat\varphi(\rr)\,\ee^{-\ii\kk'_j\cdot\rr}\,\ee^{-\ii\chi_j(\rr)},\qquad\rr\in\Omega .
+  \label{eq:stencil}
+\end{equation}
+\end{definition}
+\noindent Then, with $G_{c\ell}=\Fs[\hat\varphi^{-1}S_cD_\ell x]$ (one oversampled FFT per channel),
+\begin{equation}
+  (Ax)_{cj}=\ee^{-\ii\phi_{0j}}\sum_{\uu}\Gamma_j(\uu)\sum_\ell a_\ell(\tau_j)\,G_{c\ell}(\uu),\qquad
+  \bigl(A^\herm y\bigr)=\sum_c\overline{S_c}\sum_\ell\overline{D_\ell}\,\hat\varphi^{-1}\Fs^\herm\Bigl[\sum_j\overline{\Gamma_j}\,\overline{a_\ell(\tau_j)}\,\ee^{\ii\phi_{0j}}y_{cj}\Bigr].
+  \label{eq:fwdadj}
+\end{equation}
+\emph{$\Gamma_j$ depends on neither the coil nor the segment.} It is evaluated once per (sample, tap) and reused for all $C\cdot L$ channels. $A^\herm$ is the exact transpose.
+A plain NUFFT has $\Gamma_j=\varphi(\kk_j'-\cdot)$. We use two constructions of $\Gamma_j$.
+
+\subsubsection*{(a) Taylor stencils: derivative weights of the window (production)}
+From $\rho^\alpha\ee^{-\ii\kk\cdot\bm\rho}=(\ii\partial_{\kk})^\alpha\ee^{-\ii\kk\cdot\bm\rho}$, any polynomial phase acts on the plane wave as a differential operator in $\kk$:
+\begin{equation}
+  \ee^{-\ii\chi(\bm\rho)}\ee^{-\ii\kk\cdot\bm\rho}=\sum_{n=0}^{P}\frac{(-\ii)^n}{n!}\,\chi(\ii\partial_{\kk})^n\,\ee^{-\ii\kk\cdot\bm\rho}+R_P,\qquad |R_P|\le\frac{|\chi|^{P+1}}{(P+1)!}.
+  \label{eq:taylor}
+\end{equation}
+Applied to the interpolant this gives the stencil in closed form:
+\begin{proposition}[Taylor stencil]
+\label{prop:dweights}
+Let $\Delta C:\nabla\nabla=\sum_{pq}\Delta C_{pq}\partial_{p}\partial_{q}$. Then
+\begin{equation}
+  \Gamma_j^{(P)}(\uu)=\Bigl[\,1+\ii\,\Delta C_j\!:\!\nabla\nabla-\tfrac12\bigl(\Delta C_j\!:\!\nabla\nabla\bigr)^2
+  -\ii\!\!\sum_{3\le|\alpha|\le4}\!\!\ii^{|\alpha|}\Bigl(\sum_q\Delta w_{jq}h_{q\alpha}\Bigr)\partial^\alpha\Bigr]\varphi(\bm\kappa-\uu)\Big|_{\bm\kappa=\kk_j'}
+  \label{eq:dstencil}
+\end{equation}
+($P=2$ uses the first three terms, and order~3 adds the last term to first order). The result is the exact derivative of the interpolant $\sum_{\uu}\varphi(\kk-\uu)G(\uu)$, not a finite difference. The error is $|\chi_j|^{P+1}/(P+1)!$ plus the window error of $\partial^\alpha\varphi$.
+\end{proposition}
+\begin{proof}
+$\chi=\bm\rho^{\!\top}\Delta C\bm\rho\Rightarrow\chi(\ii\partial)=-\Delta C:\nabla\nabla$. Insert into \cref{eq:taylor} for $n\le2$, use $\rho^\alpha\mapsto\ii^{|\alpha|}\partial^\alpha$ for $c_j$, and move $\partial_{\kk}$ onto $\varphi(\kk-\uu)$. (Checked against the exact chirped sum.)
+\end{proof}
+\noindent\emph{Separable evaluation.} $\partial^\alpha\varphi(\bm\kappa-\uu)=\prod_a\varphi^{(\alpha_a)}(\kappa_a-u_a)$, so
+\begin{equation}
+  \Gamma^{(P)}_j(\uu)=\sum_{|\alpha|\le4}\gamma_{j\alpha}\prod_{a=1}^3\varphi^{(\alpha_a)}(\kappa_{ja}-u_a),\qquad\gamma_j\in\CC^{35}.
+\end{equation}
+Each tap is a sum of 35 rank-one products of 1-D tables $\varphi^{(0..4)}$ (5 values per axis per tap). The coefficients come from the 6 numbers of $\Delta C_j$, their 15 distinct fourth-order products, and $u_j\in\RR^4$ with a $4\times25$ table $h$. Everything is formed in registers.
+\emph{Window.} Order 2 needs $\varphi^{(4)}$ bounded. The exponential of semicircle $\ee^{\beta(\sqrt{1-z^2}-1)}$ has $\sqrt{\cdot}$-singular derivatives at $|z|=1$, so they are clamped to $0$ for $|z|>0.98$, where $\varphi<10^{-7}$; without the clamp the fourth-derivative error is $46\times$ larger. Interpolated value and $\partial^2$ errors (1-D) [measured]:
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+$\sigma$ (grid volume vs.\ $\sigma{=}2$) & $W$ & value & $\partial^2$\\
+\midrule
+2.0 (1.00) & 7 & $9\cdot10^{-7}$ & $8\cdot10^{-5}$\\
+1.5 (0.42) & 10 & $6\cdot10^{-8}$ & $6\cdot10^{-5}$\\
+1.25 (0.24) & 10 & $2\cdot10^{-6}$ & $3\cdot10^{-5}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The correction term is $\lesssim0.2$~rad, so $\partial^2$ accuracy $10^{-3}$ suffices: $\sigma=1.25$, $W=10$.
+\emph{Accuracy} vs.\ an f64 direct sum (B0 + $\tau$-dependent quadratic + per-sample $\Delta C$ + $\phi_0$) [measured]:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+stencil order $P$ & $L=6$ & $L=8$ & $L=10$\\
+\midrule
+0 (plain window) & $3.8\cdot10^{-2}$ & -- & --\\
+1 & $2.4\cdot10^{-3}$ & $1.7\cdot10^{-3}$ & $1.7\cdot10^{-3}$\\
+2 & $1.8\cdot10^{-3}$ & $8.5\cdot10^{-5}$ & $7.7\cdot10^{-5}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Each order has a floor set by the dropped next term, independent of $L$. Full model with GNL ($L=20$, forward / adjoint) [measured, CPU emulation]:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+$B_0$ & 2.89 T & 1.5 T & 0.55 T\\
+\midrule
+order 2 (degree-2 fit) & $4.8\cdot10^{-3}$ / $8.3\cdot10^{-3}$ & $8.9\cdot10^{-3}$ / $1.5\cdot10^{-2}$ & $3.1\cdot10^{-2}$ / $7.0\cdot10^{-2}$\\
+order 3 (degree-4 fit) & $1.2\cdot10^{-3}$ / $2.2\cdot10^{-3}$ & $3.0\cdot10^{-3}$ / $6.5\cdot10^{-3}$ & $2.9\cdot10^{-2}$ / $7.3\cdot10^{-2}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+At 0.55~T, $|\chi_j|$ reaches 1--1.4 rad, which is beyond the Taylor range ($|\chi|^3/6$). That is the regime of construction (b).
+
+\subsubsection*{(b) Least-squares stencils for large chirps}
+For $|\chi|\gtrsim1$ we fit \cref{eq:stencil} directly on a lattice $\Omega_h$ of the FOV, with $\Phi_{\bm w}=\sum_qw_qm_q$:
+\begin{equation}
+  \Gamma(\cdot;\bm w,\bm\kappa)=\argmin_{\operatorname{supp}\Gamma\subset\bm\kappa+[-S,S]^3}\;\sum_{\rr\in\Omega_h}\Bigl|\sum_{\uu}\Gamma(\uu)\ee^{-\ii\uu\cdot\rr}-\hat\varphi(\rr)\ee^{-\ii\bm\kappa\cdot\rr-\ii\Phi_{\bm w}(\rr)}\Bigr|^2+\varrho\|\Gamma\|^2 .
+\end{equation}
+Write $\Gamma=\varphi\star\hat g(\cdot;\bm w)$, where $\hat g$ is the compact spectrum of the chirp over the FOV. The family $\{\hat g(\cdot;\bm w)\}_{\bm w\in\mathcal W}$ is compressed by a POD basis $\{B_l\}_{l\le L_p}$ with DEIM points $\{\rr_i\}$:
+\begin{equation}
+  \hat g(\cdot;\bm w)\approx\sum_{l=1}^{L_p}\beta_l(\bm w)B_l,\qquad
+  \bm\beta(\bm w)=\bigl[B_l(\rr_i)\bigr]_{il}^{-1}\bigl[\ee^{-\ii\Phi_{\bm w}(\rr_i)}\bigr]_i .
+\end{equation}
+Per sample this costs $L_p$ sincos, one $L_p\times L_p$ solve and an $L_p\times(2S{+}1)^3$ contraction, followed by a separable convolution with $\varphi$.
+The fitted stencil is much narrower than a DFT of a windowed chirp: $S=3$--$4$ instead of $8$--$10$ for $10^{-3}$ at 1 rad. Training on the sequence's own $\bm w_j$ instead of the coefficient box gives $L_p=31\to13$.
+Taps per axis $J$ at tolerance $10^{-3}$ (1-D, least-squares stencil with a shared correction function) [measured]:
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+$\Phi_{\max}$ [rad] & 0 & 1 & 2 & 4 & 8\\
+\midrule
+$J$ at $\sigma=2$ & 4 & 8 & 10 & 13 & 18\\
+$J$ at $\sigma=1.25$ & 8 & 8 & 10 & 14 & 18\\
+\bottomrule
+\end{tabular}
+\end{center}
+At $\sigma=1.25$ a chirp up to about 1 rad is free, because the plain stencil is already 8 wide. Beyond that $J\approx\max(J_{\rm plain},\text{chirp spread})$.
+In k-space the Gram matrix is banded, $\hat\Nop=\Gamma^\herm\Gamma$, with bandwidth equal to the stencil support. The diagonal fields ($z^2$, $x^2{+}y^2$) give an exactly separable $\hat g$; with the cross terms the CP rank is 3--4 at $10^{-3}$.
+\emph{Status} [measured, $N=128$, $K=10^6$, $C=8$, $S=3$]: $A^\herm A=18.2$~ms/coil (39 plain-Toeplitz applications) with stored fp16 stencils and a tiled scatter. This is the only construction with one FFT pair per coil independent of $\Phi$ and $L$. It handles the concomitant phase only, with no B0 segments yet.
+
+\subsubsection*{Choice}
+\begin{center}\small
+\begin{tabular}{lcccl}
+\toprule
+construction & FFT pairs/coil & taps/sample & valid for & status\\
+\midrule
+Taylor, $P=2$ & $L$ & $W^3$ & $|\chi|\lesssim0.7$ & production\\
+Taylor, order 3 & $L$ & $W^3$ & + GNL residual & built\\
+least squares & 1 & $(2S{+}W)^3$ & $\Phi\lesssim8$ & built, no B0\\
+Weyl/Toeplitz (\cref{sec:weyl}) & 4--35 & 0 & $\Phi\lesssim3$ & built, unused\\
+\bottomrule
+\end{tabular}
+\end{center}
+Not built: least-squares stencils for the post-split residual $\chi_j$ inside the segmented operator. That would combine $L$ B0 segments with $|\chi|>1$ (low field, strong GNL).
+
+% -----------------------------------------------------------------------------
+\subsection{The full operator}
+\label{sec:fullop}
+
+Time-resolved sets add a periodic B-spline in cardiac time, $x(\rr,t)=\sum_fB_f(t)x_f(\rr)$, linear ($N_f=2$) or cubic ($N_f=4$):
+\begin{equation}
+  (Ax)_{cj}=\ee^{-\ii\phi_{0j}}\sum_{\uu}\Gamma_j(\uu)\sum_{f\in\mathcal F(t_j)}B_f(t_j)\sum_{\ell=1}^La_\ell(\tau_j)\,G_{cf\ell}(\uu),\qquad
+  G_{cf\ell}=\Fs\bigl[\hat\varphi^{-1}S_cD_\ell x_f\bigr].
+  \label{eq:full}
+\end{equation}
+FFTs scale with the number of frames and gather/scatter with $N_f$. Several images on the same samples share one tile pass:
+$y=\sum_kw_k\odot Ax_k$, $x_k=A^\herm(\bar w_k\odot y)$, $k\le4$ (separate-species fat: $w_{\rm fat}=c(\tau_j)$).
+The adjoint accumulates per tile without atomics (exact CSR tile$\to$sample lists).
+Cost per call, RTX 4090, $180\times180\times28$, $M=2.2\cdot10^5$, 12 coils [measured, ms]:
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
 operator & forward & adjoint\\
 \midrule
 plain NUFFT, $\sigma{=}2$, $W{=}6$ & 6.0 & 24.7\\
-plain NUFFT, $\sigma{=}1.25$, $W{=}10$ & 7.1 & 89\\
-segmented, $L{=}1$, order 0 & 5.7 & 8.7\\
-segmented, $L{=}8$, orders 0 / 1 / 2 & 30.1 / 30.9 / 31.7 & 31.2 / 31.8 / 30.1\\
-segmented, $L{=}10$ / $12$, order 2 & 40.4 / 49.2 & 35.3 / 41.0\\
+segmented, $L{=}1$, $P{=}0$ & 5.7 & 8.7\\
+segmented, $L{=}8$, $P=0/1/2$ & 30.1 / 30.9 / 31.7 & 31.2 / 31.8 / 30.1\\
+segmented, $L{=}10/12$, $P{=}2$ & 40.4 / 49.2 & 35.3 / 41.0\\
 \bottomrule
 \end{tabular}
 \end{center}
-The second-order correction is essentially free ($o2\approx o0$) because the weights are shared by all coils and segments; the cost is the $L$ FFT pairs and the memory-bound pad/FFT/crop passes (about half of the call). Time-resolved: 20 frames, $4.4\!\cdot\!10^6$ samples per encode, $L=8$, order 2: 0.98/0.93~s (linear) and 1.9/1.9~s (cubic) per forward/adjoint pair, against 0.62/0.59~s for 20 static per-frame calls.
+The $P=2$ stencil costs the same as $P=0$ because $\Gamma_j$ is shared by all $C\cdot L$ channels. About half of the call is the memory-bound pad/FFT/crop.
 
-\subsection{Algebra of the normal operator: Toeplitz structure, commutators, Weyl symbol}
-\label{sec:weyl}
-
-The reconstruction needs $\Nop=A^\herm A$ in two roles: the iteration gradient $\nabla f(x)=\Nop x-A^\herm y$ and the preconditioner. Because $A_j$ is coil-free and the coil maps are pointwise multiplications, with $\Nop_0=A_{\rm samp}^\herm A_{\rm samp}$ the sample-side Gram operator,
-\begin{equation}
-  \Nop=\sum_{c}\,\overline{S_c}\,\Nop_0\,S_c ,
-  \label{eq:coilsum}
-\end{equation}
-i.e.\ the coil sum is the \emph{outermost} loop; the segment interpolators, kernels, and everything below are coil-free. Hence everything in this subsection is stated for one sample-side operator $\Nop_0=:\Nop$ with sample weights $\varpi_j\ge0$ ($\varpi_j\equiv1$ in our pipeline; the choice of $\varpi$ is a preconditioning question, not part of the model).
-
-\subsubsection*{Setting}
-Let $\Xop_a$ be multiplication by coordinate $r_a$, $\Pop=-\ii\nabla$ the translation generator, and for a kernel $g(\DD)$ let
-$\Top{g}\rho(\rr)=\sum_{\rr'}g(\rr-\rr')\rho(\rr')$ be the Toeplitz (convolution) operator. For a plane wave $\Top{\ee^{\ii\kk_j\cdot\DD}}\rho=\ee^{\ii\kk_j\cdot\rr}\hat\rho(\kk_j)$ is rank one. From \cref{eq:signal}, with
-$\Phi_j=\Theta_j-\kk_j\!\cdot\!\rr$ the non-trajectory part,
-\begin{equation}
-  \Nop(\rr,\rr')=\sum_j\varpi_j\,\ee^{\ii\kk_j\cdot(\rr-\rr')}\,\ee^{\ii(\Phi_j(\rr)-\Phi_j(\rr'))},\qquad
-  \Nop=\sum_j\varpi_j\,\Qop_j\,\Top{\ee^{\ii\kk_j\cdot\DD}}\,\Qop_j^\herm,\quad \Qop_j=\ee^{+\ii\Phi_j(\Xop)} .
-  \label{eq:Nj}
-\end{equation}
-For $\Phi_j\equiv0$ this is $\Top{\sum_j\varpi_j\ee^{\ii\kk_j\cdot\DD}}$: the PSF kernel, a single FFT-diagonal operator (the ``Toeplitz embedding''). All physics enters through the conjugations $\Qop_j$.
-For the exact statements below we take $\Phi_j=\sum_qw_{jq}m_q$, the quadratic (concomitant) part; the $\omega(\rr)\tau_j$ part is carried by the segment diagonals (\cref{sec:split}) or treated at first order (remark in \cref{sec:weyl}).
-
-\begin{lemma}[commutator of a coordinate with a Toeplitz operator]
-\label{lem:comm}
-$[\Xop_a,\Top{g}]=\Top{\Delta_a g}$, hence $\ad_{\Xop}^{\beta}\Top{g}=\Top{\DD^\beta g}$ for any multi-index $\beta$.
-\end{lemma}
-\begin{proof}
-$([\Xop_a,\Top g]\rho)(\rr)=\sum_{\rr'}(r_a-r'_a)g(\rr-\rr')\rho(\rr')$. Iterate. (Checked numerically to $6\!\cdot\!10^{-14}$.)
-\end{proof}
-
-\begin{lemma}[midpoint identity for quadratic phases]
-\label{lem:mid}
-If $\Phi(\rr)=\tfrac12\rr^{\!\top}\!M\rr+\bm b\!\cdot\!\rr+c$ with $M=M^{\!\top}$, then with $\bar{\rr}=(\rr+\rr')/2$ and $\DD=\rr-\rr'$,
-\[
-  \Phi(\rr)-\Phi(\rr')=\nabla\Phi(\bar{\rr})\cdot\DD=(M\bar{\rr}+\bm b)\cdot\DD\qquad\text{(exact)}.
-\]
-\end{lemma}
-\begin{proof}
-$\tfrac12(\rr^{\!\top}\!M\rr-\rr'^{\!\top}\!M\rr')=\tfrac12(\rr+\rr')^{\!\top}\!M(\rr-\rr')$ for symmetric $M$; the linear part is $\bm b\cdot\DD$.
-\end{proof}
-The concomitant monomials $m_q$ are quadratic, hence \cref{lem:mid} applies to $\Phi_j=\sum_qw_{jq}m_q$ with $M_j=\sum_qw_{jq}H_q$, $H_q=\nabla^2m_q$ constant (e.g.\ $H_{z^2}=\diag(0,0,2)$). The same holds for the quadratic part of any smooth $\psi$ after Taylor expansion about the FOV centre; for general $\psi$ the identity holds to first order with $\nabla\psi(\bar{\rr})$ and remainder $O(\Delta^3\partial^3\psi)$.
-
-\begin{proposition}[exact Weyl symbol of $\Nop$]
-\label{prop:weyl}
-Define the Weyl symbol of an operator with kernel $K$ by $\sigma_K(\bar{\rr},\kk)=\sum_{\DD}K(\bar{\rr}+\DD/2,\bar{\rr}-\DD/2)\ee^{-\ii\kk\cdot\DD}$. For quadratic $\Phi_j$,
-\begin{equation}
-  \sigma_{\Nop}(\bar{\rr},\kk)=\sum_j\varpi_j\;\delta\bigl(\kk-\kk_j-M_j\bar{\rr}-\bm b_j\bigr),\qquad
-  \Nop=\sum_j\varpi_j\,\delta(\Pi_j-\kk_j),\quad \Pi_j=\Pop-M_j\Xop-\bm b_j,
-  \label{eq:symbol}
-\end{equation}
-with no $\hbar$-type corrections. The three components of $\Pi_j$ commute because $M_j$ is symmetric.
-\end{proposition}
-\begin{proof}
-By \cref{lem:mid} the kernel of the $j$-th term is $\varpi_j\ee^{\ii(\kk_j+M_j\bar{\rr}+\bm b_j)\cdot\DD}$, whose symbol is the delta function in \cref{eq:symbol}. For the operator form, $\Qop_j\Pop\Qop_j^\herm=\Pop-\nabla\Phi_j(\Xop)$ (compute $\ee^{\ii\Phi}(-\ii\nabla)(\ee^{-\ii\Phi}f)=\Pop f-\nabla\Phi\,f$), so $\Pi_j=\Qop_j\Pop\Qop_j^\herm$ with $\nabla\Phi_j(\Xop)=M_j\Xop+\bm b_j$, and $\Qop_j\Top{\ee^{\ii\kk_j\cdot\DD}}\Qop_j^\herm$ is the rank-one projector on the eigenfunction $\ee^{\ii\kk_j\cdot\rr+\ii\Phi_j(\rr)}$ of $\Pi_j$ with eigenvalue $\kk_j$. Commutation: $[\Pi_{j,a},\Pi_{j,b}]=[P_a,-(M_j\Xop)_b]+[-(M_j\Xop)_a,P_b]=\ii(M_{j,ba}-M_{j,ab})=0$.
-\end{proof}
-\emph{Interpretation.} Conjugation by $\ee^{\ii\Phi(\Xop)}$ with quadratic $\Phi$ is a metaplectic operator, which acts on phase space as the \emph{linear symplectic shear} $(\rr,\kk)\mapsto(\rr,\kk-\nabla\Phi(\rr))$; Weyl symbols transform exactly under linear symplectic maps (Egorov's theorem is exact for metaplectic operators~\cite{folland1989}). So the concomitant field turns the sample $\kk_j$ into a \emph{plane in phase space that is tilted by $M_j$}: at position $\bar{\rr}$ the sample is seen at the shifted frequency $\kk_j+M_j\bar{\rr}+\bm b_j$. This is the exact content of ``the PSF is spatially varying: the effective trajectory at $\bar{\rr}$ is $\kk_j^{\rm eff}(\bar{\rr})=\kk_j+M_j\bar{\rr}+\bm b_j$'', linear in $\bar{\rr}$. For non-polynomial $\psi$ (B0, GNL) the shear is nonlinear and composition produces $\hbar^2$-type terms of order $\partial^3\psi$: this is the origin of the remainder in \cref{lem:mid}.
-
-\begin{proposition}[commutator expansion]
-\label{prop:comm}
-Let $\Phi_j=\sum_qw_{jq}m_q$, $\alpha\in\mathbb N^4$ a multi-index, $\alpha!=\prod\alpha_q!$, $w_j^\alpha=\prod w_{jq}^{\alpha_q}$, and define the moment-weighted Toeplitz operators
-$\mathsf T^\alpha=\Top{g^\alpha}$, $g^\alpha(\DD)=\sum_j\varpi_jw_j^\alpha\ee^{\ii\kk_j\cdot\DD}$. Then
-\begin{equation}
-  \Nop \;=\; \sum_{\alpha}\frac{\ii^{|\alpha|}}{\alpha!}\;\ad_{m_1}^{\alpha_1}\!\cdots\ad_{m_4}^{\alpha_4}\,\mathsf T^\alpha
-  \;=\;\mathsf T^0+\ii\sum_{q}[m_q(\Xop),\mathsf T^{e_q}]-\tfrac12\sum_{q,q'}[m_q,[m_{q'},\mathsf T^{e_q+e_{q'}}]]+\cdots
-  \label{eq:commexp}
-\end{equation}
-where $\ad_m=[m(\Xop),\cdot\,]$.
-\end{proposition}
-\begin{proof}
-Hadamard's lemma $\ee^{\ii A}T\ee^{-\ii A}=\sum_n\frac{\ii^n}{n!}\ad_A^nT$ with $A=\Phi_j(\Xop)=\sum_qw_{jq}m_q(\Xop)$. The $m_q(\Xop)$ are commuting multiplication operators, so $\ad_{m_q}$ and $\ad_{m_{q'}}$ commute (Jacobi: $[\ad_A,\ad_B]=\ad_{[A,B]}=0$), and the multinomial theorem gives $\ad_A^n=\sum_{|\alpha|=n}\frac{n!}{\alpha!}w_j^\alpha\ad_m^\alpha$. Sum over $j$. (Checked: the series reproduces the exact dense $\Nop$ to $5\!\cdot\!10^{-12}$ at order 8 on a 1-D test with $\max\Phi=0.4$.)
-\end{proof}
-Each term of \cref{eq:commexp} is a nested commutator of \emph{diagonal} operators (the $m_q$, products of coordinates) with \emph{base} Toeplitz operators whose kernels $g^\alpha$ are the sample PSF re-weighted by monomials of the coefficients. Order exactly $n$ has $\binom{n+3}{3}$ multi-indices over the four monomials, so $\binom{n+4}{4}$ base kernels through order $n$ -- not $L^2$.
-
-\paragraph{The $\Delta$-form: diagonals are coordinate monomials only.}
-By \cref{lem:mid} the pair phase vanishes on the diagonal $\DD=0$ and is \emph{linear in $\DD$}; expand $\ee^{\ii(\Phi_j(\rr)-\Phi_j(\rr'))}$ in the pair phase instead of in $\Phi_j$:
-\begin{equation}
-  \Nop=\sum_{n\ge0}\mathsf K_n,\qquad
-  K_n(\rr,\rr')=\frac{\ii^n}{n!}\sum_j\varpi_j\bigl[(M_j\bar{\rr}+\bm b_j)\!\cdot\!\DD\bigr]^n\ee^{\ii\kk_j\cdot\DD}
-  =\sum_{|\beta|\le n}\bar{\rr}^{\beta}\;g_{n,\beta}(\DD),
-  \label{eq:deltaform}
-\end{equation}
-with $g_{n,\beta}$ \emph{moment kernels} (the sample PSF weighted by polynomials in $\DD$ and in the coefficients of $M_j$, $\bm b_j$). Since
-$\bar{\rr}^{\beta}=2^{-|\beta|}\sum_{\gamma\le\beta}\binom\beta\gamma r^\gamma r'^{\,\beta-\gamma}$, the operator with kernel $\bar{\rr}^\beta g(\DD)$ is the \emph{Weyl-symmetrised product}
-$2^{-|\beta|}\sum_{\gamma\le\beta}\binom\beta\gamma\,\Xop^\gamma\,\Top g\,\Xop^{\beta-\gamma}$; for $|\beta|=1$ it is $\tfrac12\{\Xop_a,\Top g\}$. Consequences:
-\begin{enumerate}
-  \item \emph{Exact Hermitian structure.} Under $\rr\leftrightarrow\rr'$ ($\bar{\rr}$ fixed, $\DD\to-\DD$) $K_n(\rr',\rr)=\overline{K_n(\rr,\rr')}$ for every $n$, so \emph{every truncation is exactly Hermitian}, with no symmetrisation step. (Checked, $0$ to machine precision.)
-  \item \emph{FFT count.} Order $n$ needs the transforms of $\Xop^\beta\rho$ for $|\beta|\le n$ and one inverse transform per output monomial: $\binom{n+3}{3}$ FFT pairs (4, 10, 20, 35 for $n=1,\dots,4$), independent of the number of samples and of $L$.
-  \item \emph{Truncation.} $|\Phi_j(\rr)-\Phi_j(\rr')|\le2\Phi_{\max}$ gives the pointwise remainder $\le\sum_j\varpi_j(2\Phi_{\max})^{n+1}/(n+1)!$ -- the expansion parameter is the \emph{pair} phase, which is small where $\Nop$ has weight (near the diagonal), rather than $\Phi$ itself.
-\end{enumerate}
-
-\paragraph{First order, explicitly.} With $\Phi_j=\sum_qw_{jq}m_q$ and \cref{lem:mid},
-\[
-  \ii\sum_q[m_q(\Xop),\mathsf T^{e_q}]=\frac{\ii}{2}\sum_{q}\sum_{a,b}(H_q)_{ab}\bigl\{\Xop_a,\;\Top{\Delta_b\,g^{e_q}}\bigr\}
-  =\frac{\ii}{2}\sum_{q,a}\bigl\{\partial_am_q(\Xop),\;\Top{\Delta_a g^{e_q}}\bigr\}
-\]
-(using $[m_q,\Top g]$ has kernel $\nabla m_q(\bar{\rr})\cdot\DD\,g$ by \cref{lem:mid}, and $\nabla m_q$ is linear). The distinct kernels are $\Delta_zg^{1};\Delta_xg^{2},\Delta_yg^{2};\Delta_xg^{3},\Delta_zg^{3};\Delta_yg^{4},\Delta_zg^{4}$: \textbf{7 kernels}. The evaluation is: forward transforms of $\rho,\,x\rho,\,y\rho,\,z\rho$ (4); in k-space multiply by the 7 kernels (and by $g^0$ for the base term); inverse transforms: one for the sum of everything that is already multiplied from the right by a coordinate, and one per coordinate $a$ for the terms that still need the left multiplication $\Xop_a$ (4 inverse). \textbf{4 FFT pairs} per coil recover $\approx94\%$ of the concomitant effect at $\Phi_{\max}=0.3$~rad; 10 pairs (order 2) $\approx99.7\%$ [measured, 8$^3$ toy].
-
-\paragraph{Second order, explicitly.} The $n=2$ term of \cref{eq:commexp} is $-\tfrac12\sum_{q,q'}[m_q,[m_{q'},\mathsf T^{e_q+e_{q'}}]]$; its kernel is $-\tfrac12\bigl(\nabla m_q(\bar{\rr})\!\cdot\!\DD\bigr)\bigl(\nabla m_{q'}(\bar{\rr})\!\cdot\!\DD\bigr)g^{e_q+e_{q'}}(\DD)$, and with $r_c r_d\mapsto\tfrac14\{\Xop_c,\{\Xop_d,\cdot\}\}$ (the kernel of $\{\Xop_c,\{\Xop_d,A\}\}$ is $4\bar r_c\bar r_dA$),
-\[
-  \mathsf K_2=-\frac18\sum_{q,q'}\sum_{a,b,c,d}(H_q)_{ac}(H_{q'})_{bd}\;\bigl\{\Xop_c,\{\Xop_d,\;\Top{\Delta_a\Delta_b\,g^{e_q+e_{q'}}}\}\bigr\}.
-\]
-It needs the $10$ monomials of degree $\le2$ ($1,x,y,z,x^2,xy,\dots$) and therefore $10$ FFT pairs per coil; the distinct moment kernels $\Delta_a\Delta_bg^{e_q+e_{q'}}$ number $36$ at $n=2$ (and $119$, $322$ at $n=3,4$) [counted in the implementation]. At $N=128$ the fused multi-field pass does not fit shared memory for $n\ge2$ and falls back to the unfused path (14.9~ms/coil, $32\times$ a plain fused convolution, against 3.1~ms/coil for $n=1$) [measured]; at $N=320$ the kernel memory ($2$~GB per padded field) is what binds first. For the one-segment case the same structure is the nested form $-\tfrac12\sum\{\Xop_p,\{\Xop_s,[\Xop_q,[\Xop_t,S]]\}\}$ of \cref{sec:toeplitzseg}.
-
-\paragraph{Fourier-domain reading.} Under $\Xop_a\mapsto\ii\partial_{k_a}$ the order-1 term is a first-order differential operator in $\kk$ acting on $\hat\rho$,
-$-\ii\sum_{q,a,b}(H_q)_{ab}\bigl[\partial_b\hat g^{q}\,\partial_a\hat\rho+\tfrac12\partial_a\partial_b\hat g^{q}\,\hat\rho\bigr]$ (from $\Xop_a\mapsto\ii\partial_{k_a}$, $\Top{\Delta_ag}\mapsto\ii\partial_a\hat g$) with $\hat g^q$ the gridded sample density weighted by $w_q$. The kernel derivatives are exact (multiply the kernel by $\Delta_b$ before its FFT); \emph{finite differences of $\hat\rho$ on the FFT grid are a trap}: the image occupies up to half of the $2N$ padded box, so $\hat\rho$ is sampled at only $2\times$ Nyquist and a central difference near the FOV edge has $\sim40\%$ error, while $\mathcal F\{x_a\rho\}$ is exact and cheaper. The multiplier $\hat g$ is rough (it fills the whole $2N$ period) and cannot be differenced either.
-
-\subsubsection{Segmented Toeplitz form with kernel-free weights, first and second order}
-\label{sec:toeplitzseg}
-For one time segment $\ell$ let $T_\ell=\Top{\sum_na_{\ell n}\ee^{\ii\kk_n\cdot\DD}}$ ($a_{\ell n}$: sample weight times interpolation coefficient) and let the per-sample residual be quadratic, $\psi_n(\rr)=\rr^{\!\top}C_n\rr$ ($C_n=\Delta C_n$ of \cref{eq:dC}). By \cref{lem:mid} with $M=2C_n$, the pair phase is $\psi_n(\rr)-\psi_n(\rr')=2\bar{\rr}^{\!\top}C_n\DD$, so with $\{\Xop_p,A\}$ having kernel $2\bar r_pA$,
-\begin{equation}
-  \Nop_\ell\approx T_\ell+\ii\sum_{pq}\{\Xop_p,[\Xop_q,S_{\ell,pq}]\}-\tfrac12\sum_{pqst}\{\Xop_p,\{\Xop_s,[\Xop_q,[\Xop_t,S_{\ell,pq,st}]]\}\},
-  \label{eq:toepseg}
-\end{equation}
-$S_{\ell,pq}=\Top{\sum_na_{\ell n}(C_n)_{pq}\ee^{\ii\kk_n\cdot\DD}}$, $S_{\ell,pq,st}=\Top{\sum_na_{\ell n}(C_n)_{pq}(C_n)_{st}\ee^{\ii\kk_n\cdot\DD}}$ (first and second order of $\ee^{\ii\,2\bar{\rr}^{\!\top}C_n\DD}$). \textbf{No new kernel is stored} if the coefficients are a compact function of the sample position, $(C_n)_{pq}\approx c_{pq}(\kk_n)$: since $(-\ii\partial_{\DD})^\alpha\ee^{\ii\kk\cdot\DD}=\kk^\alpha\ee^{\ii\kk\cdot\DD}$, $S_{\ell,pq}=c_{pq}(-\ii\nabla_{\DD})T_\ell$, whose Fourier multiplier is $\sigma_{\ell,pq}(\bm\xi)=c_{pq}(\bm\xi)\tau_\ell(\bm\xi)$ with $\tau_\ell=\mathcal F\{T_\ell\}$ the stored FFT multiplier; likewise $\sigma_{\ell,pq,st}=c_{pq}c_{st}\tau_\ell$. With $V_\ell=\mathcal F\{D_\ell x\}$ and $\Xop_p\mapsto\ii\partial_{\xi_p}$, $\Top{\Delta_ag}\mapsto\ii\partial_a\hat g$ (derived by hand; the two formulas below checked symbolically in 1-D),
-\begin{align}
-  \mathcal F\bigl\{\ii\{\Xop_p,[\Xop_q,S]\}v\bigr\}&=-\ii\bigl[(\partial_{pq}\sigma)V+2(\partial_q\sigma)(\partial_pV)\bigr],\\
-  \mathcal F\bigl\{-\tfrac12\{\Xop_p,\{\Xop_s,[\Xop_q,[\Xop_t,S]]\}\}v\bigr\}&=-\tfrac12\bigl[(\partial_{qtsp}\sigma)V+2(\partial_{qts}\sigma)(\partial_pV)+2(\partial_{qtp}\sigma)(\partial_sV)+4(\partial_{qt}\sigma)(\partial_{sp}V)\bigr].
-\end{align}
-So the corrected segment is formed pointwise from derivatives of the \emph{existing} arrays $\tau_\ell$ and $V_\ell$ and returned by the same inverse FFT: the transform count stays $2L$, with no extra kernel or NUFFT. What it does and does not need (status: structural derivation plus the representability measurements below; the operator-level accuracy against the exact $\Nop$ has \emph{not} been measured):
-\begin{itemize}
-  \item \emph{Representability of $C_n$ by $c(\kk_n)$} [measured, stack of spirals, worst phase error at the FOV corner]: constant 0.97~rad; polynomial in $\kk$ of degree 2 (10 terms) 0.066~rad; degree 4 (35 terms) 0.061~rad. $C$ depends on $|\kk_{xy}|$ through the readout time, on $k_z$ through the blip, and on the encode through the bipolar. A polynomial in readout time $\tau$ of degree 6 is worse (0.18~rad): $\kk$ is the better variable. For readouts rotated in 3D the plane normal is not a function of $\kk$ and several groups $c_h(\kk)$ are needed (\cref{sec:limits}).
-  \item \emph{Derivatives.} $V_\ell$ is smooth ($2\times$ oversampled, image support $\le$ half the box) and can be differenced: optimal antisymmetric/symmetric stencils reach $6\!\cdot\!10^{-3}/7\!\cdot\!10^{-4}$ (1st/2nd derivative) with 7 taps, $10^{-3}/10^{-4}$ with 9, $2\!\cdot\!10^{-4}/10^{-5}$ with 11 [measured]; 4th-derivative stencils were not measured. But $\tau_\ell$ fills the whole $2N$ period and is \emph{not} smooth, so $\partial\tau_\ell,\partial^2\tau_\ell$ (and up to $\partial^4$ at second order) cannot be differenced: they are precomputed derivative kernels, $3+6$ per segment through second derivatives and $35$ per segment through fourth (derived: $1{+}3{+}6{+}10{+}15$ monomials of degree $\le4$), shared by all index pairs.
-  \item \emph{The segment sum does not commute with the derivatives:} $D_\ell$ differs between segments, so $\partial_pV_\ell$ cannot be merged into one derivative after the sum over $\ell$; only the three first (six second) derivatives per segment are needed and are reused across all index pairs.
-\end{itemize}
-\emph{Decision.} For time-resolved reconstruction ($\approx80$ sets) the per-set kernels $\tau_\ell$ and the derivative kernels exceed GPU memory while each set has few samples, so the production operator is the sample-domain form of \cref{sec:segnufft} (derivative \emph{weights} in the interpolation kernel, no finite differences, no $c(\kk)$ model, $\Delta C_n$ used per sample). \cref{eq:toepseg} is the Toeplitz counterpart for large-$K$, few-set problems (time-averaged warm start) and the cheap surrogate of \cref{sec:iteration}.
-
-\subsubsection*{How the pieces relate}
-\begin{itemize}
-  \item \emph{Sample-domain vs.\ normal-operator corrections are the same Taylor idea in different variables.} On the $A$ side there is only the \emph{single} phase $\rr^{\!\top}\!\Delta C\rr$ (expansion centre: the FOV centre), so the series \cref{eq:dexp} is only usable for the small residual; the large smooth part is carried exactly by the segments. On the $\Nop$ side the natural variable is the \emph{pair} phase (\cref{lem:mid}), which vanishes on the diagonal; the expansion is correspondingly twice as efficient at equal FFT count [measured, below]. Both have the same structure at every order: derivative weights of order $2n$ in $\kk$ $\leftrightarrow$ coordinate-monomial diagonals of degree $2n$ in $\rr$ (so second order on the $A$ side uses the 15 fourth-derivative products, and \cref{eq:toepseg} the nested four-fold (anti)commutators).
-  \item \emph{Off-resonance at first order.} For $\psi=\omega(\rr)\tau_j$: $\Nop\approx\Nop^0+\tfrac{\ii}{2}\sum_a\{\partial_a\omega(\Xop),\Top{\Delta_ag^\tau}\}$ with $g^\tau=\sum_j\varpi_j\tau_j\ee^{\ii\kk_j\cdot\DD}$: 3 diagonals, 3 kernels; remainder $O(\Delta^3\partial^3\omega)$. Useful as a cheap correction, not as a replacement for segments at $\omega\tau$ of several radians.
-  \item \emph{Time-segmented normal operator.} Using the segment form, $\Nop\approx\sum_{\ell,\ell'}D_\ell^\herm\,\Top{g_{\ell\ell'}}\,D_{\ell'}$ with $g_{\ell\ell'}=\sum_j\varpi_j\overline{a_\ell(\tau_j)}a_{\ell'}(\tau_j)\ee^{\ii\kk_j\cdot\DD}$ (Hermitian in $\ell\leftrightarrow\ell'$: $L(L+1)/2$ kernels, $L$ FFT pairs per coil). This is the Fessler--Sutton--Noll form~\cite{fessler2005}. For the \emph{time-resolved} reconstruction (here $\approx80$ sets $=$ 20 frames $\times$ 4 encodes) it needs $\mathcal O(L^2)$ kernels \emph{per set}, which does not fit GPU memory, while each set has few samples ($\approx2\!\cdot\!10^5$ versus $9\!\cdot\!10^5$ voxels), so the gather/scatter the Toeplitz form saves is cheap. Both forms need the same $L$ FFT pairs per coil. \textbf{For time-resolved reconstruction we therefore use the NUFFT form (\cref{sec:segnufft})}; the Toeplitz form is attractive for large-$K$, few-set problems (time-averaged warm start).
-  \item \emph{Taylor of $\ee^{-\ii\Phi}$ (``multinomial'') and its Hankel structure.} Expanding each factor, $\ee^{-\ii\Phi_j}=\sum_\alpha c_\alpha(j)F_\alpha$, gives $\Nop=\sum_{\alpha,\alpha'}\frac{\ii^{|\alpha|-|\alpha'|}}{\alpha!\alpha'!}F_\alpha^\herm\,\mathsf T^{\alpha+\alpha'}F_{\alpha'}$, with the kernel depending only on $\alpha+\alpha'$ (Hankel): $\binom{4+2P}{2P}$ kernels instead of $L(L+1)/2$, but $\binom{4+P}{P}$ fields (FFT pairs) at order $P$ -- twice as many pairs as the Weyl form at equal accuracy.
-\end{itemize}
-
-\paragraph{Operator accuracy versus FFT pairs [measured; 8$^3$ voxels, 960 samples, random $SO(3)$-rotated spirals, $\Phi$ rescaled; relative error $\|\Nop-\Nop_{\rm approx}\|_F/\|\Nop-\Nop^0\|_F$, 1 = ignoring the concomitant field].}
-\begin{center}
-\begin{tabular}{lccc}
-\toprule
-method (FFT pairs) & $\Phi_{\max}{=}0.3$ & $1$ & $3$\\
-\midrule
-Taylor of $\ee^{-\ii\Phi}$, $P{=}2$ (15) & $6.2\!\cdot\!10^{-3}$ & $7.6\!\cdot\!10^{-2}$ & $1.1$\\
-Taylor, $P{=}3$ (35) & $4.5\!\cdot\!10^{-4}$ & $1.6\!\cdot\!10^{-2}$ & $0.37$\\
-Weyl $\Delta$-form, $n{=}1$ (4) & $6.2\!\cdot\!10^{-2}$ & $0.21$ & $0.61$\\
-Weyl, $n{=}2$ (10) & $3.5\!\cdot\!10^{-3}$ & $3.8\!\cdot\!10^{-2}$ & $0.34$\\
-Weyl, $n{=}3$ (20) & $1.7\!\cdot\!10^{-4}$ & $6.3\!\cdot\!10^{-3}$ & $0.17$\\
-Weyl, $n{=}4$ (35) & $7.2\!\cdot\!10^{-6}$ & $8.9\!\cdot\!10^{-4}$ & $7.3\!\cdot\!10^{-2}$\\
-SVD--Tucker $L{=}6$ (6) & $4.4\!\cdot\!10^{-3}$ & $1.5\!\cdot\!10^{-2}$ & $4.6\!\cdot\!10^{-2}$\\
-SVD--Tucker $L{=}12$ (12) & $5.9\!\cdot\!10^{-4}$ & $2.1\!\cdot\!10^{-3}$ & $9.8\!\cdot\!10^{-3}$\\
-\bottomrule
-\end{tabular}
-\end{center}
-The concomitant correction itself is small relative to $\Nop$ in this test ($\|\Nop-\Nop^0\|/\|\Nop\|=0.8,\,2.8,\,7.9\%$). The Weyl form needs about half the FFT pairs of the Taylor form at equal error; the SVD (Tucker) basis needs the fewest pairs but a data-dependent basis and $L(L+1)/2$ kernels. One-sided product-convolution expansions~\cite{escande2017} (a single diagonal, $\Nop\approx\sum_\ell D_\ell\Top{h_\ell}$) were measured at $2$--$5\times$ more terms than the two-sided Tucker form and are not used. The order needed grows roughly linearly in $\Phi_{\max}$ (consistent with the pair-phase bound $2\Phi_{\max}$). Honest limits: no method found has an FFT-pair count independent of the phase range -- the Slepian number of (visited coefficient set $\times$ range of the pair phase) $\approx(\Phi_{\max}/\pi)\cdot c$ sets a floor of $\sim L$; subdividing the sample set (butterfly-type splitting by time or direction) only increases the total number of bases ($42\to51/80/132$ for 2/4/8 time bins at $\Phi\approx9$~rad).
-
-\paragraph{Stencil (chirp-aware) alternative for large $\Phi$.}
-The same exactness can be read in k-space: for quadratic phases the Gram operator on the oversampled grid is a \emph{banded} matrix $\hat\Nop(\kk,\kk+\bm\delta)=\nu_{\bm\delta}(\kk)$, $|\bm\delta|\lesssim s$ with $s$ the chirp's spectral radius, and $\nu_{\bm\delta}=\sum_\alpha c_{\bm\delta\alpha}\hat g^\alpha$ with a universal table $c_{\bm\delta\alpha}$ (independent of the trajectory). The NUFFT counterpart absorbs the chirp $\ee^{-\ii\Phi_j}$ into a per-sample stencil $\Gamma_j=\varphi\star\hat g(\cdot;\bm w_j)$ with a single FFT pair per coil, independent of $L$ and of $\Phi$; its width is set by the chirp spectrum (taps per axis for $10^{-3}$: 8, 10, 13--14, 18 at $\Phi_{\max}=1,2,4,8$~rad, compared with 4 for a plain kernel at $\sigma=2$), and the stencil spectrum must be fitted by least squares on the FOV (a DFT of a windowed chirp needs $\sim3\times$ more taps). It is the only route with zero stored kernels and an FFT count independent of $\Phi$, and a competitive choice for strongly undersampled sets at $\Phi\gtrsim2$~rad; in the production pipeline the segmented operator above replaces it because the readout-dependent remainder after the split \cref{eq:split} is small (second-order derivative weights suffice).
-
-\subsection{Using the operators inside the preconditioned plug-and-play iteration}
-\label{sec:iteration}
-
-We solve $\min_x\tfrac12\|Ax-y\|^2+\lambda R(x)$ by the preconditioned plug-and-play iteration (P$^2$nP~\cite{hong2024})
-\begin{equation}
-  x_{k+1}=\mathcal D\bigl(x_k-\alpha\,\mathsf P_k\,g_k\bigr),\qquad g_k=\nabla f(x_k)=\Nop x_k-A^\herm y,
-  \label{eq:pnp}
-\end{equation}
-with $\mathcal D$ a learned or classical denoiser and $\mathsf P_k$ a preconditioner built from secant pairs $(s_k,u_k)=(x_k-x_{k-1},\,g_k-g_{k-1})$ (ZMSHR1, a rank-one update of a base metric; one operator application per iteration). There is no density compensation: for a spiral sampling every readout dwells at $\kk=0$, so $\Nop$ has a dynamic range of $10^4$--$10^6$ and the \emph{preconditioner} replaces the weights.
-
-\paragraph{Base metric.} A circulant (T.~Chan) approximation of $\Nop$ using the exact Fourier diagonal $\langle e_{\kk},\Nop e_{\kk}\rangle=(\rho\circledast P_{\rm coil})(\kk)$, the sample density convolved with the coil-map power spectrum. Three details are essential: (i)~the $\kk=0$ density spike is smeared onto neighbouring modes by the maps, so use the convolved diagonal; (ii)~raw Biot--Savart maps blow up near the loops, so use ESPIRiT-type normalised maps $\sum_c|S_c|^2=1$ on the dilated support; (iii)~floor the unsampled corners. These reduced $\lambda_{\max}(M\Nop)$ from 38 to 9.
-
-\paragraph{Lagged correction (control variate).} The data-consistency gradient is the expensive operation. Write $\Nop_\ell$ for a cheap surrogate (plain Toeplitz, a low-order Weyl form, or $L=1$) and keep an \emph{anchor} $x_a$ at which the exact operator was applied:
-\begin{equation}
-  g_k\;\approx\;\Nop_\ell\,(x_k-x_a)+g_{\rm exact}(x_a),\qquad
-  \text{refresh } x_a\leftarrow x_k\ \text{ when }\ \|x_k-x_a\|>\tau\|x_k\| .
-\end{equation}
-This removes the surrogate bias at the fixed point and only the Lipschitz mismatch times $\|x_k-x_a\|$ remains. It matters because $\Nop-\Nop^0$ is a small perturbation (cf.\ the table above) but \emph{cheap-only gradients are unsafe with a quasi-Newton preconditioner}: secant pairs learned from a mismatched operator are applied along directions where $\Nop$ has small eigenvalues, so errors that are tiny on typical images ($3\!\cdot\!10^{-4}$ for order-2 Weyl) still blow up. Measured on the 16$^3$ toy problem at $\Phi_{\max}=3$~rad, 100 iterations, no denoiser (cost in units of one plain-Toeplitz application per coil, exact $=39$ units):
-\begin{center}
-\begin{tabular}{lccc}
-\toprule
-gradient strategy & NRMSE & exact applications & cost\\
-\midrule
-exact operator every iteration & 0.213 & 100 & 15600\\
-plain surrogate only & 1.29 & 0 & 400\\
-Weyl order 2 only & $7.7\!\cdot\!10^{4}$ & 0 & 12800\\
-lagged plain, $\tau{=}0.1$ & 0.218 & 12 & 2320\\
-lagged plain, $\tau{=}0.05$ & 0.214 & 19 & 3440\\
-\bottomrule
-\end{tabular}
-\end{center}
-The lagged plain surrogate is $4.5$--$6.7\times$ cheaper for the same error; higher-order surrogates do not pay at the measured cost ratio. This is a statement about the data-consistency and preconditioner machinery on a toy problem with identity denoiser; with the real denoiser the denoiser's bias dominates the plateau, and the study must be repeated at $N\ge64$ with real coil maps. In the full pipeline the exact operator is \texttt{SegNufft}, and the surrogate a reduced-$L$ \texttt{SegNufft} or a plain Toeplitz form; this combination is a design, the measurements above use the toy operators.
-
-\subsection{Velocity parametrisation on top of the operator}
+% -----------------------------------------------------------------------------
+\subsection{Velocity parametrisation}
 \label{sec:velmodel}
 
-The operator maps a \emph{magnetisation image} $x_e(\rr,\tau)$ per encode $e$ to data. Instead of $E$ complex images ($E=4$, 7, 13) the unknowns can be the physical quantities,
+\paragraph{Model.} With encode moments $\bm k_e=\gamma\bm M_{1,e}$ and temporal bases $\beta^z_\kappa,\beta^v_\kappa$ (periodic B-splines, independent of the operator frames),
 \begin{equation}
-  x_e(\rr,\tau)=z(\rr,\tau)\,\ee^{\ii\varphi_e(\rr)}\,\ee^{-\ii\gamma\,M_{1,e}\cdot v(\rr,\tau)},
+  x_e(\rr,t)=z(\rr,t)\,\ee^{\ii\varphi_e(\rr)}\,\ee^{-\ii\bm k_e\cdot\bm v(\rr,t)},\quad
+  z=\sum_{\kappa\le K_z}\beta^z_\kappa(t)z_\kappa,\quad
+  \bm v=\sum_{\kappa\le K_v}\beta^v_\kappa(t)\bm v_\kappa,\quad
+  \varphi_e=\sum_pa_{ep}P_p .
+  \label{eq:vmodel}
 \end{equation}
-with $z\in\CC$ the reference signal (magnitude and every phase shared by all encodes), $v\in\RR^3$ the velocity, and $\varphi_e=\sum_pa_{e,p}P_p(\rr)$ a low-order Legendre residual phase per encode (eddy currents, imperfect Maxwell/B0/GNL correction); $z,v$ in periodic B-spline bases in cardiac time ($K_z\le K_v$ nodes, independent of the operator's frames). The model is \emph{linear in $z$} for fixed $(v,a)$, so no positivity or phase-wrap constraint enters; it has 5 real unknowns per voxel and node instead of $2E$; encodes are coupled through one $v$, so dual-VENC unwrapping is part of the solve rather than a per-voxel rounding afterwards. The first moment of the \emph{readout itself} ($M_1^{\rm ro}(\tau)\!\cdot\!v$, up to $\sim1$~cm of displacement at 1~m/s over 10~ms) is a known function of the current velocity iterate and is applied as a lagged per-segment warp inside $D_\ell$ (same segments, no extra FFT). The data term is evaluated through the operator of \cref{sec:segnufft}; the Gauss--Newton Hessian-vector product and a pointwise Gauss--Newton metric feed the same ZMSHR1 machinery. GNL is handled by reconstructing in apparent coordinates $\rr=u(\rr_{\rm true})$, warping back, and correcting the velocity by the Jacobian $J^{-1}$ (the known GNL VENC error).
+Here $z\in\CC$ carries the magnitude and every phase common to all encodes, $\bm v\in\RR^3$ is the velocity, and $P_p$ are Legendre polynomials (residual eddy-current or model phase, degree $\le3$).
+The unknowns $\theta=(z_\kappa,\bm v_\kappa,a)$ are 5 reals per voxel and node instead of $2E$. The model is linear in $z$, and dual-VENC unwrapping is part of the solve.
+The operator sees images at frames $t_f$: $x_{ef}=x_e(\cdot,t_f)$. Interpolation to each sample's $t_j$ happens inside $A$ (\cref{eq:full}). Each (frame, encode) set $s=(f,e)$ has its own $A_s$, and
+\begin{equation}
+  F(\theta)=\tfrac12\sum_s\omega_s\bigl\|A_s\,x_{s}(\theta)-y_s\bigr\|^2+\tfrac\lambda2\sum_\kappa\bigl\|w^{1/2}\bm v_\kappa\bigr\|^2,
+\end{equation}
+where $\omega_s$ are the VENC-continuation weights and $w$ a static-tissue mask (robust IRLS fit of the warm-start phase differences, refined by pulsatility).
 
-\subsection{Validation summary [measured on simulated data with a model-independent truth simulator]}
+\paragraph{Gradient.} One gradient is one image-space gradient per set followed by a pointwise vector--Jacobian product. With $g_s=A_s^\herm(A_sx_s-y_s)$ and $u_{s}=\ee^{\ii\varphi_e-\ii\bm k_e\cdot\bm v(t_f)}$ (so $x_s=z(t_f)u_s$),
+\begin{equation}
+  \begin{aligned}
+  \nabla_{z_\kappa}F&=\sum_s\omega_s\beta^z_\kappa(t_f)\,\overline{u_s}\,g_s,\qquad
+  \nabla_{a_{ep}}F=-\sum_{s\ni e}\omega_s\sum_{\rr}P_p\,\Imag\bigl(\overline{g_s}\,x_s\bigr),\\
+  \nabla_{\bm v_\kappa}F&=\sum_s\omega_s\beta^v_\kappa(t_f)\,\bm k_e\,\Imag\bigl(\overline{g_s}\,x_s\bigr)+\lambda w\bm v_\kappa .
+  \end{aligned}
+  \label{eq:vgrad}
+\end{equation}
+Proof: $\dd x_s=u_s\,\dd z-\ii(\bm k_e\cdot\dd\bm v)x_s+\ii P_p x_s\,\dd a_{ep}$ and $\dd F=\Real\langle g_s,\dd x_s\rangle$.
+The cost is that of the complex model (one forward and one adjoint per set) plus $O(|\Omega|K)$ pointwise work. It does not grow with $K_z,K_v$.
+
+\paragraph{Metric.} Gauss--Newton $H=J^\herm\Nop J$ with $\Nop\approx\hat n I$, where $\hat n=\mathbb E_\xi\langle\xi,\Nop\xi\rangle/\|\xi\|^2$ per unit coil energy (random probe), gives pointwise blocks per node:
+\begin{equation}
+  M_z^{-1}=\hat n\sum_s\omega_s\beta^z_\kappa(t_f)^2,\qquad
+  M_{\bm v}^{-1}(\rr)=\hat n\,|\bar z(\rr)|^2\sum_s\omega_s\beta^v_\kappa(t_f)^2\,\bm k_e\bm k_e^{\!\top}+\lambda w(\rr)I+\mu I .
+\end{equation}
+These are refreshed every 5 gradients and used as the base metric of ZMSHR1 (\cref{sec:iteration}).
+The cross term $\partial^2F/\partial z\partial\bm v\propto|z|^2\sin\phi_c\sum_e\bm k_e$ (with $\phi_c$ an encode-common phase error) is dropped by the block metric. For referenced and dual-VENC encodings $\sum_e\bm k_e\neq0$, so the solve starts with $n$ $z$-only iterations, which form a linear subproblem.
+
+\paragraph{Exact phases on the sample side.} A degree-1 residual phase is a k-space shift: $A_{\kk}(x\,\ee^{\ii(c+\bm g\cdot\bm\rho)})=\ee^{\ii c}A_{\kk-\bm g}(x)$, verified to $5\cdot10^{-7}$. Injected or estimated linear phases therefore cost nothing.
+GNL: reconstruct at apparent positions $\bm\rho=u(\rr)$ and correct $\bm v_{\rm true}=J_u^{-1}\bm v_{\rm app}$.
+
+\paragraph{Readout motion (not yet in the reconstruction).} During the readout the first moment adds $\ee^{-\ii\gamma\bm m_{1,j}(\tau)\cdot\bm v(\rr)}$. The simulator includes it, so it is a model mismatch of the current reconstruction.
+It has the form of $\omega(\rr)\tau$. With $\bm m_{1,j}=\bar{\bm m}_1(\tau)+\delta\bm m_{1,j}(\tau)$ (mean over interleaves plus a rotation-dependent part), the planned treatment is
+\begin{equation}
+  \psi(\rr,\tau)\;\leftarrow\;\psi(\rr,\tau)+\gamma\,\bar{\bm m}_1(\tau)\cdot\bm v^{(k)}(\rr),
+\end{equation}
+which is lagged in the iterate $\bm v^{(k)}$, uses the same segments, and refreshes $D_\ell,\bm a$ when $\|\bm v-\bm v^{(k)}\|$ grows. The rotation-dependent part $\delta\bm m_{1,j}\cdot\bm v(\rr)$ is not polynomial in $\rr$ and is not modelled.
+
+\paragraph{Results} (R4, 7-point dual-VENC 1.0/3.5 m/s, 60 s, $R\approx8$ per frame, 30 iterations, no prior) [measured]:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+model & velocity RMSE (m/s) & wrapped\\
+\midrule
+complex images + locally-low-rank prior & 0.183 & 0.4\,\%\\
+\cref{eq:vmodel}, $K_z=K_v=8$ cubic, VENC continuation & 0.138 & 0.11\,\%\\
+\quad + grid 1.25$\times$ finer (1.6 mm) & 0.130 & --\\
+\quad + injected residual phase 0.6 rad, robust init + anchor & 0.166 & --\\
+4-point, full physics + GNL, 10 $z$-only + 30 joint & 0.232 & 0.01\,\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% -----------------------------------------------------------------------------
+\subsection{Evaluating the gradient \texorpdfstring{$A^\herm(Ax-y)$}{AH(Ax-y)} fast}
+\label{sec:grad}
+
+\paragraph{Cost model.} The gradient is $\nabla f=\sum_sA_s^\herm(A_sx_s-y_s)$, computed as forward, residual, adjoint. With $|\Omega_\sigma|=\sigma^3|\Omega|$ grid points and $M_s$ samples,
+\begin{equation}
+  \begin{aligned}
+  T_\nabla\approx\sum_s\Bigl[&\underbrace{2CF_sL\,\bigl(T_{\rm FFT}(|\Omega_\sigma|)+T_{\rm pad/crop}\bigr)}_{\text{grid side}\;\propto\;CF_sL|\Omega_\sigma|}
+  +\underbrace{2CL\,N_fM_sW^3t_{\rm mac}}_{\text{gather/scatter}}\\
+  &+\underbrace{N_fM_sW^3\,n_\gamma t_{\rm mac}}_{\text{stencil, coil- and segment-free}}
+  +\underbrace{3CM_s\,t_{\rm mem}}_{\text{residual}}\Bigr].
+  \end{aligned}
+  \label{eq:tcost}
+\end{equation}
+Here $F_s$ is the number of frame grids that set $s$ touches (1 for a static set), and $n_\gamma\le35$.
+
+\paragraph{Implemented levers.}
+\begin{enumerate}
+  \item \emph{Shared stencils.} The $n_\gamma$ term is divided over $CLN_f$ channels, so $P=2$ costs the same as $P=0$ (31.7 vs.\ 30.1 ms).
+  \item \emph{Small grid.} Bounded window derivatives allow $\sigma=1.25$: $|\Omega_\sigma|=0.24\times$ the $\sigma=2$ grid.
+  \item \emph{Fused grid passes.} The grid is channel-interleaved $[\text{point}][c\cdot L+\ell]$ with one partial-axis FFT over all channels. The pad pass forms $\hat\varphi^{-1}S_cD_\ell x_f$ for all $(c,\ell)$ in one pass; the crop pass forms $\sum_c\overline{S_c}\sum_\ell\overline{D_\ell}(\cdot)$ in one multi-input pass. Launch shapes are planned within 48 KB of shared memory and autotuned per set.
+  \item \emph{Coil compression.} With the whitened Gram $\sum_ny_ny_n^\herm=U\Sigma^2U^\herm$, keep $C_v=\min\{n:\sum_{i\le n}s_i^2\ge0.999\sum_is_i^2\}$ virtual coils $U_{:,1:C_v}^\herm y$. Rows are orthonormal, so the noise stays white. On the 32-coil array: $C_v=16$ and 29 [measured]. The Gram is taken over the Cartesian calibration region: a centre-dense trajectory would weight it towards $k=0$ and keep too few coils.
+  \item \emph{Stochastic coil subsets.} With energy-ordered virtual coils, keep the leading set $\mathcal K$ and draw $\mathcal D_k$ from the remaining ones:
+  \begin{equation}
+    \tilde\nabla f=\sum_{c\in\mathcal K}g_c+p\sum_{c\in\mathcal D_k}g_c,\qquad\mathbb E\,\tilde\nabla f=\nabla f,
+  \end{equation}
+  where $g_c$ is the gradient of coil $c$ and $p$ is the inverse inclusion probability. With random reshuffling the epoch mean is exact.
+  The step uses $\alpha=1/\max\bigl(\lambda_{\max}(\Nop),\max_{\rm draws}\lambda_{\max}(\Nop_{\mathcal K}+p\Nop_{\mathcal D})\bigr)$. A subset is held for $h\ge2$ iterations, so the ZMSHR1 secant pair satisfies $u=\tilde\Nop s$ exactly.
+  Measured on 8 virtual coils: the epoch mean equals the full gradient to $7\cdot10^{-6}$; $\lambda_{\max}$ inflation is 1.42 when drawing 4 of 8 and 0.90 when keeping 2 and drawing 3 of 6. At 60 gradient-equivalents PnP-ISTA has 10--16\,\% lower error; ZMSHR1 does not gain.
+  \item \emph{Shared gridding} of $k\le4$ images on the same samples (\cref{sec:fullop}). One-set water+fat segments use $L$ channels instead of $2L$ (\cref{sec:segments}).
+  \item \emph{Streaming.} The k-space data $y_s$ come from a host store (dense, lz4/zstd blocks, or file). Sample tables are kept packed (zstd, $\times6.2$) and decoded into pinned staging buffers. A worker decodes set $s{+}1$ while the GPU runs set $s$, so the wall time per set is $\max(T_{\rm GPU},T_{\rm decode})$ rather than their sum. A coil subset reads only its own rows.
+  \item \emph{Lagged control variate with a reduced-segment surrogate.} The surrogate $\tilde E$ is the same operator with $L_{\rm s}<L$ segments on the same sample tables, and $\tilde\Nop=\tilde E^\herm\tilde E$:
+  \begin{equation}
+    \begin{aligned}
+    \tilde g_k&=\tilde\Nop(x_k-x_a)+\nabla f(x_a),\qquad x_a\leftarrow x_k\text{ if }\|x_k-x_a\|>\tau\|x_k\|,\\
+    \tilde f_k&=f(x_a)+\Real\langle\nabla f(x_a),x_k-x_a\rangle+\tfrac12\|\tilde E(x_k-x_a)\|^2 .
+    \end{aligned}
+  \end{equation}
+  The error is $(\tilde\Nop-\Nop)(x_k-x_a)$, which vanishes at the fixed point. Cheap steps read no data and cost $\approx L_{\rm s}/L$ of an exact step. A secant pair is kept only within one anchor (or between two exact gradients); otherwise the metric step is used.
+  $L_{\rm s}$ is chosen as the smallest value with $\|(E-\tilde E)x\|\le0.03\|Ex\|$ on the warm start.
+  Measured (test operator, 60 ZMSHR1 iterations, $\tau=0.1$): with a mismatch of 2.4\,\% (1.5 phase cycles, $L_{\rm s}=3$ of 8) or 15\,\% at 0.3 cycles, 7 exact + 53 cheap gradients reach the exact run's error. With 7--8\,\% at $\ge1.5$ cycles it needs 33--45 exact gradients and ends $2$--$3\times$ further away.
+  On sim\_point (4.3 cycles, $L=10$, chosen $L_{\rm s}=4$ at 2.6\,\%), 30 iterations took 10 exact + 20 cheap gradients and 28\,\% less time, at a 35\,\% higher final $f$.
+  \item \emph{Pruned grid FFT.} The pad pass places the image at $(a-N/2)\bmod\sigma N$ per axis, so only a wrapped block $[0,\lceil N/2\rceil)\cup[\sigma N-\lfloor N/2\rfloor,\sigma N)$ is non-zero. The forward reads only that block: the x pass runs over lines with $(y,z)$ in the block, the y pass over planes with $z$ in the block, and the z pass over all lines. Nothing outside is read, so the grid is never zeroed. The inverse mirrors it and writes only the block that the crop reads. Traffic per direction is $\approx\tfrac13(h_yh_z+h_z+1)\cdot\tfrac12(1+h)$ with $h=1/\sigma$.
+  Measured (FFT alone, $180\times180\times50$, 16 channels): forward including the former memset $2.01\to0.98$~ms, inverse $1.35\to0.96$~ms; at $\sigma=2$ both $2.8\times$ faster. Results equal the full transform to $3\cdot10^{-7}$.
+  \item \emph{Fused residual.} The gather accumulates $y\mathrel{+}=\Gamma G$, so the accumulator starts at $-y_s$ and the result is $r_s=A_sx_s-y_s$. There is no subtraction pass and no persistent residual buffer: one set's residual lives in a stream-ordered temporary instead of a second copy of all data.
+\end{enumerate}
+
+\paragraph{Not yet implemented.}
+\begin{enumerate}
+  \item \emph{Segment Gram (Toeplitz) form}~\cite{fessler2005}:
+  \[\Nop=\sum_c\overline{S_c}\sum_{\ell\ell'}\overline{D_\ell}\,\Top{g_{\ell\ell'}}\,D_{\ell'}S_c,\qquad g_{\ell\ell'}(\DD)=\sum_j\overline{a_\ell(\tau_j)}a_{\ell'}(\tau_j)\ee^{\ii\kk_j\cdot\DD}\quad\text{(no per-sample chirp).}\] It needs $L(L+1)/2$ kernels of $(2N)^3$ per set, which does not fit for time-resolved sets ($\approx80$ sets). It is useful for few-set problems.
+\end{enumerate}
+
+% -----------------------------------------------------------------------------
+\subsection{Algebra of the normal operator}
+\label{sec:weyl}
+
+Coil maps are pointwise multiplications, so $\Nop=\sum_c\overline{S_c}\,\Nop_0\,S_c$ with $\Nop_0$ coil-free. Below, $\Nop:=\Nop_0$, $\Phi_j=\Theta_j-\kk_j\cdot\rr$, and $\Xop_a$, $\Pop=-\ii\nabla$, $\Top g\rho=g\ast\rho$:
+\begin{equation}
+  \Nop(\rr,\rr')=\sum_j\ee^{\ii\kk_j\cdot(\rr-\rr')}\ee^{\ii(\Phi_j(\rr)-\Phi_j(\rr'))},\qquad
+  \Nop=\sum_j\Qop_j\,\Top{\ee^{\ii\kk_j\cdot\DD}}\,\Qop_j^\herm,\quad\Qop_j=\ee^{\ii\Phi_j(\Xop)} .
+  \label{eq:Nj}
+\end{equation}
+\begin{lemma}
+\label{lem:comm}
+$[\Xop_a,\Top g]=\Top{\Delta_ag}$, hence $\ad_{\Xop}^\beta\Top g=\Top{\DD^\beta g}$. (Checked to $6\cdot10^{-14}$.)
+\end{lemma}
+\begin{lemma}[midpoint]
+\label{lem:mid}
+For $\Phi=\tfrac12\rr^{\!\top}M\rr+\bm b\cdot\rr+c$, $M=M^{\!\top}$, $\bar\rr=\tfrac12(\rr+\rr')$, $\DD=\rr-\rr'$: $\;\Phi(\rr)-\Phi(\rr')=(M\bar\rr+\bm b)\cdot\DD$ exactly.
+\end{lemma}
+\begin{proposition}[exact Weyl symbol]
+\label{prop:weyl}
+For quadratic $\Phi_j$ (here $M_j=\sum_qw_{jq}\nabla^2m_q$),
+\begin{equation}
+  \sigma_\Nop(\bar\rr,\kk)=\sum_j\delta\bigl(\kk-\kk_j-M_j\bar\rr-\bm b_j\bigr),\qquad
+  \Nop=\sum_j\delta(\Pi_j-\kk_j),\quad\Pi_j=\Qop_j\Pop\Qop_j^\herm=\Pop-M_j\Xop-\bm b_j,
+\end{equation}
+with commuting components ($[\Pi_{j,a},\Pi_{j,b}]=\ii(M_{j,ba}-M_{j,ab})=0$) and no higher-order corrections: conjugation by a quadratic phase is metaplectic, i.e.\ the shear $(\rr,\kk)\mapsto(\rr,\kk-\nabla\Phi)$~\cite{folland1989}. The effective trajectory at $\bar\rr$ is $\kk_j+M_j\bar\rr+\bm b_j$.
+\end{proposition}
+\begin{proposition}[commutator and $\Delta$-forms]
+\label{prop:comm}
+With $g^\alpha=\sum_jw_j^\alpha\ee^{\ii\kk_j\cdot\DD}$,
+\begin{equation}
+  \begin{gathered}
+  \Nop=\sum_\alpha\frac{\ii^{|\alpha|}}{\alpha!}\ad_{m_1}^{\alpha_1}\!\cdots\ad_{m_4}^{\alpha_4}\Top{g^\alpha},\\
+  \Nop=\sum_n\mathsf K_n,\qquad K_n(\rr,\rr')=\frac{\ii^n}{n!}\sum_j\bigl[(M_j\bar\rr+\bm b_j)\cdot\DD\bigr]^n\ee^{\ii\kk_j\cdot\DD}=\sum_{|\beta|\le n}\bar\rr^\beta g_{n\beta}(\DD).
+  \end{gathered}
+\end{equation}
+The kernel $\bar\rr^\beta g(\DD)$ is the Weyl-symmetrised product $2^{-|\beta|}\sum_{\gamma\le\beta}\binom\beta\gamma\Xop^\gamma\Top g\Xop^{\beta-\gamma}$. Every truncation is exactly Hermitian. Order $n$ costs $\binom{n+3}3$ FFT pairs (4, 10, 20, 35), and the remainder is $\le\sum_j(2\Phi_{\max})^{n+1}/(n+1)!$.
+\end{proposition}
+\noindent Proofs: Hadamard $\ee^{\ii A}T\ee^{-\ii A}=\sum_n\frac{\ii^n}{n!}\ad_A^nT$ with commuting $m_q(\Xop)$ and the multinomial theorem; for the $\Delta$-form expand in the pair phase of \cref{lem:mid}. (Order 8 reproduces the dense $\Nop$ to $5\cdot10^{-12}$.)
+First order: $\ii\sum_q[m_q,\Top{g^{e_q}}]=\tfrac\ii2\sum_{q,a}\{\partial_am_q(\Xop),\Top{\Delta_ag^{e_q}}\}$ needs 7 kernels and 4 FFT pairs.
+
+\paragraph{Segmented Toeplitz form with derivative multipliers.} For one segment, $T_\ell=\Top{\sum_na_{\ell n}\ee^{\ii\kk_n\cdot\DD}}$ with multiplier $\tau_\ell$, and a quadratic residual $C_n\approx c(\kk_n)$:
+\begin{equation}
+  \Nop_\ell\approx T_\ell+\ii\sum_{pq}\{\Xop_p,[\Xop_q,S_{\ell,pq}]\}-\tfrac12\sum_{pqst}\{\Xop_p,\{\Xop_s,[\Xop_q,[\Xop_t,S_{\ell,pq,st}]]\}\},\qquad
+  \hat S_{\ell,pq}=c_{pq}\tau_\ell,\;\hat S_{\ell,pq,st}=c_{pq}c_{st}\tau_\ell,
+\end{equation}
+\begin{equation}
+  \mathcal F\{\ii\{\Xop_p,[\Xop_q,S]\}v\}=-\ii\bigl[(\partial_{pq}\hat S)V+2(\partial_q\hat S)(\partial_pV)\bigr].
+\end{equation}
+The transform count stays $2L$. However, $\tau_\ell$ fills the whole $2N$ period and cannot be differenced, so it needs 35 stored derivative kernels per segment. $c(\kk)$ (degree 2 in $\kk$) still leaves 0.066 rad. Not used for time-resolved sets.
+
+\paragraph{Operator error vs.\ FFT pairs} ($8^3$, 960 samples, rotated spirals; $\|\Nop-\Nop_{\rm approx}\|_F/\|\Nop-\Nop^0\|_F$) [measured]:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+method (FFT pairs) & $\Phi_{\max}{=}0.3$ & 1 & 3\\
+\midrule
+Taylor of $\ee^{-\ii\Phi}$, $P{=}3$ (35) & $4.5\cdot10^{-4}$ & $1.6\cdot10^{-2}$ & 0.37\\
+Weyl $n{=}1$ (4) & $6.2\cdot10^{-2}$ & 0.21 & 0.61\\
+Weyl $n{=}2$ (10) & $3.5\cdot10^{-3}$ & $3.8\cdot10^{-2}$ & 0.34\\
+Weyl $n{=}4$ (35) & $7.2\cdot10^{-6}$ & $8.9\cdot10^{-4}$ & $7.3\cdot10^{-2}$\\
+SVD--Tucker $L{=}12$ (12) & $5.9\cdot10^{-4}$ & $2.1\cdot10^{-3}$ & $9.8\cdot10^{-3}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+$\|\Nop-\Nop^0\|/\|\Nop\|=0.8,\,2.8,\,7.9\,\%$. No expansion has an FFT count independent of $\Phi$: the Slepian number $\approx(\Phi_{\max}/\pi)c$ sets a floor of order $L$. Subdividing the samples (butterfly) increases the total basis count ($42\to51/80/132$ for 2/4/8 time bins at $\Phi\approx9$).
+
+% -----------------------------------------------------------------------------
+\subsection{Preconditioned plug-and-play iteration}
+\label{sec:iteration}
+
+\begin{equation}
+  x_{k+1}=\mathcal D\bigl(x_k-\alpha\,\mathsf P_kg_k\bigr),\qquad g_k=\nabla f(x_k),\qquad
+  \mathsf P_k=\text{ZMSHR1}\bigl(M;\,s_k=x_k-x_{k-1},\,u_k=g_k-g_{k-1}\bigr)
+  \label{eq:pnp}
+\end{equation}
+(P$^2$nP~\cite{hong2024}): one operator application per iteration and a rank-one update of a base metric $M$.
+With spiral sampling $\Nop$ spans $10^4$--$10^6$; the metric replaces density compensation.
+The base metric for the complex model is circulant, $\langle e_{\kk},\Nop e_{\kk}\rangle=(\rho\circledast P_{\rm coil})(\kk)$, with normalised maps ($\sum_c|S_c|^2=1$) and a floor on unsampled corners: $\lambda_{\max}(M\Nop)$ goes from 38 to 9. The velocity model uses the pointwise Gauss--Newton blocks of \cref{sec:velmodel}.
+
+\paragraph{Lagged correction.} $\tilde g_k=\Nop_{\rm s}(x_k-x_a)+g(x_a)$, refreshing $x_a\leftarrow x_k$ when $\|x_k-x_a\|>\tau\|x_k\|$. This removes the surrogate bias at the fixed point. Cheap-only gradients are unsafe under a quasi-Newton metric: secant pairs from a mismatched operator act where $\Nop$ has small eigenvalues.
+$16^3$ toy, $\Phi_{\max}=3$, 100 iterations, identity denoiser; cost in plain-Toeplitz units, exact $=39$ [measured]:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+gradient & NRMSE & exact applications & cost\\
+\midrule
+exact every iteration & 0.213 & 100 & 15600\\
+plain surrogate only & 1.29 & 0 & 400\\
+Weyl order 2 only & $7.7\cdot10^4$ & 0 & 12800\\
+lagged plain, $\tau=0.1$ / $0.05$ & 0.218 / 0.214 & 12 / 19 & 2320 / 3440\\
+\bottomrule
+\end{tabular}
+\end{center}
+This is $4.5$--$6.7\times$ cheaper at equal error on the toy. With the reduced-segment surrogate on the real operator the gain is smaller and needs a mismatch $\lesssim3\,\%$ (\cref{sec:grad}). It is not yet tested with the real denoiser.
+
+% -----------------------------------------------------------------------------
+\subsection{Validation and limits}
 \label{sec:validation}
 
-The truth data are produced by a brute-force GPU direct sum over a fine point cloud (no NUFFT, no Toeplitz, nothing shared with the reconstruction operators; checked against an f64 CPU sum to $1.2\!\cdot\!10^{-5}$) that includes the exact gradient moments $(M_0,M_1,M_2)$, B0 from susceptibility, GNL, and the concomitant phase of the whole waveform; the reconstruction therefore has genuine model mismatch (static-within-readout motion, intravoxel dephasing, estimated maps).
+Truth data come from a GPU direct sum over a fine point cloud with exact $(M_0,M_1,M_2)$, susceptibility B0, GNL and the full concomitant phase. It shares nothing with the operators and agrees with an f64 CPU sum to $1.2\cdot10^{-5}$ [measured]:
+\begin{center}\small
+\begin{tabular}{lc}
+\toprule
+experiment & result\\
+\midrule
+time-averaged LS per encode (R4, 60 s): no physics / B0 / B0+conc. & 0.211 / 0.249 / 0.131 m/s\\
+CFD case (RACLETTE n001), B0 + conc.\ + GNL, model-exact data & image $4.3\cdot10^{-3}$, velocity 2.4 mm/s\\
+velocity model (\cref{sec:velmodel}) vs.\ complex + LLR & 0.138 vs.\ 0.183 m/s\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Limits.}
 \begin{itemize}
-  \item \emph{Physics ablation, time-averaged least squares per encode} (subject R4, 60~s scan, 100 PCGLS iterations, velocity RMSE in the lumen): no physics 0.211~m/s; B0 only 0.249 (slower convergence); B0 + concomitant 0.131; B0 + concomitant on data without B0/GNL 0.060. The $\sim0.1$~m/s offsets removed by the concomitant model are the Maxwell velocity offsets of the bipolars.
-  \item \emph{Operator validation on a CFD-based case} (RACLETTE case n001, dense model-exact data with B0 + concomitant + GNL): full model image error $4.3\!\cdot\!10^{-3}$ (CG-limited), velocity RMSE 2.4~mm/s, bias 0.0000.
-  \item \emph{Velocity model} (R4, 7-point dual-VENC 1.0/3.5~m/s, 60~s, $R\approx8$ per frame, 30 iterations, \emph{no prior}): 0.138~m/s with 8 cubic nodes for $z$ and $v$ and a VENC continuation, against 0.183~m/s for the complex model with a locally-low-rank prior; wrapped voxels fall from 0.4\% to 0.11\%.
-\end{itemize}
-These are simulated-data results on one anatomy; they validate the operator and the forward physics, not yet the reconstruction on in-vivo data.
-
-\subsection{Assumptions and limits}
-\label{sec:limits}
-\begin{itemize}
-  \item The concomitant model is first order in $G/B_0$ (\cref{eq:Bc}) and uses the \emph{nominal} (or GIRF-filtered) waveforms; eddy-current and heating residuals break the exact $A_s$-linear structure of spoke-wise coefficients and have not been measured.
-  \item The per-sample correction is a Taylor series in the single phase $\rr^{\!\top}\!\Delta C\rr$ about the FOV centre, implemented to \emph{second} order (production default; order~1 and~0 are options). The dropped third-order term is the floor: order~1 suffices for $\lesssim0.2$~rad (error $\sim\phi^2/2$ at the edge), order~2 for $\sim0.4$--$0.7$~rad, and beyond that a wider per-sample generalised stencil would be needed (not built; the remainder is small after the split \cref{eq:split}). The size of the residual is a sequence-design property: for rotated planar spirals the anisotropic part is $\approx0.7$ of the isotropic one ($0.7$~rad at the end of the readout), for a yarnball without polar wobble $0.69$ ($0.50$~rad), with polar wobble $0.14$--$0.25$ ($0.22$~rad at 12.7~ms, $0.44$~rad at 25~ms).
-  \item Segments scale linearly with readout length ($L\approx2\Delta f T_{\rm ro}+4$); long readouts and poor shimming pay directly in FFTs.
-  \item The Weyl expansions are exact for quadratic phases only; B0 and GNL enter through the segment diagonals (exact for any spatial function) and, in the normal-operator expansions, to first order with an $O(\Delta^3\partial^3\psi)$ remainder.
-  \item Operator accuracy measured on typical images is \emph{not} the relevant quantity for a quasi-Newton preconditioned iteration (see the lagged-correction experiment).
+  \item Concomitant fields are first order in $G/B_0$, computed from nominal or GIRF-filtered waveforms; eddy-current residuals have not been measured.
+  \item Taylor stencils hold for $|\chi_j|\lesssim0.7$ rad. At 0.55 T they need least-squares stencils inside the segments, which are not built.
+  \item $L$ grows with $\Delta f\,T_{\rm ro}$; long readouts pay directly in FFTs.
+  \item Readout motion and intravoxel dephasing are not modelled.
+  \item Operator error on typical images is not the relevant accuracy for a quasi-Newton iteration (\cref{sec:iteration}).
 \end{itemize}
 % =========================== END SECTION =====================================
 
@@ -485,7 +573,6 @@ These are simulated-data results on one anatomy; they validate the operator and 
 \bibitem{fessler2005} J.~A. Fessler, S.~Lee, V.~T. Olafsson, H.~R. Shi, D.~C. Noll. Toeplitz-based iterative image reconstruction for MRI with correction for magnetic field inhomogeneity. \emph{IEEE Trans. Signal Process.} 53(9):3393--3402, 2005.
 \bibitem{fessler2003} J.~A. Fessler, B.~P. Sutton. Nonuniform fast Fourier transforms using min-max interpolation. \emph{IEEE Trans. Signal Process.} 51(2):560--574, 2003.
 \bibitem{barnett2019} A.~H. Barnett, J.~Magland, L.~af Klinteberg. A parallel nonuniform fast Fourier transform library based on an ``exponential of semicircle'' kernel. \emph{SIAM J. Sci. Comput.} 41(5):C479--C504, 2019.
-\bibitem{escande2017} P.~Escande, P.~Weiss. Approximation of integral operators using product-convolution expansions. \emph{J. Math. Imaging Vis.} 58:333--348, 2017.
 \bibitem{folland1989} G.~B. Folland. \emph{Harmonic Analysis in Phase Space.} Princeton University Press, 1989.
 \bibitem{hong2024} T.~Hong, X.~Xu, J.~Hu, J.~A. Fessler. Provable preconditioned plug-and-play approach for compressed sensing MRI reconstruction. \emph{IEEE Trans. Comput. Imaging}, 2024 (arXiv:2405.03854).
 \end{thebibliography}

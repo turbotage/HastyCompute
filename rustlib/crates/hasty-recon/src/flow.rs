@@ -11,6 +11,9 @@ use num_complex::Complex64;
 
 use crate::data::inv3;
 
+/// largest number of velocity-encoded images (beyond the reference) [`FlowDecoder::velocity`] handles
+pub const MAX_ENC: usize = 32;
+
 pub struct FlowDecoder {
     m1: Vec<Vec3>,
     /// k_e for e ≥ 1 (rad per m/s)
@@ -91,16 +94,24 @@ impl FlowDecoder {
     /// logical velocity (m/s) from the encodes of one voxel, z[e] for e in 0..n_enc
     pub fn velocity(&self, z: &[Complex64]) -> Vec3 {
         let tau = 2.0 * std::f64::consts::PI;
-        let phi: Vec<f64> = z[1..].iter().map(|ze| -(ze * z[0].conj()).arg()).collect();
-        let mut used: Vec<(usize, f64)> = Vec::with_capacity(phi.len());
+        // fixed-size scratch (no allocation per voxel; MAX_ENC encodes)
+        let ne = z.len() - 1;
+        assert!(ne <= MAX_ENC, "at most {MAX_ENC} encodes");
+        let mut phi = [0f64; MAX_ENC];
+        for (p, ze) in phi.iter_mut().zip(&z[1..]) {
+            *p = -(ze * z[0].conj()).arg();
+        }
+        let mut used = [(0usize, 0f64); MAX_ENC];
+        let mut nu = 0;
         let mut v = [0.0; 3];
         for (add, ninv) in &self.stages {
             for &e in add {
                 let pred = dot(&self.k[e], &v);
-                used.push((e, phi[e] + tau * ((pred - phi[e]) / tau).round()));
+                used[nu] = (e, phi[e] + tau * ((pred - phi[e]) / tau).round());
+                nu += 1;
             }
             let mut b = [0.0; 3];
-            for &(e, p) in &used {
+            for &(e, p) in &used[..nu] {
                 for a in 0..3 {
                     b[a] += self.k[e][a] * p;
                 }

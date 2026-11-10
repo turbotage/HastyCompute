@@ -76,6 +76,8 @@ impl<R: Real> ConvPlan<R> {
             n,
             n_in,
             n_out,
+            n_in_tail: 0,
+            n_out_tail: 0,
             dir,
             scale: sc,
             conv,

@@ -1,7 +1,7 @@
 //! Model-based B0 / R2* / fat from a simulated multi-echo train scan, stage S1 of research/b0_r2s_model_based.md:
 //! the unknowns are tissue properties shared by all echoes, not echo images.
 //!
-//!     mbq_b0 <sim_dir> <out_dir> --init <recon_b0 run> [--grid-scale 1] [--vcoils 12] [--knot-mm 20] [--iters 150]
+//!     mbq_b0 <sim_dir> <out_dir> --init <recon_b0 run> [--grid-scale 1] [--vcoils auto|n] [--coil-energy 0.999] [--knot-mm 20] [--iters 150]
 //!            [--rho-iters 40] [--lam-rho 2e-3] [--lam-r2 2e-3] [--every 10] [--clean] [--terms 1]
 //!
 //! `--moco <motionfit run> [--resp bellows|truth] [--levels 16]` (S4, respiratory): every readout's breathing state
@@ -220,7 +220,13 @@ fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut take = |n: &str| -> Option<String> { args.iter().position(|a| a == n).map(|i| { args.remove(i); args.remove(i) }) };
     let gs: usize = take("--grid-scale").map_or(1, |s| s.parse().unwrap());
-    let nvc: usize = take("--vcoils").map_or(12, |s| s.parse().unwrap());
+    // virtual coils: a number, or auto (default) = the fewest holding --coil-energy (99.9 %) of the whitened map energy
+    let coil_energy: f64 = take("--coil-energy").map_or(hasty_recon::coils::CoilRule::DEFAULT_ENERGY, |s| s.parse().unwrap());
+    let vc_arg = take("--vcoils").unwrap_or("auto".into());
+    let (nvc_req, coil_energy) = match hasty_recon::coils::CoilRule::parse(&vc_arg, coil_energy).unwrap() {
+        hasty_recon::coils::CoilRule::Fixed(n) => (n, None),
+        hasty_recon::coils::CoilRule::Energy(e) => (0, Some(e)),
+    };
     let knot_mm: f64 = take("--knot-mm").map_or(20.0, |s| s.parse().unwrap());
     let iters: usize = take("--iters").map_or(150, |s| s.parse().unwrap());
     let rho_iters: usize = take("--rho-iters").map_or(40, |s| s.parse().unwrap());
@@ -249,7 +255,8 @@ fn main() {
         }
         None => (None, vec![]),
     };
-    let d = load(&dir, &LoadOpts { nvc, grid_scale: gs, support_rel: 0.05, clean, group: group.clone() });
+    let d = load(&dir, &LoadOpts { nvc: nvc_req, coil_energy, grid_scale: gs, support_rel: 0.05, clean, group: group.clone() });
+    let nvc = d.nvc;
     // reference sets (windows): the image unknowns; all groups' data enter each
     let (dims, nv, nset) = (d.dims, d.nv, d.n_win);
     println!("{nset} windows, grid {dims:?} at {:.1} mm, {} virtual coils ({:.0}s)", d.res * 1e3, nvc, t0.elapsed().as_secs_f64());

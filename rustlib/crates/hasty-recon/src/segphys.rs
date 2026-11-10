@@ -96,7 +96,7 @@ pub fn seg_tables(sd: &SimData, set: &SampleSet, fit: &MonoFit, with_conc: bool,
     let nf = sd.n_frames as f64;
     let mut max_dw = [0.0f64; 4];
     for (r, &ro) in set.readouts.iter().enumerate() {
-        let card = sd.acq.readouts[ro].card;
+        let card = sd.ro.card[ro];
         for n in 0..na {
             let j = r * na + n;
             let phase = card.phase + set.tau[j] / card.rr;
@@ -108,7 +108,7 @@ pub fn seg_tables(sd: &SimData, set: &SampleSet, fit: &MonoFit, with_conc: bool,
             let th = |i: usize| (0..4).map(|q| dw[q] * fit.theta[q][i]).sum::<f64>();
             phi0[j] = th(0) as f32;
             for a in 0..3 {
-                coords[a][j] += (th(1 + a) * sd.res) as f32;
+                coords[a][j] += (th(1 + a) * sd.vox[a]) as f32;
             }
             for i in 0..6 {
                 dc[i * m + j] = th(4 + i) as f32;
@@ -148,4 +148,114 @@ pub fn mean_coefficients(sets: &[&SampleSet], na: usize) -> Vec<[f64; 4]> {
         }
     }
     w
+}
+
+// ───────────────────────────────────────────────────────────── higher-order fit (optional, `SegNufft` order 3)
+
+/// The degree-3/4 monomials beyond the quadratic basis, in the order `hasty_nufft::SegNufft::points_hi` expects:
+/// x^a y^b z^c, degree 3 first (10), then degree 4 (15), a (x order) outer, b (y order) inner.
+pub use hasty_nufft::{hi_exponents, NHI};
+
+/// Degree-4 fits of the concomitant monomials at the true (GNL-warped) positions over the apparent logical position ρ:
+///   m_q(ρ) ≈ θ_q·[1, x, y, z, x², y², z², 2xy, 2xz, 2yz] + Σ_α h_qα ρ^α   (α: the [`NHI`] monomials of degree 3, 4).
+/// `quad` holds the quadratic part θ of the joint fit (so `seg_tables` maps it to φ0 / k-shift / ΔC exactly as for the
+/// quadratic fit) and the residual of the whole degree-4 fit (rms / max, m²); `hi` the degree-3/4 coefficients (m^{2−n}).
+pub struct MonoFitHi {
+    pub quad: MonoFit,
+    pub hi: [[f64; NHI]; 4],
+}
+
+impl MonoFitHi {
+    /// the per-sample degree-3/4 phase of deviation `dw`: Σ_α (Σ_q dw_q h_qα) ρ^α (rad)
+    pub fn hi_phase(&self, dw: &[f64; 4], p: &Vec3) -> f64 {
+        let ex = hi_exponents();
+        (0..NHI).map(|i| (0..4).map(|q| dw[q] * self.hi[q][i]).sum::<f64>() * p[0].powi(ex[i][0] as i32) * p[1].powi(ex[i][1] as i32) * p[2].powi(ex[i][2] as i32)).sum()
+    }
+}
+
+/// [`fit_monomials`] to degree 4 (least squares over `voxels`, in coordinates scaled to the fit region for conditioning).
+pub fn fit_monomials_hi(sd: &SimData, grid: &PhysicsGrid, voxels: &[usize]) -> MonoFitHi {
+    const NB: usize = 10 + NHI;
+    let ex = hi_exponents();
+    let s = voxels.iter().map(|&v| sd.voxel_log(v).iter().fold(0.0f64, |a, &c| a.max(c.abs()))).fold(0.0f64, f64::max).max(1e-6);
+    // basis in scaled coordinates u = ρ / s; coefficient in metres = scaled coefficient / s^degree
+    let deg: [i32; NB] = std::array::from_fn(|i| if i == 0 { 0 } else if i < 4 { 1 } else if i < 10 { 2 } else if i < 20 { 3 } else { 4 });
+    let bas = |p: &Vec3| -> [f64; NB] {
+        let u = [p[0] / s, p[1] / s, p[2] / s];
+        let mut b = [0.0; NB];
+        b[..10].copy_from_slice(&basis(&u));
+        for i in 0..NHI {
+            b[10 + i] = u[0].powi(ex[i][0] as i32) * u[1].powi(ex[i][1] as i32) * u[2].powi(ex[i][2] as i32);
+        }
+        b
+    };
+    let mut ata = nalgebra::DMatrix::<f64>::zeros(NB, NB);
+    let mut atb = nalgebra::DMatrix::<f64>::zeros(NB, 4);
+    for &v in voxels {
+        let b = bas(&sd.voxel_log(v));
+        for i in 0..NB {
+            for k in 0..NB {
+                ata[(i, k)] += b[i] * b[k];
+            }
+            for q in 0..4 {
+                atb[(i, q)] += b[i] * grid.mono[v][q];
+            }
+        }
+    }
+    let tr = (0..NB).map(|i| ata[(i, i)]).sum::<f64>() / NB as f64;
+    for i in 0..NB {
+        ata[(i, i)] += 1e-12 * tr;
+    }
+    let sol = ata.cholesky().expect("degree-4 monomial fit").solve(&atb);
+    let mut theta = [[0.0; 10]; 4];
+    let mut hi = [[0.0; NHI]; 4];
+    for q in 0..4 {
+        for i in 0..NB {
+            let c = sol[(i, q)] / s.powi(deg[i]);
+            if i < 10 {
+                theta[q][i] = c;
+            } else {
+                hi[q][i - 10] = c;
+            }
+        }
+    }
+    let mut fit = MonoFitHi { quad: MonoFit { theta, rms: [0.0; 4], max: [0.0; 4] }, hi };
+    let (mut rms, mut max) = ([0.0; 4], [0.0f64; 4]);
+    for &v in voxels {
+        let p = sd.voxel_log(v);
+        let b = basis(&p);
+        for q in 0..4 {
+            let mut e = [0.0; 4];
+            e[q] = 1.0;
+            let r = grid.mono[v][q] - (0..10).map(|i| fit.quad.theta[q][i] * b[i]).sum::<f64>() - fit.hi_phase(&e, &p);
+            rms[q] += r * r;
+            max[q] = max[q].max(r.abs());
+        }
+    }
+    rms.iter_mut().for_each(|r| *r = (*r / voxels.len().max(1) as f64).sqrt());
+    fit.quad.rms = rms;
+    fit.quad.max = max;
+    fit
+}
+
+/// [`seg_tables`] for the degree-4 fit: the quadratic part as usual (φ0, k-shift, ΔC; `max_resid_phase` is then the
+/// phase the degree-4 fit leaves out), plus the per-sample deviation Δw = w − w̄ (4 × m SoA) that weights the degree-3/4
+/// coefficients `fit.hi` (`hasty_nufft::SegNufft::points_hi`). Without concomitant fields Δw = 0.
+pub fn seg_tables_hi(sd: &SimData, set: &SampleSet, fit: &MonoFitHi, with_conc: bool, wbar: Option<&[[f64; 4]]>) -> (SegTables, Vec<f32>) {
+    let tab = seg_tables(sd, set, &fit.quad, with_conc, wbar);
+    let (na, m) = (sd.na, tab.tau.len());
+    let mut dw = vec![0f32; 4 * m];
+    if with_conc {
+        for j in 0..m {
+            for q in 0..4 {
+                dw[q * m + j] = (set.wq[j][q] - tab.wbar[j % na][q]) as f32;
+            }
+        }
+    }
+    (tab, dw)
+}
+
+/// the degree-3/4 coefficient table of a fit as `SegNufft::points_hi` takes it: h_qα, q-major (4 × [`NHI`])
+pub fn hi_table(fit: &MonoFitHi) -> Vec<f64> {
+    fit.hi.iter().flatten().copied().collect()
 }

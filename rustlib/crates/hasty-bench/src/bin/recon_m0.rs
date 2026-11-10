@@ -69,7 +69,7 @@ fn main() {
     let nv = sd.nv();
     let nc = sd.nc;
     let w = sd.whitener();
-    println!("loaded {} readouts x {} ADC x {} coils, recon grid {:?} ({:.1}s)", sd.acq.readouts.len(), sd.na, nc, sd.dims, t0.elapsed().as_secs_f64());
+    println!("loaded {} readouts x {} ADC x {} coils, recon grid {:?} ({:.1}s)", sd.spiral().readouts.len(), sd.na, nc, sd.dims, t0.elapsed().as_secs_f64());
     let dev = Device::new(0).unwrap();
     let st = dev.default_stream();
     let kern = std::sync::Arc::new(Kernels::new(&dev).unwrap());

@@ -7,3 +7,4 @@ license.workspace = true
 [dependencies]
 cudarc.workspace = true
 thiserror.workspace = true
+libloading = "0.9"

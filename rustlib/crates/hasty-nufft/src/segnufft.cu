@@ -173,6 +173,12 @@ extern "C" __global__ void seg_pad(const cx* __restrict__ x, const cx* __restric
   }
 }
 
+// ---------------------------------------------------------------- residual init: r = −y (the gather then accumulates A x)
+extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r, unsigned long long n) {
+  const size_t t = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+  if (t < n) { const cx v = y[t]; r[t] = cx{-v.x, -v.y}; }
+}
+
 // ---------------------------------------------------------------- fused multi-input crop: NCH channels -> image (accumulate)
 extern "C" __global__ void seg_crop(const cx* __restrict__ grid, const cx* __restrict__ smaps, const cx* __restrict__ segph, cx* __restrict__ x,
                                     const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,

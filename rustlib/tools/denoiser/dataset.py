@@ -34,6 +34,9 @@ import torch.nn.functional as Fn
 
 REPO = Path(__file__).resolve().parents[3]
 TRAIN = REPO / "data/hasty/train/raclette"
+# our own phantom cases (rustlib/tools/phantom/to_training.py: moving atlas phantoms with LBM chamber flow, the same
+# layout): joined to RACLETTE when HASTY_TRAIN_PHANTOM is not "0"; their weight in the case draw by --phantom-weight
+PHANTOM = REPO / "data/hasty/train/phantom"
 import sys  # noqa: E402
 
 sys.path.insert(0, str(REPO / "python/lib"))
@@ -86,7 +89,7 @@ class _Case:
     def mask_frame(self, f):
         return self.mask[:, :, :, f] if self.lazy else np.asarray(self.mask[..., f])
 GRADE_CLASS = {"Healthy": 0, "Sclerosis": 0, "Mild": 1, "Moderate": 2, "Severe_LowGradient": 3, "Severe_HighGradient": 3, "Critical": 4}
-SEVEN_POINT = ["7p_2Venc", "7p_2Venc_Breathing", "7p_2Venc_Super"]
+SEVEN_POINT = ["7p_2Venc", "7p_2Venc_Breathing", "7p_2Venc_Super", "phantom_7p"]
 MARGIN = 8  # native voxels around the rotated patch: B-spline prefilter edge error ~ |z1|^8 ≈ 3e-5
 Z1 = np.sqrt(3.0) - 2.0
 PREFILTER = torch.tensor([np.sqrt(3.0) * Z1 ** abs(k) for k in range(-12, 13)], dtype=torch.float32)  # inverse of (1, 4, 1)/6
@@ -106,12 +109,23 @@ def layout(enc):
 
 class Tier1(torch.utils.data.Dataset):
     def __init__(self, split="train", patch=32, frames=12, h=2.0e-3, length=10000, variants=SEVEN_POINT, snr=(5.0, 60.0),
-                 lumen_frac=0.7, oh=True, balance_grades=True, seed=0, offset=0):
-        idx = json.loads((TRAIN / "index.json").read_text())
-        self.cases = [c for c in idx["cases"] if c["split"] == split and c["variant"] in variants and c["n_frames"] >= (frames or 1) and c["n_enc"] == 7]
+                 lumen_frac=0.7, oh=True, balance_grades=True, seed=0, offset=0, roots=None, phantom_weight=0.2):
+        if roots is None:
+            import os
+
+            roots = [TRAIN] + ([PHANTOM] if os.environ.get("HASTY_TRAIN_PHANTOM", "1") != "0" and (PHANTOM / "index.json").exists() else [])
+        self.cases = []
+        for r in roots:
+            idx = json.loads((Path(r) / "index.json").read_text())
+            self.cases += [dict(c, path=str(Path(r) / c["path"])) for c in idx["cases"]
+                           if c["split"] == split and c["variant"] in variants and c["n_frames"] >= (frames or 1) and c["n_enc"] == 7]
         assert self.cases, f"no cases for split {split}"
         cls = np.array([GRADE_CLASS.get(c["stenosis_grade"], 2) for c in self.cases])
         w = 1.0 / np.bincount(cls)[cls] if balance_grades else np.ones(len(cls))
+        # the phantom cases share `phantom_weight` of the draw (few cases, many patches each), RACLETTE the rest
+        ph = np.array([c["variant"] == "phantom_7p" for c in self.cases])
+        if ph.any() and (~ph).any():
+            w = np.where(ph, w / w[ph].sum() * phantom_weight, w / w[~ph].sum() * (1 - phantom_weight))
         self.p = w / w.sum()
         self.P, self.T = int(patch), frames
         self.h = (h, h) if np.isscalar(h) else tuple(h)
@@ -126,7 +140,7 @@ class Tier1(torch.utils.data.Dataset):
 
     def meta(self, path):
         if path not in self._meta:
-            self._meta[path] = json.loads((TRAIN / path / "case.json").read_text())
+            self._meta[path] = json.loads((TRAIN / path / "case.json").read_text())  # absolute paths: TRAIN / p = p
         return self._meta[path]
 
     def symmetry(self, rng):
@@ -152,7 +166,7 @@ class Tier1(torch.utils.data.Dataset):
         c = self.cases[rng.choice(len(self.cases), p=self.p)]
         m = self.meta(c["path"])
         if c["path"] not in self._cases:
-            self._cases[c["path"]] = _Case(TRAIN / c["path"])
+            self._cases[c["path"]] = _Case(TRAIN / c["path"])  # absolute path (roots joined above)
             self._levels[c["path"]] = self._cases[c["path"]].blood_level(layout(m["encodings"])[0][0])
         mk = self._cases[c["path"]]
         frames, centre, h = self.choose(rng, m, mk)

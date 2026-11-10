@@ -16,7 +16,9 @@ hasty-recon = { path = "../hasty-recon" }
 hasty-value = { path = "../hasty-value" }
 hasty-seq = { path = "../hasty-seq" }
 hasty-qfit = { path = "../hasty-qfit" }
+hasty-cfd = { path = "../hasty-cfd" }
 serde_json = "1"
+rayon = "1.12"
 nalgebra = "0.33"
 num-complex.workspace = true
 cudarc.workspace = true

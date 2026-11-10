@@ -99,7 +99,7 @@ fn main() {
             pts.push(eng.points(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, None).unwrap());
         }
         eng.autotune(&st, &segs[0], &pts[0]).unwrap();
-        let mut ops = SegSets { eng, pts, segs, seg_of_set: vec![0, 1, 2, 3], kern: kern.clone() };
+        let mut ops = SegSets { eng, pts, segs, seg_of_set: vec![0, 1, 2, 3], kern: kern.clone(), surrogate: None };
         let mut recon = vec![C32::new(0.0, 0.0); 4 * nv];
         let mut curves = Vec::new();
         let mut finals = Vec::new();

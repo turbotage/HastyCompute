@@ -17,12 +17,12 @@ fn main() {
     let c = sd.fov_c;
     let half = [0, 1, 2].map(|a| sd.meta["fov"][a].as_f64().unwrap() / 2.0);
     let na = sd.na;
-    let step = (sd.acq.readouts.len() / nro).max(1);
+    let step = (sd.spiral().readouts.len() / nro).max(1);
     // rows: (encode, k (rad/m logical), C (6, rad/m²), b (3, rad/m), φ0)
     let mut rows: Vec<(usize, [f64; 3], [f64; 6], [f64; 3], f64, f64)> = Vec::new();
-    for ro in (0..sd.acq.readouts.len()).step_by(step) {
-        let sp = sd.acq.sample_params(ro..ro + 1);
-        let enc = sd.acq.readouts[ro].enc;
+    for ro in (0..sd.spiral().readouts.len()).step_by(step) {
+        let sp = sd.spiral().sample_params(ro..ro + 1);
+        let enc = sd.spiral().readouts[ro].enc;
         for n in (0..na).step_by(4) {
             let s = &sp[n * SAMPLE_FLOATS..(n + 1) * SAMPLE_FLOATS];
             let w = [s[9] as f64, s[10] as f64, s[11] as f64, s[12] as f64];
@@ -32,7 +32,7 @@ fn main() {
             let cpc = hasty_mrsim::mat_vec(&cp, &c);
             let b = hasty_mrsim::mat_vec(&transpose(&r), &cpc).map(|v| 2.0 * v);
             let phi0: f64 = (0..3).map(|a| c[a] * cpc[a]).sum();
-            let m = sd.acq.moments_logical(ro, n);
+            let m = sd.spiral().moments_logical(ro, n);
             let k = m.m0.map(|v| hasty_mrsim::GAMMA * v);
             rows.push((enc, k, [cl[0][0], cl[1][1], cl[2][2], cl[0][1], cl[0][2], cl[1][2]], b, phi0, s[13] as f64));
         }

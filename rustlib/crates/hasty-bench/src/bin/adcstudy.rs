@@ -82,6 +82,8 @@ fn main() {
         rot_kind: RotSet::SuperFibonacci,
         n_rot_pns,
         aniso_weight: 0.0,
+        res_weight: 0.0,
+        res_band: vec![],
         curve_pts: 60_000,
         ret: None,
     };

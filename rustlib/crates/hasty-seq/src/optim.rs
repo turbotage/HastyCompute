@@ -7,7 +7,7 @@
 //!  2. PNS by part-wise slew derating: the TR is split into encode / readout / tail; while the worst SAFE
 //!     value over the rotation set exceeds the target, the slew factor of the part holding the maximum is scaled by
 //!     target / max (then N is re-fitted, since a slower readout covers less);
-//!  3. objective N·TR·(1 + λ·anisotropy).
+//!  3. objective N·TR·(1 + λ·anisotropy)·(1 + μ·resonance exposure of the readout, Nyquist cells).
 //! The shape is searched by a coarse grid and Nelder–Mead.
 
 use crate::encode::Scheme;
@@ -40,6 +40,10 @@ pub struct Problem {
     pub rot_kind: RotSet,
     pub n_rot_pns: usize,
     pub aniso_weight: f64,
+    /// resonance exposure of the readout (`robust::band_exposure` on `res_band`, in Nyquist cells × FOV): objective
+    /// factor (1 + res_weight · exposure); 0 = off
+    pub res_weight: f64,
+    pub res_band: Vec<(f64, f64)>,
     pub curve_pts: usize,
     /// out-and-back readout returning to `ret`·kmax and ending at rest ([`Yarn::curve_return`]); the per-rotation tail
     /// is then a straight move to the spoil moment, inside kmax when |spoil| ≤ kmax/γ̄. None = centre-out readout
@@ -67,6 +71,8 @@ pub struct Eval {
     pub pns: SeqPns,
     pub feasible: bool,
     pub aniso: f64,
+    /// resonance exposure of the readout, Nyquist cells (0 when no band is set)
+    pub res: f64,
     pub objective: f64,
 }
 
@@ -136,7 +142,7 @@ impl Problem {
         Some(best)
     }
     pub fn tr_spec(&self, slew: &[f64; 3]) -> TrSpec {
-        TrSpec { sys: self.sys.clone(), enc_slew: slew[0], tail_slew: slew[2], rf_dur: self.rf_dur, scheme: self.scheme, venc: self.venc, balanced: self.balanced, spoil: self.spoil }
+        TrSpec { sys: self.sys.clone(), enc_slew: slew[0], tail_slew: slew[2], rf_dur: self.rf_dur, scheme: self.scheme, venc: self.venc, balanced: self.balanced, spoil: self.spoil, encode_shape: Default::default(), tail_shape: Default::default() }
     }
     pub fn pns_rotations(&self) -> Vec<Mat3> {
         let r = rotations(self.rot_kind, self.n_rot_pns);
@@ -157,8 +163,9 @@ impl Problem {
             let aniso = concomitant_anisotropy(&p_aniso);
             let feasible = pns.max <= self.pns_target;
             let n_eff = self.n_eff(s, n);
-            let objective = n_eff * tr.tr() * (1.0 + self.aniso_weight * aniso);
-            let e = Eval { shape: *s, n_design: n, n_eff, slew, tr, pns: pns.clone(), feasible, aniso, objective };
+            let res = if self.res_band.is_empty() { 0.0 } else { crate::robust::band_exposure(&tr.spoke.grad, &self.res_band) * self.fov };
+            let objective = n_eff * tr.tr() * (1.0 + self.aniso_weight * aniso) * (1.0 + self.res_weight * res);
+            let e = Eval { shape: *s, n_design: n, n_eff, slew, tr, pns: pns.clone(), feasible, aniso, res, objective };
             if feasible {
                 return Some(e);
             }
@@ -288,6 +295,8 @@ mod profile {
             rot_kind: RotSet::SuperFibonacci,
             n_rot_pns: 400,
             aniso_weight: 0.0,
+            res_weight: 0.0,
+            res_band: vec![],
             curve_pts: 60_000,
             ret: std::env::var("RET").ok().map(|x| x.parse().unwrap()),
         };

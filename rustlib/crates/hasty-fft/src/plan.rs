@@ -54,11 +54,30 @@ pub struct LineAddr {
     pub out_sn: usize,
 }
 
+/// Optional runtime split of the line index `b` into two sub-indices with gaps (pruned multi-dimensional passes: only
+/// the lines whose other coordinates lie in a wrapped block are transformed). With `lb1_cnt > 0`:
+/// `b1 = b % lb1_cnt`, `b2 = b / lb1_cnt`; `b1 += lb1_gap` if `b1 >= lb1_hi` (likewise `b2`); the line starts at
+/// `a*la + b1*lb + b2*lb2` (input `in_lb`, `in_lb2`; output `out_lb`, `out_lb2`). `LineAddr::lb_cnt` is then the
+/// number of selected lines `b`. All zero (default): no split.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LineSplit {
+    pub lb1_cnt: usize,
+    pub lb1_hi: usize,
+    pub lb1_gap: usize,
+    pub lb2_hi: usize,
+    pub lb2_gap: usize,
+    pub in_lb2: usize,
+    pub out_lb2: usize,
+}
+
 #[derive(Clone, Debug)]
 pub struct AxisSpec {
     pub n: usize,
     pub n_in: usize,
     pub n_out: usize,
+    /// wrapped pruning: also read the last `n_in_tail` / write the last `n_out_tail` entries of each line (0 = none)
+    pub n_in_tail: usize,
+    pub n_out_tail: usize,
     pub dir: Direction,
     pub scale: f64,
     pub conv: bool,
@@ -111,6 +130,8 @@ pub struct AxisPlan<R: Real> {
     smem: u32,
     /// elements the plain (outer, n, inner) layout would occupy; used for buffer-size checks by the simple API
     simple_len: usize,
+    /// line-index split ([`LineSplit`]; default none)
+    pub split: LineSplit,
 }
 
 const DEFAULT_SMEM: usize = 48 * 1024;
@@ -188,6 +209,8 @@ impl<R: Real> AxisPlan<R> {
             n,
             n_in: n,
             n_out: n,
+            n_in_tail: 0,
+            n_out_tail: 0,
             dir,
             scale,
             conv: false,
@@ -208,7 +231,7 @@ impl<R: Real> AxisPlan<R> {
 
     pub fn from_spec(dev: &Device, spec: &AxisSpec) -> Result<Self, FftError> {
         let n = spec.n;
-        if spec.n_in > n || spec.n_out > n || spec.n_in == 0 || spec.n_out == 0 {
+        if spec.n_in + spec.n_in_tail > n || spec.n_out + spec.n_out_tail > n || spec.n_in == 0 || spec.n_out == 0 {
             return Err(FftError::Invalid(format!(
                 "n_in/n_out must be in 1..=n (n={n}, n_in={}, n_out={})",
                 spec.n_in, spec.n_out
@@ -256,6 +279,8 @@ impl<R: Real> AxisPlan<R> {
             scale: spec.scale,
             n_in: spec.n_in,
             n_out: spec.n_out,
+            n_in_tail: spec.n_in_tail,
+            n_out_tail: spec.n_out_tail,
             conv: spec.conv,
             pre: spec.pre.clone(),
             post: spec.post.clone(),
@@ -289,7 +314,7 @@ impl<R: Real> AxisPlan<R> {
         ) + &format!(
             "{:?}p{}q{}",
             spec.kfmt, spec.poly_pre as u8, spec.poly_post as u8
-        ) + &if blue { format!("_blu{m}") } else { String::new() };
+        ) + &if spec.n_in_tail + spec.n_out_tail > 0 { format!("_t{}u{}", spec.n_in_tail, spec.n_out_tail) } else { String::new() } + &if blue { format!("_blu{m}") } else { String::new() };
         let func = dev.load_function(
             &name,
             &src,
@@ -340,6 +365,7 @@ impl<R: Real> AxisPlan<R> {
             grid,
             smem: smem as u32,
             simple_len: 0,
+            split: LineSplit::default(),
         })
     }
 
@@ -390,6 +416,15 @@ impl<R: Real> AxisPlan<R> {
                 .arg(&ola)
                 .arg(&olb)
                 .arg(&osn);
+            let sp = &self.split;
+            let sv: [i64; 7] = if sp.lb1_cnt > 0 {
+                [sp.lb1_cnt as i64, sp.lb1_hi as i64, sp.lb1_gap as i64, sp.lb2_hi as i64, sp.lb2_gap as i64, sp.in_lb2 as i64, sp.out_lb2 as i64]
+            } else {
+                [lb_cnt.max(1), i64::MAX, 0, i64::MAX, 0, 0, 0]
+            };
+            for v in &sv {
+                b.arg(v);
+            }
             let guards = self.blue.as_ref().map(|t| (t.ch.device_ptr(stream), t.bh_f.device_ptr(stream), t.bh_i.device_ptr(stream)));
             if let Some(((ch, _), (bf, _), (bi, _))) = &guards {
                 b.arg(ch).arg(bf).arg(bi);

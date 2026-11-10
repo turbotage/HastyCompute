@@ -11,6 +11,8 @@ cudarc.workspace = true
 thiserror.workspace = true
 nalgebra = "0.33"
 num-complex.workspace = true
+rayon = "1.12"
+hasty-value = { path = "../hasty-value" }
 
 [dev-dependencies]
 hasty-testkit = { path = "../hasty-testkit" }

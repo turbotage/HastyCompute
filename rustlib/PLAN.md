@@ -875,3 +875,400 @@ Notes:
     with LLR (F2) reaches 0.196.
   - 7-point ideal: 0.135 m/s, wraps 0.06 % (5 z-only), no harm.
   - A z-only stage of 10 iterations had not converged yet (data term 7.4e12 → 3.6e12).
+
+## Operator direct-sum tests, segment counts (2026-11-07)
+
+**Tests** (GPU, not run yet) compare the operators against an f64 direct sum (`hasty-testkit::physops`):
+- `hasty-nufft/tests/seg_b0_direct.rs`:
+  - plain NUFFT and B0 (smooth / strong-gradient / fat) for readouts of 2–12 ms and L = 1–24;
+  - CPU budget: `seg_b0_model_error_budget_cpu --ignored`.
+- `hasty-bench/tests/seg_physics_direct.rs`:
+  - concomitant fields at 0.55 / 1.5 / 2.89 T and off-centre;
+  - full B0 + concomitant + GNL with coil maps;
+  - adjoint identity;
+  - temporal model.
+- `opbench`: operator time per set and a projected reconstruction time; `--plan` runs on the CPU.
+
+**Segment counts** (CPU emulation, model error, least-squares interpolators, sample-aligned table). L is set by the
+phase cycles Δf·T, not by T:
+
+| field | 2 ms | 4 ms | 8 ms | 12 ms |
+|---|---|---|---|---|
+| smooth 450 Hz, L = 4 | 9e-4 | | | |
+| smooth 450 Hz, L = 6 | 8e-6 | 2.5e-4 | 1.5e-2 | |
+| smooth 450 Hz, L = 8 | | | 6e-4 | |
+| smooth 450 Hz, L = 10 | | | 2.7e-5 | 8.9e-4 |
+| fat included 843 Hz, L = 12 | | | 6e-4 | |
+
+- Brain-type fields of ±100 Hz over 20 ms need about 6–8 segments, the same Δf·T.
+- Our phantom's field after shim is ±242 Hz over the FOV; fat adds −419 Hz at 2.89 T.
+- `recon_p2np --nseg auto` (default) sets L = ⌈1.3 Δf·T + 3.5⌉ from the fitted voxels.
+- The interpolator table has one entry per ADC sample (256 entries left a floor of 3–7e-4).
+- Fix: `segphys.rs`, the concomitant k-shift scaled by `vox[a]`, not `res`.
+
+**Still open:**
+- Fat as its own species with a known shift, so the segments only cover the B0 range.
+- The full model's ≈ 5e-3 floor: the quadratic concomitant fit at GNL-warped positions; a higher order is needed.
+- 0.55 T: the per-sample ΔC phase reaches 1–1.4 rad, beyond the second-order correction.
+- Memory: a 10-min flow recon needs ≈ 110 GiB resident (data 19, residual 19, SegPoints 36.5, images 6 × 5.9) and must
+  stream from the host on 24 GB.
+
+**Water + fat with a known fat fraction** (`hasty_recon::setop::FatSets`, `recon_p2np --fat-fraction <npy|truth>`):
+- Model: E' x = E((1 − ff) x) + c(τ) ⊙ E(ff x), with c(τ) the six-peak spectrum per sample. Both species share x, so
+  they share the velocity encoding. The inner operator models B0 + concomitant only.
+- `sim_truth.py` writes truth_fat_fraction.npy (signal fat fraction, steady-state weighted).
+- CPU budget (`seg_b0_direct.rs fat_species_error_budget_cpu`): mixed shell, smooth B0 ±225 Hz, 8 ms readout,
+  2.89 T.
+
+  | model | error |
+  |---|---|
+  | fat unmodelled | 54 % |
+  | fat folded into the field map, single peak | floor 27 % at any L |
+  | known ff | 1.6e-2 at L = 6, 6.5e-4 at L = 8 (16 segment paths), 2.8e-5 at L = 10 |
+
+- Cost: two inner applications per forward / adjoint. The gridding is not yet shared between the two paths: the same
+  samples could be interpolated once.
+- Per-frame maps: `FatSets::with_maps` and `recon_p2np --fat-fraction` with nv × frames values. `sim_truth` writes
+  the truth per frame.
+- GPU check written, not run: `cargo test --release -p hasty-recon --test fat_direct -- --nocapture` (forward /
+  adjoint against the direct sum ≤ 2e-3, adjoint identity ≤ 1e-5).
+- Next:
+  - the fat fraction from the B0 / R2* / fat reconstruction, warped per frame;
+  - shared gridding of the two paths.
+
+**Shared gridding for several images (2026-11-07)** (`SegNufft::forward_multi` / `adjoint_multi`, kernels
+`segnufft_multi.cu`; `SetOp::forward_multi` / `adjoint_multi` with a loop default, overridden by `SegSets` and passed
+through by `WeightedSets`; `FatSets` uses it by default, `shared_gridding = false` / `separate()` keeps two calls):
+- y = Σ_k w_k ⊙ A x_k and x_k = Aᴴ(w̄_k ⊙ y), one tile pass over ≤ 4 images; FFTs stay one per image.
+- Memory: the K grids are views into the engine's slots (smaller coil batch) or extra buffers within
+  `max_grid_bytes + multi_extra_bytes` (default 0); `multi_plan` falls back to one image per pass.
+- Gain (op-count model, 512×512×256, 1.5 M samples, 12 coils, L = 8): only the sample staging is shared, the MACs scale
+  with K. At the default 6 GB budget one coil's grid (8.4 GB) is already over it → one image per pass, no gain; with
+  8.4 GB extra memory −22 % gridding, −9 % operator (6.5 → 5.9 s per forward + adjoint, FFTs 3.8 s unchanged).
+- The larger lever (CPU, `seg_b0_direct.rs fat_joint_segments_budget_cpu`): segment the water + fat time function of
+  each voxel jointly (complex diagonals P_l = g_v(τ_l)): L = 12 → 5.0e-4, L = 14 → 6.3e-5, against 2L = 16 paths
+  → 6.5e-4 for two species: −25 % FFTs and MACs. Not wired yet (needs a complex `build_segments`).
+- GPU tests written, not run: `hasty-nufft --test seg_multi`, `hasty-recon --test fat_direct`.
+
+**Concomitant fit at GNL-warped positions: `--conc-fit deg4` (2026-11-07)** (`segphys::fit_monomials_hi`,
+`seg_tables_hi`, `SegNufft` order 3 via `points_hi`):
+- The full model's floor is the quadratic fit's residual R = Δw·m(x(ρ)) − (φ0 + b·ρ + ρᵀΔCρ) (rms 4.5e-3, max 0.056 rad
+  at 2.89 T): with R exact the error drops to the segment floor; the Taylor-2 truncation is negligible at 2.89 T.
+  R has rank 3 (energy 0.84 / 0.13 / 0.03), so a low-rank correction would cost 2–3 extra images (2–3× FFTs).
+- Order 3: degree-4 fit, its degree-3/4 part per sample to first order in the kernel (Δw per sample + a 4 × 25 table);
+  no extra FFTs, ≈ +25 FMA per tile row in the staging.
+- CPU (`seg_physics_model_error_budget_cpu_order3`), full model, L = 20, forward / adjoint:
+
+  | B0 | order 2 | order 3 |
+  |---|---|---|
+  | 2.89 T | 4.8e-3 / 8.3e-3 | 1.15e-3 / 2.2e-3 |
+  | 1.5 T | 8.9e-3 / 1.5e-2 | 3.0e-3 / 6.5e-3 |
+  | 0.55 T | 3.1e-2 / 7.0e-2 | 2.9e-2 / 7.3e-2 (Taylor-2 of ψ2 dominates) |
+
+  L = 10 stays segment-limited (8.3e-3 at 2.89 T).
+- Next: the products ψ2·c34 (degree 5–6, per-axis order ≤ 4 representable) would give 9.9e-4 / 1.7e-3 at 2.89 T and
+  1.9e-3 / 4.5e-3 at 1.5 T.
+- GPU tests written, not run: `hasty-bench --test seg_physics_direct seg_full_physics_order3_matches_direct_sum`,
+  `hasty-nufft --test seg_multi seg_order3_matches_emulation`.
+
+## GPU pacer (2026-11-07)
+
+`hasty_cuda::pace::pace(&stream)` (Rust) / `hastycompute.pace.pace()` (Python): throttle long GPU jobs.
+- Unset (default): full speed, zero overhead. 10⁶ calls take < 50 ms (Rust) / 0.1 s (Python); no synchronisation.
+- `HASTY_GPU_DUTY=f`: at each pace point, synchronise and sleep busy · (1 − f) / f.
+- `HASTY_GPU_WATTS=W`: board power from NVML (libnvidia-ml.so.1 via dlopen; Python: pynvml or nvidia-smi) steers the
+  duty, duty ← duty · (W / P)^½ within [0.05, 1].
+- `HASTY_GPU_PACE_LOG=1` logs the duty and power.
+
+Hooks:
+- every LBM step (`Backend::pace`, GPU backend only);
+- every simphantom time bin;
+- every denoiser training iteration;
+- every phantom_4d frame;
+- every set of the P²nP gradient (`hasty_recon::p2np`).
+
+The driver-level alternative is `sudo nvidia-smi -pl W` (root).
+
+**Joint water + fat segments: `recon_p2np --fat-model joint` (2026-11-07)** (`shared` = FatSets multi path, the
+default; `separate` = two calls): one image whose segment diagonals carry each voxel's water / fat mix.
+- One map: folded into the diagonals, table fitted to g_v(τ) = [(1 − ff) + ff c(τ)] e^{−iψ} (`build_segments_complex`,
+  plain SegSets, existing kernels). Per-frame maps: `build_segments_fat` (water diagonals, c_l at the nodes, a table
+  fitted to the water and fat function of every voxel — exact for any ff because g is linear in ff), one table per
+  encode, maps applied in the pad / crop (`SegNufft::segments_fat`, `fat_maps`, `forward_fat`, `FatJointSets`).
+  Per-(frame, encode) tables were rejected: nf × ne × L × nv × 8 B (≈ 900 GB at 512×512×256, 20 frames, 7 encodes).
+- `--nseg auto` adds the main fat peak of every fitted voxel to the phase-cycle count (same rule).
+- CPU (`seg_b0_direct.rs fat_species_error_budget_cpu`, 8 ms, mixed voxels), error (fwd) vs FFT channels per coil:
+  2.89 T: two species L 8 → 6.5e-4 (16 ch); joint L 12 → 5.0e-4 (one map) / 7.5e-4 (ff-free table), L 13 (rule) →
+  1.5e-4 / 2.5e-4 (13 ch). 1.5 T: joint L 10 → 4.9e-4 / 7.4e-4, L 11 (rule) ≈ 2e-4 (11 ch).
+- GPU test `hasty-recon --test fat_direct fat_joint_matches_direct_sum_and_fat_sets`: passes (run 2026-11-08).
+
+**Streamed sample tables (2026-11-08)** — SegPoints are now placeable (they were "not placeable yet" in §27):
+- `SegPoints::to_host` / `to_device` (pinned host copies). A host-resident set is uploaded into one of two device
+  slots of the engine when used (`SegNufft::stream_reserve`, `stage`); `stream_prefetch` uploads the next set on a
+  second stream during the current one (`SegSets` calls `prefetch` after each forward; explicit ready / free events).
+  Every `SegNufft` entry point that takes points stages them first; resident points take the old path unchanged.
+- `SetOp::table_bytes` / `tables_on_host` / `place_tables` (defaults: none; SegSets, FatJointSets and the wrappers
+  forward them). SENSE coordinates (12 B/sample) are not placeable.
+- Planner: `plan::choose_tables` / `TableNeed` (resident vs 2 slots + bytes / h2d per gradient); `choose` unchanged.
+- recon_p2np: tables built straight into host memory when they would not fit next to what is still to come (auto) or
+  with `--plan host`; with --vmodel the planner places them (and the data, kept on the host from the start when data
+  + coordinates + operator exceed the budget). `--table-prefetch`. opbench's projection uses `choose_tables`.
+- 10-min flow case (140 sets, 2.12e8 samples, 214 B/sample): tables 45 GiB → 2 × 0.32 GB on the device; upload
+  ≈ 13 ms per set at 25 GB/s (≈ 2.6 % of the 0.49 s normal operator per set, ≈ 1.8 s per gradient; hidden with
+  prefetch). Host: 64 GiB pinned (tables + data) on top of SimData.
+- GPU tests `hasty-nufft --test seg_stream`, `hasty-recon --test stream_tables`: pass (run 2026-11-08) after the
+  tolerances were set from measured spreads. Streamed vs resident: 0.8–1.7e-5 relative at the engine level, ≈ 20 × the
+  resident path's own run-to-run spread (5e-7) — float32-equivalent, not bitwise (summation order in the staged slot;
+  not investigated). At the P²nP level both are inside the atomics spread (2e-5 after 3 iterations).
+
+## De-oracling the reconstruction: coil compression, ESPIRiT, measured fields, stochastic coils (2026-11-08)
+
+Library first (research/recon_realism.md has the analysis); the old defaults stay reachable.
+- `hasty_recon::coils`: `CoilGram` (streaming nc × nc Hermitian Gram, data or maps), `CoilCompression::from_gram`
+  with `CoilRule::Fixed(n)` or `CoilRule::Energy(e)` (fewest virtual coils holding a fraction e of the eigenvalue sum),
+  `report()`. recon_p2np / recon_b0 / mbq_b0: `--vcoils auto|n` (default auto) `--coil-energy 0.999`.
+  recon_p2np `--coil-gram calib` (default; the Gram of the Cartesian calibration region, density-neutral) or `data`
+  (the raw samples of set 0, the old choice: centre-dense trajectories weight it towards k = 0, i.e. towards the
+  single vector Σ_r S(r) ρ(r), so it keeps too few coils).
+  Measured: whitened true maps of the 32-coil array, 99.9 % → 16 (sim_point) / 29 (b0test6) virtual coils; 12 keep
+  99.70 % / 98 %.
+- `hasty_recon::espirit` (CPU, rustfft + rayon): calibration Gram, randomized subspace iteration with Rayleigh–Ritz
+  for the kept kernels (dense eigendecomposition optional), W(r) on a coarse grid, per-voxel top eigenpair, phase
+  aligned to a virtual reference coil, periodic trilinear interpolation, Σ|s|² = 1 where λ > eig_min.
+  `calib_from_noncart` (GPU): low-resolution CG on the samples inside the calibration box (no density compensation)
+  → centred FFT. Tests: synthetic maps 3e-5 (Cartesian and non-Cartesian), production size (16 coils, 6³, 24³ →
+  130 × 80 × 44) 5.9 s (dense eigen: 311 s).
+- `hasty_recon::fieldmap::FieldMaps`: recon_b0 maps (ω, R2*, ff per breathing bin) carried by scanner position
+  (B0 scan geometry + GNL: its maps are at apparent positions) to another scan's voxels, holes filled (onion peeling
+  + smoothing).
+- recon_p2np: `--field truth|est:<recon_b0 run>[:bin]`, `--r2s off|truth|est:<run>` (T2* decay in the segments via
+  `build_segments_complex`: plain and joint-one-map paths), `--smaps truth|espirit[:eig_min]` (calibration reused,
+  compressed), `--fat-fraction est:<run>`; run.json records the estimates' errors vs truth. The sim already applies
+  e^{−R2* τ} during the readout; without `--r2s` the recon omits it (model error).
+- `tools/recon/eval_matrix.sh <flow sim> <recon_b0 run> <out> -- [recon args]`: configurations oracle / est_field /
+  est_smaps / est_both / true_r2s (resumable, skip finished), `eval_table.py` → eval_table.{md,csv}, figs.
+- Stochastic coil sampling `p2np::CoilSampling` (keep the leading virtual coils, draw from the rest, unbiased weights,
+  random reshuffling, hold ≥ 2 for exact ZMSHR1 pairs, full last iterations; `SetOp::select_coils`,
+  `SegNufft::select_coils`, `Objective::begin_iteration` / `curvature_pair_ok`, `P2np::step_norm_sampled`);
+  recon_p2np `--coil-sampling keep:draw[:hold[:last[:seed]]]`. Test (`--test coil_sampling`, 8 energy-ordered virtual
+  coils): epoch mean = full gradient (7e-6); λ_max inflation 1.42 drawing 4 of 8 vs 0.90 keeping 2 + 3 of 6; at 60
+  gradient-equivalents PnP-ISTA 10–16 % lower error than full gradients, ZMSHR1 no gain (secant pairs lost on subset
+  changes). Real-data test with the denoiser still to do.
+
+## K-space data path: streamed loading, stores, staging (2026-11-08)
+
+Goal: the same reconstruction on this workstation (24 GB VRAM, 94 GB RAM shared with simulations) and on a cluster
+node (several GPUs, large RAM / VRAM). The 10-min factory_arms scan has 212 M samples × 32 coils (54 GB raw).
+- `hasty_recon::kload`: `SimData::load_lazy` leaves data_clean.npy (and a schedule sim's per-sample records) on disk;
+  `NpyFile` positional reads; `SimData::load_set(ros, LoadOpts { w, cc, keep, data })` reads readouts in parallel,
+  whitens, adds noise, removes φ0, optionally filters samples (calibration box) and coil-compresses on the way in.
+  Noise is added after whitening (Ψ-correlated noise is white there: W L orthogonal), counter-based per (seed,
+  sample, coil): the same noise however the scan is split or ordered, and the calibration region and the compressed
+  data share it. Test (`--test kload_stream`, sim_point): identical to the legacy loader without noise (≤ 1e-6,
+  compressed ≤ 1e-5, filtered); noise variance σ²/2 to 0.02 %, coil correlations 0.002 (≈ 1/√m).
+- `hasty_recon::kstore::KStore`: per-set coil-major rows, representation `[disk[=PATH]:]ram|raw|lz4|zstd|zstdN[+qREL]`:
+  dense RAM, compressed blocks in RAM (32768 samples per coil and block, byte-shuffled, `hasty_value` codec, parallel
+  decode), or a file with a JSON index (reopened by later runs / other processes); +qREL quantises to multiples of
+  REL·σ before compression (adds REL²/12 σ² noise variance, +0.52 % at 0.25). Lock-free `&self` reads, coil subsets
+  read only their blocks. Unit tests: all representations, out-of-order concurrent fill, reopen, quantisation
+  variance. sim_point data (nearly noise-free): lz4 ×1.17, zstd ×1.25, zstd1+q0.25 ×2.9; decode 5–16 GB/s.
+- `hasty_recon::kstage::Stager`: two pinned buffers of the largest set + a worker thread decoding set t+1 while the
+  GPU works on set t; per use a device copy of exactly the set (stream-ordered). `P2np::from_store` (no device data,
+  no per-set residual buffers; sampled gradients stage only the group's coils) and `VelProblem::data_from_store`
+  (`YData::Staged`). One stager per GPU stream; stores are shared (`Arc`).
+- `hasty_value::codec::{compress_block, decompress_block, block_raw_len}`: the block codec outside `.hv` files.
+- recon_p2np `--kstore auto|legacy|<spec>`: legacy = the old in-memory loader; a spec streams; auto = legacy when
+  3 × raw < ½ available RAM (MemAvailable, capped by the cgroup's memory.max), else ram / zstd1 / disk:zstd1 by size.
+  A disk store defaults to <sim>/kstore/<hash of the content>.kst and is reused (eval_matrix configurations share it).
+  Data stay resident when they fit (as before); otherwise staged (image-space P²nP and the velocity model; `--plan
+  host` forces it). run.json `kdata`. Smoke (sim_point, seg b0): legacy / ram / staged lz4 / staged disk zstd1+q0.25
+  f = 2.9551e3 … 2.9552e3 after 4 iterations; coil sampling resident vs staged identical (2.4427e3).
+- Sample tables (SegPoints ≈ 187 B/sample: records 48, tile lists 137, items 1 → 40 GB on the 10-min scan):
+  `SegPoints::pack(opts)` compresses the host form (after `to_host`) into 1 MiB blocks; on use they are decoded in
+  parallel into a per-slot pinned staging buffer (event-guarded) and uploaded (prefetch path too); `to_device`
+  decodes. `is_packed`, `host_stored_bytes`, `SegNufft::stream_staging_bytes`. Test (`seg_stream`
+  packed_tables_match_resident): same streamed-vs-resident difference as pinned (1.4–1.9e-5, the known systematic
+  gap). Real trajectory tables (`HASTY_TABLE_PROBE=1`, sim_point): records ×6.6, tile lists ×6.2 with zstd1 (×6.24
+  overall in the recon), lz4 ×3–4. recon_p2np `--table-store auto|pinned|lz4|zstd|zstdN` (auto: packed zstd1 when
+  pinned tables would exceed 40 % of the available RAM).
+- `build_segments` / `_complex` / `_fat`: the diagonals, the fit basis and the interpolator table are built in
+  parallel (rayon; bit-identical to the serial code, test `seg_build_tests`). sim_point with warm-start-masked maps
+  (478 k fit voxels × 1782 table points × 4 encodes): 4 min 48 s → 9 s.
+- After the tables are built recon_p2np releases the per-sample host records they consumed (concomitant
+  coefficients always, coordinates / τ unless voxel-basis or fat-spectrum weights need them): 11 GB on the 10-min
+  scan.
+- 10-min scan budget now (RAM): data 39 GB (zstd1) or 49 GB dense or ≈ 10 GB quantised (estimate) or on disk;
+  tables ≈ 6.5 GB packed; records 11 GB until the tables exist. The planner/VRAM side is unchanged (stacks,
+  operator, two data + two table slots).
+
+
+## Lagged gradient with a reduced-segment surrogate (2026-11-08)
+
+- `SetOp::use_surrogate(on)` (default: none). `SegSets::with_surrogate(eng, segs)` attaches a second `SegNufft` with
+  fewer segments on the same sample tables (same grid, width, order, frames, coils, tile lists — asserted);
+  `SegSurrogate { eng, segs, on }`. Coil selection and table placement / streaming apply to both engines;
+  `WeightedSets` / `FatSets` pass the switch through, `FatJointSets` has none.
+- `P2np::with_lagged(τ)`: ∇̃f(x) = Ñ(x − x_a) + ∇f(x_a), f̃ = f(x_a) + Re⟨∇f(x_a), d⟩ + ½‖Ẽd‖²; exact gradient
+  (anchor refresh) when ‖x − x_a‖ > τ‖x‖. Surrogate gradients read no data (nothing staged). Secant pairs are kept only
+  within one anchor or between two exact gradients (`curvature_pair_ok`), otherwise the metric step. `lag_stats`
+  counts (exact, surrogate). Anchor reset at every `run_from`. Coil-sampled iterations stay exact. Two extra stacks.
+- `recon_p2np --lagged TAU[:LS|auto]` (model seg, no vmodel): auto = smallest L_s with ‖(E − Ẽ)x‖ ≤ 3 % ‖Ex‖ on the
+  warm start (else a smooth probe); none within 3 % → exact gradients. run.json `"lagged"`.
+- Test `hasty-recon --test lagged` (60 ZMSHR1 iterations, τ 0.1, L = 8): at 0.3 phase cycles L_s = 1 (15 % mismatch)
+  7 exact + 53 surrogate gradients reach the exact run's error; at 1.5 cycles L_s = 3 (2.4 %) the same; L_s = 2 (7.7 %)
+  or 2.5 cycles L_s = 3 (6.9 %): 33–45 exact gradients and 2–3× further from the solution (`HASTY_LAG_HZ=150|250`).
+- sim_point (4.3 cycles, L = 10 → L_s = 4 at 2.6 %): 30 iterations 10 exact + 20 surrogate, 13 s vs 18 s, final f
+  119 (estimate) vs 88. A modest gain at strong B0; the toy's 4.5–6.7× came from a 1-FFT surrogate of a 39-unit
+  operator.
+- Next: real-scale timing (10-min scan), surrogate = fewer segments *and* coils, gradient-relative refresh rule.
+
+## Pruned grid FFT, fused residual, SVD segment basis (2026-11-08, late)
+
+- `hasty-fft::PrunedChanFft3` (chanfft.rs): in-place 3-D FFT of channel-interleaved `[n2][n1][n0][nch]` data whose
+  image is a wrapped block per axis (`[0, hi) ∪ [n − lo, n)`, the NUFFT pad layout). Forward: x pass over (y, z) in the
+  block reading the block's x entries, y pass over z in the block, z pass all lines — nothing outside the block is
+  read, so no zeroing. Inverse mirrored, writes only the block. Codegen additions (both the mixed-radix and the
+  Bluestein generators): `n_in_tail` / `n_out_tail` (wrapped pruning) and a runtime `LineSplit` (line index split into
+  two sub-indices with gaps); defaults leave every old plan unchanged. Test `hasty-fft --test chanfft`: equal to the
+  full transform (forward exact, inverse 3e-7, incl. Bluestein lengths); 180×180×50 × 16 channels: forward incl. the
+  old memset 2.01 → 0.98 ms, inverse 1.35 → 0.96 ms; σ = 2: 2.8× both.
+- `SegNufft`: `GridFft` (pruned when ≥ 2 channels; `HASTY_SEG_NOPRUNE=1` = old full plans + memset) for the engine
+  slots and the multi-image path; `grid_fft_pruned()`.
+- Fused residual: `SegNufft::forward_residual(seg, pts, x, y, r)` — the gather accumulates onto −y (`seg_neg` init
+  kernel instead of the memset), also order 3 / multi path and host-resident tables. `SetOp::forward_residual`
+  (default forward + subtract; `SegSets` fused, surrogate-aware). P2np (all gradient paths) and VelProblem use it;
+  **P2np no longer keeps per-set residual buffers** (a whole second copy of the data): one stream-ordered temporary
+  per set in flight.
+- `build_segments_svd` / `build_segments_svd_weighted`: optimal rank-L basis of g(v, τ) over the fit voxels (Gram
+  GᴴG on `ns` readout times → leading eigenvectors V; D_l(v) = Σ_i g(v, τ_i) V_il; LS interpolators refitted per
+  table entry; optional per-voxel weights, e.g. warm-start signal energy). `recon_p2np --seg-basis fixed|svd`.
+  CPU study (`hasty-nufft --test seg_basis_cpu`, sim_point field map, 2.12 cycles): 0.6× the separable error at equal
+  L (L = 8: 6.0e-4 → 3.5e-4 rms), ≈ half a segment. The fixed-time LS interpolators were already optimal for their
+  diagonals; the rank is bounded by Δf·T, so no separable basis does better than the SVD.
+- Status: hasty-fft built and GPU-tested; hasty-nufft / hasty-recon changes built (before the weighted SVD variant);
+  **not run**: `hasty-nufft --test seg_pruned` (pruned vs full, fused residual, timing), the recon smoke tests,
+  `hasty-recon --test lagged|coil_sampling|stream_tables` after the residual change. **Not compiled**:
+  `build_segments_svd_weighted`, `recon_p2np --seg-basis`. GPU and CPU paused at the user's request.
+
+## Respiratory × cardiac frames; host-resident solver state (2026-11-09)
+
+- `recon_p2np --resp-bins NR --resp bellows|truth`: readouts binned by breathing amplitude (belt as recorded,
+  physio.npy; or the simulator's truth), frame index r·F + f. LLR spans all frames; the learned prior runs per bin
+  (cyclic cardiac windows). Truth comparisons use the cardiac frame. Not yet with --temporal / --vmodel; field maps
+  are not yet per bin.
+- `hasty_recon::hoststack`: `HostStack` (one contiguous host buffer per stack), `SetStreamer` (two device image
+  slots + two gradient slots, pinned staging, copy stream + events; a worker thread stages the next image and collects
+  the previous gradient while the GPU computes), `run_objective_host` (P²nP / ZMSHR1 on host stacks; the plain ZMSHR1
+  fused over the elements: no temporaries, 5 host stacks; the metric variant applies M per chunk).
+  `Objective::gradient_host` / `metric_host` (defaults upload the stack); `P2np` streams set by set (data resident or
+  staged). `recon_p2np --state auto|device|host` (auto: host when 3 stacks exceed half the free VRAM).
+  sim_point, 8 ZMSHR1 iterations: host vs device 1.2e-4 (device vs device 6.3e-5: scatter atomics).
+- Still device-only: --lagged, --coil-sampling, the velocity model. Next: stacks larger than RAM (compressed / NVMe
+  stores), the denoiser tile-streamed from them, multi-GPU (sets split across GPUs, scalar reductions on the host).
+
+## Multi-resolution simulation sources, small-FOV development scans, 1 mm design (2026-11-09)
+
+- simphantom: source records 24 floats; box elements (edge h, field gradient ∇ω): each term × Π_a sinc(h (k_a + ∇ω_a τ)/2)
+  (exact for uniform magnetization and a linear field in the cube; branch uniform over the block). Inputs
+  `tissue.size_m` / `tissue.field_grad_ppm_m` (absent = points, as before); truth maps spread an element's PD over the
+  voxels it covers. Formula checked against a 32³ sub-point sum (7e-4 = the midpoint rule's error).
+- prep_sim `--src-octree`: label-homogeneous 8 / 4 / 2 mm blocks (kept, no lumen, ≥ 12 mm from the heart) → box
+  elements with the block's mean field and half-difference gradient; every other voxel a 1 mm box. `--keep-box heart:M
+  | box`: tissue / blood only in the box (outer volume suppressed), FOV = box + 10 mm (z too); B0 still from the whole
+  body. factory_arms ph0001, heart + 40 mm: 5.70 M voxels → 2.29 M elements, 2.98 M sources with fat (the 2 mm arms
+  scan: 14.7 M); blood 0.73 M per frame. Note: the previous scans' 2 mm *points* outside the heart box (PD × 8, flat
+  spectrum) overstate high-k signal there (a 2 mm block's spectrum is 0.64 at the 2 mm kmax).
+- realistic_scan.sh: `--res`, `--keep-box`, `--octree`, `--tag` (scan directory suffix), `--flow-run` (sequence design).
+- Sequence: data/hasty/seq/flow_thorax_1mm (`seqdesign --res 1e-3 --fov 0.23 --t-adc 8e-3 --venc 1 --scheme coprime7
+  --p 2 --return 0 --spoil flowcomp`): N 3571, TR 11.27 ms, T_adc 8 ms, PNS 79.8 % (example hardware). The designs
+  still assume Siemens-like hardware (10 µs gradient raster, 2.89 T, example SAFE PNS); GE SIGNA Premier: 3.0 T, 4 µs
+  raster, GE PNS model — to be redone before any scanner export.
+- Next development scan: `realistic_scan.sh <ph> --beats 15 --res 0.001 --keep-box heart:40 --octree --tag _box1mm
+  --flow-run data/hasty/seq/flow_thorax_1mm` (after the 2 mm B0 scan).
+
+## Static-tissue lock, divergence-free wavelets, wavelet engine (2026-11-09)
+
+- `hasty_recon::sepwt`: separable periodic wavelet engine.
+  - f32, in-place Mallat layout, run-time AVX2+FMA multiply-accumulate over contiguous vectors.
+  - x/y passes per plane, z pass per row, all threads per image.
+  - db4 (`wavelet.rs`) moved onto it: 6.5× (stack) to 54× (single image) faster than the f64 version.
+- `hasty_recon::dfwavelet`: Deriaz–Perrier / Ong divergence-free wavelets, BART's filters and lincomb made periodic
+  (exact PR).
+  - Sign fixed by test: n = c_p − ¼ΣΔc_q, which separates a discrete curl field to 1e-7.
+  - Magnitude-weighted SURE / fixed thresholds, cycle spinning.
+  - `shrink_encodes` decodes, shrinks and re-encodes per frame.
+  - recon_p2np `--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]`, complex and velocity model.
+- `hasty_recon::tlock`: static / dynamic map from the iterate.
+  - Low-passed temporal variances (cardiac within bins, respiratory of bin means) against a local second-difference
+    noise level.
+  - Mean-velocity significance; ramp + dilation.
+  - Quadratic or group-soft-threshold lock, cardiac and respiratory separately.
+  - recon_p2np `--static-lock MU[:IT0[:EVERY]]` (+ `--lock-mode/-blur/-dilate/-score/-vmin`). Maps saved per refresh
+    (`static_map_<tag>.npy/json`, resumable); run_figs.py figure 20 with the lumen-locked fraction.
+- Details: research/static_lock.md.
+- Next:
+  - 2 mm factory_arms comparison (LLR vs + lock vs + lock + DFW);
+  - map vs the phantom's displacement truth;
+  - GPU wavelets inside the set streaming;
+  - the lock for the velocity model (temporal nodes).
+- recon_b0 OOM on the 2.5-min B0 scan (14:13).
+  - Cause: 50 echo sets × a device circulant preconditioner (~250 MB each) plus ~12 GB of data plus device stacks
+    exceeded 24 GB.
+  - Fix (additive):
+    - `CirculantPrecond::to_host` + `CircShared`: the N-grid arrays live in host memory, one shared device workspace
+      (plans, temporary, two upload slots); test `precond_host`, exact to 1e-6 with alternating sets.
+    - recon_b0 `--state auto|device|host`: auto goes host above 80 % of free device memory.
+- Host-memory budget of the 2 mm 10-min reconstruction (smoke OOM-killed at the 60 GiB cap; profiled:
+  eval_10min/memprof/mem.txt).
+  - Measured: setup ≈ 30 GiB (11.4 packed tables + ~19); iterations + 22 GiB (stacks); end + 13 GiB (output arrays).
+  - Fixes:
+    - the plain ZMSHR1 / gradient step fused into the update (no step stack: −1 stack);
+    - raw streaming checkpoints of host stacks (`hoststack::save_raw/load_raw`, `state_<name>.hsk`; the hasty-value
+      form copied x, x_prev, g_prev — still read for older runs);
+    - final recon/vel npy streamed from the stack (`save_parts`);
+    - `sysmem::trim` (malloc_trim) after setup, RSS printed.
+  - Test `host_state`: host solver vs device 3.8e-6 (ZMSHR1) / 1.9e-6 (plain); stop + resume through the raw
+    checkpoint vs uninterrupted 4.4e-6.
+- Cost: 6 min per iteration at 1 respiratory bin (140 sets × 17 segments × 31 coils, FFT-bound), ≈ 12 at 2 bins.
+- Data disk full (15:33).
+  - Cause: the k-space store tag held the scan path as spelled, so a relative and an absolute run built two 44 GiB
+    stores of the same data; the 2-bin store then had no room.
+  - Fixes: canonical path in the tag; `HASTY_KSTORE_DIR` (eval_10min.sh and the queues: rustlib/target/kstore on the
+    root disk, 220 GB free); queue5 checks ≥ 90 GB free before the 1 mm scan (≈ 72 GB: data 54, schedules 14, samples 3).
+- First full reconstruction of the realistic 10-min scan (2 mm, 2 respiratory bins, oracle, LLR, plain ZMSHR1):
+  - from a zero start (`--warm 0`, the default) 10 iterations gave velocity RMSE 0.464 m/s (rel 1.08, worse than zero
+    velocity) and a dark band through the heart and lungs in |x|.
+  - First diagnosis (no warm start → slow convergence) was wrong. The cause: a stale operator (2026-11-09 evening).
+    - The support estimate without a warm start thresholds the smoothed adjoint of the reference encode.
+    - The plain SENSE operator `op` was built before the Σ_c|S_c|² = 1 normalisation of the coil maps, so that adjoint
+      was weighted by the raw Biot–Savart Σ|S|²: 22.6 near the coils (body p99) vs 0.25 in the lumen (90×).
+    - The 5 %-of-p99 threshold dropped the deep thorax; the per-slice flood fill entered through the air between arm and
+      torso. 18 % of the lumen (and the heart band) fell outside the support, and the coil maps were zeroed there, so the
+      model could not represent the heart's signal at all.
+    - With a warm start the support comes from the normalised maps, which is why earlier runs were fine.
+    - Fix: `op` built after the normalisation.
+  - The warm start (`--warm 20`) then OOMed on the device (all three comparison runs).
+    - Pooling 40 frames per encode needs y, the PCGLS r and q, and the operator's ksp/ksp2 at the pooled size:
+      5 × 7.5 GB.
+    - Fix: `cg::pcgls_sets_ctl`: CGLS streamed over the sets through the plain operator (`set_points`), the data
+      residual on the host per set, E_i p evaluated twice per set instead of stored; checkpoints x, p, γ (the residual
+      is recomputed on resume).
+    - Test `pcgls_sets`: streamed vs pooled 1e-5 / 1.2e-6 (without / with circulant), stop + resume 1.1e-5 / 1.5e-6.
+      The deliberately ill-conditioned test problem amplifies f32 rounding ~7× per iteration, including the pooled
+      run's own atomics: 4 iterations.
+  - k-space store key.
+    - Every run built its own 46 GB store: the tag held the coil-compression rows, and those are not reproducible
+      (near-degenerate calibration eigenvalues, e.g. 0.0429 / 0.0426, let the eigenvectors rotate inside the kept
+      subspace under f32 rounding: 1–4 % entry changes).
+    - That, not only the relative / absolute path, filled the data disk at 15:33 and the root disk (4 GB left) at 20:20.
+    - Fix: the store is keyed by scan, sets, noise, injection and the compression rule. A run finding a store adopts the
+      basis stored in its tag (the reconstruction is invariant to a unitary change of virtual-coil basis).
+  - Queue6: llr_cold (the cold-start question with the support fixed), then llr / lock / lock_dfw with the warm start
+    shared (computed in llr, state copied), then the 1 mm development scan resumes (paused by STOP at bin 4500 of 60001,
+    ≈ 36 h left).
+  - The broken cold run is kept in lock_2mm/cold_start_llr10.
+  - Open: plain ZMSHR1 is a scalar plus rank-one quasi-Newton step. Without density compensation the spiral normal
+    operator spans ~10⁶ (cg.rs), so high frequencies converge slowly from zero.
+    - ZMSHR1-M (the same step in the circulant metric, `Precond::Zmshr1M`) is the variant built for that.
+    - A metric shared per encode would be 7 × 133 MB (per-set circulants: ≈ 37 GB).
+    - Decide after llr_cold.

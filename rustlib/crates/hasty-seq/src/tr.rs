@@ -9,6 +9,7 @@
 //! back, rotations in acquisition order), so tails of previous TRs with other rotations are included.
 
 use crate::encode::{design, EncodeDesign, EncodeSpec, Scheme};
+use crate::robust::RobustOpts;
 use crate::pns::{pns, SafeHw};
 use crate::system::System;
 use crate::traj::{tail, Spoke};
@@ -28,6 +29,21 @@ pub struct TrSpec {
     pub venc: f64,
     pub balanced: bool,
     pub spoil: Spoil,
+    pub encode_shape: EncodeShape,
+    /// shape of the per-encode flow-compensated tail blocks (`Spoil::FlowComp`): two-lobe, or robust / resonance-tuned
+    /// QP blocks with the same spoil M0 and M1 rewind
+    pub tail_shape: EncodeShape,
+}
+
+/// shape of the velocity-encoding blocks
+#[derive(Clone, Debug, Default)]
+pub enum EncodeShape {
+    /// minimum-time two-lobe trapezoids (`encode::design`)
+    #[default]
+    TwoLobe,
+    /// GIRF-robust / resonance-tuned QP blocks (`robust::design`), `extra` raster segments longer than the two-lobe
+    /// block at the same limits (negative: shorter, e.g. with a higher encode slew); lengthened until feasible
+    Robust { opts: RobustOpts, extra: i64 },
 }
 
 /// part of the TR a raster segment belongs to
@@ -91,7 +107,10 @@ impl Tr {
         let i_enc = (sys.ceil_raster(sys.rf_dead + spec.rf_dur + sys.rf_ringdown) / dt).round() as usize;
         let enc_sys = System { smax: sys.smax * spec.enc_slew, ..sys.clone() };
         let es = EncodeSpec { m0: [0.0; 3], m1_offset: [0.0; 3], scheme: spec.scheme, venc: spec.venc, balanced: spec.balanced, t_start: i_enc as f64 * dt, t_ref: t_rf };
-        let encode = design(&es, &enc_sys);
+        let encode = match &spec.encode_shape {
+            EncodeShape::TwoLobe => design(&es, &enc_sys),
+            EncodeShape::Robust { opts, extra } => crate::robust::design_like(&es, &enc_sys, opts, *extra),
+        };
         let i_ro = i_enc + encode.waves[0].len() - 1;
         let i_tail = i_ro + spoke.i_adc;
         let mut tr = Tr { dt, t_rf, i_enc, i_ro, i_tail, n: 0, encode, spoke, spoil: spec.spoil, tail_gmax: sys.gmax, tail_smax: sys.smax * spec.tail_slew, n_tail: 0, enc_tail: None };
@@ -107,13 +126,22 @@ impl Tr {
                 design(&EncodeSpec { m0: sp, m1_offset: off, scheme: spec.scheme, venc: -spec.venc, balanced: spec.balanced, t_start: t_s, t_ref: t_rf }, &tail_sys)
             };
             let mut best = mk(0.0);
+            let mut best_half = 0.0;
             let mut half = 0.5 * best.duration;
             for _ in 0..4 {
                 let d = mk(half);
-                half = 0.5 * d.duration;
+                let next = 0.5 * d.duration;
                 if d.duration < best.duration {
                     best = d;
+                    best_half = half;
                 }
+                half = next;
+            }
+            if let EncodeShape::Robust { opts, extra } = &spec.tail_shape {
+                // the same targets (spoil M0, rewind M1 with the chosen offset) as robust / tuned QP blocks
+                let off = [0, 1, 2].map(|a| sp[a] * (t_s - t_rf + best_half));
+                let es = EncodeSpec { m0: sp, m1_offset: off, scheme: spec.scheme, venc: -spec.venc, balanced: spec.balanced, t_start: t_s, t_ref: t_rf };
+                best = crate::robust::design_like(&es, &tail_sys, opts, *extra);
             }
             tr.n_tail = best.waves[0].len() - 1;
             tr.enc_tail = Some(best);
@@ -190,6 +218,13 @@ impl Tr {
                 g
             })
             .collect()
+    }
+    /// moments of encode `e`, rotation `r` as played through `girf` at `times` (s from the TR start), integrated from
+    /// the excitation; `prev` = the encode and rotation of the TR before (acquisition order), whose tails the chain
+    /// still carries
+    pub fn played_moments(&self, girf: &crate::girf::Girf, e: usize, r: &Mat3, prev: Option<(usize, &Mat3)>, times: &[f64]) -> Vec<crate::girf::Played> {
+        let pg: Vec<Vec3> = prev.map_or(vec![], |(ep, rp)| self.physical_all(rp).swap_remove(ep));
+        crate::girf::played_moments(girf, &pg, &self.physical(e, r), self.t_rf, times)
     }
     pub fn physical(&self, e: usize, r: &Mat3) -> Grad {
         let mut g = self.physical_all(r).swap_remove(e);
@@ -276,7 +311,7 @@ mod tests {
         let y = Yarn { kmax: 200.0, fov: 0.3, n_design: 6000.0, edge_density: 1.0, kg0: 0.0, wobble: 0.5, wobble_freq: 3.0 };
         let sp = Spoke::design(&y.curve(100_000), &sys, &TopOpts::default());
         let spoil = [0.0, 0.0, 2.0 / (crate::GAMMA_BAR * 0.0025)];
-        let spec = TrSpec { sys: sys.clone(), enc_slew: 1.0, tail_slew: 1.0, rf_dur: 100e-6, scheme: Scheme::Hadamard, venc: 1.5, balanced: true, spoil: Spoil::Physical(spoil) };
+        let spec = TrSpec { sys: sys.clone(), enc_slew: 1.0, tail_slew: 1.0, rf_dur: 100e-6, scheme: Scheme::Hadamard, venc: 1.5, balanced: true, spoil: Spoil::Physical(spoil), encode_shape: EncodeShape::TwoLobe, tail_shape: EncodeShape::TwoLobe };
         let rots = rotations(RotSet::SuperFibonacci, 64);
         let tr = Tr::build(&spec, sp, &rots);
         let d = crate::encode::delta_m1(1.5);
@@ -313,7 +348,7 @@ mod flowcomp_tests {
         let y = Yarn { kmax: 250.0, fov: 0.32, n_design: 2200.0, edge_density: 1.0, kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
         let sp = Spoke::design(&y.curve_return(60_000, 0.0), &System { smax: sys.smax * 0.45, ..sys.clone() }, &TopOpts { v_end: Some(0.0), ..TopOpts::default() });
         let spoil = [0.0, 0.0, 2.0 / (crate::GAMMA_BAR * 2e-3)];
-        let spec = TrSpec { sys: sys.clone(), enc_slew: 0.3, tail_slew: 0.5, rf_dur: 100e-6, scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven }, venc: 1.0, balanced: true, spoil: Spoil::FlowComp(spoil) };
+        let spec = TrSpec { sys: sys.clone(), enc_slew: 0.3, tail_slew: 0.5, rf_dur: 100e-6, scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven }, venc: 1.0, balanced: true, spoil: Spoil::FlowComp(spoil), encode_shape: EncodeShape::TwoLobe, tail_shape: EncodeShape::TwoLobe };
         let rots = rotations(RotSet::SuperFibonacci, 32);
         let tr = Tr::build(&spec, sp, &rots);
         let l = tr.enc_tail.as_ref().unwrap().waves[0].limits();
@@ -334,3 +369,39 @@ mod flowcomp_tests {
         println!("flowcomp tail {:.3} ms, M1 spread {spread:.2e} (encode M1 {m1_scale:.2e})", tr.n_tail as f64 * tr.dt * 1e3);
     }
 }
+
+#[cfg(test)]
+mod robust_encode_tests {
+    use super::*;
+    use crate::encode::DualLayout;
+    use crate::traj::{rotations, RotSet, TopOpts, Yarn};
+
+    #[test]
+    fn robust_encode_keeps_the_encoding_and_the_flowcomp_tail() {
+        let sys = System::prisma_xr();
+        let y = Yarn { kmax: 250.0, fov: 0.32, n_design: 2200.0, edge_density: 1.0, kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
+        let sp = Spoke::design(&y.curve_return(60_000, 0.0), &System { smax: sys.smax * 0.45, ..sys.clone() }, &TopOpts { v_end: Some(0.0), ..TopOpts::default() });
+        let spoil = [0.0, 0.0, 2.0 / (crate::GAMMA_BAR * 2e-3)];
+        let base = TrSpec { sys: sys.clone(), enc_slew: 0.3, tail_slew: 0.5, rf_dur: 100e-6, scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven }, venc: 1.0, balanced: true, spoil: Spoil::FlowComp(spoil), encode_shape: EncodeShape::TwoLobe, tail_shape: EncodeShape::TwoLobe };
+        let rob = TrSpec { encode_shape: EncodeShape::Robust { opts: RobustOpts::default(), extra: 30 }, ..base.clone() };
+        let rots = rotations(RotSet::SuperFibonacci, 16);
+        let t0 = Tr::build(&base, sp.clone(), &rots);
+        let t1 = Tr::build(&rob, sp, &rots);
+        assert_eq!(t1.i_ro - t1.i_enc, t0.i_ro - t0.i_enc + 30);
+        for r in rots.iter().step_by(5) {
+            let mut spread: f64 = 0.0;
+            let ends: Vec<_> = (0..t1.n_enc()).map(|e| t1.physical(e, r).moments(t1.t_rf)).collect();
+            for e in 0..t1.n_enc() {
+                let m0 = t0.physical(e, r).moments(t0.t_rf);
+                // same velocity encoding at the echo, k = 0 there, constant total M0 and equal total M1
+                assert!(norm(&ends[e].m0[t1.i_ro]) < 1e-12);
+                assert!(norm(&crate::sub(&ends[e].m1[t1.i_ro], &m0.m1[t0.i_ro])) < 1e-6 * norm(&m0.m1[t0.i_ro]).max(1e-12) + 1e-15, "e{e}");
+                assert!(norm(&crate::sub(&ends[e].last().0, &spoil)) < 1e-3 * norm(&spoil));
+                spread = spread.max(norm(&crate::sub(&ends[e].last().1, &ends[0].last().1)));
+                assert!(t1.physical(e, r).limits().ok_axis(&sys));
+            }
+            assert!(spread < 1e-6 * norm(&t1.encode.m1[1]), "total M1 spread {spread}");
+        }
+    }
+}
+

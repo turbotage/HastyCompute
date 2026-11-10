@@ -3,6 +3,8 @@
 use num_complex::Complex;
 use rustfft::FftPlanner;
 
+pub mod physops;
+
 pub type C64 = Complex<f64>;
 pub type C32 = Complex<f32>;
 

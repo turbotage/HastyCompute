@@ -286,7 +286,7 @@ mod tests {
         let y = Yarn { kmax: 150.0, fov: 0.3, n_design: 800.0, edge_density: 1.0, kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
         let sp = Spoke::design(&y.curve_return(30_000, 0.0), &System { smax: sys.smax * 0.45, ..sys.clone() }, &TopOpts { v_end: Some(0.0), ..TopOpts::default() });
         let spoil = [0.0, 0.0, 2.0 / (hasty_seq::GAMMA_BAR * 3e-3)];
-        let spec = TrSpec { sys, enc_slew: 0.3, tail_slew: 0.5, rf_dur: 100e-6, scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven }, venc: 1.0, balanced: true, spoil: Spoil::FlowComp(spoil), encode_shape: EncodeShape::TwoLobe };
+        let spec = TrSpec { sys, enc_slew: 0.3, tail_slew: 0.5, rf_dur: 100e-6, scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven }, venc: 1.0, balanced: true, spoil: Spoil::FlowComp(spoil), encode_shape: EncodeShape::TwoLobe, tail_shape: EncodeShape::TwoLobe };
         Tr::build(&spec, sp, &rotations(RotSet::SuperFibonacci, 16))
     }
 

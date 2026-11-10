@@ -523,6 +523,7 @@ name = "hasty-bench"
 version = "0.1.0"
 dependencies = [
  "cudarc",
+ "hasty-cfd",
  "hasty-cuda",
  "hasty-fft",
  "hasty-mrsim",
@@ -536,7 +537,21 @@ dependencies = [
  "hasty-value",
  "nalgebra",
  "num-complex",
+ "rayon",
  "serde_json",
+]
+
+[[package]]
+name = "hasty-cfd"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "cudarc",
+ "hasty-cuda",
+ "hasty-value",
+ "rayon",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -544,6 +559,7 @@ name = "hasty-cuda"
 version = "0.1.0"
 dependencies = [
  "cudarc",
+ "libloading",
  "thiserror",
 ]
 
@@ -585,8 +601,10 @@ dependencies = [
  "hasty-cuda",
  "hasty-fft",
  "hasty-testkit",
+ "hasty-value",
  "nalgebra",
  "num-complex",
+ "rayon",
  "thiserror",
 ]
 
@@ -622,10 +640,13 @@ dependencies = [
  "hasty-fft",
  "hasty-mrsim",
  "hasty-nufft",
+ "hasty-testkit",
  "hasty-toeplitz",
  "hasty-value",
  "nalgebra",
  "num-complex",
+ "rayon",
+ "rustfft",
  "serde_json",
  "thiserror",
 ]

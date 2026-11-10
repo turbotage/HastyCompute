@@ -286,3 +286,27 @@ pub(crate) fn decode_block(h: &BlockHeader, payload: &[u8], out: &mut [u8]) -> R
     }
     Ok(())
 }
+
+/// Compress one self-describing block (header + payload): the public form of the format's block encoder, for
+/// containers outside `.hv` (e.g. `hasty_recon::kstore`). `word` is the byte-shuffle word size (4 for f32 / complex
+/// f32 components, 1 = no shuffle); `delta` applies the integer delta filter (integer data only).
+pub fn compress_block(raw: &[u8], word: usize, delta: bool, o: &Options) -> Vec<u8> {
+    let mut out = Vec::with_capacity(raw.len() / 2 + BLOCK_HEADER + 4);
+    encode_block(raw, word, delta, o, &mut out);
+    out
+}
+
+/// Raw length of a block made by [`compress_block`] (from its header).
+pub fn block_raw_len(block: &[u8]) -> Result<usize> {
+    BlockHeader::parse(block).map(|h| h.raw_len as usize).ok_or_else(|| Error::Format("short block".into()))
+}
+
+/// Decompress one block made by [`compress_block`] into `out` (exactly its raw length).
+pub fn decompress_block(block: &[u8], out: &mut [u8]) -> Result<()> {
+    let h = BlockHeader::parse(block).ok_or_else(|| Error::Format("short block".into()))?;
+    let n = h.len();
+    if block.len() < n + h.comp_len as usize {
+        return Err(Error::Format("truncated block".into()));
+    }
+    decode_block(&h, &block[n..n + h.comp_len as usize], out)
+}

@@ -4,6 +4,9 @@
 // tracer, JS fallback, common/flowmath.js); until then — or when the volume exceeds the memory budget, or with &client=0 —
 // the server's flow_* commands do the work.
 //   flow/index.html?id=<value id>[&frame=n][&follow=0][&client=0][&maxmb=1500][&dpr=1.5][&selftest=1]
+//   Display-only reductions are flags, default = no reduction unless the volume would not fit: &mip=auto|1|2|… (MIP max-pooling,
+//   &mipvox= voxel budget), &roimb=768 (largest full-resolution box the vessel tool fetches),
+//   &mipsteps=auto|N, &mipstepvox=1, &mipmax=2048 (ray sampling of the MIP). Measurements never use pooled data.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HastyClient } from '../../common/hasty_client.js';
@@ -11,6 +14,9 @@ import { Centerlines, derivedScalar, dilate, lineAttribute, mergeLines, meanFlow
 import { COLORMAPS, cssGradient, lut } from './colormaps.js';
 import { CenterlineLayer, Glyphs, LineLayer, MipLayer, PlaneDisc, SlicePlane, lutTexture } from './layers.js';
 import { fieldBytes, loadCenterlines, loadField } from './field.js';
+import { loadPcmra } from './pcmra.js';
+import { fetchRoi } from '../../common/roi.js';
+import { poolSlab } from '../../common/pool.js';
 import { GpuTracer } from './gputrace.js';
 import { VesselTool, drawProfile, profileSeries } from './vessel.js';
 import { Plot } from './plot.js';
@@ -107,15 +113,13 @@ async function main() {
     status('PC-MRA…');
     const pcOut = (await client.execute('flow_pcmra', {}, [id], 'flow_pcmra (flow viewer)')).outputs[0];
     temps.add(pcOut);
-    const pc = await client.getTensor(pcOut);
-    forget(pcOut);
+    const pcm = await loadPcmra(client, pcOut, info.dims, { factor: params.get('mip') ?? 'auto', maxVox: Number(params.get('mipvox') ?? 2 ** 27), onProgress: (a, b) => status(`PC-MRA: ${a}/${b} planes`) });
     const grayTex = lutTexture('gray');
-    const mip = new MipLayer(info.dims, sp, pc.data, grayTex);
-    const pcData = pc.data;
+    const mip = new MipLayer(info.dims, sp, null, grayTex, pcm);
+    let pcFull = pcm.full;                                // float PC-MRA, only kept for small volumes (region growing in client mode)
     scene.add(mip.mesh);
-    let amax = 0;
-    for (let i = 1; i < pc.data.length; i++) if (pc.data[i] > pc.data[amax]) amax = i;
-    const hot = [amax % X, Math.floor(amax / X) % Y, Math.floor(amax / (X * Y))];
+    const hot = pcm.hot;
+    if (pcm.factor > 1) status(`MIP is max-pooled ${pcm.factor}× for display (${pcm.dims.join('×')} texture); slices, tracing and measurements use full resolution`);
 
     // ── slices ─────────────────────────────────────────────────────────────────────────────────────────────────
     // Each visible slice keeps its whole cardiac cycle in one GPU texture array; frames are requested as the current
@@ -263,14 +267,24 @@ async function main() {
     let clientWanted = params.get('client') === '1' && clientFits, clientStarted = false;
     const setCompute = (extra = '') => {
         const el = $('compute');
-        el.textContent = (field && localTrace ? `client · ${gpu ? 'WebGPU' : 'JS'}` : field ? 'server · volume in browser (vessel tool)' : clientStarted ? 'server · loading volume…' : clientFits ? 'server · click to load volume into the browser' : 'server') + extra;
+        el.textContent = (field && localTrace ? `client · ${gpu ? 'WebGPU' : 'JS'}` : field ? 'server · volume in browser' : clientStarted ? 'server · loading volume…' : clientFits ? 'server · click to load volume into the browser' : 'server') + extra;
         el.style.cursor = !field && !clientStarted && clientFits ? 'pointer' : '';
     };
     $('compute').addEventListener('click', () => { if (!field && !clientStarted && clientFits) { localTrace = true; clientWanted = true; startClientLoad(); } });
     const local = () => field && localTrace;
     setCompute();
+    // The vessel tool needs no volume in the browser: clicks are traced through the (display) PC-MRA and the measurement
+    // fetches a full-resolution box around the click.
+    const velRank = entry.summary?.items?.vel?.shape?.length ?? 5;
+    vessel = new VesselTool({
+        scene, spacingMm: sp, divArr, invalidate,
+        vol: { u8: pcm.u8, dims: pcm.dims, factor: pcm.factor, scale: pcm.scale },
+        info: { dims: info.dims, spacing: info.spacing, frames: F },
+        fetchRoi: (box) => fetchRoi(client, { id, pcId: pcOut, info, velRank, box }),
+        getCenterlines: () => centerlines, maxRoiBytes: Number(params.get('roimb') ?? 768) * 1048576,
+    });
     const regionCache = new Map();
-    const regionFor = (q) => { const k = `r${q.toFixed(3)}`; if (!regionCache.has(k)) regionCache.set(k, regionFrom({ mask: fieldMask, pc: pcData, quantile: q })); return regionCache.get(k); };
+    const regionFor = (q) => { const k = `r${q.toFixed(3)}`; if (!regionCache.has(k)) regionCache.set(k, regionFrom({ mask: fieldMask, pc: pcFull, quantile: q })); return regionCache.get(k); };
     const stopFor = (q) => { const k = `s${q.toFixed(3)}`; if (!regionCache.has(k)) regionCache.set(k, dilate(regionFor(Math.max(0, q - 0.05)), info.dims)); return regionCache.get(k); };
     const mmToM = 1e-3;
 
@@ -467,6 +481,7 @@ async function main() {
         discs.forEach((d) => d.frame(f, vmax()));
         plot.setCursor(f * dt * 1e3);
         vessel?.setFrame(f, vmax());
+        if (vessel?.wall && $('vw-by').value.endsWith('_f') || vessel?.wall && $('vw-by').value === 'wss') wallColour();
         renderVesselFrame();
         if ($('vq').value !== 'pcmra') applyQuantity();
     }
@@ -484,9 +499,9 @@ async function main() {
         }
         let u = c.frames.get(frame);
         if (!u) {
-            const v = derivedScalar(field, frame, kind), k = 255 / c.scale;
-            u = new Uint8Array(v.length);
-            for (let i = 0; i < v.length; i++) { const q = v[i] * k; u[i] = q >= 255 ? 255 : q > 0 ? (q + 0.5) | 0 : 0; }
+            const v = derivedScalar(field, frame, kind);
+            u = new Uint8Array(pcm.dims[0] * pcm.dims[1] * pcm.dims[2]);
+            poolSlab(v, info.dims, pcm.factor, 0, Z, c.scale, u);          // max-pool (factor 1: plain quantisation) to the MIP texture size
             c.frames.set(frame, u);
         }
         mip.setData(u);
@@ -523,21 +538,85 @@ async function main() {
             ['peak velocity', `${pk.toFixed(2)} m/s`], ['plane-to-plane spread', `${spread.toFixed(1)} ml/s`],
         ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
     }
-    function runVessel(hit) {
-        const t = performance.now(), res = vessel.measure(hit, vesselOpts());
+    async function runVessel(hit) {
+        const t = performance.now();
+        status('vessel tool: fetching the region around the click at full resolution…');
+        let res;
+        try { res = await vessel.measure(hit, vesselOpts()); } catch (e) { console.error('vessel', e); status(`vessel tool: ${e.message}`); return null; }
+        if (res === undefined) return null;                // a newer click superseded this one
         if (!res) { status('vessel tool: no lumen / flow at that point — lower the threshold or click nearer the vessel centre'); return null; }
         lastHit = hit;
         vessel.show(res, frame, vmax());
+        renderWall();
+        if ($('vw-tree').checked) renderTree();
         renderVessel();
         renderVesselFrame();
         status(`vessel: ${res.planes.length} planes (${res.source}), net ${res.avg.net_ml.toFixed(2)} ml/cycle, ${(performance.now() - t).toFixed(0)} ms`);
         return res;
     }
+    // wall surface + wall shear stress of the measured vessel (common/surface.js). Opt-in; recomputed when its settings change.
+    const wallMu = () => Math.max(0.1, Number($('vw-mu').value || 3.5)) * 1e-3;
+    const wallD = () => Math.max(0.01, Number($('vw-d').value || Math.max(...sp)));
+    $('vw-d').value = Math.max(...sp).toFixed(2);                                 // default: one voxel
+    let wallKey = '';
+    async function wallColour() {
+        const w = vessel.wall;
+        if (!w) return;
+        const by = $('vw-by').value, usr = Number($('vw-max').value);
+        if (/^(ke|diss)/.test(by) && !w.en) {                      // first use: ~2 s at 0.5 mm, so say so and let the status paint
+            if (w.busy) return;
+            w.busy = true;
+            status('energy: computing velocity gradients near the wall and in the lumen…');
+            await new Promise((r) => setTimeout(r, 16));
+            const t = performance.now(), lum = vessel.ensureEnergy();
+            const sum = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+            $('vw-info').textContent += ` Energy (${(performance.now() - t).toFixed(0)} ms): whole lumen in the box, wall-adjacent voxel layer excluded so a lower bound: mean viscous dissipation ${(sum(lum.diss_W) * 1e3).toFixed(3)} mW, mean kinetic energy ${(sum(lum.ke_J) * 1e3).toFixed(3)} mJ over ${(lum.volume_mm3 / 1000).toFixed(1)} ml (ρ 1060 kg/m³; gradients of MRI velocity are noise-sensitive, dissipation especially).`;
+            status('energy: done');
+            w.busy = false;
+            if (vessel.wall !== w) return;
+        }
+        const auto = w.auto[by] || 1;
+        const unit = { twss: 'Pa', wss: 'Pa', osi: '', none: '', ke: 'J/m³', ke_f: 'J/m³', diss: 'W/m³', diss_f: 'W/m³' }[by];
+        const max = usr > 0 && by !== 'osi' ? usr : auto;
+        vessel.setWallColour(by, frame, max, Number($('vw-op').value));
+        $('vw-bar').style.background = by === 'none' ? '#9e9e9e' : cssGradient(cmapName);
+        $('vw-hi').textContent = by === 'none' ? '' : `${max < 100 ? max.toFixed(2) : max.toExponential(1)} ${unit}`;
+    }
+    async function renderWall(force = false) {
+        const on = $('vw-on').checked;
+        $('vw-opts').hidden = !on;
+        if (!on || !vessel.result) { vessel.clearWall(); wallKey = ''; invalidate(); return; }
+        const key = [vessel.result.hit.p.map((c) => c.toFixed(1)).join(','), vessel.result.opts.frac, vessel.result.opts.radiusMm, vessel.result.opts.nPlanes, $('vw-order').value, wallD(), wallMu()].join('|');
+        if (force || key !== wallKey || !vessel.wall) {
+            status('wall surface: segmenting the lumen and sampling the velocity near the wall…');
+            await new Promise((r) => setTimeout(r, 16));
+            const t = performance.now(), dMm = wallD(), mu = wallMu();
+            const r = vessel.buildWall(vessel.result, { dMm, mu, order: Number($('vw-order').value), lut: lutTex });
+            wallKey = key;
+            if (!r) { $('vw-info').textContent = 'no lumen surface at this click (lower the lumen threshold)'; status('wall surface: none found'); return; }
+            const vox = Math.max(...sp);
+            $('vw-info').textContent = `${r.vertices} vertices, ${(performance.now() - t).toFixed(0)} ms. Time-mean WSS: 2nd–98th percentile ${r.wss[0].toFixed(2)}–${r.wss[1].toFixed(2)} Pa` + (r.nan ? `; ${r.nan} vertices at the box edge have no value` : '') +
+                `. Assumes no slip at the surface and Newtonian blood (μ ${(mu * 1e3).toFixed(1)} mPa·s); wall = iso-surface of the lumen threshold, so its position is uncertain by about ±½ voxel (${(vox / 2).toFixed(2)} mm), which shifts WSS by roughly ${Math.round(100 * (vox / 2) / Math.max(1e-6, Math.sqrt(vessel.result.avg.area_mm2 / Math.PI)))} % for this vessel. Sampling at ${dMm.toFixed(2)} mm; WSS from phase-contrast data is usually underestimated — compare relative patterns, not absolute values.`;
+            status(`wall surface: ${r.vertices} vertices`);
+        }
+        wallColour();
+    }
+    async function renderTree() {
+        if (!$('vw-tree').checked || !lastHit) { vessel.clearTree(); invalidate(); return; }
+        status('vessel tree: segmenting the connected vessels…');
+        await new Promise((r) => setTimeout(r, 16));
+        const t = performance.now(), r = vessel.buildTree(lastHit, vesselOpts().frac, Number($('vw-op').value) * 0.4);
+        if (r.error) { status(`vessel tree: ${r.error}`); $('vw-tree').checked = false; return; }
+        status(`vessel tree: ${(r.triangles / 1e3).toFixed(0)}k triangles, ${(r.nvox / 1e6).toFixed(2)} M voxels at ${r.factor > 1 ? `${r.factor}× max-pooled display resolution (widths may be exaggerated by up to ${r.factor - 1} voxel${r.factor > 2 ? 's' : ''})` : 'full resolution'}, ${(performance.now() - t).toFixed(0)} ms`);
+    }
+    $('vw-tree').onchange = renderTree;
+    for (const k of ['vw-on', 'vw-order', 'vw-d', 'vw-mu']) $(k).onchange = () => renderWall();
+    for (const k of ['vw-by', 'vw-max']) $(k).onchange = () => { wallColour(); };
+    $('vw-op').oninput = () => { wallColour(); vessel.setTreeOpacity(Number($('vw-op').value) * 0.4); };
     function vesselClick(e, r) {
-        if (!field || !vessel) { status(clientStarted ? 'vessel tool: the velocity volume is still loading into the browser…' : 'vessel tool: the velocity volume is not loaded (too large? see ?maxmb=)'); return; }
         ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
         const o = ray.ray.origin, d = ray.ray.direction;
-        const hit = vessel.pick([o.x / sp[0], o.y / sp[1], o.z / sp[2]], [d.x / sp[0], d.y / sp[1], d.z / sp[2]], Math.max(0.25, mip.uniforms.lo.value) * mip.scale);
+        const hit = vessel.pick([o.x / sp[0], o.y / sp[1], o.z / sp[2]], [d.x / sp[0], d.y / sp[1], d.z / sp[2]], Math.max(0.25, mip.uniforms.lo.value) * mip.scale);   // level in PC-MRA units
         if (!hit) { status('vessel tool: nothing bright under the cursor (raise the volume level or click on a vessel)'); return; }
         runVessel(hit);
     }
@@ -558,6 +637,7 @@ async function main() {
         if (lastStream) setStream(lastStream);
         if (lastPath) setPath(lastPath);
         if ($('vq').value !== 'pcmra') mip.uniforms.lut.value = lutTex;
+        if (vessel?.wall) { vessel.wall.uniforms.lut.value = lutTex; wallColour(); }
         legend(); paintSlices();
     };
     $('lcolor').onchange = () => { if (lastStream) setStream(lastStream); if (lastPath) setPath(lastPath); legend(); };
@@ -584,13 +664,10 @@ async function main() {
         if ($('vq').value === 'pcmra') { mip.setData(mip.u8); mip.uniforms.lut.value = grayTex; invalidate(); }
         else { mip.uniforms.lut.value = lutTex; applyQuantity(); }
     };
-    $('vt-on').onchange = () => { document.body.classList.toggle('vessel-tool', $('vt-on').checked); if ($('vt-on').checked && !field) {
-            if (clientFits) { status('vessel tool: loading the velocity volume into the browser (streamlines stay on the server)…'); clientWanted = true; startClientLoad(); }
-            else status(`vessel tool: the velocity volume is too large for the browser (${(fieldBytes(info) / 1048576).toFixed(0)} MB; raise ?maxmb=)`);
-        } };
+    $('vt-on').onchange = () => { document.body.classList.toggle('vessel-tool', $('vt-on').checked); if ($('vt-on').checked) status('vessel tool: click a vessel in the 3D view'); };
     for (const k of ['vt-n', 'vt-step', 'vt-frac', 'vt-r', 'vt-orient']) $(k).onchange = () => { if (lastHit) runVessel(lastHit); };
     $('vt-redo').onclick = () => { if (lastHit) runVessel(lastHit); };
-    $('vt-clear').onclick = () => { vessel?.clear(); lastHit = null; renderVessel(); renderVesselFrame(); };
+    $('vt-clear').onclick = () => { vessel?.clear(); $('vw-tree').checked = false; wallKey = ''; lastHit = null; renderVessel(); renderVesselFrame(); };
     $('vt-seed').onclick = () => {
         if (!vessel?.result) { status('measure a vessel first'); return; }
         $('sl-vessel').checked = $('pl-vessel').checked = true;
@@ -639,10 +716,15 @@ async function main() {
 
     // Render on demand: a frame is drawn only when something changed (camera, UI, data) or while playing. The MIP's
     // ray-marching steps drop while the camera is being dragged and refine once it rests.
-    const MIP_STEPS = 256, MIP_STEPS_MOVING = 96;
+    // MIP sampling: &mipsteps=auto (default: one sample per &mipstepvox=1 texture voxel along the ray, ≤ &mipmax=2048 samples) or a fixed count N.
+    // While the camera moves the step is 2.5× coarser (auto) / N·0.4 (fixed); it refines when the camera rests.
+    const mipMode = params.get('mipsteps') ?? 'auto', mipFixed = mipMode === 'auto' ? 0 : Math.max(8, Math.round(Number(mipMode)) || 256), mipStepVox = Math.max(0.1, Number(params.get('mipstepvox') ?? 1));
+    mip.uniforms.maxSteps.value = Math.min(4096, Math.max(16, Number(params.get('mipmax') ?? 2048)));
+    const setMipQuality = (moving) => { mip.uniforms.steps.value = mipFixed ? (moving ? Math.max(8, Math.round(0.4 * mipFixed)) : mipFixed) : 0; mip.uniforms.stepVox.value = mipStepVox * (mipFixed || !moving ? 1 : 2.5); };
+    setMipQuality(false);
     controls.addEventListener('change', invalidate);
-    controls.addEventListener('start', () => { interacting = true; mip.uniforms.steps.value = MIP_STEPS_MOVING; invalidate(); });
-    controls.addEventListener('end', () => { interacting = false; mip.uniforms.steps.value = MIP_STEPS; invalidate(); });
+    controls.addEventListener('start', () => { interacting = true; setMipQuality(true); invalidate(); });
+    controls.addEventListener('end', () => { interacting = false; setMipQuality(false); invalidate(); });
     for (const ev of ['input', 'change']) $('side').addEventListener(ev, invalidate);
 
     let last = performance.now(), frames = 0, fps = 0, fpsT = last;
@@ -701,22 +783,21 @@ async function main() {
         if (!clientWanted || clientStarted) { setCompute(); return; }
         clientStarted = true; setCompute();
         try {
-            const velRank = entry.summary?.items?.vel?.shape?.length ?? 5;
             const r = await loadField(client, id, info, { velRank, onProgress: (a, b) => status(`loading the velocity volume to the browser: ${a}/${b} frames`) });
             field = r.field; fieldMask = r.mask;
+            if (localTrace && !pcFull) { const t = await client.getTensor(pcOut); pcFull = t.dtype === 'float32' ? t.data : Float32Array.from(t.data); }   // region growing needs the float PC-MRA
             regionCache.clear();
             gpu = localTrace ? await GpuTracer.create() : null;
             if (gpu && gpu.fits(field)) await gpu.setField(field, (a, b) => status(`uploading the velocity volume to the GPU: ${a}/${b}`));
             else gpu = null;
             gpuStop = null;
-            vessel = new VesselTool({ scene, spacingMm: sp, divArr, getField: () => field, getPc: () => pcData, getMask: () => fieldMask, getCenterlines: () => centerlines, invalidate });
             for (const [k, label] of [['speed', 'speed (this frame)'], ['vorticity', 'vorticity'], ['q', 'Q-criterion (vortices)'], ['helicity', 'helicity density']]) $('vq').append(new Option(label, k));
             if (localTrace) clearStreamCache();
             for (let a = 0; a < 3; a++) {          // from now on the slice planes come from memory
                 sac[a].abort(); sac[a] = new AbortController(); sgen[a]++; clearTimeout(ctimer[a]);
                 planes[a].place(planes[a].index); loadSlice(a, 0);
             }
-            status(`${X}×${Y}×${Z}, ${F} frames: velocity volume is in the browser (${localTrace ? (gpu ? 'WebGPU' : 'JS') + ' tracing, ' : 'streamlines stay on the server, '}vessel tool ready)`);
+            status(`${X}×${Y}×${Z}, ${F} frames: velocity volume is in the browser (${localTrace ? (gpu ? 'WebGPU' : 'JS') + ' tracing' : 'streamlines stay on the server'})`);
         } catch (e) { console.error('client volume', e); field = null; gpu = null; status(`client-side volume unavailable (${e.message}); using the server`); }
         clientStarted = false; setCompute();
         if (local() && ($('sl-on').checked)) updateStreamlines();
@@ -730,7 +811,7 @@ async function main() {
     await slicesReady();
     status(`${X}×${Y}×${Z}, ${F} frames × ${(dt * 1e3).toFixed(1)} ms, voxel ${sp.map((s) => s.toFixed(2)).join('×')} mm, p99.9 speed ${vmaxDefault} m/s`);
     invalidate();
-    window.hasty = { client, scene, camera, renderer, info, planes, stream, path, discs, setFrame, addPlane, updatePathlines, updateStreamlines, get field() { return field; }, get gpu() { return gpu; }, get vessel() { return vessel; }, runVessel, clientReady };
+    window.hasty = { THREE, hot, mip, client, scene, camera, renderer, info, planes, stream, path, discs, setFrame, addPlane, updatePathlines, updateStreamlines, get field() { return field; }, get gpu() { return gpu; }, get vessel() { return vessel; }, runVessel, clientReady };
 
     if (selftest) {
         const out = { ok: false };
@@ -754,8 +835,8 @@ async function main() {
             out.pathlines = pm.lines;
             const j = layers.includes('plane') ? await addPlane(hot) : { net_ml: 0, area_mm2: 0, flow_ml_s: [0] };
             out.plane = { net_ml: j.net_ml, area_mm2: j.area_mm2, peak_flow_ml_s: Math.max(...j.flow_ml_s) };
-            if (field && layers.includes('vessel')) {
-                const i0 = hot[0] + X * (hot[1] + Y * hot[2]), v = runVessel({ p: hot, value: pcData[i0] });
+            if (layers.includes('vessel')) {
+                const v = await runVessel({ p: hot, value: pcm.hotValue });
                 out.vessel = v ? { planes: v.planes.length, source: v.source, net_ml: v.avg.net_ml, area_mm2: v.avg.area_mm2 } : null;
             }
             tau = (info.peak_frame + 0.3) * dt;
