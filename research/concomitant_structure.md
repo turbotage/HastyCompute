@@ -1,12 +1,12 @@
 # Concomitant fields when every spoke is a linear transform of a base spoke
 
 Companion to `RESEARCH_fast_normal_operator.md`. Experiments: `research/experiments/{conc_structure,pair_rank,cp_rank}.py`
-(torch/numpy, run with the repo `.venv`). All rank numbers are on small voxel grids (12³–20³ over a 0.32 m FOV) with random SO(3) rotations of a
+(torch/numpy, run with `rustlib/.venv`). All rank numbers are on small voxel grids (12³–20³ over a 0.32 m FOV) with random SO(3) rotations of a
 synthetic 2 ms prototype — they show *trends*; absolute ranks depend on your real sequences, FOV offsets and B0. Rerun with real waveforms before trusting a number.
 
 ## 0. Findings in one place
 
-1. **Probable bug in the main pipeline (check first).** `cpp/test/src/non_fourier_interp_test.cpp:302-305` (and `notes/MRI_Physics.tex` eq. `conc_maxwell`) use
+1. **Probable bug in the main pipeline (check first).** (The C++ was removed on 2026-11-10; paths refer to commit `232eabf`.) `cpp/test/src/non_fourier_interp_test.cpp:302-305` (and `notes/MRI_Physics.tex` eq. `conc_maxwell`) use
    `(Gx²+Gy²)/(8B0)·z²` and `+GxGz/(2B0)·xz`. Deriving from `B = (B0+G·r) ẑ + (Gx z − Gz x/2) x̂ + (Gy z − Gz y/2) ŷ` (∇·B = 0, ∇×B = 0) gives
    `B_c = [ (Gx z − Gz x/2)² + (Gy z − Gz y/2)² ] / (2B0) = (Gx²+Gy²)/(2B0) z² + Gz²/(8B0)(x²+y²) − GxGz/(2B0) xz − GyGz/(2B0) yz`.
    The transverse `z²` term is **4× larger** than the code/notes, and the cross-term sign is **opposite**. `cpp/test/src/concomitant_coordinate_warp_test.cpp:106-109` has the correct coefficients,

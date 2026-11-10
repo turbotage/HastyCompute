@@ -1,6 +1,6 @@
 # Round 2: faster concomitant-field handling — butterfly, stencil NUFFT, kernel design, commutator modes
 
-Scripts (all in `research/experiments/`, run with the repo `.venv`): `butterfly_split.py`, `stencil_width2.py`, `kernel_design.py`, `stencil_rank.py`
+Scripts (all in `research/experiments/`, run with `rustlib/.venv`): `butterfly_split.py`, `stencil_width2.py`, `kernel_design.py`, `stencil_rank.py`
 (plus round 1: `conc_structure.py`, `pair_rank.py`, `cp_rank.py`, `operator_frontier.py`, `identities_check.py`).
 Everything is a small-scale model (1-D stencil studies with N=64 voxels; 3-D rank studies on 12³–32³ grids); numbers show *scaling and ratios*, not final performance.
 Cost numbers use the measured FFT timings (RTX 4090, f32): 640³ = 14.6 ms, 400³ = 3.7 ms, fused Toeplitz conv pass N=320 = 11.1 ms (`rustlib/bench/baselines.md`).

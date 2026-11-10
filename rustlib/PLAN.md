@@ -1272,3 +1272,29 @@ node (several GPUs, large RAM / VRAM). The 10-min factory_arms scan has 212 M sa
     - ZMSHR1-M (the same step in the circulant metric, `Precond::Zmshr1M`) is the variant built for that.
     - A metric shared per encode would be 7 × 133 MB (per-set circulants: ≈ 37 GB).
     - Decide after llr_cold.
+
+## Legacy features: C++/Python stack removed (2026-11-10)
+
+The C++ module (`cpp/`, CMake, `scripts/`), the old Python package parts (`grpc_client`, `generic_value`, `plot`, `mri`,
+`linalg`, `wavelet`, old tests) and `copy_of_pycompute/` were deleted. Last present in commit `232eabf`
+(`git show 232eabf:<path>`). Kept: `python/lib/hastycompute/{value_format,pace,v2}` and their tests (rustlib tools import
+them), `notes/*.tex|pdf`. The VkFFT headers moved to `bench/cpp/vendor/vkFFT`; the FINUFFT v2.5.1 source for the
+cuFINUFFT baseline is untracked in `bench/cpp/vendor/finufft-src` (see `rustlib/.gitignore`).
+
+Capabilities that existed only there (paths at `232eabf`), in case one is needed again:
+
+| Feature | Old location | Rust today |
+|---|---|---|
+| Coordinate warp: bandlimited apparent ↔ true geometry resampling (FFT + type-2 NUFFT at Newton-inverted points), \|det J\| density correction, oversampled q-grid | `cpp/lib/src/mri/coordinate_warp.cppm` | recon on the apparent grid; J⁻¹ applied to velocity only (`data.rs`, `hasty-mrsim/src/gnl.rs`). **Needed for true-geometry output of real data.** |
+| Off-resonance normal-operator compression: omega-driven P×R, `z_svd_init` + CP-ALS (non-Hermitian A_p/B_p), varpro loss, diagonal O(L) weights, coil-factored L² Toeplitz embeddings | `cpp/lib/src/mri/normal_toeplitz.cppm` | apply engine only (`hasty-toeplitz` spec/mix/kernels); recon uses SegNufft forward/adjoint |
+| Matrix-free truncated SVD of the full phi (per-sample, spoke-dependent concomitant waveforms; SLEPc TRLanczos), batched merge-SVD, spoke subsampling + Catmull-Rom upsampling, z/conc outer-product fits, feature binning, FreqAware weights | `cpp/lib/src/mri/off_fourier_interpolators.cppm`, `cpp/lib/src/linalg/linalg_svd_impl.cpp` | time-only g(v, τ) basis (`build_segments_svd[_weighted]`) + per-sample Δw correction (`segphys.rs`) |
+| Butterfly factorization (two-level prototype) | `cpp/lib/src/mri/butterfly_*.cppm` | none (research note: pays off only for Φ ≳ 100 rad) |
+| CPU FINUFFT plan (low-VRAM Toeplitz kernel build), 1D/2D Toeplitz API, NUFFT type 3 (no callers) | `cpp/lib/src/fft/nufft.cppm`, `toeplitz_creation.cpp` | GPU types 1/2 only; 3D Toeplitz |
+| Multi-GPU load balancer (fewest pending tasks, ties by free memory) | `cpp/lib/src/threading/device_loadbalancing.cppm` | none; see the cluster section |
+| NIfTI-1 read/write with qform/sform, scaling | `cpp/lib/src/io/io_nifti.cppm` | none (node editor JS writes 1 mm pixdim, no sform) |
+| Volume registration via a server-run Python script (DIPY / FireANTs rigid, affine, SyN) | `cpp/lib/src/python/*`, `python/scripts/register_nifti.py` | none |
+| Lanczos operator SVD (Python), ptwt GPU wavelets (haar/db2/db4/sym2/coif1, padding modes) | `python/lib/hastycompute/{linalg,wavelet}` | randomized subspace iteration (`espirit.rs`); CPU periodic `sepwt.rs` |
+| General integer-lattice VENC analysis (Smith normal form injectivity, exact-recovery cells, min-norm decoding) | `python/tests/vencstuff/` | coprime dual-VENC CRT (`hasty-seq/src/venc.rs`), hierarchical unwrap (`flow.rs`) |
+
+Also removed: one-off diagnostics `hasty-bench` bins `angcheck`, `cgcheck`, `coilcheck`, `toepcheck`, `kcover`; tools
+`phantom/blend_explore{,2,3}.py`, `phantom/label_figs.py`, `raclette/inspect_subject.py`, `seq/compare_resaware.py`.

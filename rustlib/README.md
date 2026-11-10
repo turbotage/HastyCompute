@@ -1,6 +1,6 @@
 # rustlib
 
-Rust re-implementation of the HastyCompute stack. Start with `PLAN.md`; research context in `docs/`.
+Rust re-implementation of the HastyCompute stack. Start with `PLAN.md`; research notes in `../research/`. The old C++/Python stack was removed on 2026-11-10 (last present in commit `232eabf`, see PLAN.md "Legacy features").
 
 ```
 cargo test --workspace                                  # CPU refs + NVRTC smoke tests (needs a CUDA GPU)
