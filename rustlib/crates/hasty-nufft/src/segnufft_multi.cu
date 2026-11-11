@@ -254,7 +254,9 @@ extern "C" __global__ void __launch_bounds__(NT_AM) seg_adjoint_mt(const float4*
     }
   }
   const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
-  if (km < nk && cg + cl < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) {
+  // an empty tile adds nothing to a slot holding partial sums
+  const bool noop = it.count == 0 && ((addmask >> fo) & 1);
+  if (!noop && km < nk && cg + cl < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) {
     cx* gp = g.p[km * NF + fo] + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + cl) * NSEG;
     if (it.split) {
       #pragma unroll

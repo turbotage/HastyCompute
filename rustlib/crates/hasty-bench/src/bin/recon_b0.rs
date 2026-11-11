@@ -617,8 +617,8 @@ fn main() {
         "moco": moco_dir, "resp": {"bins": nb, "mode": resp_mode, "gate_explained": sg.explained, "gate_corr_truth": gate_corr, "used_corr_truth": used_corr, "bin_mean_true_r": bin_truth_r},
     });
     std::fs::write(out.join("summary.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
-    let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/b0/plot_b0recon.py");
-    let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+    let tools = hasty_site::tool("b0/plot_b0recon.py");
+    let py = hasty_site::python();
     match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
         Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
         r => println!("figure script failed ({r:?}); run: {} -I {} {}", py.display(), tools.display(), out.display()),

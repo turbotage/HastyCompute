@@ -447,7 +447,9 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* _
     }
   }
   const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
-  if (cg + cl < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) {
+  // an empty tile adds nothing to a slot holding partial sums (grouped sets: every member after the first)
+  const bool noop = it.count == 0 && ((addmask >> fo) & 1);
+  if (!noop && cg + cl < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) {
     cx* gp = g.p[fo] + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + cl) * NSEG;
     if (it.split) {
       #pragma unroll

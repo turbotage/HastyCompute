@@ -121,7 +121,7 @@ fn evaluate(acq: &Acq, keep: &[bool], t: &Tissue, b0: f64, om_hz: f64) -> Eval {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let opt = |n: &str| args.iter().position(|a| a == n).map(|i| args[i + 1].clone());
-    let out = PathBuf::from(opt("--out").unwrap_or("data/hasty/seq/studies/echodesign".into()));
+    let out = opt("--out").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/studies/echodesign"));
     std::fs::create_dir_all(&out).unwrap();
     let pns_lim: f64 = opt("--pns").map_or(80.0, |s| s.parse().unwrap());
     let sys = System::prisma_xr();

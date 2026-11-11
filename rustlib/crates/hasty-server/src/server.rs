@@ -33,7 +33,7 @@ impl Default for Config {
         Self {
             bind: env("HASTY_BIND").and_then(|s| s.parse().ok()).unwrap_or_else(|| "0.0.0.0:8443".parse().unwrap()),
             tls: env("HASTY_TLS").map(|s| s != "0").unwrap_or(true),
-            cert_dir: env("HASTY_CERT_DIR").map(PathBuf::from).unwrap_or_else(|| repo_path("data/hasty/certs")),
+            cert_dir: env("HASTY_CERT_DIR").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("certs")),
             web_dir: env("HASTY_WEB_DIR").map(PathBuf::from).unwrap_or_else(|| repo_path("plotting_website")),
             extra_names: env("HASTY_TLS_NAMES").map(|s| s.split(',').map(|x| x.trim().to_string()).collect()).unwrap_or_default(),
         }

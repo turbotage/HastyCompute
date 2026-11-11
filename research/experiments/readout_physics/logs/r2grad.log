@@ -1,0 +1,8 @@
+09:19:18 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+09:19:21 g_eff water: 6510064 sources -> 1794544 voxels
+09:19:21 g_eff fat: 1820856 sources -> 711580 voxels
+09:50:49 v2 (1855s): table 1.37, wmean 0.833, wmean+table 0.558, gsinc 1.57, table+gsinc 1.48, table+gcos 1.64, wmean+table+gsinc 1.26, wmean+table+gcos 1.49, cplx 0.462, cplx+gsinc 1.22, omission 1.66
+09:50:51 g_eff water: 6510064 sources -> 1794544 voxels
+09:50:52 g_eff fat: 1820856 sources -> 711580 voxels
+10:12:24 current (1265s): table 2.02, wmean 5.7, wmean+table 0.912, gsinc 4.82, table+gsinc 2.61, table+gcos 3.16, wmean+table+gsinc 2.08, wmean+table+gcos 2.72, cplx 1.02, cplx+gsinc 1.81, omission 5.96
+10:12:24 done

@@ -833,8 +833,8 @@ fn main() {
                                      "lam_rho": lam_rho, "lam_r2": lam_r2, "s_rho": s_rho, "n_vox": nx, "n_sets": nset, "evals": evals, "seconds": t0.elapsed().as_secs_f64(),
                                      "errors": {"omega_hz": e_om, "r2": e_r2, "ff": e_ff, "n_signal": sel.len()}});
     std::fs::write(out.join("summary.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
-    let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/b0/plot_mbq.py");
-    let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+    let tools = hasty_site::tool("b0/plot_mbq.py");
+    let py = hasty_site::python();
     match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
         Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
         r => println!("figure script failed ({r:?})"),

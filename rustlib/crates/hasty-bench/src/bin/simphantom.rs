@@ -385,7 +385,7 @@ fn main() {
     let b0_k: usize = take("--b0-k").map(|s| s.parse().unwrap()).unwrap_or(24);
     let b0_pns: f64 = take("--b0-pns").map(|s| s.parse().unwrap()).unwrap_or(80.0);
     let dwell_opt: Option<f64> = take("--dwell").map(|s| s.parse().unwrap());
-    let flow_run = PathBuf::from(take("--flow-run").unwrap_or_else(|| "data/hasty/seq/flow_thorax".into()));
+    let flow_run = take("--flow-run").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax"));
     let girf_name = take("--girf").unwrap_or_else(|| "ideal".into());
     // --beats <lbm_run>: per-heartbeat chamber flow from the LBM beat library (hasty_bench::beats), each heartbeat a
     // library beat (seeded shuffle, the first --beat-max of the library), the intravoxel distribution as six

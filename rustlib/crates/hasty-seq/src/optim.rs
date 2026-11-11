@@ -49,6 +49,33 @@ pub struct Problem {
     /// is then a straight move to the spoil moment, inside kmax when |spoil| ≤ kmax/γ̄. None = centre-out readout
     /// ending at kmax with a ramp-down / rewinder / spoiler tail.
     pub ret: Option<f64>,
+    /// readout geometry beyond `ret` (research/readout_redesign.md); [`Leg::Default`] = what `ret` selects
+    pub leg: Leg,
+}
+
+/// Readout geometry (research/readout_redesign.md). Every variant other than `Default` ends at rest at k = 0 (so the
+/// per-encode flow-compensated tail, `Spoil::FlowComp`, applies unchanged) and marks its reconstruction samples in
+/// [`Spoke::recon`]; prephasers and rewinders are navigator ADC. The ADC budget `t_adc` then bounds the span of the
+/// reconstruction samples ([`Spoke::t_recon`]), not the whole ADC window.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum Leg {
+    /// centre-out (`ret` None) or the symmetric out-and-back yarn (`ret` Some)
+    #[default]
+    Default,
+    /// centre-out yarn to kmax ending at rest, then a straight rewind to k = 0 (navigator): every reconstruction sample
+    /// on the way out, the low-k (high-energy) samples at the shortest times after the echo
+    Rewind,
+    /// as `Rewind`, but the rewinder also nulls the readout's first moment ([`Spoke::rewind_m1`]): the TR's net M1 is
+    /// then the same for every rotation (not only every encode)
+    RewindM1,
+    /// asymmetric out-and-back: the return leg is the yarn designed for `back` × the out leg's spokes (fewer turns:
+    /// shorter, coarser), sampled down to `ret`·kmax, then the straight rewind (ret > 0); `null_m1`: the rewind also
+    /// nulls the readout's first moment ([`Spoke::rewind_m1`])
+    Asym { back: f64, ret: f64, null_m1: bool },
+    /// two centre-out legs in one readout, each followed by its rewind, the second turned by π about x
+    Double,
+    /// in-out: a prephaser to the reflected end point, in through k = 0 (the echo) and out again, then the rewind
+    InOut,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -81,8 +108,17 @@ impl Problem {
         Yarn { kmax: self.kmax, fov: self.fov, n_design: n, edge_density: self.edge_density, kg0: s.kg0, wobble: s.wobble, wobble_freq: s.wobble_freq }
     }
     pub fn spoke(&self, s: &Shape, n: f64, slew_ro: f64) -> Spoke {
+        self.spoke_rw(s, n, slew_ro, slew_ro)
+    }
+    /// as [`Problem::spoke`], the final rewinder of a [`Leg`] readout at its own slew factor `slew_rw` (it counts as
+    /// the tail for PNS derating, `Tr::part`); default readouts ignore it
+    pub fn spoke_rw(&self, s: &Shape, n: f64, slew_ro: f64, slew_rw: f64) -> Spoke {
         let sys = System { smax: self.sys.smax * slew_ro, ..self.sys.clone() };
         let y = self.yarn(s, n);
+        if self.leg != Leg::Default {
+            let sys_rw = System { smax: self.sys.smax * slew_rw, ..self.sys.clone() };
+            return self.spoke_leg(&y, &sys, Some(&sys_rw));
+        }
         match self.ret {
             None => Spoke::design(&y.curve(self.curve_pts), &sys, &TopOpts { vmax: self.vmax, ..TopOpts::default() }),
             Some(r) => {
@@ -97,7 +133,93 @@ impl Problem {
             }
         }
     }
+    /// readouts of the [`Leg`] variants (vector limits `sys`; the final rewinder at `rw`, left out when None: the
+    /// ADC budget only bounds the reconstruction span, so the N fit designs it once at the end)
+    fn spoke_leg(&self, y: &Yarn, sys: &System, rw: Option<&System>) -> Spoke {
+        let at_rest = TopOpts { vmax: self.vmax, v_end: Some(0.0), ..TopOpts::default() };
+        let gb = crate::GAMMA_BAR;
+        match self.leg {
+            Leg::Default => unreachable!(),
+            Leg::Rewind => {
+                let c = y.curve(self.curve_pts);
+                let mut sp = Spoke::design(&c, sys, &at_rest);
+                if let Some(rw) = rw {
+                    sp.rewind(rw.gmax, rw.smax);
+                }
+                sp
+            }
+            Leg::RewindM1 => {
+                let c = y.curve(self.curve_pts);
+                let mut sp = Spoke::design(&c, sys, &at_rest);
+                if let Some(rw) = rw {
+                    sp.rewind_m1(rw.gmax, rw.smax);
+                }
+                sp
+            }
+            Leg::Asym { back, ret, null_m1 } => {
+                let yb = Yarn { n_design: y.n_design * back, ..y.clone() };
+                let c = y.curve_asym(&yb, self.curve_pts, ret);
+                let mut sp = Spoke::design(&c, sys, &at_rest);
+                if null_m1 || ret > 0.0 {
+                    if let Some(rw) = rw {
+                        if null_m1 {
+                            sp.rewind_m1(rw.gmax, rw.smax);
+                        } else {
+                            sp.rewind(rw.gmax, rw.smax);
+                        }
+                    }
+                } else {
+                    sp.close_to(&crate::scale(c.last().unwrap(), 1.0 / gb), sys.gmax, sys.smax);
+                }
+                sp
+            }
+            Leg::Double => {
+                let c = y.curve(self.curve_pts);
+                let mut sp = Spoke::design(&c, sys, &at_rest);
+                let leg_g = sp.grad.g.clone();
+                let leg_len = sp.length;
+                sp.rewind(sys.gmax, sys.smax);
+                let q = crate::axis_angle(&[1.0, 0.0, 0.0], std::f64::consts::PI);
+                let second: Vec<crate::Vec3> = leg_g.iter().map(|g| crate::mat_vec(&q, g)).collect();
+                sp.push(&second, true, leg_len);
+                if let Some(rw) = rw {
+                    sp.rewind(rw.gmax, rw.smax);
+                }
+                sp
+            }
+            Leg::InOut => {
+                let (c, centre) = y.curve_in_out(self.curve_pts);
+                let ro = Spoke::design(&c, sys, &at_rest);
+                // prephaser from the encode's k = 0 to the curve start, then the in-out readout, then the rewind
+                let pre = crate::traj::vector_trapezoid(&crate::scale(&c[0], 1.0 / gb), sys.gmax, sys.smax, sys.grad_raster);
+                let mut sp = Spoke { grad: pre.clone(), t_adc: pre.duration(), i_adc: pre.len() - 1, length: 0.0, frac: vec![0.0; pre.len()], m0_end: pre.moments(0.0).last().0, recon: vec![], i_echo: 0 };
+                let i0 = sp.i_adc;
+                sp.push(&ro.grad.g, true, ro.length);
+                // the echo: the raster point closest to the curve's centre (arc-length fraction)
+                let fc = centre as f64 / (c.len() - 1) as f64;
+                let j = ro.frac.iter().position(|&f| f >= fc).unwrap_or(0);
+                sp.i_echo = i0 + j;
+                if let Some(rw) = rw {
+                    sp.rewind(rw.gmax, rw.smax);
+                }
+                sp
+            }
+        }
+    }
+    /// the time the ADC budget bounds: the whole window (default readouts), the reconstruction span ([`Leg`] variants)
+    pub fn budget_time(&self, sp: &Spoke) -> f64 {
+        if self.leg == Leg::Default { sp.t_adc } else { sp.t_recon() }
+    }
     pub fn n_eff(&self, s: &Shape, n: f64) -> f64 {
+        match self.leg {
+            Leg::Default => {}
+            Leg::Rewind | Leg::RewindM1 => return n,
+            Leg::Asym { back, ret, .. } => {
+                let y = self.yarn(s, n);
+                return y.n_eff_asym(&Yarn { n_design: n * back, ..y.clone() }, ret);
+            }
+            Leg::Double | Leg::InOut => return 0.5 * n,
+        }
         match self.ret {
             None => n,
             Some(r) => self.yarn(s, n).n_eff(r),
@@ -109,27 +231,74 @@ impl Problem {
     }
     /// as [`Problem::fit_budget`], bracketing around a previous solution `hint` when given
     pub fn fit_budget_near(&self, s: &Shape, slew_ro: f64, hint: Option<f64>) -> Option<(f64, Spoke)> {
-        // radial (q ≈ 1 everywhere) bound
+        self.fit_budget_rw(s, slew_ro, slew_ro, hint)
+    }
+    /// as [`Problem::fit_budget_near`] with the final rewinder of a [`Leg`] readout at slew factor `slew_rw`
+    pub fn fit_budget_rw(&self, s: &Shape, slew_ro: f64, slew_rw: f64, hint: Option<f64>) -> Option<(f64, Spoke)> {
+        if self.leg != Leg::Default {
+            // bisect on the readout without its final rewinder (outside the budgeted span), then add it once
+            let sys = System { smax: self.sys.smax * slew_ro, ..self.sys.clone() };
+            let part = |n: f64| self.spoke_leg(&self.yarn(s, n), &sys, None);
+            let (n, _) = self.bisect_budget(&part, hint)?;
+            return Some((n, self.spoke_rw(s, n, slew_ro, slew_rw)));
+        }
+        self.fit_budget_default(s, slew_ro, slew_rw, hint)
+    }
+    /// the N bisection of [`Problem::fit_budget_near`] over any readout constructor
+    fn bisect_budget(&self, spoke: &dyn Fn(f64) -> Spoke, hint: Option<f64>) -> Option<(f64, Spoke)> {
         let n_rad = 4.0 * std::f64::consts::PI * self.kmax.powi(2) * self.fov.powi(2) * self.edge_density.max(1.0);
         let (mut lo, mut hi) = (n_rad / 1e4, n_rad * 100.0);
         if let Some(h) = hint {
             let (a, b) = (h / 1.5, h * 1.5);
-            if self.spoke(s, a, slew_ro).t_adc > self.t_adc && b < hi {
+            if self.budget_time(&spoke(a)) > self.t_adc && b < hi {
                 lo = a;
-                if self.spoke(s, b, slew_ro).t_adc <= self.t_adc {
+                if self.budget_time(&spoke(b)) <= self.t_adc {
                     hi = b;
                 }
             }
         }
-        let sp_hi = self.spoke(s, hi, slew_ro);
-        if sp_hi.t_adc > self.t_adc {
+        let sp_hi = spoke(hi);
+        if self.budget_time(&sp_hi) > self.t_adc {
             return None;
         }
         let mut best = (hi, sp_hi);
         for _ in 0..22 {
             let mid = (lo * hi).sqrt();
-            let sp = self.spoke(s, mid, slew_ro);
-            if sp.t_adc <= self.t_adc {
+            let sp = spoke(mid);
+            if self.budget_time(&sp) <= self.t_adc {
+                hi = mid;
+                best = (mid, sp);
+            } else {
+                lo = mid;
+            }
+            if hi / lo < 1.002 {
+                break;
+            }
+        }
+        Some(best)
+    }
+    fn fit_budget_default(&self, s: &Shape, slew_ro: f64, slew_rw: f64, hint: Option<f64>) -> Option<(f64, Spoke)> {
+        // radial (q ≈ 1 everywhere) bound
+        let n_rad = 4.0 * std::f64::consts::PI * self.kmax.powi(2) * self.fov.powi(2) * self.edge_density.max(1.0);
+        let (mut lo, mut hi) = (n_rad / 1e4, n_rad * 100.0);
+        if let Some(h) = hint {
+            let (a, b) = (h / 1.5, h * 1.5);
+            if self.budget_time(&self.spoke_rw(s, a, slew_ro, slew_rw)) > self.t_adc && b < hi {
+                lo = a;
+                if self.budget_time(&self.spoke_rw(s, b, slew_ro, slew_rw)) <= self.t_adc {
+                    hi = b;
+                }
+            }
+        }
+        let sp_hi = self.spoke_rw(s, hi, slew_ro, slew_rw);
+        if self.budget_time(&sp_hi) > self.t_adc {
+            return None;
+        }
+        let mut best = (hi, sp_hi);
+        for _ in 0..22 {
+            let mid = (lo * hi).sqrt();
+            let sp = self.spoke_rw(s, mid, slew_ro, slew_rw);
+            if self.budget_time(&sp) <= self.t_adc {
                 hi = mid;
                 best = (mid, sp);
             } else {
@@ -155,7 +324,8 @@ impl Problem {
         let mut last: Option<Eval> = None;
         let mut hint = None;
         for _ in 0..24 {
-            let (n, sp) = self.fit_budget_near(s, slew[1], hint)?;
+            // leg readouts: the final rewinder is derated with the tail (it counts as the tail for PNS, `Tr::part`)
+            let (n, sp) = if self.leg == Leg::Default { self.fit_budget_near(s, slew[1], hint)? } else { self.fit_budget_rw(s, slew[1], slew[2], hint)? };
             hint = Some(n);
             let p_aniso = sp.grad.moments(0.0).p[sp.i_adc];
             let tr = Tr::build(&self.tr_spec(&slew), sp, rots);
@@ -299,6 +469,7 @@ mod profile {
             res_band: vec![],
             curve_pts: 60_000,
             ret: std::env::var("RET").ok().map(|x| x.parse().unwrap()),
+            leg: Leg::Default,
         };
         let p = if p.ret.is_some() { Problem { spoil: Spoil::Physical([0.0, 0.0, 0.5 / (crate::GAMMA_BAR * res)]), ..p } } else { p };
         let s = Shape { kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
@@ -322,5 +493,165 @@ mod profile {
         let t = Instant::now();
         let e = p.evaluate(&s, &rots).unwrap();
         println!("evaluate {:.3} s (slew {:?}, N {:.0} (design {:.0}), TR {:.2} ms, N·TR {:.2} s, PNS {:.1} {:?})", t.elapsed().as_secs_f64(), e.slew, e.n_eff, e.n_design, e.tr.tr() * 1e3, e.objective, e.pns.max, e.pns.part);
+    }
+}
+
+#[cfg(test)]
+mod leg_tests {
+    use super::*;
+    use crate::encode::DualLayout;
+    use crate::{norm, sub, GAMMA, GAMMA_BAR};
+
+    pub(super) fn problem_for_study(leg: Leg) -> Problem {
+        Problem { curve_pts: 60_000, ..problem(leg) }
+    }
+    fn problem(leg: Leg) -> Problem {
+        let res = 2e-3;
+        Problem {
+            sys: System::prisma_xr(),
+            hw: SafeHw::example(),
+            pns_target: 80.0,
+            kmax: 0.5 / res,
+            fov: 0.32,
+            edge_density: 1.0,
+            t_adc: 8e-3,
+            vmax: None,
+            rf_dur: 100e-6,
+            scheme: Scheme::Coprime { p: 2, layout: DualLayout::Seven },
+            venc: 1.0,
+            balanced: true,
+            spoil: Spoil::FlowComp([0.0, 0.0, 2.0 / (GAMMA_BAR * res)]),
+            rot_kind: RotSet::SuperFibonacci,
+            n_rot_pns: 400,
+            aniso_weight: 0.0,
+            res_weight: 0.0,
+            res_band: vec![],
+            curve_pts: 30_000,
+            ret: Some(0.0),
+            leg,
+        }
+    }
+    const SHAPE: Shape = Shape { kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
+
+    /// every leg ends at rest at k = 0, keeps the reconstruction samples inside kmax, respects the vector limits
+    #[test]
+    fn legs_end_at_rest_inside_kmax() {
+        for leg in [Leg::Rewind, Leg::RewindM1, Leg::Asym { back: 4.0, ret: 0.5, null_m1: false }, Leg::Asym { back: 4.0, ret: 0.5, null_m1: true }, Leg::Asym { back: 2.0, ret: 0.0, null_m1: false }, Leg::Double, Leg::InOut] {
+            let p = problem(leg);
+            let sp = p.spoke(&SHAPE, 2000.0, 0.45);
+            // hardware vector limits; the derated (PNS) slew cap within 1.5 % (the raster traversal overshoots its cap by
+            // ~1 % where the curvature changes fast, as the default out-and-back design does: 89.98 vs 89.4 T/m/s; PNS is
+            // checked on the actual waveform)
+            let l = sp.grad.limits();
+            assert!(l.ok_vec(&p.sys), "{leg:?}: {l:?}");
+            assert!(l.s_vec <= p.sys.smax * 0.45 * 1.015, "{leg:?}: {l:?}");
+            assert!(norm(&sp.g_end()) == 0.0, "{leg:?}");
+            assert!(norm(&sp.m0_end) * GAMMA_BAR < 1e-6, "{leg:?}: end k {:.3e}", norm(&sp.m0_end) * GAMMA_BAR);
+            let k = sp.grad.moments(0.0).k();
+            let kin = k.iter().enumerate().filter(|(i, _)| sp.is_recon(*i)).map(|(_, q)| norm(q)).fold(0.0, f64::max);
+            assert!(kin <= p.kmax * (1.0 + 1e-3), "{leg:?}: recon |k| {kin}");
+            assert!(sp.t_recon() <= sp.t_adc + 1e-12 && sp.t_recon_samples() <= sp.t_recon() + 1e-12);
+            if matches!(leg, Leg::Rewind | Leg::RewindM1) {
+                // the reconstruction part is the out leg only, starting at the echo
+                assert_eq!(sp.recon.len(), 1);
+                assert_eq!(sp.recon[0][0], 0);
+            }
+            if leg == Leg::Double {
+                assert_eq!(sp.recon.len(), 2);
+            }
+            if leg == Leg::InOut {
+                assert!(norm(&k[sp.i_echo]) < 2.0, "in-out echo at |k| {}", norm(&k[sp.i_echo]));
+            }
+            let m1 = GAMMA * norm(&sp.m1_end());
+            if matches!(leg, Leg::RewindM1 | Leg::Asym { null_m1: true, .. }) {
+                assert!(m1 < 1e-6, "M1-nulled rewind left γ|M1| {m1}");
+            }
+            println!("{leg:?}: ADC {:.2} ms, recon span {:.2} ms, end γ|M1| {m1:.3} rad/(m/s), n_eff {:.0}", sp.t_adc * 1e3, sp.t_recon() * 1e3, p.n_eff(&SHAPE, 2000.0));
+        }
+    }
+
+    /// the asymmetric construction with back = 1 is the symmetric out-and-back curve
+    #[test]
+    fn asym_with_equal_legs_is_curve_return() {
+        let p = problem(Leg::Default);
+        let y = p.yarn(&SHAPE, 2000.0);
+        let a = y.curve_return(20_000, 0.0);
+        let b = y.curve_asym(&y, 20_000, 0.0);
+        // curve_asym drops ≤ a few near-duplicate points at the junction: same out leg, same return leg (aligned from
+        // the end), away from the smoothed turn
+        assert!(a.len().abs_diff(b.len()) <= 4, "{} vs {}", a.len(), b.len());
+        let m = y.curve(20_000).len();
+        let d_out = a[..m - 400].iter().zip(&b[..m - 400]).map(|(x, z)| norm(&sub(x, z))).fold(0.0, f64::max);
+        let d_ret = a.iter().rev().zip(b.iter().rev()).take(a.len() - m - 400).map(|(x, z)| norm(&sub(x, z))).fold(0.0, f64::max);
+        assert!(d_out < 1e-9 * y.kmax && d_ret < 1e-6 * y.kmax, "max deviation out {d_out}, return {d_ret}");
+        // n_eff takes N = n_design / 2 (q ≈ f); n_eff_asym the exact max over r of 4πr²D²w / (2q)
+        assert!((y.n_eff(0.0) - y.n_eff_asym(&y, 0.0)).abs() < 1e-3 * y.n_design, "{} vs {}", y.n_eff(0.0), y.n_eff_asym(&y, 0.0));
+    }
+
+    /// FlowComp TR with the rewind legs: constant physical M0 and equal TR M1 across encodes, for any rotation; with the
+    /// M1-nulled rewind also equal across rotations
+    #[test]
+    fn flowcomp_with_rewind_legs() {
+        for leg in [Leg::Rewind, Leg::RewindM1] {
+            let p = problem(leg);
+            let sp = p.spoke(&SHAPE, 2000.0, 0.45);
+            let rots = rotations(RotSet::SuperFibonacci, 16);
+            let tr = Tr::build(&p.tr_spec(&[0.3, 0.45, 0.4]), sp, &rots);
+            let Spoil::FlowComp(spoil) = p.spoil else { unreachable!() };
+            let mut m1_rot: Vec<crate::Vec3> = vec![];
+            for r in &rots {
+                let ends: Vec<_> = (0..tr.n_enc()).map(|e| tr.physical(e, r).moments(tr.t_rf).last()).collect();
+                for (m0, m1, _, _) in &ends {
+                    assert!(norm(&sub(m0, &spoil)) < 1e-6 * norm(&spoil));
+                    assert!(GAMMA * norm(&sub(m1, &ends[0].1)) < 1e-6, "{leg:?}: encode M1 spread");
+                }
+                m1_rot.push(ends[0].1);
+            }
+            let spread = m1_rot.iter().map(|m| GAMMA * norm(&sub(m, &m1_rot[0]))).fold(0.0, f64::max);
+            println!("{leg:?}: TR {:.3} ms, net-M1 spread across rotations {spread:.3e} rad/(m/s)", tr.tr() * 1e3);
+            if leg == Leg::RewindM1 {
+                assert!(spread < 1e-5, "rotation spread {spread}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod merged_tail_study {
+    use super::*;
+    use crate::encode::{design, EncodeSpec};
+    use crate::{mat_vec, norm, GAMMA};
+
+    /// Study (research/readout_redesign.md §7): instead of an M1-nulled rewinder, the per-encode flow-compensated tail
+    /// could absorb the plain rewinder's rotated first moment R·m1 (a per-rotation block). Longest such block over
+    /// rotations vs the rotation-independent block and the extra rewinder time.
+    ///   cargo test --release -p hasty-seq merged_tail_study -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn merged_tail_length() {
+        let p = super::leg_tests::problem_for_study(Leg::Rewind);
+        let shape = Shape { kg0: -0.05, wobble: 0.0833, wobble_freq: 11.37 };
+        let (_, sp) = p.fit_budget_rw(&shape, 0.444, 0.373, None).unwrap();
+        let (_, spm) = Problem { leg: Leg::RewindM1, ..p.clone() }.fit_budget_rw(&shape, 0.444, 0.373, None).unwrap();
+        let rots = rotations(RotSet::SuperFibonacci, 64);
+        let spec = p.tr_spec(&[0.275, 0.444, 0.373]);
+        let tr = Tr::build(&spec, sp.clone(), &rots);
+        let m1r = sp.m1_end();
+        let Spoil::FlowComp(spoil) = p.spoil else { unreachable!() };
+        let tail_sys = System { smax: p.sys.smax * 0.373, ..p.sys.clone() };
+        let t_s = tr.i_tail as f64 * tr.dt;
+        // the rotation-independent block's M1 offset convention (Tr::build): half = 0.5 × block duration
+        let half = 0.5 * tr.n_tail as f64 * tr.dt;
+        let off = [0, 1, 2].map(|a| spoil[a] * (t_s - tr.t_rf + half));
+        let mut longest = 0usize;
+        for r in &rots {
+            let rm = mat_vec(r, &m1r);
+            let es = EncodeSpec { m0: spoil, m1_offset: [0, 1, 2].map(|a| off[a] - rm[a]), scheme: spec.scheme, venc: -spec.venc, balanced: spec.balanced, t_start: t_s, t_ref: tr.t_rf };
+            longest = longest.max(design(&es, &tail_sys).waves[0].len() - 1);
+        }
+        println!(
+            "plain rewinder {:.2} ms, M1-nulled rewinder {:.2} ms; flow-comp block {:.2} ms (rotation-independent) vs {:.2} ms (absorbing R·m1, γ|m1| {:.2} rad/(m/s), longest of {} rotations)",
+            (sp.i_adc - sp.recon[0][1]) as f64 * tr.dt * 1e3, (spm.i_adc - spm.recon[0][1]) as f64 * tr.dt * 1e3, tr.n_tail as f64 * tr.dt * 1e3, longest as f64 * tr.dt * 1e3, GAMMA * norm(&m1r), rots.len()
+        );
     }
 }

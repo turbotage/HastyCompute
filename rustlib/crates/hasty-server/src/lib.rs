@@ -37,6 +37,5 @@ pub enum Error {
 
 /// path relative to the HastyCompute repository root
 pub fn repo_path(rel: &str) -> std::path::PathBuf {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    root.canonicalize().unwrap_or(root).join(rel)
+    hasty_site::repo_path(rel)
 }

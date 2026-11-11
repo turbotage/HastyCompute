@@ -2,14 +2,38 @@
 //! compensation, whitened + coil-compressed data, LLR prior over all frames × encodes or the learned 7-point prior.
 //! Any encoding of the simulator (referenced / Hadamard 4-point, 7-point dual-VENC): velocities by hasty_recon::flow.
 //!   recon_p2np <sim_dir> [--model sense|seg] [--temporal off|linear|cubic] [--phys none|b0|full] [--gnl]
-//!              [--nseg L|auto] [--order o] [--precond none,circ,zmshr1,zmshr1m] [--iters n] [--kappa k,k,..] [--block b]
+//!              [--nseg L|auto|auto:noise[:R]] [--order o] [--precond none,circ,zmshr1,zmshr1m,zmshr1s,zmshr1ms] [--iters n] [--kappa k,k,..] [--block b]
 //!              [--vcoils auto|n] [--coil-energy 0.999] [--coil-gram calib|data] [--every n] [--warm n] [--eps e] [--conc-dc] [--synthetic] [--out dir]
 //!              [--learned <export_dir> [--tile n] [--keep-frames n] [--learned-prec bf16|fp16|fp32] [--learned-cpu]]
 //!              [--fresh] [--ckpt-every n] [--fat-fraction <npy|truth> [--fat-model shared|separate|joint]]
 //!              [--conc-fit quad|deg4] [--table-prefetch]
-//!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--smaps truth|espirit[:eig_min]]
-//!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--state auto|device|host] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|svd|svdw] [--seg-weight count|mass[:lo,hi]] [--kstore auto|legacy|<store spec>]
+//!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--smaps truth|espirit[:eig_min]] [--coil-mask auto|none|support]
+//!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
 //!              [--table-store auto|pinned|lz4|zstd|zstdN]   (env HASTY_KSTORE_DIR: k-space store directory, default <sim>/kstore)
+//!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]]
+//! Coarse-to-fine pyramid (hasty_recon::pyramid, driver rustlib/tools/recon/pyramid.sh):
+//!   --kcrop [FRAC][:prefix]: keep only the samples a (coarse, --grid-scale) grid represents, the ball
+//!     Σ_a (k_a Δ_a)² ≤ (π·FRAC)² (default FRAC 1; ∩ the Nyquist box for FRAC > 1), applied to the sample records,
+//!     the segment tables and the data (the k-space store is filtered on read, never rewritten; the kept data are
+//!     held as a dense RAM copy when they fit, < 30 % of the available RAM; HASTY_KCROP_VIEW=1: always the filtered
+//!     view). `prefix`: only each readout's outgoing part up to its first sample
+//!     outside the ball (the kept ADC window ends early: fewer B0 / concomitant segments with --nseg auto).
+//!   --init-from <path>: start from a previous level's images, resampled band-limited to this grid (Fourier
+//!     coefficients kept: the same NUFFT data on the common band): recon_<tag>.npy (X, Y, Z, E, F) or warm.npy /
+//!     warm_full.npy (X, Y, Z, E); a run directory picks its newest recon_*.npy, else warm_full.npy, else warm.npy.
+//!     Frames: equal, 1 (broadcast) or the cardiac frames (broadcast over respiratory bins). Replaces the --warm
+//!     PCGLS start (its per-encode time average is the warm start: support, warm.npy, --vmodel); --warm-full starts
+//!     from it, else the solver starts from the per-frame images.
+//!   --truth-sampling point|box: oracle maps (field, R2*, fat fraction, lumen fraction) at the reconstruction voxels'
+//!     true positions (point, default) or averaged over the reconstruction voxel (box; differs only on grids coarser
+//!     than the native one). Native-grid maps given to --fat-fraction are resampled to the reconstruction grid.
+//!              [--warm-full n | --tpyramid RxC:n[,RxC:n..]] [--pooled-grad auto|grouped|replicate]
+//! --tpyramid: temporal pyramid of pooled PCG warm starts through the full model, coarse to fine (e.g.
+//!   "1x1:4,2x1:3,2x5:3"): per level R respiratory-bin groups × C cardiac-phase groups, n iterations; every
+//!   (encode, resp group, cardiac group) shares one image; the last level initialises every set of the solver.
+//!   Pooled levels go through the grouped operator (`SetOp::forward_group`: one grid FFT per segment and coil batch per
+//!   group); with per-frame joint fat maps a group uses the mean of its frames' maps (an approximation on pooled
+//!   levels only). --pooled-grad replicate: the per-set path (every set pays its own FFTs).
 //! --learned: the exported denoiser (tools/denoiser/export.py) through the libtorch plugin (hasty_recon::learned) in
 //!   place of LLR, x ← x + κ (D(x) − x) per P²nP iteration; --tile / --keep-frames: exact overlap tiles in space /
 //!   cyclic time windows (bounded GPU memory); bf16 autocast by default (the training regime).
@@ -70,6 +94,8 @@
 //! phase), i.e. a reconstruction that models the chain exactly. `--conc-dc` is spiral-only; velocities come from the
 //! hierarchical decoder (coprime 7: unaliased to ±VENC_hi, not the ±(p+1)·VENC_lo of the CRT in hasty-seq `venc`).
 
+
+#![recursion_limit = "256"]
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -91,18 +117,9 @@ use hasty_recon::segphys::{fit_monomials, fit_monomials_hi, hi_table, mean_coeff
 use hasty_recon::setop::{SegSets, SenseSets, SetOp};
 use num_complex::Complex64;
 
-/// bytes of RAM this process can still use: MemAvailable, capped by the cgroup's memory.max (systemd-run scopes,
-/// batch schedulers) minus its current use
+/// bytes of RAM this process can still use (MemAvailable capped by the enclosing memory cgroups, v1 and v2)
 fn available_memory() -> usize {
-    let mut avail = std::fs::read_to_string("/proc/meminfo").ok().and_then(|s| s.lines().find(|l| l.starts_with("MemAvailable:")).and_then(|l| l.split_whitespace().nth(1)?.parse::<usize>().ok())).map_or(usize::MAX, |kb| kb * 1024);
-    if let Some(cg) = std::fs::read_to_string("/proc/self/cgroup").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("0::").map(|p| p.trim().to_string()))) {
-        let base = std::path::Path::new("/sys/fs/cgroup").join(cg.trim_start_matches('/'));
-        let rd = |f: &str| std::fs::read_to_string(base.join(f)).ok().and_then(|v| v.trim().parse::<usize>().ok());
-        if let (Some(max), Some(cur)) = (rd("memory.max"), rd("memory.current")) {
-            avail = avail.min(max.saturating_sub(cur));
-        }
-    }
-    avail
+    hasty_site::available_memory()
 }
 
 /// FNV-1a 64-bit (content tags)
@@ -157,9 +174,19 @@ fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut flag = |name: &str| args.iter().position(|a| a == name).map(|i| { args.remove(i); true }).unwrap_or(false);
     let (synthetic, conc_dc, gnl, fresh) = (flag("--synthetic"), flag("--conc-dc"), flag("--gnl"), flag("--fresh"));
+    // --init-truth (diagnostic): every frame starts from the warm image with the true velocity phases in the lumen (the
+    // --synthetic construction, sampled on any grid): a solution that drifts away from it has a biased fixed point
+    // (model or estimator); one that stays shows that the usual start / convergence is the problem
+    let init_truth = flag("--init-truth");
     let learned_cpu = flag("--learned-cpu");
     let table_prefetch = flag("--table-prefetch");
     let mut take = |name: &str| -> Option<String> { args.iter().position(|a| a == name).map(|i| { args.remove(i); args.remove(i) }) };
+    // --vdecode auto|hier|ml[:MARGIN]: velocity decoder. hier = hierarchical unwrapping (range of the least sensitive
+    // encodes); ml = + search over the first stage's aliases inside the design's unaliased range
+    // (meta sequence.encoding.unaliased; hasty_recon::flow::AliasSearch), an alias accepted only with a phase-cost
+    // advantage > MARGIN (default 1.0); auto = ml:1.0 when the design declares a range beyond the first stage's
+    // (coprime / dual-VENC), else hier. The log also prints the hierarchical decoder's RMSE when ml is active.
+    let vdecode: String = take("--vdecode").unwrap_or("auto".into());
     let iters: usize = take("--iters").map(|s| s.parse().unwrap()).unwrap_or(40);
     let kappas: Vec<f64> = take("--kappa").unwrap_or("1.0".into()).split(',').map(|s| s.parse().unwrap()).collect();
     let block: usize = take("--block").map(|s| s.parse().unwrap()).unwrap_or(8);
@@ -173,6 +200,22 @@ fn main() {
     let coil_gram = take("--coil-gram").unwrap_or("calib".into());
     assert!(coil_gram == "calib" || coil_gram == "data", "--coil-gram calib|data");
     let warm_iters: usize = take("--warm").map(|s| s.parse().unwrap()).unwrap_or(0);
+    // --warm-full n: after the plain-model warm start (which ignores B0, fat, R2*, concomitant fields and GNL: the
+    // SENSE operator), n more pooled PCG iterations per encode through the full model operator (all frames of an encode
+    // share one image; one gradient pass over all sets per iteration; the per-encode circulant as preconditioner when
+    // the run builds circulants). The solver starts from that. 0 (default): the plain warm start only.
+    let warm_full: usize = take("--warm-full").map(|s| s.parse().unwrap()).unwrap_or(0);
+    // --tpyramid SPEC: temporal pyramid of pooled PCG warm starts through the full model operator, coarse to fine:
+    // comma-separated levels RxC:N = R respiratory-bin groups × C cardiac-phase groups (contiguous bins / phases, sizes
+    // may differ by one; R ≤ --resp-bins, C ≤ cardiac frames), N pooled PCG iterations. Each (encode, resp group,
+    // cardiac group) shares one image; level 1 starts from the plain warm start (--warm) or zero, each later level from
+    // the previous one (a group from the mean of its sets' previous group images: a copy where the levels nest); the
+    // last level initialises every set of the solver. --warm-full n is the level "1x1:n" (kept as its own path).
+    let tpyramid: Option<Vec<(usize, usize, usize)>> = take("--tpyramid").map(|s| parse_tpyramid(&s));
+    assert!(tpyramid.is_none() || warm_full == 0, "--tpyramid and --warm-full: give the pooled level as \"1x1:n\" in --tpyramid");
+    // --pooled-grad auto|grouped|replicate: group gradients of pooled PCG (--warm-full, --tpyramid): auto / grouped =
+    // the grouped operator (one grid FFT per segment, coil batch and group), replicate = every set separately
+    let pooled_grad = take("--pooled-grad").map_or(hasty_recon::hoststack::PooledGrad::Auto, |s| hasty_recon::hoststack::PooledGrad::parse(&s).expect("--pooled-grad auto|grouped|replicate"));
     let every: usize = take("--every").map(|s| s.parse().unwrap()).unwrap_or(5);
     let model = take("--model").unwrap_or("seg".into());
     let temporal: Option<u32> = match take("--temporal").as_deref() {
@@ -185,12 +228,19 @@ fn main() {
     // time segments: --nseg L, or auto (default): from the phase cycles the field spans over the readout,
     // L = ⌈1.3 · Δf·T + 3.5⌉ (≈ 1e-3 operator error with least-squares interpolators: CPU budgets of
     // tests/seg_b0_direct.rs — 450 Hz over 8 ms → 8, fat included 843 Hz → 12; a fixed 10 was too few with fat)
-    let nseg_arg: Option<usize> = take("--nseg").and_then(|s| if s == "auto" { None } else { Some(s.parse().unwrap()) });
+    // --nseg auto:noise[:R] (research/segment_basis.md): the smallest L whose model error, predicted from the weighted
+    // separable error (energy voxel weights, per-ADC-sample weights 1 + (E(n) + E_vol) / (C σ²)), is at most R noise rms
+    // in the data (default R = 0.2); the plain `auto` rule above stays the default
+    let nseg_spec: Option<String> = take("--nseg");
+    let seg_noise_rule: Option<f64> = nseg_spec.as_deref().and_then(|s| s.strip_prefix("auto:noise")).map(|r| r.strip_prefix(':').map_or(0.2, |v| v.parse().expect("--nseg auto:noise[:R]")));
+    let nseg_arg: Option<usize> = nseg_spec.and_then(|s| if s == "auto" || s.starts_with("auto:") { None } else { Some(s.parse().unwrap()) });
     let mut nseg: usize = nseg_arg.unwrap_or(if phys == "none" { 1 } else { 0 });
     let order: u32 = take("--order").map(|s| s.parse().unwrap()).unwrap_or(if phys == "full" { 2 } else { 0 });
     // relative floor of the circulant preconditioner's Fourier diagonal (larger = weaker, better-posed metric)
     let eps: f64 = take("--eps").map(|s| s.parse().unwrap()).unwrap_or(1e-3);
     let preconds: Vec<String> = take("--precond").unwrap_or("zmshr1".into()).split(',').map(|s| s.to_string()).collect();
+    // --circ-share set|encode: circulant metrics per set, or one per encode shared by its frames (default: encode)
+    let circ_share_arg: Option<String> = take("--circ-share");
     let out_arg = take("--out");
     let ckpt_every: usize = take("--ckpt-every").map(|s| s.parse().unwrap()).unwrap_or(10);
     // velocity-parametrised model (research/velocity_model_sr.md): --vmodel KZ,KV [--vdeg DZ,DV] [--vpoly d] [--vcont n]
@@ -222,6 +272,8 @@ fn main() {
     // --fat-fraction <npy | truth>: water + fat with a known signal fat fraction per voxel (hasty_recon::setop::FatSets:
     // the fat part carries the six-peak spectrum per sample; the B0 segments then only cover the B0 range); `truth`:
     // truth_fat_fraction.npy of the sim directory (sim_truth.py), else a float32 npy on the reconstruction grid
+    // --coil-mask auto|none|support (see the coil-map block): auto = none for --smaps truth, support otherwise
+    let coil_mask_arg: Option<String> = take("--coil-mask").filter(|v| v != "auto");
     let fat_fraction: Option<String> = take("--fat-fraction");
     // measured instead of true fields / coil maps (the oracle-vs-estimate evaluation; defaults = the oracle as before):
     // --field truth|est:<recon_b0 run>[:bin]: off-resonance ω; --r2s off|truth|est:<run>[:bin]: T2* decay during the
@@ -309,6 +361,36 @@ fn main() {
         (o, it0, every)
     });
     let lock_tag = static_lock.as_ref().map_or(String::new(), |(o, it0, ev)| format!("_lock{}{}i{it0}e{ev}", if o.group { "g" } else { "q" }, o.mu));
+    // --air auto[:IT0[:EVERY]] | fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]:
+    // air map from the iterate (hasty_recon::airmap; no labels): voxels reachable from the FOV boundary through
+    // low-signal voxels (reference magnitude < T × the body level, default 0.05), with a safety margin of MM (default
+    // 4 mm) to anything else, estimated from iteration IT0 (default 0) and refreshed every EVERY (default 2)
+    // iterations; monotone (a zeroed voxel is released, and then protected, only where the iterate puts signal above
+    // R × the level back, default 0.15); x = 0 there in every frame and encode, before and after the prior.
+    // --air-init: a seed on any grid of the same FOV (an air_map_*.npy, an air mask, or a coarse level's images, see
+    // airmap::load_seed), applied from the first iteration; `fixed`: the seed only, never re-estimated.
+    // Complex-image models only.
+    let air: Option<(hasty_recon::airmap::AirOpts, usize, usize)> = take("--air").map(|v| {
+        let it: Vec<&str> = v.split(':').collect();
+        let mut o = hasty_recon::airmap::AirOpts::default();
+        let (it0, every) = match it[0] {
+            "auto" => (it.get(1).map_or(0, |x| x.parse().expect("--air auto[:IT0[:EVERY]]")), it.get(2).map_or(2, |x| x.parse::<usize>().expect("--air auto[:IT0[:EVERY]]")).max(1)),
+            "fixed" => (usize::MAX, usize::MAX),
+            _ => panic!("--air auto[:IT0[:EVERY]] | fixed"),
+        };
+        if let Some(b) = take("--air-margin") { o.margin_mm = b.parse().expect("--air-margin MM"); }
+        if let Some(b) = take("--air-tau") { o.tau = b.parse().expect("--air-tau T"); }
+        if let Some(b) = take("--air-release") { o.release = b.parse().expect("--air-release R"); }
+        if let Some(b) = take("--air-blur") { o.blur_mm = b.split(',').map(|x| x.parse().expect("--air-blur MM[,MM..]")).collect(); }
+        (o, it0, every)
+    });
+    let air_init: Option<PathBuf> = take("--air-init").map(PathBuf::from);
+    assert!(air_init.is_none() || air.is_some(), "--air-init needs --air auto[:IT0[:EVERY]] | fixed");
+    assert!(air.as_ref().map_or(true, |a| a.1 != usize::MAX || air_init.is_some()), "--air fixed needs --air-init");
+    let air_tag = air.as_ref().map_or(String::new(), |(o, it0, ev)| {
+        let s = if air_init.is_some() { "s" } else { "" };
+        if *it0 == usize::MAX { format!("_airfix{s}m{}", o.margin_mm) } else { format!("_air{}m{}i{it0}e{ev}{s}", o.tau, o.margin_mm) }
+    });
     let resp_bins: usize = take("--resp-bins").map_or(1, |v| v.parse().expect("--resp-bins N"));
     let resp_src = take("--resp").unwrap_or("bellows".into());
     let seg_basis_arg = take("--seg-basis").unwrap_or("fixed".into());
@@ -317,20 +399,38 @@ fn main() {
     // the support, clamped to [lo, hi] (default 0.3, 3): bright regions count more, dark tissue keeps a floor so the
     // basis is not biased away from it, air (outside the support) never counts
     let seg_weight = take("--seg-weight").unwrap_or("count".into());
+    // energy (research/segment_basis.md): the smoothed warm-start magnitude squared × the coil energy Σ_c |S_c|² relative
+    // to its median over the support: the signal energy each voxel feeds into the data (no clamp)
+    let seg_energy = seg_weight == "energy";
     let seg_mass: Option<(f32, f32)> = match seg_weight.split(':').next().unwrap() {
-        "count" => None,
+        "count" | "energy" => None,
         "mass" => Some(seg_weight.split(':').nth(1).map_or((0.3, 3.0), |b| {
             let v: Vec<f32> = b.split(',').map(|x| x.parse().expect("--seg-weight mass:lo,hi")).collect();
             (v[0], v[1])
         })),
-        o => panic!("--seg-weight count|mass[:lo,hi], got {o}"),
+        o => panic!("--seg-weight count|mass[:lo,hi]|energy, got {o}"),
     };
+    // svdn (research/segment_basis.md): the rank-L basis weighted per ADC sample by 1 + (E(n) + E_vol) / (C σ²) (whitened
+    // data energy per sample plus its k-space volume average, over the noise energy per sample; hasty_nufft::
+    // noise_time_weights) on a time grid that resolves the k-space-centre samples
+    // (hasty_nufft::seg_time_grid, build_segments_svd_grid), voxel weights of --seg-weight; cheb: fixed-time
+    // diagonals at Chebyshev nodes (clustered at the readout ends) with --seg-weight-weighted interpolators
+    // svdn-union (research/readout_physics_budget.md §3.3): svdn, and with per-frame fat maps the union water + fat
+    // noise-weighted SVD in cardinal form (hasty_nufft::build_segments_svd_fat_union) instead of the uniform-node fallback
+    let seg_union = seg_basis_arg == "svdn-union";
+    let seg_svdn = seg_basis_arg == "svdn" || seg_union;
+    let seg_cheb = seg_basis_arg == "cheb";
     let (seg_svd, seg_svdw) = match seg_basis_arg.as_str() {
-        "fixed" => (false, false),
-        "svd" => (true, false),
+        "fixed" | "cheb" => (false, false),
+        "svd" | "svdn" | "svdn-union" => (true, false),
         "svdw" => (true, true),
-        o => panic!("--seg-basis fixed|svd|svdw, got {o}"),
+        o => panic!("--seg-basis fixed|cheb|svd|svdw|svdn|svdn-union, got {o}"),
     };
+    // --b0-absorb D (0 default): the degree-D polynomial part of the field (fit over the support, weighted by the
+    // expected signal energy) moves from the segments to the per-sample tables (hasty_recon::segphys::FieldPoly):
+    // degree 1 = constant phase + k-space shift per sample (exact, free); degree 2 adds the quadratic part relative to
+    // the readout centre through the ΔC kernel correction (Taylor: only for a few Hz of curvature; reported)
+    let b0_absorb: u32 = take("--b0-absorb").map_or(0, |v| v.parse().expect("--b0-absorb 0|1|2"));
     let lagged: Option<(f64, Option<usize>)> = take("--lagged").map(|v| {
         let mut it = v.split(':');
         let tau: f64 = it.next().unwrap().parse().expect("--lagged TAU[:LS|auto]");
@@ -372,6 +472,23 @@ fn main() {
     let keep_frames: Option<usize> = take("--keep-frames").map(|s| s.parse().unwrap()).filter(|&t: &usize| t > 0);
     // learned prior precision on CUDA: fp32 | bf16 (autocast, the training regime) | fp16
     let learned_prec = take("--learned-prec").unwrap_or("bf16".into());
+    let init_from: Option<PathBuf> = take("--init-from").map(PathBuf::from);
+    let truth_box = match take("--truth-sampling").as_deref() {
+        None | Some("point") => false,
+        Some("box") => true,
+        Some(o) => panic!("--truth-sampling point|box, got {o}"),
+    };
+    // --kcrop takes an optional value ([FRAC][:prefix]): the next argument when it parses as one
+    let kcrop: Option<hasty_recon::pyramid::KCrop> = args.iter().position(|a| a == "--kcrop").map(|i| {
+        args.remove(i);
+        match args.get(i).map(|v| hasty_recon::pyramid::KCrop::parse(v)) {
+            Some(Ok(k)) => {
+                args.remove(i);
+                k
+            }
+            _ => hasty_recon::pyramid::KCrop::default(),
+        }
+    });
     let cmdline = std::env::args().collect::<Vec<_>>().join(" ");
     let dir = PathBuf::from(&args[0]);
     assert!(model == "seg" || temporal.is_none(), "--temporal needs --model seg");
@@ -380,8 +497,11 @@ fn main() {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
         let tag = format!("{name}_{model}{}_{phys}{}{}", temporal.map_or(String::new(), |b| format!("_t{b}")), if gnl { "_gnl" } else { "" }, if conc_hi { "_deg4" } else { "" }) + if fat_fraction.is_some() { "_fat" } else { "" } + if fat_fraction.is_some() && fat_model != "shared" { fat_model.as_str() } else { "" }
             + if field_spec != "truth" { "_fest" } else { "" } + if r2s_spec != "off" { "_r2s" } else { "" } + if smaps_spec != "truth" { "_espirit" } else { "" }
-            + &coil_sampling.as_ref().map_or(String::new(), |c| format!("_cs{}-{}", c.keep, c.draw));
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/hasty/runs").join(tag)
+            + &coil_sampling.as_ref().map_or(String::new(), |c| format!("_cs{}-{}", c.keep, c.draw))
+            + &if kcrop.is_some() || init_from.is_some() { format!("_g{}", grid_scale.map_or("1".into(), |g| g.map(|v| v.to_string()).join("-"))) } else { String::new() }
+            + &kcrop.map_or(String::new(), |k| format!("_kc{}{}", k.frac, if k.prefix { "p" } else { "" }))
+            + if init_from.is_some() { "_init" } else { "" };
+        hasty_site::runs().join(tag)
     });
     std::fs::create_dir_all(&out).unwrap();
     if fresh {
@@ -450,7 +570,32 @@ fn main() {
     let sd = sd;
     let (nv, nc, nf) = (sd.nv(), sd.nc, sd.n_frames);
     // encodes (4-point referenced / Hadamard, 7-point dual-VENC, ...) and their velocity decoder
-    let dec = FlowDecoder::new(&sd.encode_m1);
+    let dec_h = FlowDecoder::new(&sd.encode_m1);
+    let vext_design = sd.meta["sequence"]["encoding"]["unaliased"].as_f64();
+    let r_first = dec_h.range().iter().cloned().fold(0.0, f64::max);
+    let (dec, vdec_info) = {
+        let (mode, margin) = match vdecode.split_once(':') {
+            Some((m, x)) => (m.to_string(), x.parse::<f64>().expect("--vdecode ml:MARGIN")),
+            None => (vdecode.clone(), 1.0),
+        };
+        let ml = match mode.as_str() {
+            "hier" => false,
+            "ml" => true,
+            "auto" => vext_design.is_some_and(|v| v > 1.001 * r_first),
+            _ => panic!("--vdecode auto|hier|ml[:MARGIN]"),
+        };
+        if ml {
+            let vext = vext_design.expect("--vdecode ml needs the design's unaliased range (meta sequence.encoding.unaliased)");
+            let d = FlowDecoder::new(&sd.encode_m1).with_alias_search(hasty_recon::flow::AliasSearch { vext, margin });
+            let active = d.alias_search().is_some();
+            println!("velocity decoder: hierarchical (first stage ±{r_first:.2} m/s){}", if active { format!(" + alias search over ±{vext:.2} m/s (design), margin {margin}") } else { " (no alias inside the design range)".into() });
+            (d, serde_json::json!({ "mode": "ml", "active": active, "vext": vext, "margin": margin, "first_stage_range": r_first }))
+        } else {
+            println!("velocity decoder: hierarchical (±{r_first:.2} m/s){}", vext_design.map_or(String::new(), |v| format!("; design unaliased range ±{v:.2} m/s")));
+            (FlowDecoder::new(&sd.encode_m1), serde_json::json!({ "mode": "hier", "first_stage_range": r_first, "design_range": vext_design }))
+        }
+    };
+    let dec_cmp = dec.alias_search().is_some();
     let ne = dec.n_enc();
     let learned = learned_dir.as_ref().map(|d| {
         assert_eq!(ne, 7, "--learned needs 7-point dual-VENC data (sim4d --venc-hi)");
@@ -467,6 +612,18 @@ fn main() {
         p
     });
     let kv7: [f32; 7] = if ne == 7 { std::array::from_fn(|e| dec.kv()[e] as f32) } else { [0.0; 7] };
+    // --init-from: a previous level's images (checked now, read when needed)
+    let init = init_from.as_ref().map(|p| {
+        let ini = hasty_recon::pyramid::InitImages::open(p).unwrap_or_else(|e| panic!("--init-from {}: {e}", p.display()));
+        assert_eq!(ini.ne, ne, "--init-from {}: {} encodes, this scan has {ne}", ini.path.display(), ini.ne);
+        ini.frame_for(0, nf, nf_card).unwrap_or_else(|e| panic!("{e}"));
+        println!("initial images: {} ({:?} × {} encodes × {} frames) → grid {:?}, band-limited (Fourier coefficients kept, values × {:.4} voxel-volume ratio)", ini.path.display(), ini.dims, ini.ne, ini.nf, sd.dims, ini.nv() as f64 / nv as f64);
+        if warm_iters > 0 {
+            println!("  --init-from replaces the --warm {warm_iters} PCGLS start");
+        }
+        ini
+    });
+    let mut pyr_info = serde_json::json!({ "grid": sd.dims, "vox": sd.vox, "native": sd.tdims, "truth_sampling": if truth_box { "box" } else { "point" }, "init_from": init.as_ref().map(|i| i.path.clone()) });
     let w = sd.whitener();
     let dev = Device::new(0).unwrap();
     let st = dev.default_stream();
@@ -623,6 +780,14 @@ fn main() {
     // oracle-vs-estimate diagnostics for run.json
     let mut diag = serde_json::Map::new();
     let mut grid = sd.physics_grid(gnl, &w);
+    // --truth-sampling box: the oracle field averaged over each (coarser) reconstruction voxel
+    let sample_truth = |field: &[f32], comp: usize, x: &[f64; 3]| if truth_box { sd.sample_log_box(field, comp, x) } else { sd.sample_log(field, comp, x) };
+    if truth_box && !sd.native_grid() {
+        use rayon::prelude::*;
+        let wfac = 2.0 * std::f64::consts::PI * hasty_mrsim::GAMMA_BAR * sd.b0 * 1e-6;
+        let om: Vec<f64> = grid.x_log.par_iter().map(|x| wfac * sd.sample_log_box(&sd.field_ppm, 0, x)).collect();
+        grid.omega = om;
+    }
     // scanner position of every voxel's true location (for maps measured in another scan)
     let xs: Vec<[f64; 3]> = grid.x_log.iter().map(|xl| [0, 1, 2].map(|a| (0..3).map(|b| sd.rot[a][b] * xl[b]).sum::<f64>() + sd.fov_c[a])).collect();
     let est_maps = |spec: &str| -> hasty_recon::fieldmap::FieldMaps {
@@ -658,7 +823,7 @@ fn main() {
         "off" => None,
         "truth" => {
             let t: Vec<f32> = hasty_recon::data::read_npy(&dir.join("truth_r2s.npy")).expect("--r2s truth needs truth_r2s.npy").f32s().iter().map(|v| if v.is_finite() { *v } else { 0.0 }).collect();
-            let r: Vec<f64> = (0..nv).map(|q| sd.sample_log(&t, 0, &grid.x_log[q])).collect();
+            let r: Vec<f64> = (0..nv).map(|q| sample_truth(&t, 0, &grid.x_log[q])).collect();
             println!("R2*: truth (tissue PD-weighted 1/T2*; blood not in the truth map), median over signal voxels {:.1} 1/s", { let mut v: Vec<f64> = (0..nv).filter(|&q| sig[q]).map(|q| r[q]).collect(); v.sort_by(|a, b| a.partial_cmp(b).unwrap()); v.get(v.len() / 2).copied().unwrap_or(0.0) });
             Some(r)
         }
@@ -735,6 +900,11 @@ fn main() {
                 k
             }
             None => {
+                // HASTY_KSTORE_REUSE_ONLY (set by tools/recon/pyramid.sh): never write a new file store (they are tens
+                // of GB; the pyramid levels share the full-resolution runs' store, whose key does not depend on the grid)
+                if spec.file.is_some() && std::env::var("HASTY_KSTORE_REUSE_ONLY").is_ok_and(|v| !v.is_empty() && v != "0") {
+                    panic!("HASTY_KSTORE_REUSE_ONLY: no k-space store {} with key {hash:016x} (other arguments than the run that built the store? the key covers the scan, trajectory, sets incl. --resp-bins, noise, --inject-phase and the coil rule)", spec.file.as_ref().unwrap().display());
+                }
                 let ks = KStore::create(spec, nvc, host_sets.iter().map(|s| s.tau.len()).collect(), sigma_c, &tag).unwrap();
                 let opts = LoadOpts { w: &w, cc: Some(&cc), keep: None, data: true };
                 for t in 0..fe.len() {
@@ -760,6 +930,57 @@ fn main() {
         kstore_info = serde_json::json!({"path": "streamed", "spec": spec_s, "describe": ks.spec().describe(), "file": ks.spec().file, "raw_bytes": stt.raw_bytes, "stored_bytes": stt.stored_bytes, "ratio": stt.ratio(), "quant_step": ks.step(), "tag_hash": format!("{hash:016x}")});
         kstore = Some(std::sync::Arc::new(ks));
     }
+    // --kcrop: the samples inside the grid's band. The sample records are cropped (everything downstream sees the
+    // kept samples); the whole records stay for the segment tables (built per readout × ADC sample, then cropped);
+    // the store (keyed and filled with the whole sets, shared with the full-resolution runs) is filtered on read.
+    let mut full_sets: Vec<SampleSet> = vec![];
+    let mut crop_sel: Option<Vec<Vec<u32>>> = None;
+    let mut crop_adc: Option<hasty_recon::pyramid::AdcStats> = None;
+    if let Some(kc) = kcrop {
+        use rayon::prelude::*;
+        let t_c = Instant::now();
+        let sel: Vec<Vec<u32>> = host_sets.par_iter().map(|s| kc.select(&s.coords, sd.na)).collect();
+        let lens_full: Vec<usize> = host_sets.iter().map(|s| s.coords[0].len()).collect();
+        let st = hasty_recon::pyramid::AdcStats::new(&sel, &lens_full, sd.na);
+        let (w0, w1) = st.window;
+        let (t_w0, t_w1) = (host_sets[0].tau[w0] * 1e3, host_sets[0].tau[w1] * 1e3);
+        let cropped: Vec<SampleSet> = host_sets.par_iter().zip(sel.par_iter()).map(|(s, i)| hasty_recon::pyramid::crop_set(s, i)).collect();
+        full_sets = std::mem::replace(&mut host_sets, cropped);
+        for s in full_sets.iter_mut() {
+            s.y = Vec::new();
+        }
+        if model != "seg" {
+            full_sets = vec![];
+        }
+        println!("k-space crop ({}): {} of {} samples kept ({:.2} %), ADC window {w0}..{w1} of {} ({t_w0:.3}..{t_w1:.3} ms), {} .. {} per set ({:.1}s)", kc.describe(), st.kept, st.total, 100.0 * st.fraction(), sd.na, sel.iter().map(|s| s.len()).min().unwrap_or(0), sel.iter().map(|s| s.len()).max().unwrap_or(0), t_c.elapsed().as_secs_f64());
+        if let Some(ks) = kstore.take() {
+            let ks = std::sync::Arc::try_unwrap(ks).unwrap_or_else(|_| panic!("k-space store shared before the crop"));
+            let view = ks.with_selection(sel.clone()).unwrap();
+            let bytes = st.kept * nvc * 8;
+            // the kept samples as a dense RAM copy when they fit (one pass over the store; no per-gradient decode)
+            // (HASTY_KCROP_VIEW=1: always read through the filtered view)
+            let ram = !view.spec().is_dense() && (bytes as f64) < 0.3 * available_memory() as f64 && std::env::var("HASTY_KCROP_VIEW").is_err();
+            let ks = if ram {
+                let t_r = Instant::now();
+                let r = KStore::create(KStoreSpec::dense(), nvc, view.lens().to_vec(), None, &format!("{}|kcrop", view.tag())).unwrap();
+                for t in 0..view.n_sets() {
+                    r.put_owned(t, view.read_vec(t).unwrap()).unwrap();
+                }
+                println!("k-space crop: kept data {:.2} GiB copied to RAM ({:.1}s; the store stays as it is)", bytes as f64 / GIB, t_r.elapsed().as_secs_f64());
+                r
+            } else {
+                println!("k-space crop: kept data {:.2} GiB read through a filtered view of the store", bytes as f64 / GIB);
+                view
+            };
+            kstore = Some(std::sync::Arc::new(ks));
+        }
+        pyr_info["kcrop"] = serde_json::json!({ "frac": kc.frac, "prefix": kc.prefix, "kept": st.kept, "total": st.total, "fraction": st.fraction(), "adc_window": [w0, w1], "window_ms": [t_w0, t_w1] });
+        crop_sel = Some(sel);
+        crop_adc = Some(st);
+    }
+    // (sizes below: the kept samples)
+    let samples_total: usize = host_sets.iter().map(|s| s.coords[0].len()).sum();
+    dev_mem(&dev, "after loading and coil compression");
     let (early_host, staged) = {
         let (free, total) = dev.ctx.mem_get_info().unwrap();
         let budget = vram_budget.unwrap_or(total.saturating_sub(512 << 20)).min(free);
@@ -837,6 +1058,7 @@ fn main() {
         if gnl { " + GNL" } else { "" },
         t0.elapsed().as_secs_f64()
     );
+    dev_mem(&dev, "after the data placement");
     // ESPIRiT-style normalisation Σ_c |S_c|² = 1 (receive bias moves into the image intensity; phases and hence
     // velocities are unchanged). Raw Biot–Savart maps blow up next to the loops and dominate λ_max of the normal operator.
     if std::env::var("HASTY_RAW_MAPS").is_err() {
@@ -886,7 +1108,13 @@ fn main() {
     // warm start: time-averaged plain-model reconstruction per encode (all frames pooled), PCGLS + circulant. The pooled
     // sets stream through the plain operator one at a time with the data residual on the host (pcgls_sets_ctl): pooling
     // them on the device needs 4 data-space vectors of the pooled size (7.5 GB each for a 10-min scan at 2 mm).
-    let warm: Vec<Vec<C32>> = if warm_iters > 0 {
+    let warm: Vec<Vec<C32>> = if let Some(ini) = &init {
+        // --init-from: the per-encode time average of the previous level, resampled (the solver starts per frame)
+        let t_i = Instant::now();
+        let w: Vec<Vec<C32>> = (0..ne).map(|e| ini.mean_image(e, sd.dims).unwrap()).collect();
+        println!("warm start: --init-from time average per encode, resampled {:?} → {:?} ({:.1}s)", ini.dims, sd.dims, t_i.elapsed().as_secs_f64());
+        w
+    } else if warm_iters > 0 {
         (0..ne)
             .map(|e| {
                 let idx: Vec<usize> = (0..fe.len()).filter(|&t| enc_of(t) == e).collect();
@@ -920,7 +1148,8 @@ fn main() {
     } else {
         vec![]
     };
-    println!("warm start: {} PCGLS iterations per encode ({:.0}s)", warm_iters, t0.elapsed().as_secs_f64());
+    println!("warm start: {} PCGLS iterations per encode ({:.0}s)", if init.is_some() { 0 } else { warm_iters }, t0.elapsed().as_secs_f64());
+    dev_mem(&dev, "after the warm start");
     // object support: smoothed magnitude of the warm start (or of the summed adjoint of the reference encode without
     // one), thresholded, enclosed low-signal regions filled per slice (background = what a flood fill from the slice
     // border reaches through sub-threshold voxels)
@@ -951,10 +1180,12 @@ fn main() {
                 }
             }
         }
-        // smooth (3 box passes, radius 4 in-plane / 1 through-plane, σ ≈ 4.5 / 1.4 voxels) so that dark structures
-        // inside the body (vessel lumen with flow dephasing, lungs) do not open holes in the mask
+        // smooth (3 box passes, radius 4 in-plane / 1 through-plane native voxels, σ ≈ 4.5 / 1.4 voxels: in mm, so
+        // the same physical radius on any reconstruction grid) so that dark structures inside the body (vessel lumen
+        // with flow dephasing, lungs) do not open holes in the mask
         let d = sd.dims;
         for (axis, r) in [(0usize, 4usize), (1, 4), (2, 1)] {
+            let r = (r as f64 * sd.res / sd.vox[axis]).round() as usize;
             let (n, stride) = (d[axis], [1, d[0], d[0] * d[1]][axis]);
             for _ in 0..3 {
                 let src = acc.clone();
@@ -998,10 +1229,12 @@ fn main() {
     };
     println!("support {} voxels", support.iter().filter(|&&b| b).count());
     // coil maps zero outside the (dilated) object support, as ESPIRiT maps are: no unconstrained air modes
+    // (dilation by 3 native voxels in mm: the same physical margin on any reconstruction grid)
     let mut dil = support.clone();
     {
         let d = sd.dims;
-        for _ in 0..3 {
+        let n_dil = ((3.0 * sd.res / (sd.vox.iter().sum::<f64>() / 3.0)).round() as usize).max(1);
+        for _ in 0..n_dil {
             let prev = dil.clone();
             for q in 0..nv {
                 if prev[q] {
@@ -1013,7 +1246,18 @@ fn main() {
             }
         }
     }
-    if std::env::var("HASTY_NO_MASK").is_err() {
+    // --coil-mask auto|none|support: zero the coil maps outside `dil` (support) or not (none). auto: none for maps that
+    // exist everywhere (--smaps truth: a threshold of the blurred warm start would cut tissue with signal out of the
+    // model, e.g. 25k voxels on ph0001; air is handled by --air instead), support for estimated maps (ESPIRiT has no
+    // information outside the object). `dil` stays the fit region (concomitant and segment fits) either way.
+    let coil_mask_mode = coil_mask_arg.clone().unwrap_or_else(|| if smaps_spec == "truth" { "none".into() } else { "support".into() });
+    assert!(coil_mask_mode == "none" || coil_mask_mode == "support", "--coil-mask {coil_mask_mode}: auto, none or support");
+    let mask_maps = coil_mask_mode == "support" && std::env::var("HASTY_NO_MASK").is_err();
+    let maps_mask: Vec<bool> = if mask_maps { dil.clone() } else { vec![true; nv] };
+    if !mask_maps {
+        println!("coil maps not masked (--coil-mask {coil_mask_mode}): {} voxels; fit region {} voxels", nv, dil.iter().filter(|&&b| b).count());
+    }
+    if mask_maps {
         for q in (0..nv).filter(|&q| !dil[q]) {
             for c in 0..nvc {
                 smaps[c * nv + q] = C32::new(0.0, 0.0);
@@ -1027,12 +1271,13 @@ fn main() {
     }
     let maps: Vec<CudaSlice<C32>> = maps_host.iter().map(|m| st.clone_htod(m).unwrap()).collect();
     // lumen and truth at the true positions of the reconstruction voxels
-    let lumen: Vec<usize> = (0..nv).filter(|&q| sd.sample_log(&sd.truth_frac, 0, &grid.x_log[q]) > 0.9).collect();
-    println!("lumen {} voxels: {} in the support, {} in the masked maps", lumen.len(), lumen.iter().filter(|&&q| support[q]).count(), lumen.iter().filter(|&&q| dil[q]).count());
+    let lumen: Vec<usize> = (0..nv).filter(|&q| sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.9).collect();
+    println!("lumen {} voxels: {} in the support, {} in the masked maps", lumen.len(), lumen.iter().filter(|&&q| support[q]).count(), lumen.iter().filter(|&&q| maps_mask[q]).count());
     let dims4 = |n: usize| [sd.dims[0], sd.dims[1], sd.dims[2], n];
     save(&out.join("smaps.npy"), "<c8", &dims4(nvc), c8(&smaps));
     save(&out.join("mask_support.npy"), "<f4", &sd.dims, f4(support.iter().map(|&b| b as u8 as f32)));
-    save(&out.join("mask_maps.npy"), "<f4", &sd.dims, f4(dil.iter().map(|&b| b as u8 as f32)));
+    save(&out.join("mask_maps.npy"), "<f4", &sd.dims, f4(maps_mask.iter().map(|&b| b as u8 as f32)));
+    save(&out.join("mask_fit.npy"), "<f4", &sd.dims, f4(dil.iter().map(|&b| b as u8 as f32)));
     if !warm.is_empty() {
         save(&out.join("warm.npy"), "<c8", &dims4(ne), c8(&warm.concat()));
     }
@@ -1040,17 +1285,44 @@ fn main() {
     // (the velocity model uses its own Gauss–Newton metric: no circulant kernels, they would cost ~8 GB)
     let mut lag_tau: Option<f64> = None;
     let mut lag_info = serde_json::Value::Null;
-    let need_circ = vmodel.is_none() && preconds.iter().any(|p| p == "circ" || p == "zmshr1m");
-    let circ: Vec<Vec<CirculantPrecond>> = if need_circ {
+    let need_circ = vmodel.is_none() && preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.metric()));
+    // --circ-share encode (default for frame-resolved sets): one circulant per encode from the pooled samples of all its
+    // frames (the frames of an encode share the trajectory's density; per-set circulants would need 133 MB each at 2 mm,
+    // ≈ 37 GB for 280 sets); set: one per set (the original, needed for --temporal block-diagonal metrics)
+    let circ_share = circ_share_arg.clone().unwrap_or_else(|| if temporal.is_some() { "set".into() } else { "encode".into() });
+    assert!(circ_share == "set" || circ_share == "encode", "--circ-share {circ_share}: set or encode");
+    assert!(circ_share == "set" || temporal.is_none(), "--circ-share encode needs one frame per set (no --temporal)");
+    let circ_map: Vec<usize> = if need_circ && circ_share == "encode" { (0..fe.len()).map(enc_of).collect() } else { vec![] };
+    // shared per-encode circulants live in host memory (uploaded per application into one shared device workspace):
+    // the joint water + fat operator with per-frame maps leaves no room for 7 device-resident N-grid preconditioners
+    let circ_ws = if need_circ && circ_share == "encode" { Some(hasty_recon::precond::CircShared::new(&dev, &st, sd.dims).unwrap()) } else { None };
+    let circ: Vec<Vec<CirculantPrecond>> = if need_circ && circ_share == "encode" {
+        (0..ne)
+            .map(|e| {
+                let idx: Vec<usize> = (0..fe.len()).filter(|&t| enc_of(t) == e).collect();
+                let c: [Vec<f32>; 3] = [0, 1, 2].map(|a| idx.iter().flat_map(|&t| host_sets[t].coords[a].iter().copied()).collect());
+                let pc = CirculantPrecond::new(&dev, &st, kern.clone(), sd.dims, [&c[0], &c[1], &c[2]], &smaps, nvc, eps).unwrap();
+                println!("circulant metric for encode {e}: {} sets pooled, dynamic range {:.2e} (host-resident)", idx.len(), pc.dyn_range);
+                vec![pc.to_host(&st, circ_ws.as_ref().unwrap()).unwrap()]
+            })
+            .collect()
+    } else if need_circ {
         host_sets
             .iter()
-            .map(|s| {
+            .enumerate()
+            .map(|(t, s)| {
                 let frames: Vec<Option<usize>> = if temporal.is_some() { (0..nf).map(Some).collect() } else { vec![None] };
                 frames
                     .iter()
                     .map(|&f| {
-                        let sel: Vec<usize> = (0..s.readouts.len()).filter(|&r| f.is_none_or(|f| sd.ro.frame[s.readouts[r]] == f)).collect();
-                        let c: [Vec<f32>; 3] = [0, 1, 2].map(|a| sel.iter().flat_map(|&r| s.coords[a][r * sd.na..(r + 1) * sd.na].iter().copied()).collect());
+                        let c: [Vec<f32>; 3] = match &crop_sel {
+                            // --kcrop: kept sample i comes from readout sel[i] / na of the whole set
+                            Some(cs) => [0, 1, 2].map(|a| (0..s.coords[a].len()).filter(|&i| f.is_none_or(|f| sd.ro.frame[s.readouts[cs[t][i] as usize / sd.na]] == f)).map(|i| s.coords[a][i]).collect()),
+                            None => {
+                                let sel: Vec<usize> = (0..s.readouts.len()).filter(|&r| f.is_none_or(|f| sd.ro.frame[s.readouts[r]] == f)).collect();
+                                [0, 1, 2].map(|a| sel.iter().flat_map(|&r| s.coords[a][r * sd.na..(r + 1) * sd.na].iter().copied()).collect())
+                            }
+                        };
                         CirculantPrecond::new(&dev, &st, kern.clone(), sd.dims, [&c[0], &c[1], &c[2]], &smaps, nvc, eps).unwrap()
                     })
                     .collect()
@@ -1093,6 +1365,15 @@ fn main() {
         sense_sets = SenseSets { op: &mut op, coords, ms: ms.clone(), maps, map_of_set: if conc_dc { (0..fe.len()).map(enc_of).collect() } else { vec![] } };
         &mut sense_sets
     } else {
+        // the plain SENSE operator (device coil maps + NUFFT plan) served the warm start and the support only: free it
+        // before the segment operator is built (the joint water + fat operator needs the room)
+        drop(op);
+        let dev_free = |what: &str| {
+            if let Ok((free, total)) = dev.ctx.mem_get_info() {
+                println!("device memory {what}: {:.2} GiB free of {:.2} GiB", free as f64 / GIB, total as f64 / GIB);
+            }
+        };
+        dev_free("before the segment operator");
         let ts = Instant::now();
         let (with_b0, with_conc) = (phys != "none", phys == "full");
         let fit_vox: Vec<usize> = (0..nv).filter(|&q| dil[q]).collect();
@@ -1108,8 +1389,9 @@ fn main() {
         let ff_joint: Option<Vec<f32>> = fat_joint.then(|| {
             let src = fat_fraction.as_ref().unwrap();
             let path = if src == "truth" { PathBuf::from(&dir).join("truth_fat_fraction.npy") } else { PathBuf::from(src) };
-            let ff = match &ff_est { Some(v) => v.clone(), None => hasty_recon::data::read_npy(&path).unwrap_or_else(|e| panic!("--fat-fraction {}: {e:?}", path.display())).f32s() };
-            assert!(ff.len() == nv || ff.len() == nv * nf, "--fat-fraction: {} values for {nv} voxels (or {nv} × {nf} frames)", ff.len());
+            let ff = match &ff_est { Some(v) => v.clone(), None => maps_on_grid(&sd, &path, &grid.x_log, truth_box) };
+            let ff = expand_cardiac_maps(ff, nv, nf, nf_card);
+            assert!(ff.len() == nv || ff.len() == nv * nf, "--fat-fraction: {} values for {nv} voxels (or {nv} × {nf} frames, or {nv} × {nf_card} cardiac frames)", ff.len());
             println!("water + fat (--fat-model joint): known fat fraction ({}{}), {} voxels with ff > 5 %, six-peak spectrum at {:.2} T in the segments", path.display(), if ff.len() > nv { ", per frame" } else { "" }, ff[..nv].iter().filter(|&&f| f > 0.05).count(), sd.b0);
             ff.iter().map(|f| f.clamp(0.0, 1.0)).collect()
         });
@@ -1123,15 +1405,117 @@ fn main() {
             2.0 * std::f64::consts::PI * hasty_mrsim::GAMMA_BAR * sd.b0 * fs_joint.ppm[i] * 1e-6
         };
         // the encode-wide mean concomitant coefficients (all frames): the segments and the auto segment count
-        let wbar: Vec<Vec<[f64; 4]>> = (0..ne).map(|e| mean_coefficients(&(0..fe.len()).filter(|&t| enc_of(t) == e).map(|t| &host_sets[t]).collect::<Vec<_>>(), sd.na)).collect();
+        // the whole sample records (readout × ADC sample structure): the uncropped sets with --kcrop
+        let rec_sets: &[SampleSet] = if full_sets.is_empty() { &host_sets } else { &full_sets };
+        // segment time window: the ADC samples kept by --kcrop (all of them otherwise)
+        let (wa, wb) = crop_adc.as_ref().map_or((0, sd.na - 1), |s| s.window);
+        let wbar: Vec<Vec<[f64; 4]>> = (0..ne).map(|e| mean_coefficients(&(0..fe.len()).filter(|&t| enc_of(t) == e).map(|t| &rec_sets[t]).collect::<Vec<_>>(), sd.na)).collect();
         let wbar: Vec<Vec<[f64; 4]>> = if with_conc { wbar } else { vec![vec![[0.0; 4]; sd.na]; ne] };
+        // --b0-absorb: the smooth field part handled per sample (weights: smoothed warm-start magnitude² × coil energy)
+        let coil_energy: Vec<f64> = (0..nv).map(|q| (0..nvc).map(|c| { let z = smaps[c * nv + q]; (z.re as f64).powi(2) + (z.im as f64).powi(2) }).sum()).collect();
+        let field_poly = if b0_absorb > 0 && with_b0 {
+            let tau_a: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
+            let wv: Vec<f64> = fit_vox.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
+            let fp = hasty_recon::segphys::fit_field_poly(&sd, &grid, &fit_vox, Some(&wv), b0_absorb, 0.5 * (tau_a[wa] + tau_a[wb]));
+            let hz = |c: f64| c / (2.0 * std::f64::consts::PI);
+            println!("--b0-absorb {b0_absorb}: field part {:.1} Hz + [{:.1}, {:.1}, {:.1}] Hz/m · ρ{} in the sample tables", hz(fp.c[0]), hz(fp.c[1]), hz(fp.c[2]), hz(fp.c[3]), if b0_absorb >= 2 { format!(" + quadratic [{}] Hz/m² (ΔC, relative to the readout centre)", fp.c[4..].iter().map(|c| format!("{:.0}", hz(*c))).collect::<Vec<_>>().join(", ")) } else { String::new() });
+            assert!(b0_absorb < 2 || order >= 1, "--b0-absorb 2 needs the ΔC kernel correction (--order 1|2)");
+            fp
+        } else {
+            hasty_recon::segphys::FieldPoly::none()
+        };
+        // voxel weights of the segment basis over the fit voxels (seg_fit below): energy (--seg-weight energy)
+        let seg_fit_e: Vec<usize> = fit_vox.iter().copied().step_by(3).collect();
+        let seg_ew: Option<Vec<f64>> = seg_energy.then(|| {
+            let e: Vec<f64> = seg_fit_e.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
+            let mut srt = e.clone();
+            srt.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let med = srt[srt.len() / 2].max(1e-300);
+            println!("segment basis voxel weights: smoothed warm-start magnitude² × coil energy / median ({} fit voxels)", e.len());
+            e.into_iter().map(|v| v / med).collect()
+        });
+        // per-ADC-sample weights 1 + (E(n) + E_vol) / (C σ²) for --seg-basis svdn and --nseg auto:noise: whitened data
+        // energy per sample (every 7th readout, at most 512) plus its k-space volume average, over the noise energy per
+        // sample (σ: HASTY_NOISE_SIGMA, the sim's noise_sigma, else 1 = data whitened with the measured noise covariance)
+        let noise_sigma: f64 = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0).or_else(|| sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0)).unwrap_or(1.0);
+        let snr_w: Option<Vec<f64>> = (seg_svdn || seg_noise_rule.is_some()).then(|| {
+            let ros: Vec<usize> = (0..sd.n_readouts()).step_by(7).take(512).collect();
+            let e = sd.adc_energy_whitened(&ros, &sd.whitener()).unwrap();
+            // |k| of every ADC sample (first readout of set 0; the shells of the white floor)
+            let s0 = &rec_sets[0];
+            let kap: Vec<f64> = (wa..=wb).map(|n| (0..3).map(|a| (s0.coords[a][n] as f64 / sd.vox[a]).powi(2)).sum::<f64>().sqrt()).collect();
+            let noise = nc as f64 * noise_sigma * noise_sigma;
+            let w = hasty_nufft::noise_time_weights(&e[wa..=wb], &kap, noise);
+            println!("per-sample weights 1 + (E(n) + E_vol) / (C σ²), σ = {noise_sigma:.3}: first {:.2e}, middle {:.2e}, last {:.2e}, mean {:.2e}; white floor E_vol / (C σ²) = {:.1}", w[0] - 1.0, w[w.len() / 2] - 1.0, w[w.len() - 1] - 1.0, w.iter().sum::<f64>() / w.len() as f64 - 1.0, hasty_nufft::vol_energy(&e[wa..=wb], &kap) / noise);
+            w
+        });
+        let snr_grid: Option<(Vec<f64>, Vec<f64>)> = snr_w.as_ref().map(|w| {
+            let tau_a: Vec<f64> = (wa..=wb).map(|n| rec_sets[0].tau[n]).collect();
+            hasty_nufft::seg_time_grid(&tau_a, w, 96)
+        });
+        if let (Some(r_noise), Some((ts_n, tw_n)), Some(w)) = (seg_noise_rule, snr_grid.as_ref(), snr_w.as_ref()) {
+            // relative weighted error ε(L) → data error in noise rms ≈ ε(L) √(mean w) (w = 1 + (E(n) + E_vol) / (C σ²):
+            // proportional to the sample's signal plus the white floor; research/segment_basis.md)
+            // margin 1.5: the separable prediction was up to 1.3–2× optimistic against the exact data-space error at
+            // L ≥ 9 on ph0001 (research/segment_basis.md §2–3); HASTY_SEG_MARGIN overrides
+            let margin: f64 = std::env::var("HASTY_SEG_MARGIN").ok().and_then(|v| v.parse().ok()).unwrap_or(1.5);
+            let gain = (w.iter().sum::<f64>() / w.len() as f64).sqrt();
+            let tol = r_noise / (gain * margin);
+            let tau_a: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
+            let (t0, t1) = (tau_a[wa], tau_a[wb]);
+            let ffm: Option<Vec<f64>> = ff_joint.as_ref().map(|ff| ff[..nv].iter().map(|&f| f as f64).collect());
+            let mut lsel = 2usize;
+            // error weights of the prediction: the energy weights (always); fit weights of cheb: --seg-weight
+            let seg_ew_rule: Option<Vec<f64>> = seg_ew.clone().or_else(|| {
+                let e: Vec<f64> = seg_fit_e.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
+                let mut srt = e.clone();
+                srt.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let med = srt[srt.len() / 2].max(1e-300);
+                Some(e.into_iter().map(|v| v / med).collect())
+            });
+            let seg_vw_rule: Option<Vec<f64>> = seg_ew.clone();
+            for e in 0..ne {
+                let psi_raw = segment_phase(&grid, &wbar[e], &tau_a, with_b0);
+                let psi = field_poly.residual(&sd, &psi_raw);
+                let dec = |v: usize, t: f64| -> f64 { r2v.as_ref().map_or(1.0, |r| (-r[v] * (t - tau_a[0])).exp()) };
+                let g = |v: usize, t: f64| -> Complex64 {
+                    let z = Complex64::from_polar(dec(v, t), -psi(v, t));
+                    match &ffm { Some(f) => z * (Complex64::new(1.0 - f[v], 0.0) + f[v] * cfat(t)), None => z }
+                };
+                // per-frame fat maps: the segments are fixed-time (uniform nodes for svdn) whatever the basis, except
+                // svdn-union (the union water + fat Gram, its eigenvalue tail is the rule)
+                let per_frame_fat = ff_joint.as_ref().is_some_and(|ff| ff.len() > nv);
+                let l_e = if seg_union && per_frame_fat {
+                    let (ww, wf) = union_weights(&seg_fit_e, seg_ew_rule.as_deref(), ff_joint.as_ref().unwrap(), nv);
+                    let ev = hasty_nufft::fat_union_spectrum(&seg_fit_e, &ww, &wf, ts_n, tw_n, &psi, &cfat);
+                    hasty_nufft::seg_count_for(&ev, tol, 2, 64)
+                } else if seg_svd && !per_frame_fat {
+                    // the optimal rank-L error in the energy-weighted metric (exact for --seg-weight energy, a lower
+                    // bound for other voxel weights)
+                    let ev = hasty_nufft::weighted_spectrum(&seg_fit_e, seg_ew_rule.as_deref(), ts_n, tw_n, &g);
+                    hasty_nufft::seg_count_for(&ev, tol, 2, 64)
+                } else {
+                    // fixed-time diagonals: scan L with the interpolators solved on the time grid
+                    (2..=64).find(|&l| {
+                        let cheb = seg_cheb;
+                        let tl: Vec<f64> = if cheb { hasty_nufft::cheb_nodes(l, t0, t1) } else { (0..l).map(|i| t0 + (t1 - t0) * i as f64 / (l - 1) as f64).collect() };
+                        let weighted = cheb || seg_energy || (seg_svdn && per_frame_fat);
+                        hasty_nufft::nodes_weighted_error(&seg_fit_e, if weighted { seg_vw_rule.as_deref() } else { None }, seg_ew_rule.as_deref(), ts_n, tw_n, &tl, &g) <= tol
+                    }).unwrap_or(64)
+                };
+                lsel = lsel.max(l_e);
+            }
+            println!("segments (auto:noise): predicted data error × {margin} ≤ {r_noise} noise rms (relative weighted error ≤ {tol:.2e}, ×{gain:.1}) → L = {lsel} ({} basis)", seg_basis_arg);
+            nseg = lsel;
+        }
         if nseg == 0 {
             // phase cycles spanned over the ADC window by the fitted voxels (B0 and the mean concomitant phase), worst encode
-            let tau_adc: Vec<f64> = (0..sd.na).map(|n| host_sets[0].tau[n]).collect();
-            let (t0, t1) = (tau_adc[0], tau_adc[sd.na - 1]);
+            let tau_adc: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
+            let (t0, t1) = (tau_adc[wa], tau_adc[wb]);
             let mut cyc = 0.0f64;
             for e in 0..ne {
-                let psi = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi_raw = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi = field_poly.residual(&sd, &psi_raw);
                 let mut d: Vec<f64> = fit_vox.iter().step_by(7).map(|&q| psi(q, t1) - psi(q, t0)).collect();
                 if fat_joint {
                     // joint water + fat: the main fat peak of every voxel too
@@ -1150,7 +1534,10 @@ fn main() {
         let mut eng = SegNufft::new(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg)).unwrap();
         eng.set_maps(&st, &smaps).unwrap();
         // segments per encode from the encode-wide mean coefficients (all frames)
-        let tau_adc: Vec<f64> = (0..sd.na).map(|n| host_sets[0].tau[n]).collect();
+        let tau_adc: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
+        let (tw0, tw1, ntab) = (tau_adc[wa], tau_adc[wb], (wb - wa + 1).max(256));
+        // svdw with --kcrop: the time weights count the kept samples only
+        let keep_w: Option<Vec<f64>> = crop_adc.as_ref().map(|s| s.keep_fraction());
         let seg_fit: Vec<usize> = fit_vox.iter().copied().step_by(3).collect();
         // data energy per ADC time for --seg-basis svdw (every 7th readout, at most 512)
         let adc_w: Option<Vec<f64>> = seg_svdw.then(|| {
@@ -1163,7 +1550,8 @@ fn main() {
         let tw_fn = |t: f64| -> f64 {
             let e = adc_w.as_ref().unwrap();
             let dt = (tau_adc[sd.na - 1] - tau_adc[0]) / (sd.na - 1).max(1) as f64;
-            e[(((t - tau_adc[0]) / dt).round().max(0.0) as usize).min(e.len() - 1)]
+            let i = (((t - tau_adc[0]) / dt).round().max(0.0) as usize).min(e.len() - 1);
+            e[i] * keep_w.as_ref().map_or(1.0, |k| k[i.min(k.len() - 1)])
         };
         let tw: Option<&(dyn Fn(f64) -> f64 + Sync)> = if seg_svdw { Some(&tw_fn) } else { None };
         let seg_vw: Option<Vec<f64>> = seg_mass.map(|(lo, hi)| {
@@ -1177,12 +1565,22 @@ fn main() {
             println!("segment basis voxel weights: warm-start magnitude / median, clamped to [{lo}, {hi}] ({} fit voxels)", m.len());
             m.into_iter().map(|v| v as f64).collect()
         });
-        assert!(seg_mass.is_none() || seg_svd, "--seg-weight mass needs --seg-basis svd|svdw");
-        let svd_build = |nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| build_segments_svd_weighted(nv, nseg, tau_adc[0], tau_adc[sd.na - 1], sd.na.max(256), &seg_fit, seg_vw.as_deref(), tw, 96, g);
+        assert!(seg_mass.is_none() || seg_svd, "--seg-weight mass needs --seg-basis svd|svdw|svdn");
+        let seg_vw: Option<Vec<f64>> = seg_vw.or_else(|| seg_ew.clone());
+        let svd_build = |nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| match (&snr_grid, seg_svdn) {
+            (Some((ts_n, tw_n)), true) => hasty_nufft::build_segments_svd_grid(nv, nseg, tw0, tw1, ntab, &seg_fit, seg_vw.as_deref(), ts_n, tw_n, g),
+            _ => build_segments_svd_weighted(nv, nseg, tw0, tw1, ntab, &seg_fit, seg_vw.as_deref(), tw, 96, g),
+        };
+        // --seg-basis cheb: Chebyshev node times, interpolators weighted by --seg-weight; --seg-basis fixed with
+        // --seg-weight energy: the uniform nodes with energy-weighted interpolators (the same diagonals as `fixed`)
+        let nodes_of = |nseg: usize| -> Vec<f64> { if seg_cheb { hasty_nufft::cheb_nodes(nseg, tw0, tw1) } else { (0..nseg).map(|l| if nseg == 1 { 0.5 * (tw0 + tw1) } else { tw0 + (tw1 - tw0) * l as f64 / (nseg - 1) as f64 }).collect() } };
+        let seg_nodes_w = seg_cheb || seg_energy;
+        let cheb_build = |nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| hasty_nufft::build_segments_nodes(nv, &nodes_of(nseg), tw0, tw1, ntab, &seg_fit, seg_vw.as_deref(), g);
         let make_segs = |eng: &SegNufft, nseg: usize| -> Vec<hasty_nufft::SegSegments> {
         (0..ne)
             .map(|e| {
-                let psi = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi_raw = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi = field_poly.residual(&sd, &psi_raw);
                 // one interpolator table entry per ADC sample (256 left a 3–7e-4 floor with fat at 8–12 ms readouts)
                 // T2* decay relative to the readout start (--r2s; 1 without)
                 let dec = |v: usize, t: f64| -> f64 { r2v.as_ref().map_or(1.0, |r| (-r[v] * (t - tau_adc[0])).exp()) };
@@ -1190,22 +1588,41 @@ fn main() {
                     if ff.len() == nv {
                         // joint, one map: folded into the diagonals, table fitted to g_v(τ) = [(1 − ff) + ff c(τ)] e^{−iψ}
                         let g = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t)) * (Complex64::new(1.0 - ff[v] as f64, 0.0) + ff[v] as f64 * cfat(t));
-                        let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else { build_segments_complex(nv, nseg, tau_adc[0], tau_adc[sd.na - 1], sd.na.max(256), &seg_fit, &g) };
+                        let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else if seg_nodes_w { cheb_build(nseg, &g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, &g) };
                         return eng.segments(&st, &sp, &at, ta, dt).unwrap();
                     }
                     // joint, per-frame maps: water diagonals + an ff-independent table, maps applied by the operator
-                    let (sp, at, cl, ta, dt) = build_segments_fat(nv, nseg, tau_adc[0], tau_adc[sd.na - 1], sd.na.max(256), &seg_fit, &psi, &cfat);
+                    // (--seg-basis cheb|svdn or --seg-weight energy: node times / weights of hasty_nufft::
+                    // build_segments_fat_nodes — the rank-L SVD basis does not fit the per-node fat factor c_l of the
+                    // operator, so svdn falls back to uniform nodes with its voxel weights here; Chebyshev nodes lose
+                    // in the noise-referenced error, research/segment_basis.md)
+                    if let (true, Some((ts_n, tw_n))) = (seg_union, snr_grid.as_ref()) {
+                        let (ww, wf) = union_weights(&seg_fit, seg_vw.as_deref(), ff, nv);
+                        let (sp, at, cl, ta, dt, nodes, cond) = hasty_nufft::build_segments_svd_fat_union(nv, nseg, tw0, tw1, ntab, &seg_fit, &ww, &wf, ts_n, tw_n, &psi, &cfat);
+                        if e == 0 {
+                            println!("segments (svdn-union, per-frame fat maps): L = {nseg}, cardinal nodes (ms) {:?}, condition {cond:.1}", nodes.iter().map(|&q| ((ta + q as f64 * dt - tw0) * 1e4).round() / 10.0).collect::<Vec<_>>());
+                        }
+                        return eng.segments_fat(&st, &sp, &at, &cl, ta, dt).unwrap();
+                    }
+                    let (sp, at, cl, ta, dt) = if seg_cheb || seg_svdn || seg_energy {
+                        let tl = if seg_cheb { hasty_nufft::cheb_nodes(nseg, tw0, tw1) } else { (0..nseg).map(|l| if nseg == 1 { 0.5 * (tw0 + tw1) } else { tw0 + (tw1 - tw0) * l as f64 / (nseg - 1) as f64 }).collect() };
+                        hasty_nufft::build_segments_fat_nodes(nv, &tl, tw0, tw1, ntab, &seg_fit, seg_vw.as_deref(), &psi, &cfat)
+                    } else {
+                        build_segments_fat(nv, nseg, tw0, tw1, ntab, &seg_fit, &psi, &cfat)
+                    };
                     return eng.segments_fat(&st, &sp, &at, &cl, ta, dt).unwrap();
                 }
                 if r2v.is_some() {
                     let g = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t));
-                    let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else { build_segments_complex(nv, nseg, tau_adc[0], tau_adc[sd.na - 1], sd.na.max(256), &seg_fit, &g) };
+                    let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else if seg_nodes_w { cheb_build(nseg, &g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, &g) };
                     return eng.segments(&st, &sp, &at, ta, dt).unwrap();
                 }
                 let (sp, at, ta, dt) = if seg_svd {
                     svd_build(nseg, &|v, t| Complex64::from_polar(1.0, -psi(v, t)))
+                } else if seg_nodes_w {
+                    cheb_build(nseg, &|v, t| Complex64::from_polar(1.0, -psi(v, t)))
                 } else {
-                    build_segments(nv, nseg, tau_adc[0], tau_adc[sd.na - 1], sd.na.max(256), &seg_fit, &psi)
+                    build_segments(nv, nseg, tw0, tw1, ntab, &seg_fit, &psi)
                 };
                 eng.segments(&st, &sp, &at, ta, dt).unwrap()
             })
@@ -1213,6 +1630,8 @@ fn main() {
         };
         let segs = make_segs(&eng, nseg);
         let mut resid = 0.0f64;
+        // --b0-absorb 2: largest per-sample quadratic B0 phase handed to the ΔC Taylor correction
+        let mut absorb_q = 0.0f64;
         // sample tables per set: resident, or (they would crowd the device / --plan host) pinned host memory streamed
         // into two device slots; decided from set 0's measured size
         let mut tables_host: Option<bool> = None;
@@ -1222,11 +1641,15 @@ fn main() {
             .map(|t| {
                 let mut p = (|| {
                 if let (Some(f4), Some(h)) = (&fit4, &htab) {
-                    let (tab, dw) = seg_tables_hi(&sd, &host_sets[t], f4, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
+                    let (mut tab, dw) = seg_tables_hi(&sd, &rec_sets[t], f4, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
+                    absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
+                    let (tab, dw) = match &crop_sel { Some(sel) => { let m = tab.tau.len(); (tab.select(&sel[t]), hasty_recon::pyramid::gather_rows(&dw, m, &sel[t])) } None => (tab, dw) };
                     resid = resid.max(tab.max_resid_phase);
                     return eng.points_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &dw, h, temporal.map(|_| &tab.t[..])).unwrap();
                 }
-                let tab = seg_tables(&sd, &host_sets[t], &fit, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
+                let mut tab = seg_tables(&sd, &rec_sets[t], &fit, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
+                absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
+                let tab = match &crop_sel { Some(sel) => tab.select(&sel[t]), None => tab };
                 resid = resid.max(tab.max_resid_phase);
                 eng.points(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, temporal.map(|_| &tab.t[..])).unwrap()
                 })();
@@ -1286,6 +1709,9 @@ fn main() {
             eng.stream_prefetch = table_prefetch;
             let (logical, stored) = (pts.iter().map(|p| p.table_bytes()).sum::<usize>(), pts.iter().map(|p| p.host_stored_bytes()).sum::<usize>());
             println!("sample tables streamed: {:.2} GiB on the host ({}, {:.2} GiB of tables), {:.2} GiB device slots, prefetch {}", stored as f64 / 1073741824.0, if pts[0].is_packed() { format!("packed ×{:.2}", logical as f64 / stored.max(1) as f64) } else { "pinned".into() }, logical as f64 / 1073741824.0, eng.stream_slot_bytes() as f64 / 1073741824.0, if table_prefetch { "on (second stream)" } else { "off" });
+        }
+        if b0_absorb >= 2 {
+            println!("--b0-absorb 2: largest per-sample quadratic B0 phase in the ΔC Taylor correction {absorb_q:.3} rad (Taylor-2 truncation ≈ {:.1e})", absorb_q.powi(3) / 6.0);
         }
         let (kf, ka) = eng.autotune(&st, &segs[0], &pts[0]).unwrap();
         println!(
@@ -1371,6 +1797,10 @@ fn main() {
     {
         let (keep_coords, keep_tau) = (voxel_basis.is_some(), fat_fraction.is_some() && !fat_joint);
         let mut freed = 0usize;
+        // --kcrop: the whole records the segment tables were built from
+        for s in std::mem::take(&mut full_sets) {
+            freed += s.wq.len() * 32 + s.coords.iter().map(|c| c.len() * 4).sum::<usize>() + s.tau.len() * 8;
+        }
         for s in host_sets.iter_mut() {
             freed += s.wq.len() * 32;
             s.wq = Vec::new();
@@ -1408,8 +1838,9 @@ fn main() {
         Some(_) if fat_joint => sop,
         Some(src) => {
             let path = if src == "truth" { PathBuf::from(&dir).join("truth_fat_fraction.npy") } else { PathBuf::from(src) };
-            let ff = match &ff_est { Some(v) => v.clone(), None => hasty_recon::data::read_npy(&path).unwrap_or_else(|e| panic!("--fat-fraction {}: {e:?}", path.display())).f32s() };
-            assert!(ff.len() == nv || ff.len() == nv * nf, "--fat-fraction: {} values for {nv} voxels (or {nv} × {nf} frames)", ff.len());
+            let ff = match &ff_est { Some(v) => v.clone(), None => maps_on_grid(&sd, &path, &grid.x_log, truth_box) };
+            let ff = expand_cardiac_maps(ff, nv, nf, nf_card);
+            assert!(ff.len() == nv || ff.len() == nv * nf, "--fat-fraction: {} values for {nv} voxels (or {nv} × {nf} frames, or {nv} × {nf_card} cardiac frames)", ff.len());
             let fs = hasty_qfit::waterfat::FatSpectrum::six_peak();
             let c: Vec<Vec<C32>> = host_sets.iter().map(|s| hasty_recon::setop::fat_spectrum_weights(&fs.ppm, &fs.amp, sd.b0, &s.tau)).collect();
             let nfat = ff[..nv].iter().filter(|&&f| f > 0.05).count();
@@ -1555,7 +1986,7 @@ fn main() {
         // data bytes on the device now (all, or none when kept on the host from the start)
         let data_dev: usize = pr.ys.iter().map(|y| if let hasty_recon::vobj::YData::Dev(d) = y { d.len() * 8 } else { 0 }).sum();
         let budget = vram_budget.unwrap_or(pb.total.saturating_sub(512 << 20)).min(pb.total);
-        let quasi = preconds.iter().any(|p| p == "zmshr1" || p == "zmshr1m");
+        let quasi = preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.quasi()));
         let mut need = Need { fixed: (pb.total - pb.free).saturating_sub(data_dev), stack: spec.stack_bytes(), chunk_max: lens.iter().max().unwrap() * 8, data: data_b, set_max, quasi, gradient_s: 0.0 };
         // the operator's sample tables (SegPoints): placeable too
         let (tab_b, tab_max) = pr.op.table_bytes();
@@ -1601,15 +2032,17 @@ fn main() {
             "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "runs": runs,
             "prior": if vkappas.iter().any(|&k| k > 0.0) { "llr(z, p)" } else { "none" }, "vkappas": vkappas, "vmodel": {"kz": kz, "kv": kv, "deg": [vdeg.0, vdeg.1], "poly": vpoly, "vcont": vcont, "low_venc_encodes": low, "anchor": vanchor.as_ref().map(|(m, s)| format!("{m},{s}"))}, "injected_phase": injected, "setup_s": t0.elapsed().as_secs_f64(),
         });
+        info["pyramid"] = pyr_info.clone();
         info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight }); info["respiration"] = resp_info.clone(); info["prior_detail"] = serde_json::json!({ "prior": prior_kind, "wavelet": { "thr": wav_thr, "levels": wav_levels, "mix": wav_mix } });
         info["prior_detail"]["dfw"] = serde_json::json!(dfw_rule.map(|r| serde_json::json!({ "rule": format!("{r:?}"), "levels": dfw_levels, "mix": dfw_mix })));
         assert!(static_lock.is_none(), "--static-lock: complex-image models only (not --vmodel)");
+        assert!(air.is_none(), "--air: complex-image models only (not --vmodel)");
     std::fs::write(out.join("run.json"), serde_json::to_string_pretty(&info).unwrap()).unwrap();
         let rt = transpose(&sd.rot);
         for (pc, kap) in preconds.iter().flat_map(|p| vkappas.iter().map(move |&k| (p, k))) {
             let tag = vtag(pc, kap);
-            let precond = match pc.as_str() { "none" => Precond::None, "circ" => Precond::Circulant, "zmshr1" => Precond::Zmshr1, _ => Precond::Zmshr1M };
-            let with_metric = matches!(precond, Precond::Circulant | Precond::Zmshr1M);
+            let precond = Precond::parse(pc).unwrap_or(Precond::Zmshr1M);
+            let with_metric = precond.metric();
             let resuming = out.join(format!("state_{tag}_s0.hv")).exists() || out.join(format!("state_{tag}_s1.hv")).exists() || out.join(format!("vdone_{tag}_s0")).exists();
             if !resuming && out.join(format!("recon_{tag}.npy")).exists() {
                 println!("  {tag}: finished in an earlier run, skipped (--fresh to redo)");
@@ -1861,20 +2294,23 @@ fn main() {
                 let _ = std::fs::remove_file(out.join(format!("vdone_{tag}_s{si}")));
             }
         }
-        let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/figs/run_figs.py");
-        let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+        let tools = hasty_site::tool("figs/run_figs.py");
+        let py = hasty_site::python();
         match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
             Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
             r => println!("figure script failed ({r:?}); run: {} -I {} {}", py.display(), tools.display(), out.display()),
         }
         return;
     }
+    if let Ok((free, total)) = dev.ctx.mem_get_info() {
+        println!("device memory before the solver: {:.2} GiB free of {:.2} GiB", free as f64 / GIB, total as f64 / GIB);
+    }
     let mut p = if staged {
         let sg = hasty_recon::kstage::Stager::new(&dev.ctx, kstore.clone().unwrap()).unwrap();
         println!("data staged from the store: {} pinned staging buffers of {:.2} GiB", 2, sg.pinned_bytes() as f64 / 2.0 / GIB);
-        P2np::from_store(sop, sg, circ, &st).unwrap()
+        P2np::from_store(sop, sg, circ, &st).unwrap().with_circ_map_opt(circ_map.clone())
     } else {
-        P2np::new(sop, ys.iter().collect(), circ, &st).unwrap()
+        P2np::new(sop, ys.iter().collect(), circ, &st).unwrap().with_circ_map_opt(circ_map.clone())
     };
     let mut lmax = p.step_norm(&st, false, 12).unwrap();
     let mut lmax_c = if need_circ { p.step_norm(&st, true, 12).unwrap() } else { 1.0 };
@@ -1890,6 +2326,123 @@ fn main() {
         p = p.with_lagged(tau);
     }
     println!("lambda_max(N) = {lmax:.3e}, lambda_max(M N) = {lmax_c:.3e}, setup {:.0}s", t0.elapsed().as_secs_f64());
+    // physics-model warm start (--warm-full): pooled PCG per encode through the full objective
+    let warm: Vec<Vec<C32>> = if warm_full > 0 {
+        assert!(temporal.is_none(), "--warm-full needs one frame per set (no --temporal)");
+        let group_of: Vec<usize> = (0..fe.len()).map(enc_of).collect();
+        let done: Vec<String> = (0..ne).map(|e| format!("warm_full_done_{e}")).collect();
+        let loaded: Vec<Option<Vec<C32>>> = done.iter().map(|d| ctl.load(d).unwrap().map(|v| st.clone_dtoh(&value_dev(&st, &v, nv).unwrap()).unwrap())).collect();
+        let xw: Vec<Vec<C32>> = if loaded.iter().all(|v| v.is_some()) {
+            println!("physics-model warm start: loaded ({} encodes)", ne);
+            loaded.into_iter().map(|v| v.unwrap()).collect()
+        } else {
+            let mut xw: Vec<Vec<C32>> = if warm.is_empty() { vec![vec![C32::new(0.0, 0.0); nv]; ne] } else { warm.clone() };
+            let tw = Instant::now();
+            let lens_w = p.lens();
+            assert!(lens_w.iter().all(|&l| l == nv), "--warm-full: one image per set");
+            let oc = hasty_recon::hoststack::pooled_pcg_host_with(&mut p, &st, &group_of, &mut xw, warm_full, need_circ, Some((&ctl, "warm_full")), 2, pooled_grad).unwrap();
+            if let Outcome::Stopped(k) = oc {
+                println!("stopped in the physics-model warm start (PCG iteration {k}): state saved, rerun the same command to resume");
+                std::process::exit(0);
+            }
+            for (e, d) in done.iter().enumerate() {
+                ctl.save(d, &hasty_recon::checkpoint::dev_value(&st, &st.clone_htod(&xw[e]).unwrap()).unwrap()).unwrap();
+            }
+            println!("physics-model warm start: {warm_full} pooled PCG iterations per encode{} ({:.0}s)", if need_circ { " (per-encode circulant)" } else { "" }, tw.elapsed().as_secs_f64());
+            xw
+        };
+        save(&out.join("warm_full.npy"), "<c8", &dims4(ne), c8(&xw.concat()));
+        // diagnostic: time-averaged velocity of the physics warm start vs the time-averaged truth over the lumen
+        let (mut e2, mut n) = (0.0f64, 0usize);
+        for &q in &lumen {
+            let z: Vec<Complex64> = (0..ne).map(|e| Complex64::new(xw[e][q].re as f64, xw[e][q].im as f64)).collect();
+            let vq = dec.velocity(&z);
+            for a in 0..3 {
+                let tm: f64 = (0..nf_card).map(|f| sd.sample_log(&sd.truth_vel, a + 3 * f, &grid.x_log[q])).sum::<f64>() / nf_card as f64;
+                e2 += (vq[a] - tm).powi(2);
+            }
+            n += 1;
+        }
+        if n > 0 {
+            println!("physics-model warm-start velocity in the lumen: RMSE {:.3} m/s vs the time-averaged truth", (e2 / n as f64).sqrt());
+        }
+        xw
+    } else {
+        warm
+    };
+    // temporal pyramid (--tpyramid): pooled PCG levels, coarse to fine; the last level's group images initialise the
+    // solver per set (group_of of the last level, its images)
+    let tpyr_init: Option<(Vec<usize>, Vec<Vec<C32>>)> = tpyramid.as_ref().map(|levels| {
+        assert!(temporal.is_none(), "--tpyramid needs one frame per set (no --temporal)");
+        assert!(p.lens().iter().all(|&l| l == nv), "--tpyramid: one image per set");
+        let frame_enc: Vec<(usize, usize)> = fe.iter().map(|&(f, e)| (f.unwrap(), e)).collect();
+        let level_groups = |rg: usize, cg: usize| tpyr_groups(&frame_enc, ne, nf_card, resp_bins, rg, cg);
+        let done = |li: usize, rg: usize, cg: usize| format!("tpyr_done_{li}_{rg}x{cg}");
+        // resume: the finest level already finished
+        let found = (0..levels.len()).rev().find_map(|li| { let (rg, cg, _) = levels[li]; ctl.load(&done(li, rg, cg)).unwrap().map(|v| (li, v)) });
+        let last_done = found.as_ref().map(|f| f.0);
+        let mut prev: Option<(Vec<usize>, Vec<Vec<C32>>)> = None;
+        if let Some((li, v)) = found {
+            let (rg, cg, _) = levels[li];
+            let (ng, gof) = level_groups(rg, cg);
+            let mut h = hasty_recon::hoststack::HostStack::zeros(&vec![nv; ng]);
+            h.load_value(&v).unwrap();
+            println!("temporal pyramid: level {} ({rg}x{cg}, {ng} groups) loaded", li + 1);
+            prev = Some((gof, (0..ng).map(|g| h.chunk(g).to_vec()).collect()));
+        }
+        let tw = Instant::now();
+        for (li, &(rg, cg, it)) in levels.iter().enumerate().skip(last_done.map_or(0, |l| l + 1)) {
+            let (ng, gof) = level_groups(rg, cg);
+            // initial images: the previous level (mean over each group's sets of their previous group images), else
+            // the plain warm start per encode, else zero
+            let mut xg: Vec<Vec<C32>> = match &prev {
+                Some((pg, px)) => tpyr_prolong(pg, px, &gof, ng),
+                None => (0..ng).map(|g| match warm.is_empty() {
+                    true => vec![C32::new(0.0, 0.0); nv],
+                    false => warm[enc_of((0..fe.len()).find(|&t| gof[t] == g).unwrap())].clone(),
+                }).collect(),
+            };
+            let sizes: Vec<usize> = (0..ng).map(|g| gof.iter().filter(|&&h| h == g).count()).collect();
+            println!("temporal pyramid level {} / {}: {rg}x{cg} → {ng} groups of {}..{} sets, {it} pooled PCG iterations", li + 1, levels.len(), sizes.iter().min().unwrap(), sizes.iter().max().unwrap());
+            if it > 0 {
+                let tl = Instant::now();
+                let oc = hasty_recon::hoststack::pooled_pcg_host_with(&mut p, &st, &gof, &mut xg, it, need_circ, Some((&ctl, &format!("tpyr_{li}"))), 2, pooled_grad).unwrap();
+                if let Outcome::Stopped(k) = oc {
+                    println!("stopped in temporal pyramid level {} (PCG iteration {k}): state saved, rerun the same command to resume", li + 1);
+                    std::process::exit(0);
+                }
+                println!("temporal pyramid level {}: {:.0}s", li + 1, tl.elapsed().as_secs_f64());
+            }
+            // this level's result for a resume; the previous level's is no longer needed
+            let mut h = hasty_recon::hoststack::HostStack::zeros(&vec![nv; ng]);
+            for g in 0..ng {
+                h.chunk_mut(g).copy_from_slice(&xg[g]);
+            }
+            ctl.save(&done(li, rg, cg), &h.to_value().unwrap()).unwrap();
+            if li > 0 {
+                let (prg, pcg, _) = levels[li - 1];
+                ctl.clear(&done(li - 1, prg, pcg));
+            }
+            prev = Some((gof, xg));
+        }
+        let (gof, xg) = prev.unwrap();
+        // the last level per encode (time average over its groups, weighted by sets): array + lumen diagnostic
+        let enc: Vec<usize> = (0..fe.len()).map(enc_of).collect();
+        let mean_e = tpyr_prolong(&gof, &xg, &enc, ne);
+        save(&out.join("tpyramid_mean.npy"), "<c8", &dims4(ne), c8(&mean_e.concat()));
+        let (mut e2, mut n) = (0.0f64, 0usize);
+        for &q in &lumen {
+            let z: Vec<Complex64> = (0..ne).map(|e| Complex64::new(mean_e[e][q].re as f64, mean_e[e][q].im as f64)).collect();
+            let vq = dec.velocity(&z);
+            for a in 0..3 {
+                let tm: f64 = (0..nf_card).map(|f| sd.sample_log(&sd.truth_vel, a + 3 * f, &grid.x_log[q])).sum::<f64>() / nf_card as f64;
+                e2 += (vq[a] - tm).powi(2);
+            }
+            n += 1;
+        }
+        println!("temporal pyramid: {} levels ({:.0}s); time-averaged velocity in the lumen: RMSE {:.3} m/s vs the time-averaged truth", levels.len(), tw.elapsed().as_secs_f64(), (e2 / n.max(1) as f64).sqrt());
+        (gof, xg)
+    });
     let ttag = temporal.map_or(String::new(), |b| format!("_t{b}"));
     let runs: Vec<String> = preconds.iter().flat_map(|p| kappas.iter().map(|k| (p.clone(), *k)).collect::<Vec<_>>()).map(|(p, k)| format!("{model}{ttag}_{p}{}_k{k}", if learned.is_some() { "_learned" } else { "" })).collect();
     let mut info = serde_json::json!({
@@ -1898,20 +2451,18 @@ fn main() {
         "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "lambda_max": lmax, "lambda_max_mn": lmax_c, "setup_s": t0.elapsed().as_secs_f64(),
         "noise_sigma_env": std::env::var("HASTY_NOISE_SIGMA").ok(), "runs": runs,
         "prior": if learned.is_some() { "learned" } else { "llr" }, "learned_dir": learned_dir, "tile": tile, "keep_frames": keep_frames, "learned_prec": learned_prec,
-        "field": field_spec, "r2s": r2s_spec, "smaps": smaps_spec, "coils": coil_info, "estimates": diag, "kdata": kstore_info, "lagged": lag_info,
+        "field": field_spec, "r2s": r2s_spec, "smaps": smaps_spec, "coil_mask": coil_mask_mode, "coils": coil_info, "estimates": diag, "kdata": kstore_info, "lagged": lag_info, "vdecode": vdec_info,
     });
+    info["pyramid"] = pyr_info.clone();
     info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight }); info["respiration"] = resp_info.clone(); info["prior_detail"] = serde_json::json!({ "prior": prior_kind, "wavelet": { "thr": wav_thr, "levels": wav_levels, "mix": wav_mix } });
     info["prior_detail"]["dfw"] = serde_json::json!(dfw_rule.map(|r| serde_json::json!({ "rule": format!("{r:?}"), "levels": dfw_levels, "mix": dfw_mix })));
     info["prior_detail"]["static_lock"] = serde_json::json!(static_lock.as_ref().map(|(o, it0, ev)| serde_json::json!({ "opts": format!("{o:?}"), "it0": it0, "every": ev })));
+    info["prior_detail"]["air"] = serde_json::json!(air.as_ref().map(|(o, it0, ev)| serde_json::json!({ "opts": format!("{o:?}"), "it0": if *it0 == usize::MAX { None } else { Some(it0) }, "every": if *ev == usize::MAX { None } else { Some(ev) }, "init": air_init })));
     std::fs::write(out.join("run.json"), serde_json::to_string_pretty(&info).unwrap()).unwrap();
     let rt = transpose(&sd.rot);
     for (pc, kappa) in preconds.iter().flat_map(|p| kappas.iter().map(move |&k| (p, k))) {
-        let (precond, alpha) = match pc.as_str() {
-            "none" => (Precond::None, 1.0 / lmax),
-            "circ" => (Precond::Circulant, 1.0 / lmax_c),
-            "zmshr1m" => (Precond::Zmshr1M, 1.0 / lmax_c),
-            _ => (Precond::Zmshr1, 1.0 / lmax),
-        };
+        let precond = Precond::parse(pc).unwrap_or(Precond::Zmshr1);
+        let alpha = if precond.metric() { 1.0 / lmax_c } else { 1.0 / lmax };
         let stack_bytes = lens.iter().sum::<usize>() * 8;
         let host_state = match state_arg.as_str() {
             "host" => true,
@@ -1929,7 +2480,19 @@ fn main() {
         if pc == &preconds[0] && kappa == kappas[0] {
             println!("solver state: {} ({:.2} GiB per stack, {} sets)", if host_state { "host memory, sets streamed through two device slots" } else { "device" }, stack_bytes as f64 / GIB, lens.len());
         }
-        if !warm.is_empty() {
+        if let Some((gof, xg)) = &tpyr_init {
+            // the temporal pyramid's last level: each set from its group's image
+            for fr in 0..nf {
+                for e in 0..ne {
+                    let (t, o) = at(fr, e);
+                    if host_state {
+                        xh.chunk_mut(t)[o..o + nv].copy_from_slice(&xg[gof[t]]);
+                    } else {
+                        st.memcpy_htod(&xg[gof[t]], &mut x.v[t].slice_mut(o..o + nv)).unwrap();
+                    }
+                }
+            }
+        } else if !warm.is_empty() {
             for fr in 0..nf {
                 for e in 0..ne {
                     let (t, o) = at(fr, e);
@@ -2005,11 +2568,61 @@ fn main() {
             (false, "wavelet", _) => format!("_wav{wav_thr}"),
             _ => String::new(),
         };
-        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{dfw_tag}{lock_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")));
+        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{dfw_tag}{lock_tag}{air_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")));
         let resuming = out.join(format!("state_{tag}.hv")).exists();
         if !resuming && out.join(format!("recon_{tag}.npy")).exists() {
             println!("  {tag}: finished in an earlier run (recon_{tag}.npy), skipped (--fresh to redo)");
             continue;
+        }
+        if let (Some(ini), false, 0) = (&init, resuming, warm_full) {
+            // --init-from: the previous level's images frame by frame (each source frame resampled once); one source
+            // frame is the warm start already
+            if ini.nf > 1 {
+                let t_i = Instant::now();
+                for fs in 0..ini.nf {
+                    let imgs: Vec<Vec<C32>> = (0..ne).map(|e| ini.image(fs, e, sd.dims).unwrap()).collect();
+                    for fr in (0..nf).filter(|&fr| ini.frame_for(fr, nf, nf_card).unwrap() == fs) {
+                        for e in 0..ne {
+                            let (t, o) = at(fr, e);
+                            if host_state {
+                                xh.chunk_mut(t)[o..o + nv].copy_from_slice(&imgs[e]);
+                            } else {
+                                st.memcpy_htod(&imgs[e], &mut x.v[t].slice_mut(o..o + nv)).unwrap();
+                            }
+                        }
+                    }
+                }
+                println!("  {tag}: started from --init-from, {} source frames → {nf} frames, resampled {:?} → {:?} ({:.1}s)", ini.nf, ini.dims, sd.dims, t_i.elapsed().as_secs_f64());
+            }
+        }
+        if init_truth && !resuming {
+            let t_i = Instant::now();
+            let mut nl = 0usize;
+            for fr in 0..nf {
+                for e in 0..ne {
+                    let mut img = vec![C32::new(0.0, 0.0); nv];
+                    for q in 0..nv {
+                        let r = warm[e][q];
+                        let mut z = Complex64::new(r.re as f64, r.im as f64);
+                        if sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.5 {
+                            let v = [0, 1, 2].map(|a| sample_truth(&sd.truth_vel, a + 3 * (fr % nf_card), &grid.x_log[q]));
+                            let r0 = warm[0][q];
+                            z = Complex64::new(r0.re as f64, r0.im as f64) * Complex64::from_polar(1.0, dec.phase(e, &v) - dec.phase(0, &v));
+                            if fr == 0 && e == 0 {
+                                nl += 1;
+                            }
+                        }
+                        img[q] = C32::new(z.re as f32, z.im as f32);
+                    }
+                    let (t, o) = at(fr, e);
+                    if host_state {
+                        xh.chunk_mut(t)[o..o + nv].copy_from_slice(&img);
+                    } else {
+                        st.memcpy_htod(&img, &mut x.v[t].slice_mut(o..o + nv)).unwrap();
+                    }
+                }
+            }
+            println!("  {tag}: --init-truth: warm images with the true velocity phases in {nl} lumen voxels (lumen fraction > 0.5), {nf} frames ({:.1}s)", t_i.elapsed().as_secs_f64());
         }
         let mut csv = std::fs::OpenOptions::new().create(true).append(true).open(out.join(format!("metrics_{tag}.csv"))).unwrap();
         if !resuming {
@@ -2030,8 +2643,68 @@ fn main() {
             println!("  static map of iteration {} loaded (static: cardiac {:.1} %, respiratory {:.1} %)", m.iteration, 100.0 * m.static_card, 100.0 * m.static_resp);
             lmap = Some(m);
         }
+        // air map: reloaded on resume, else the seed (--air-init); next estimate at air_next
+        let (air_npy, air_json) = (out.join(format!("air_map_{tag}.npy")), out.join(format!("air_map_{tag}.json")));
+        let vox_mm = sd.vox.map(|v| v * 1e3);
+        let mut amap: Option<hasty_recon::airmap::AirMap> = None;
+        let mut air_next = usize::MAX;
+        // a seed has not been applied to the iterate yet: applied before its first refresh, so that the release test
+        // only sees what the gradient steps put back into the zeroed region, not the haze the seed is meant to remove
+        let mut air_seed_pending = false;
+        let n_dil = dil.iter().filter(|&&b| b).count().max(1);
+        if let Some((ao, it0, ev)) = &air {
+            air_next = *it0;
+            if resuming && air_npy.exists() && air_json.exists() {
+                let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&air_json).unwrap()).unwrap();
+                let v = hasty_recon::data::read_npy(&air_npy).unwrap().f32s();
+                let m = hasty_recon::airmap::AirMap::from_stacked(&v, nv, meta["iteration"].as_u64().unwrap() as usize, meta["level"].as_f64().unwrap_or(f64::NAN));
+                if !meta["seed"].as_bool().unwrap_or(false) && *it0 != usize::MAX {
+                    air_next = air_next.max(m.iteration.saturating_add(*ev));
+                }
+                println!("  air map of iteration {} loaded{}: {} voxels zeroed ({:.1} % of the coil-map support)", m.iteration, if meta["seed"].as_bool().unwrap_or(false) { " (seed)" } else { "" }, m.stats.marked, 100.0 * (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count() as f64 / n_dil as f64);
+                amap = Some(m);
+            } else if let Some(p) = &air_init {
+                let (m, desc) = hasty_recon::airmap::load_seed(p, sd.dims, vox_mm, ao).unwrap();
+                println!("  air seed {}: {desc} ({:.1} % of the coil-map support)", p.display(), 100.0 * (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count() as f64 / n_dil as f64);
+                save(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
+                let mut j = hasty_recon::airmap::sidecar(&m, ao, sd.dims, vox_mm);
+                j["seed"] = serde_json::json!(true);
+                j["init"] = serde_json::json!(p);
+                std::fs::write(&air_json, serde_json::to_string_pretty(&j).unwrap()).unwrap();
+                amap = Some(m);
+                air_seed_pending = true;
+            }
+        }
         let (mut tdf, mut ndf, mut tlk, mut nlk) = (0.0f64, 0usize, 0.0f64, 0usize);
         let mut denoise = |k: usize, h: &mut Vec<C32>| {
+            // air map: estimated on the iterate after the gradient step (zeroed voxels show what the step put back),
+            // projected before the prior (it sees no haze in air) and again after it
+            if let Some((ao, _, ev)) = &air {
+                if k >= air_next {
+                    let t = Instant::now();
+                    if std::mem::take(&mut air_seed_pending) {
+                        hasty_recon::airmap::apply(h, &lay, amap.as_ref().unwrap());
+                    }
+                    let m = hasty_recon::airmap::estimate(h, &lay, ao, amap.as_ref(), k);
+                    let in_dil = (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count();
+                    let lz = lumen.iter().filter(|&&q| m.w[q] > 0.0).count();
+                    save(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
+                    let mut j = hasty_recon::airmap::sidecar(&m, ao, sd.dims, vox_mm);
+                    j["seed"] = serde_json::json!(false);
+                    j["support_zeroed"] = serde_json::json!(in_dil);
+                    j["support_fraction"] = serde_json::json!(in_dil as f64 / n_dil as f64);
+                    j["truth_lumen_zeroed"] = serde_json::json!(lz);
+                    std::fs::write(&air_json, serde_json::to_string_pretty(&j).unwrap()).unwrap();
+                    let st = &m.stats;
+                    // oracle diagnostic: truth-lumen voxels with w > 0 (should be 0)
+                    println!("    air map at it {k}: {} voxels zeroed ({:.1} % of the coil-map support, {in_dil} voxels), {} added, {} released ({} protected), level {:.3e}; truth lumen zeroed {lz} ({:.2}s)", st.marked, 100.0 * in_dil as f64 / n_dil as f64, st.added, st.released, st.protected, m.level, t.elapsed().as_secs_f64());
+                    amap = Some(m);
+                    air_next = k.saturating_add(*ev);
+                }
+                if let Some(m) = &amap {
+                    hasty_recon::airmap::apply(h, &lay, m);
+                }
+            }
             denoise_prior(k, h);
             if let Some(dfw) = dfw_op.as_mut() {
                 let t = Instant::now();
@@ -2084,6 +2757,9 @@ fn main() {
                     }
                 }
             }
+            if let Some(m) = &amap {
+                hasty_recon::airmap::apply(h, &lay, m);
+            }
         };
         // metrics / outputs of iteration k from per-set host images (device stacks are downloaded by the wrapper below)
         let report_due = |k: usize| { let k = k.wrapping_add(1); !(k % every != 0 && k != iters && k != 0) };
@@ -2107,14 +2783,27 @@ fn main() {
                 v
             };
             let (mut e2, mut t2, mut n) = (0.0f64, 0.0f64, 0usize);
+            let mut e2h = 0.0f64;
             let mut per_frame = Vec::with_capacity(nf);
             for fr in 0..nf {
                 let (mut fe2, mut fn_) = (0.0, 0usize);
                 for &q in &lumen {
                     let v = vel(fr, q);
+                    // the hierarchical decoder's answer, for comparability with runs before --vdecode
+                    let vh = if dec_cmp {
+                        let z: Vec<Complex64> = (0..ne).map(|e| img(fr, e, q)).collect();
+                        let mut v = dec_h.velocity(&z);
+                        if gnl {
+                            v = mat_vec(&rt, &mat_vec(&inv3(&grid.jac[q]), &mat_vec(&sd.rot, &v)));
+                        }
+                        v
+                    } else {
+                        v
+                    };
                     for a in 0..3 {
                         let t = sd.sample_log(&sd.truth_vel, a + 3 * (fr % nf_card), &grid.x_log[q]);
                         e2 += (v[a] - t).powi(2);
+                        e2h += (vh[a] - t).powi(2);
                         t2 += t * t;
                         fe2 += (v[a] - t).powi(2);
                     }
@@ -2122,6 +2811,9 @@ fn main() {
                     fn_ += 1;
                 }
                 per_frame.push((fe2 / fn_.max(1) as f64).sqrt());
+            }
+            if dec_cmp {
+                println!("    hierarchical decoder (±{r_first:.2} m/s): velocity RMSE {:.3} m/s (rel {:.3})", (e2h / n as f64).sqrt(), (e2h / t2).sqrt());
             }
             {
                 use std::io::Write;
@@ -2184,10 +2876,157 @@ fn main() {
             println!("  lagged gradient: {} exact, {} surrogate (f is the surrogate estimate on surrogate iterations)", p.lag_stats.0 - lag0.0, p.lag_stats.1 - lag0.1);
         }
     }
-    let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/figs/run_figs.py");
-    let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+    let tools = hasty_site::tool("figs/run_figs.py");
+    let py = hasty_site::python();
     match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
         Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
         r => println!("figure script failed ({r:?}); run: {} -I {} {}", py.display(), tools.display(), out.display()),
     }
+}
+
+/// Groups of a temporal-pyramid level with `rg` respiratory × `cg` cardiac groups (clamped to the bins / phases):
+/// set t of (frame f = r · nf_card + c, encode e) → (e · rg + ⌊r · rg / resp_bins⌋) · cg + ⌊c · cg / nf_card⌋
+/// (contiguous bins and phases, group sizes differing by at most one). Returns (groups, group of every set).
+fn tpyr_groups(frame_enc: &[(usize, usize)], ne: usize, nf_card: usize, resp_bins: usize, rg: usize, cg: usize) -> (usize, Vec<usize>) {
+    let (rg, cg) = (rg.clamp(1, resp_bins), cg.clamp(1, nf_card));
+    let g = frame_enc.iter().map(|&(f, e)| {
+        let (r, c) = (f / nf_card, f % nf_card);
+        (e * rg + r * rg / resp_bins) * cg + c * cg / nf_card
+    }).collect();
+    (ne * rg * cg, g)
+}
+
+/// Prolongation between pyramid levels: group g of the new level (`gof`, `ng` groups) gets the mean over its sets of
+/// their previous group images (`pg`, `px`); a copy of the parent image where the levels nest. Also restriction to
+/// any coarser grouping (e.g. per encode: the set-weighted time average).
+fn tpyr_prolong(pg: &[usize], px: &[Vec<C32>], gof: &[usize], ng: usize) -> Vec<Vec<C32>> {
+    let nv = px[0].len();
+    (0..ng).map(|g| {
+        let ts: Vec<usize> = (0..gof.len()).filter(|&t| gof[t] == g).collect();
+        let mut acc = vec![[0.0f64; 2]; nv];
+        for &t in &ts {
+            for (a, v) in acc.iter_mut().zip(&px[pg[t]]) {
+                a[0] += v.re as f64;
+                a[1] += v.im as f64;
+            }
+        }
+        let w = 1.0 / ts.len().max(1) as f64;
+        acc.iter().map(|a| C32::new((a[0] * w) as f32, (a[1] * w) as f32)).collect()
+    }).collect()
+}
+
+#[cfg(test)]
+mod tpyramid_tests {
+    use super::*;
+
+    #[test]
+    fn levels_parse_group_and_prolong() {
+        assert_eq!(parse_tpyramid("1x1:4,2x1:3,2x5:3"), vec![(1, 1, 4), (2, 1, 3), (2, 5, 3)]);
+        assert_eq!(parse_tpyramid("1X20:0"), vec![(1, 20, 0)]);
+        assert!(std::panic::catch_unwind(|| parse_tpyramid("2x:3")).is_err());
+        assert!(std::panic::catch_unwind(|| parse_tpyramid("0x1:3")).is_err());
+        // 2 resp bins × 20 cardiac phases × 7 encodes, t = f · ne + e
+        let (nr, nfc, ne) = (2usize, 20usize, 7usize);
+        let fe: Vec<(usize, usize)> = (0..nr * nfc).flat_map(|f| (0..ne).map(move |e| (f, e))).collect();
+        // 1x1: one group per encode
+        let (ng, g) = tpyr_groups(&fe, ne, nfc, nr, 1, 1);
+        assert_eq!(ng, ne);
+        assert!(fe.iter().zip(&g).all(|(&(_, e), &gi)| gi == e));
+        // R x F: one group per set
+        let (ng, g) = tpyr_groups(&fe, ne, nfc, nr, nr, nfc);
+        assert_eq!(ng, fe.len());
+        let mut s = g.clone();
+        s.sort_unstable();
+        s.dedup();
+        assert_eq!(s.len(), fe.len());
+        // 2x3 (20 phases in 3 groups: 7, 7, 6) and clamping (3 resp groups of 2 bins → 2)
+        let (ng, g) = tpyr_groups(&fe, ne, nfc, nr, 2, 3);
+        assert_eq!(ng, ne * 6);
+        let sizes: Vec<usize> = (0..ng).map(|k| g.iter().filter(|&&h| h == k).count()).collect();
+        assert!(sizes.iter().all(|&n| n == 6 || n == 7), "{sizes:?}");
+        assert!(fe.iter().zip(&g).all(|(&(_, e), &gi)| gi / 6 == e), "groups never mix encodes");
+        assert_eq!(tpyr_groups(&fe, ne, nfc, nr, 3, 1).0, ne * 2);
+        // nested levels: prolongation copies the parent image; restriction per encode averages
+        let (_, g1) = tpyr_groups(&fe, ne, nfc, nr, 1, 1);
+        let x1: Vec<Vec<C32>> = (0..ne).map(|e| vec![C32::new(e as f32, 1.0); 5]).collect();
+        let (ng2, g2) = tpyr_groups(&fe, ne, nfc, nr, 2, 5);
+        let x2 = tpyr_prolong(&g1, &x1, &g2, ng2);
+        assert!((0..fe.len()).all(|t| x2[g2[t]] == x1[g1[t]]));
+        let back = tpyr_prolong(&g2, &x2, &g1, ne);
+        assert_eq!(back, x1);
+        // non-nested (1x3 → 1x2): the mean of the parents, weighted by sets
+        let (n3, g3) = tpyr_groups(&fe, ne, nfc, nr, 1, 3);
+        let x3: Vec<Vec<C32>> = (0..n3).map(|k| vec![C32::new(k as f32, 0.0); 2]).collect();
+        let (n4, g4) = tpyr_groups(&fe, ne, nfc, nr, 1, 2);
+        let x4 = tpyr_prolong(&g3, &x3, &g4, n4);
+        // encode 0, cardiac half 0 = phases 0..10: groups 0 (phases 0..6, 7 phases) and 1 (phases 7..9, 3 phases)
+        assert!((x4[0][0].re - (7.0 * 0.0 + 3.0 * 1.0) / 10.0).abs() < 1e-6, "{:?}", x4[0][0]);
+    }
+}
+
+/// `--tpyramid` levels "RxC:N,…" → [(resp groups, cardiac groups, pooled PCG iterations)]
+fn parse_tpyramid(s: &str) -> Vec<(usize, usize, usize)> {
+    let bad = |l: &str| -> ! { panic!("--tpyramid: level {l:?} is not RxC:N (e.g. 1x1:4,2x1:3,2x5:3)") };
+    let v: Vec<(usize, usize, usize)> = s
+        .split(',')
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            let (g, n) = l.split_once(':').unwrap_or_else(|| bad(l));
+            let (r, c) = g.split_once(['x', 'X']).unwrap_or_else(|| bad(l));
+            match (r.trim().parse::<usize>(), c.trim().parse::<usize>(), n.trim().parse::<usize>()) {
+                (Ok(r), Ok(c), Ok(n)) if r >= 1 && c >= 1 => (r, c, n),
+                _ => bad(l),
+            }
+        })
+        .collect();
+    assert!(!v.is_empty(), "--tpyramid: no levels");
+    v
+}
+
+/// Per-cardiac-frame maps (nv × nf_card, e.g. the sim's truth fat fraction) for a run with respiratory bins
+/// (nf = bins × nf_card frames, frame f = bin · nf_card + cardiac phase): frame f takes cardiac map f % nf_card.
+/// One map, or maps already per frame, are returned unchanged.
+fn expand_cardiac_maps(ff: Vec<f32>, nv: usize, nf: usize, nf_card: usize) -> Vec<f32> {
+    if nf == nf_card || ff.len() != nv * nf_card {
+        return ff;
+    }
+    (0..nf).flat_map(|f| ff[(f % nf_card) * nv..(f % nf_card + 1) * nv].iter().copied()).collect()
+}
+
+/// A float32 map file (the fat fraction) on the reconstruction grid: as stored on it, or resampled at the voxels'
+/// true positions from the native grid (hasty_recon::pyramid::maps_on_recon_grid)
+fn maps_on_grid(sd: &SimData, path: &std::path::Path, x_log: &[[f64; 3]], boxed: bool) -> Vec<f32> {
+    let (v, resampled) = hasty_recon::pyramid::maps_on_recon_grid(sd, path, x_log, boxed).unwrap_or_else(|e| panic!("--fat-fraction {}: {e:?}", path.display()));
+    if resampled {
+        println!("  {}: {} native-grid map(s) {:?} resampled to the reconstruction grid {:?} ({})", path.display(), v.len() / sd.nv(), sd.tdims, sd.dims, if boxed { "voxel averages" } else { "at the true voxel positions" });
+    }
+    v
+}
+
+/// free device memory at a setup milestone (diagnostic for the device budget)
+fn dev_mem(dev: &Device, what: &str) {
+    if let Ok((free, total)) = dev.ctx.mem_get_info() {
+        println!("device memory {what}: {:.2} GiB free of {:.2} GiB", free as f64 / (1u64 << 30) as f64, total as f64 / (1u64 << 30) as f64);
+    }
+}
+
+
+/// union weights of `--seg-basis svdn-union` per fit voxel: water w (1 − f_min)², fat w f_max² over the frames' fat
+/// maps (ff: nv or nv × frames, frame-major), w = the fit voxel weights (1 without)
+fn union_weights(fit: &[usize], w: Option<&[f64]>, ff: &[f32], nv: usize) -> (Vec<f64>, Vec<f64>) {
+    let nfr = (ff.len() / nv).max(1);
+    let mut ww = Vec::with_capacity(fit.len());
+    let mut wf = Vec::with_capacity(fit.len());
+    for (r, &q) in fit.iter().enumerate() {
+        let (mut lo, mut hi) = (1.0f64, 0.0f64);
+        for f in 0..nfr {
+            let v = ff[f * nv + q] as f64;
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        let b = w.map_or(1.0, |w| w[r]);
+        ww.push(b * (1.0 - lo).max(0.0).powi(2) + 1e-12);
+        wf.push(b * hi * hi + 1e-12);
+    }
+    (ww, wf)
 }

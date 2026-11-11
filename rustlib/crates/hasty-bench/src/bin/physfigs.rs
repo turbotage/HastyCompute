@@ -151,7 +151,7 @@ fn main() {
     });
     std::fs::write(out.join("summary.json"), serde_json::to_string_pretty(&j).unwrap()).unwrap();
     println!("{}", serde_json::to_string_pretty(&j).unwrap());
-    let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
-    let tool = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/figs/physics_figs.py");
+    let py = hasty_site::python();
+    let tool = hasty_site::tool("figs/physics_figs.py");
     let _ = std::process::Command::new(&py).arg("-I").arg(&tool).arg(&out).arg(&dir).status();
 }

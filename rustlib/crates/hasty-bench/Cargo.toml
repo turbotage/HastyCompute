@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+hasty-site = { path = "../hasty-site" }
 hasty-cuda = { path = "../hasty-cuda" }
 hasty-testkit = { path = "../hasty-testkit" }
 hasty-fft = { path = "../hasty-fft" }

@@ -97,10 +97,9 @@ fn parse() -> Args {
     let (quick, no_gnl, no_tune, plan) = (flag("--quick"), flag("--no-gnl"), flag("--no-tune"), flag("--plan"));
     let mut take = |n: &str| -> Option<String> { a.iter().position(|x| x == n).map(|i| { a.remove(i); a.remove(i) }) };
     let v3 = |s: String| -> Vec3 { let v: Vec<f64> = s.split(',').map(|x| x.parse().unwrap()).collect(); [v[0], v[1], v[2]] };
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let args = Args {
         seqs: take("--seq").unwrap_or("flow,b0".into()).split(',').map(String::from).collect(),
-        flow_run: take("--flow-run").map(PathBuf::from).unwrap_or_else(|| repo.join("data/hasty/seq/flow_thorax")),
+        flow_run: take("--flow-run").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax")),
         scan_min: take("--scan-min").map(|s| s.parse().unwrap()).unwrap_or(10.0),
         b0_scan_min: take("--b0-scan-min").map(|s| s.parse().unwrap()).unwrap_or(2.5),
         fov: take("--fov").map(v3).unwrap_or([0.45, 0.45, 0.22]),

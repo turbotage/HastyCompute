@@ -1,0 +1,57 @@
+{
+ "ista": {
+  "final_rel_dist": 0.06849112369101161,
+  "apps_to_1e-1": 1001,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "fista": {
+  "final_rel_dist": 0.0005798193886857725,
+  "apps_to_1e-1": 82,
+  "apps_to_1e-2": 301,
+  "apps_to_1e-3": 1025
+ },
+ "pnp_fixed_a1": {
+  "final_rel_dist": 0.06849112369101161,
+  "apps_to_1e-1": 1001,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "pnp_fixed_a0.5": {
+  "final_rel_dist": 0.20017645256366381,
+  "apps_to_1e-1": null,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "admm_pcg_rho0.05_in5": {
+  "final_rel_dist": 0.014586040874171258,
+  "apps_to_1e-1": 306,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "admm_pcg_rho0.02_in5": {
+  "final_rel_dist": 0.0019291387128158213,
+  "apps_to_1e-1": 120,
+  "apps_to_1e-2": 750,
+  "apps_to_1e-3": null
+ },
+ "admm_pcg_rho0.05_in10": {
+  "final_rel_dist": 0.03487913902738234,
+  "apps_to_1e-1": 561,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "fista_dcw": {
+  "final_rel_dist": 0.5738852568330555,
+  "apps_to_1e-1": null,
+  "apps_to_1e-2": null,
+  "apps_to_1e-3": null
+ },
+ "error_to_truth": {
+  "x_star": 0.4917563630370188,
+  "pnp_fixed_a1": 0.4991380103503901,
+  "pnp_fixed_a0.5": 0.566454459762255,
+  "fista_dcw": 0.13751243463325452
+ },
+ "pnp_fixed_alpha_dependence": 0.15771772435413786
+}

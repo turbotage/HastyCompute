@@ -145,6 +145,14 @@ pub struct KStore {
     stored: AtomicUsize,
     saturated: AtomicUsize,
     tag: String,
+    /// sample selection applied on read ([`KStore::with_selection`]); None: the stored sets
+    view: Option<View>,
+}
+
+/// kept sample indices per set (ascending) and their counts
+struct View {
+    sel: Vec<Vec<u32>>,
+    lens: Vec<usize>,
 }
 
 fn as_bytes(x: &[C32]) -> &[u8] {
@@ -201,6 +209,7 @@ impl KStore {
             stored: AtomicUsize::new(0),
             saturated: AtomicUsize::new(0),
             tag: tag.to_string(),
+            view: None,
         })
     }
 
@@ -242,6 +251,7 @@ impl KStore {
             stored: AtomicUsize::new(u(&j["file_bytes"])?),
             saturated: AtomicUsize::new(u(&j["saturated"]).unwrap_or(0)),
             tag: j["tag"].as_str().unwrap_or("").to_string(),
+            view: None,
         })
     }
 
@@ -257,16 +267,47 @@ impl KStore {
     pub fn nvc(&self) -> usize {
         self.nvc
     }
-    /// samples per coil of set t
+    /// samples per coil of set t (as read: the selected samples of a [`with_selection`](Self::with_selection) view)
     pub fn len(&self, t: usize) -> usize {
-        self.lens[t]
+        self.lens()[t]
     }
     pub fn lens(&self) -> &[usize] {
-        &self.lens
+        match &self.view {
+            Some(v) => &v.lens,
+            None => &self.lens,
+        }
     }
-    /// C32 elements of the largest set (all coils)
+    /// samples per coil of set t as stored (before a selection)
+    pub fn stored_len(&self, t: usize) -> usize {
+        self.lens[t]
+    }
+    /// C32 elements of the largest set (all coils, as read)
     pub fn max_set(&self) -> usize {
-        self.lens.iter().max().copied().unwrap_or(0) * self.nvc
+        self.lens().iter().max().copied().unwrap_or(0) * self.nvc
+    }
+
+    /// A view of the store restricted to the samples `sel[t]` of every set (ascending indices into the stored set,
+    /// e.g. a k-space crop to a coarse grid's band, `pyramid::KCrop`): [`len`](Self::len), [`lens`](Self::lens),
+    /// [`max_set`](Self::max_set), [`read`](Self::read) and [`read_vec`](Self::read_vec) see the selected sets, so
+    /// `Stager` and the solvers work unchanged. The stored data are untouched (a file store is not rewritten): blocks
+    /// are decoded as before and filtered, blocks without a kept sample are skipped.
+    pub fn with_selection(mut self, sel: Vec<Vec<u32>>) -> Result<Self, Error> {
+        if sel.len() != self.lens.len() {
+            return Err(Error::Format(format!("k-space store selection: {} sets for a store of {}", sel.len(), self.lens.len())));
+        }
+        for (t, s) in sel.iter().enumerate() {
+            if !s.windows(2).all(|w| w[0] < w[1]) || s.last().is_some_and(|&j| j as usize >= self.lens[t]) {
+                return Err(Error::Format(format!("k-space store selection: set {t} not ascending within its {} samples", self.lens[t])));
+            }
+        }
+        let lens = sel.iter().map(|s| s.len()).collect();
+        self.view = Some(View { sel, lens });
+        Ok(self)
+    }
+
+    /// a selection is applied on read
+    pub fn is_view(&self) -> bool {
+        self.view.is_some()
     }
     /// absolute quantisation step (0: lossless)
     pub fn step(&self) -> f64 {
@@ -403,6 +444,9 @@ impl KStore {
                 &all
             }
         };
+        if let Some(v) = &self.view {
+            return self.read_selected(t, coils, &v.sel[t], out);
+        }
         if out.len() != coils.len() * m {
             return Err(Error::Format(format!("k-space store read: set {t}: buffer {} for {} coils × {m}", out.len(), coils.len())));
         }
@@ -437,9 +481,63 @@ impl KStore {
         }
     }
 
+    /// [`read`](Self::read) of the samples `sel` (ascending) of set t: per coil row the blocks holding kept samples,
+    /// decoded in parallel and gathered
+    fn read_selected(&self, t: usize, coils: &[usize], sel: &[u32], out: &mut [C32]) -> Result<(), Error> {
+        let (m, ms) = (self.lens[t], sel.len());
+        if out.len() != coils.len() * ms {
+            return Err(Error::Format(format!("k-space store read: set {t}: buffer {} for {} coils × {ms} selected", out.len(), coils.len())));
+        }
+        if ms == 0 {
+            return Ok(());
+        }
+        let body = self.sets[t].get().ok_or_else(|| Error::Format(format!("k-space store: set {t} not stored")))?;
+        if let SetBody::Dense(v) = body {
+            out.par_chunks_mut(ms).zip(coils.par_iter()).for_each(|(row, &c)| {
+                for (o, &j) in row.iter_mut().zip(sel) {
+                    *o = v[c * m + j as usize];
+                }
+            });
+            return Ok(());
+        }
+        let (bs, nb) = (self.spec.block, self.nb(t));
+        // kept samples of block b: sel[bounds[b]..bounds[b + 1]]
+        let bounds: Vec<usize> = (0..=nb).map(|b| sel.partition_point(|&j| (j as usize) < b * bs)).collect();
+        out.par_chunks_mut(ms).zip(coils.par_iter()).try_for_each(|(row, &c)| {
+            let mut parts = Vec::with_capacity(nb);
+            let mut rest = row;
+            for b in 0..nb {
+                let (p, r) = rest.split_at_mut(bounds[b + 1] - bounds[b]);
+                parts.push((b, p));
+                rest = r;
+            }
+            parts.into_par_iter().filter(|(_, p)| !p.is_empty()).try_for_each(|(b, p)| -> Result<(), Error> {
+                let lo = b * bs;
+                let mut blk = vec![C32::new(0.0, 0.0); (lo + bs).min(m) - lo];
+                match body {
+                    SetBody::Ram { arena, idx } => {
+                        let (o, l) = idx[c * nb + b];
+                        self.decode(&arena[o as usize..o as usize + l as usize], &mut blk)?;
+                    }
+                    SetBody::File { idx } => {
+                        let (o, l) = idx[c * nb + b];
+                        let mut buf = vec![0u8; l as usize];
+                        self.file.as_ref().unwrap().read_exact_at(&mut buf, o)?;
+                        self.decode(&buf, &mut blk)?;
+                    }
+                    SetBody::Dense(_) => unreachable!(),
+                }
+                for (x, &j) in p.iter_mut().zip(&sel[bounds[b]..bounds[b + 1]]) {
+                    *x = blk[j as usize - lo];
+                }
+                Ok(())
+            })
+        })
+    }
+
     /// set t, all coils, as a new vector
     pub fn read_vec(&self, t: usize) -> Result<Vec<C32>, Error> {
-        let mut v = vec![C32::new(0.0, 0.0); self.nvc * self.lens[t]];
+        let mut v = vec![C32::new(0.0, 0.0); self.nvc * self.len(t)];
         self.read(t, None, &mut v)?;
         Ok(v)
     }
@@ -580,6 +678,45 @@ mod tests {
             }
             println!("{spec:>16}: {}", ks.report());
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn selection_view_reads_the_kept_samples() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp").join(format!("hasty_kstore_view_{}", std::process::id()));
+        let (nvc, lens) = (3, vec![25000usize, 0, 999, 40000]);
+        let sets: Vec<Vec<C32>> = lens.iter().enumerate().map(|(t, &m)| data(nvc, m, 31 + t as u64)).collect();
+        // prefix + suffix of every "readout" of 1000 samples, one set empty, one set whole blocks skipped
+        let sel: Vec<Vec<u32>> = lens.iter().enumerate().map(|(t, &m)| (0..m as u32).filter(|&j| match t { 3 => j < 7000 && (j % 1000 < 40 || j % 1000 > 980), _ => j % 1000 < 40 || j % 1000 > 980 }).collect()).collect();
+        for spec in ["ram", "lz4", "disk:zstd", "zstd+q0.25"] {
+            let mut sp = StoreSpec::parse(spec, &dir.join(format!("{}.kst", spec.replace([':', '+'], "_")))).unwrap();
+            sp.block = 4096;
+            let ks = KStore::create(sp.clone(), nvc, lens.clone(), Some(0.2887), "view").unwrap();
+            (0..lens.len()).into_par_iter().for_each(|t| ks.put(t, &sets[t]).unwrap());
+            ks.finish().unwrap();
+            let full: Vec<Vec<C32>> = (0..lens.len()).map(|t| ks.read_vec(t).unwrap()).collect();
+            let ks = if sp.file.is_some() { KStore::open(sp.file.as_ref().unwrap()).unwrap() } else { ks };
+            let v = ks.with_selection(sel.clone()).unwrap();
+            assert!(v.is_view());
+            assert_eq!(v.max_set(), nvc * sel.iter().map(|s| s.len()).max().unwrap());
+            for t in 0..lens.len() {
+                let (m, ms) = (lens[t], sel[t].len());
+                assert_eq!((v.len(t), v.stored_len(t)), (ms, m));
+                let got = v.read_vec(t).unwrap();
+                for c in 0..nvc {
+                    for (i, &j) in sel[t].iter().enumerate() {
+                        assert_eq!(got[c * ms + i], full[t][c * m + j as usize], "{spec} set {t} coil {c} sample {j}");
+                    }
+                }
+                if ms > 0 {
+                    let mut o = vec![C32::new(0.0, 0.0); ms];
+                    v.read(t, Some(&[2]), &mut o).unwrap();
+                    assert_eq!(&o[..], &got[2 * ms..3 * ms], "{spec}: coil subset");
+                }
+            }
+        }
+        let ks = KStore::create(StoreSpec::dense(), 1, vec![10], None, "").unwrap();
+        assert!(ks.with_selection(vec![vec![3, 2]]).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

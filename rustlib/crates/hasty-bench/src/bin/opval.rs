@@ -34,7 +34,7 @@ fn main() {
     let dir = PathBuf::from(&args[0]);
     let out = out_arg.map(PathBuf::from).unwrap_or_else(|| {
         let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/hasty/runs").join(format!("opval_{}_{ts}", dir.file_name().unwrap().to_string_lossy()))
+        hasty_site::runs().join(format!("opval_{}_{ts}", dir.file_name().unwrap().to_string_lossy()))
     });
     std::fs::create_dir_all(&out).unwrap();
     let t0 = Instant::now();
@@ -168,8 +168,8 @@ fn main() {
         "cmdline": std::env::args().collect::<Vec<_>>().join(" "), "sim_dir": dir, "models": models, "iters": iters,
         "lambda_rel": lam_rel, "dims": dims, "venc": sd.venc, "support_threshold": thr,
     })).unwrap()).unwrap();
-    let tools = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/figs/opval_figs.py");
-    let py = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+    let tools = hasty_site::tool("figs/opval_figs.py");
+    let py = hasty_site::python();
     match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
         Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
         r => println!("figure script failed ({r:?})"),

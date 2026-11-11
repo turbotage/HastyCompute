@@ -8,3 +8,4 @@ license.workspace = true
 cudarc.workspace = true
 thiserror.workspace = true
 libloading = "0.9"
+hasty-site = { path = "../hasty-site" }

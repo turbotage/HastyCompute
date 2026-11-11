@@ -57,8 +57,8 @@ struct Cand {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let opt = |n: &str| args.iter().position(|a| a == n).map(|i| args[i + 1].clone());
-    let flow = PathBuf::from(opt("--flow").unwrap_or("data/hasty/seq/flow_thorax".into()));
-    let out = PathBuf::from(opt("--out").unwrap_or("data/hasty/seq/studies/encrobust".into()));
+    let flow = opt("--flow").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax"));
+    let out = opt("--out").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/studies/encrobust"));
     let extra: Vec<usize> = opt("--extra").unwrap_or("0,20,50,80".into()).split(',').map(|s| s.parse().unwrap()).collect();
     let eps: f64 = opt("--eps").map_or(0.1, |s| s.parse().unwrap());
     let r_off: f64 = opt("--r-off").map_or(0.10, |s| s.parse().unwrap());

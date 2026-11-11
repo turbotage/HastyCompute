@@ -200,6 +200,11 @@ pub struct Spoke {
     pub frac: Vec<f64>,
     /// zeroth moment at the ADC end (base frame)
     pub m0_end: Vec3,
+    /// raster ranges [a, b] (time a·dt … b·dt from the readout start) whose samples are reconstruction data; the rest
+    /// of the ADC window (prephaser, rewinders: [`Spoke::rewind`]) is navigator data. Default: the whole window.
+    pub recon: Vec<[usize; 2]>,
+    /// raster index of the echo (the k = 0 sample the velocity encoding refers to): 0 for centre-out readouts
+    pub i_echo: usize,
 }
 
 impl Spoke {
@@ -209,7 +214,112 @@ impl Spoke {
         let i_adc = tr.grad.len() - 1;
         let t_adc = tr.grad.duration();
         let m0_end = tr.grad.moments(0.0).last().0;
-        Spoke { grad: tr.grad, t_adc, i_adc, length: tr.length, frac: tr.frac, m0_end }
+        Spoke { grad: tr.grad, t_adc, i_adc, length: tr.length, frac: tr.frac, m0_end, recon: vec![[0, i_adc]], i_echo: 0 }
+    }
+    /// span of the reconstruction samples (first to last), s: the window the off-resonance segments must cover
+    pub fn t_recon(&self) -> f64 {
+        let a = self.recon.iter().map(|r| r[0]).min().unwrap_or(0);
+        let b = self.recon.iter().map(|r| r[1]).max().unwrap_or(self.i_adc);
+        (b - a) as f64 * self.grad.dt
+    }
+    /// ADC time holding reconstruction samples, s (≤ [`Spoke::t_recon`]; less when navigator parts lie in between)
+    pub fn t_recon_samples(&self) -> f64 {
+        self.recon.iter().map(|r| (r[1] - r[0]) as f64).sum::<f64>() * self.grad.dt
+    }
+    /// is raster segment i (time i·dt … (i+1)·dt) reconstruction data
+    pub fn is_recon(&self, i: usize) -> bool {
+        self.recon.iter().any(|r| i >= r[0] && i < r[1])
+    }
+    /// append the raster samples `g` (g[0] = the current end gradient, not repeated) as reconstruction data or as
+    /// navigator data; `length` = curve length they add (reported only)
+    pub fn push(&mut self, g: &[Vec3], recon: bool, length: f64) {
+        assert!(norm(&crate::sub(&g[0], &self.g_end())) < 1e-12, "push: the appended samples must start at the end gradient");
+        let a = self.i_adc;
+        self.grad.g.extend_from_slice(&g[1..]);
+        self.frac.extend(std::iter::repeat(1.0).take(g.len() - 1));
+        self.i_adc = self.grad.len() - 1;
+        self.t_adc = self.grad.duration();
+        self.m0_end = self.grad.moments(0.0).last().0;
+        if recon {
+            match self.recon.last_mut() {
+                Some(r) if r[1] == a => r[1] = self.i_adc,
+                _ => self.recon.push([a, self.i_adc]),
+            }
+            self.length += length;
+        }
+    }
+    /// straight vector trapezoid from rest back to M0 = 0 (k = 0, G = 0) under vector limits; navigator samples. The
+    /// path is the segment from the end point to the centre, so it stays inside the kmax ball.
+    pub fn rewind(&mut self, gmax: f64, smax: f64) {
+        assert!(norm(&self.g_end()) == 0.0, "rewind needs a readout ending at rest");
+        let back = vector_trapezoid(&crate::scale(&self.m0_end, -1.0), gmax, smax, self.grad.dt);
+        if back.len() > 1 {
+            self.push(&back.g, false, 0.0);
+        }
+    }
+    /// rewind from rest to M0 = 0 that also brings the readout's total first moment to zero (navigator samples): two-lobe
+    /// blocks (`encode::two_lobe_*`, exact M0 and M1) along the rewind direction e₁ = −M0_end/|M0_end| and along e₂, the
+    /// part of the required first moment orthogonal to e₁, at limit fractions (a, √(1 − a²)) (vector-safe under any
+    /// rotation; the split giving the shortest block is chosen). The
+    /// readout then adds nothing to the TR's net first moment for any rotation: the per-encode flow-compensated tail
+    /// equalises the whole TR's M1 exactly (RF spoiling of moving spins without a rotation-dependent per-TR phase).
+    pub fn rewind_m1(&mut self, gmax: f64, smax: f64) {
+        use crate::encode::{two_lobe_fixed, two_lobe_min_time};
+        assert!(norm(&self.g_end()) == 0.0, "rewind_m1 needs a readout ending at rest");
+        let dt = self.grad.dt;
+        let t_s = self.i_adc as f64 * dt;
+        let m0e = self.m0_end;
+        let m1e = self.m1_end();
+        // block targets about its own start: M0_b = −M0_end, M1_b = −M1_end + t_s M0_end (total M1 about t = 0 → 0)
+        let m0b = crate::scale(&m0e, -1.0);
+        let m1b = crate::sub(&crate::scale(&m0e, t_s), &m1e);
+        let a0 = norm(&m0b);
+        let e1 = if a0 > 0.0 { crate::scale(&m0b, 1.0 / a0) } else { [1.0, 0.0, 0.0] };
+        let perp = crate::sub(&m1b, &crate::scale(&e1, dot(&m1b, &e1)));
+        let e2 = if norm(&perp) > 0.0 { crate::scale(&perp, 1.0 / norm(&perp)) } else { [0.0; 3] };
+        let t1 = (a0, dot(&m1b, &e1));
+        let t2 = (0.0, norm(&perp));
+        // limits split between the two directions: (a, √(1 − a²)) of (gmax, smax) keeps the vector norm within the limits;
+        // the split with the shortest joint block wins
+        let mut best: Option<(usize, crate::encode::TwoLobe, Option<crate::encode::TwoLobe>)> = None;
+        for ia in 0..=12 {
+            let a = if t2.1 > 0.0 { 0.35 + 0.05 * ia as f64 } else { 1.0 };
+            let b = (1.0 - a * a).max(0.0).sqrt();
+            let s1 = System { gmax: gmax * a, smax: smax * a, grad_raster: dt, ..System::prisma_xr() };
+            let s2 = System { gmax: gmax * b, smax: smax * b, grad_raster: dt, ..System::prisma_xr() };
+            let mut n = two_lobe_min_time(t1.0, t1.1, &s1).segments();
+            if t2.1 > 0.0 {
+                n = n.max(two_lobe_min_time(t2.0, t2.1, &s2).segments());
+            }
+            if best.as_ref().is_some_and(|bb| n >= bb.0) {
+                continue;
+            }
+            let found = loop {
+                let l1 = two_lobe_fixed(t1.0, t1.1, n, &s1);
+                let l2 = if t2.1 > 0.0 { two_lobe_fixed(t2.0, t2.1, n, &s2) } else { None };
+                if let Some(l1) = l1 {
+                    if t2.1 == 0.0 || l2.is_some() {
+                        break (n, l1, l2);
+                    }
+                }
+                n += 1;
+            };
+            if best.as_ref().map_or(true, |bb| found.0 < bb.0) {
+                best = Some(found);
+            }
+            if t2.1 == 0.0 {
+                break;
+            }
+        }
+        let (_, l1, l2) = best.unwrap();
+        let s1 = l1.samples();
+        let s2 = l2.map(|l| l.samples()).unwrap_or_else(|| vec![0.0; s1.len()]);
+        let g: Vec<Vec3> = (0..s1.len()).map(|i| [0, 1, 2].map(|q| s1[i] * e1[q] + s2[i] * e2[q])).collect();
+        self.push(&g, false, 0.0);
+    }
+    /// the readout's own first moment at its end (base frame, T·s²/m): origin-independent once M0 = 0 there
+    pub fn m1_end(&self) -> Vec3 {
+        self.grad.moments(0.0).last().1
     }
     /// end exactly at zeroth moment `target` (T·s/m): the raster traversal of a curve ending at rest misses its end
     /// point by a small discretisation residual, which would rotate with the spoke and make the TR's net moment jitter;
@@ -221,11 +331,18 @@ impl Spoke {
             return;
         }
         let blip = vector_trapezoid(&d, gmax, smax, self.grad.dt);
+        let a = self.i_adc;
         self.grad.g.extend_from_slice(&blip.g[1..]);
         self.frac.extend(std::iter::repeat(1.0).take(blip.len() - 1));
         self.i_adc = self.grad.len() - 1;
         self.t_adc = self.grad.duration();
         self.m0_end = self.grad.moments(0.0).last().0;
+        // the closing blip belongs to whatever part it closes (the reconstruction window for the out-and-back yarn)
+        if let Some(r) = self.recon.last_mut() {
+            if r[1] == a {
+                r[1] = self.i_adc;
+            }
+        }
     }
     /// actual k (cycles/m) at `m`-times upsampled raster points over the ADC window
     pub fn k_adc(&self, m: usize) -> Vec<Vec3> {
@@ -435,6 +552,78 @@ impl Yarn {
         }
         n
     }
+    /// Asymmetric out-and-back curve (research/readout_redesign.md): the centre-out curve of `self` to kmax, then back in
+    /// along the centre-out curve of `back` (the same family designed for more spokes: fewer turns, a shorter and coarser
+    /// return), reversed and rotated so that it starts at the out leg's end point with the out leg's tangential direction
+    /// (only the radial component flips, as in [`Yarn::curve_return`], to which this reduces for `back` = `self`), down
+    /// to radius `ret`·kmax. The turn-around kink is Gaussian-smoothed (convex combinations: inside the kmax ball).
+    pub fn curve_asym(&self, back: &Yarn, npts: usize, ret: f64) -> Vec<Vec3> {
+        let out = self.curve(npts);
+        // the same point spacing on both legs
+        let nb = ((npts as f64) * back.length() / self.length()).round().max(16.0) as usize;
+        let cb = back.curve(nb);
+        let frame = |c: &[Vec3], flip: bool| -> Mat3 {
+            let m = c.len();
+            let e = crate::scale(&c[m - 1], 1.0 / norm(&c[m - 1]));
+            let t = crate::sub(&c[m - 1], &c[m - 4]);
+            let u = crate::sub(&t, &crate::scale(&e, dot(&t, &e)));
+            let u = crate::scale(&u, if flip { -1.0 } else { 1.0 } / norm(&u));
+            let w = cross(&e, &u);
+            // columns e, u, w
+            [[e[0], u[0], w[0]], [e[1], u[1], w[1]], [e[2], u[2], w[2]]]
+        };
+        // Q maps the back leg's end frame (e_b, −u_b) onto the out leg's (e_o, u_o)
+        let q = mat_mul(&frame(&out, false), &crate::transpose(&frame(&cb, true)));
+        let r_stop = ret.clamp(0.0, 1.0) * self.kmax;
+        let m = out.len();
+        let mut c = out.clone();
+        for p in cb[..cb.len() - 1].iter().rev() {
+            if norm(p) < r_stop {
+                break;
+            }
+            c.push(crate::mat_vec(&q, p));
+        }
+        let h = self.length() / (m - 1) as f64;
+        // both legs end with a clipped (possibly tiny) step at kmax; near-duplicate points at the junction give spurious
+        // Menger-curvature spikes (the traversal would nearly stop there), so drop them
+        let mut j = m - 1;
+        let mut i = j.saturating_sub(4).max(1);
+        while i < (j + 5).min(c.len()) {
+            if norm(&crate::sub(&c[i], &c[i - 1])) < 0.5 * h && i != j {
+                c.remove(i);
+                if i < j {
+                    j -= 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        smooth_kink(&mut c, j, self.kmax, h);
+        c
+    }
+    /// In-out curve: the centre-out curve point-reflected and reversed (from −k_end in through k = 0, arriving along +z),
+    /// then the centre-out curve itself (leaving along +z: no kink at the centre). The echo is in the middle.
+    pub fn curve_in_out(&self, npts: usize) -> (Vec<Vec3>, usize) {
+        let out = self.curve(npts);
+        let mut c: Vec<Vec3> = out[1..].iter().rev().map(|p| crate::scale(p, -1.0)).collect();
+        let centre = c.len();
+        c.extend_from_slice(&out);
+        (c, centre)
+    }
+    /// spokes needed for Nyquist with [`Yarn::curve_asym`] (out leg `self`, return `back` down to `ret`·kmax): shells
+    /// above `ret`·kmax are crossed by both legs, path length q_out + q_back per unit radius
+    pub fn n_eff_asym(&self, back: &Yarn, ret: f64) -> f64 {
+        let r_stop = ret.clamp(0.0, 1.0) * self.kmax;
+        let steps = 2000;
+        let mut n: f64 = 0.0;
+        for i in 1..=steps {
+            let r = self.kmax * i as f64 / steps as f64;
+            let a = 4.0 * std::f64::consts::PI * r * r * self.fov * self.fov * self.w(r);
+            let q = self.q(r) + if r >= r_stop { back.q(r) } else { 0.0 };
+            n = n.max(a / q);
+        }
+        n
+    }
     /// total turning of the direction path, rad
     pub fn sigma_total(&self) -> f64 {
         let n = 4000;
@@ -446,6 +635,34 @@ impl Yarn {
                 if q > 1.0 { (q * q - 1.0).sqrt() / r * h } else { 0.0 }
             })
             .sum()
+    }
+}
+
+/// Gaussian smoothing of a turn-around kink at index `j` of a polyline with mean point spacing `h` (the smoothing of
+/// [`Yarn::curve_return`], shared by the newer constructions): width ≈ kink angle · kmax, convex combinations only
+fn smooth_kink(c: &mut [Vec3], j: usize, kmax: f64, h: f64) {
+    let m = j + 1;
+    if !(j >= 8 && j + 8 < c.len()) {
+        return;
+    }
+    let u = crate::sub(&c[j], &c[j - 6]);
+    let w = crate::sub(&c[j + 6], &c[j]);
+    let kink = (dot(&u, &w) / (norm(&u) * norm(&w))).clamp(-1.0, 1.0).acos();
+    let sig = ((kink * kmax / 2.5) / h).clamp(3.0, 0.01 * m as f64);
+    let half = (4.0 * sig).ceil() as usize;
+    let lo = j.saturating_sub(half);
+    let hi = (j + half).min(c.len() - 1);
+    let src = c.to_vec();
+    for i in lo..=hi {
+        let (mut acc, mut wsum) = ([0.0; 3], 0.0);
+        let a = i.saturating_sub(half);
+        let b = (i + half).min(src.len() - 1);
+        for (k, p) in src.iter().enumerate().take(b + 1).skip(a) {
+            let wt = (-0.5 * ((k as f64 - i as f64) / sig).powi(2)).exp();
+            acc = [0, 1, 2].map(|q| acc[q] + wt * p[q]);
+            wsum += wt;
+        }
+        c[i] = crate::scale(&acc, 1.0 / wsum);
     }
 }
 

@@ -110,7 +110,7 @@ fn host_state_matches_device_and_resumes_exactly() {
     let ysr: Vec<&cudarc::driver::CudaSlice<C32>> = ys.iter().collect();
     let lam = P2np::new(&mut sets, ysr.clone(), vec![], &st).unwrap().step_norm(&st, false, 30).unwrap();
     let iters = 14;
-    for pc in [Precond::Zmshr1, Precond::None] {
+    for pc in [Precond::Zmshr1, Precond::Zmshr1Set, Precond::None] {
         let xd = {
             let mut p = P2np::new(&mut sets, ysr.clone(), vec![], &st).unwrap();
             let mut x = Stack::zeros(&st, nsets, nv).unwrap();
@@ -147,4 +147,48 @@ fn host_state_matches_device_and_resumes_exactly() {
         println!("{pc:?}: stopped at 6 and resumed vs uninterrupted: {e:.2e}");
         assert!(e < 1e-4, "{pc:?}: resumed run differs: {e:e}");
     }
+    // pooled PCG through the objective (the physics-model warm start): both sets measure the same image, so the pooled
+    // least-squares solution is ≈ the object (small noise); stop + resume through the raw checkpoint is exact
+    let pooled = |sets: &mut SegSets, iters: usize, ctl: Option<(&RunCtl, &str)>, stop_at: Option<usize>| -> (Vec<C32>, Outcome) {
+        let mut p = P2np::new(sets, ysr.clone(), vec![], &st).unwrap();
+        let mut xg = vec![vec![C32::new(0.0, 0.0); nv]];
+        if let (Some((c, _)), Some(_)) = (ctl, stop_at) {
+            std::fs::write(c.dir().join("STOP"), b"").unwrap();
+        }
+        let o = hasty_recon::hoststack::pooled_pcg_host(&mut p, &st, &vec![0; nsets], &mut xg, iters, false, ctl, 1).unwrap();
+        (xg.remove(0), o)
+    };
+    let (xp, o) = pooled(&mut sets, 40, None, None);
+    assert_eq!(o, Outcome::Finished);
+    // pooled normal equations: ‖Σ_t ∇f_t(x)‖ / ‖Σ_t ∇f_t(0)‖ (the minimum-norm least-squares solution from x = 0)
+    let pooled_grad = |sets: &mut SegSets, x: &[C32]| -> f64 {
+        use hasty_recon::p2np::Objective;
+        let mut p = P2np::new(sets, ysr.clone(), vec![], &st).unwrap();
+        let mut xs = HostStack::zeros(&vec![nv; nsets]);
+        for t in 0..nsets {
+            xs.chunk_mut(t).copy_from_slice(x);
+        }
+        let mut g = HostStack::zeros(&vec![nv; nsets]);
+        p.gradient_host(&st, &xs, &mut g).unwrap();
+        (0..nv).map(|i| (0..nsets).fold((0.0f64, 0.0f64), |a, t| (a.0 + g.chunk(t)[i].re as f64, a.1 + g.chunk(t)[i].im as f64))).map(|(a, b)| a * a + b * b).sum::<f64>().sqrt()
+    };
+    let gr = pooled_grad(&mut sets, &xp) / pooled_grad(&mut sets, &vec![C32::new(0.0, 0.0); nv]);
+    let e = rel(&xp, &xt);
+    println!("pooled PCG (2 sets, one image, 40 iterations): normal-equation residual {gr:.2e}, error to the object {e:.2e} (null-space part of the object not recoverable)");
+    assert!(gr < 2e-3, "pooled PCG did not solve the pooled normal equations: {gr:e}");
+    assert!(e < 0.1, "pooled PCG far from the object: {e:e}");
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("host_state_pooled");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (_, o) = pooled(&mut sets, 12, Some((&RunCtl::new(&dir, 0), "w")), Some(1));
+    assert_eq!(o, Outcome::Stopped(1), "pooled PCG: expected a stop after the first iteration");
+    let _ = std::fs::remove_file(dir.join("STOP"));
+    let (xr, o) = pooled(&mut sets, 12, Some((&RunCtl::new(&dir, 0), "w")), None);
+    assert_eq!(o, Outcome::Finished);
+    let (xu, _) = pooled(&mut sets, 12, None, None);
+    let e = rel(&xr, &xu);
+    println!("pooled PCG: stopped after 1 and resumed vs uninterrupted (12 iterations): {e:.2e}");
+    // the resumed run restores x, r, p exactly; the two runs still differ by the float32 atomics of the gridding
+    // (summation order), which CG amplifies to ≈ 1e-4 over 12 iterations
+    assert!(e < 5e-4, "pooled PCG resume differs: {e:e}");
 }

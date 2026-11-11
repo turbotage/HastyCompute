@@ -532,6 +532,7 @@ dependencies = [
  "hasty-qfit",
  "hasty-recon",
  "hasty-seq",
+ "hasty-site",
  "hasty-testkit",
  "hasty-toeplitz",
  "hasty-value",
@@ -559,6 +560,7 @@ name = "hasty-cuda"
 version = "0.1.0"
 dependencies = [
  "cudarc",
+ "hasty-site",
  "libloading",
  "thiserror",
 ]
@@ -640,9 +642,11 @@ dependencies = [
  "hasty-fft",
  "hasty-mrsim",
  "hasty-nufft",
+ "hasty-site",
  "hasty-testkit",
  "hasty-toeplitz",
  "hasty-value",
+ "libc",
  "nalgebra",
  "num-complex",
  "rayon",
@@ -665,6 +669,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-server",
+ "hasty-site",
  "hasty-value",
  "if-addrs",
  "num-complex",
@@ -687,6 +692,10 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
 ]
+
+[[package]]
+name = "hasty-site"
+version = "0.1.0"
 
 [[package]]
 name = "hasty-testkit"

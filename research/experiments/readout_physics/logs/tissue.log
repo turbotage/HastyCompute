@@ -1,0 +1,11 @@
+07:55:40 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+07:55:52 g_eff water: 6510064 sources -> 1794544 voxels
+07:55:53 g_eff fat: 1820856 sources -> 711580 voxels
+08:06:15 current systole: cardiac|m1|all 0.0455/0.0455, cardiac|m1|myo 0.0181/0.155, cardiac|disp|all 0.0455/0.0455, cardiac|disp|myo 0.018/0.155, cardiac|perp|all 0.00154/0.00154, cardiac|perp|myo 0.000805/0.00692, resp_peak|m1|all 0.0459/0.0459, resp_peak|m1|myo 0.00374/0.0322, cardiac+resp_peak|m1|all 0.0523/0.0523, cardiac+resp_peak|m1|myo 0.0182/0.157
+08:20:49 current diastole: cardiac|m1|all 0.0378/0.0378, cardiac|m1|myo 0.0168/0.145, cardiac|disp|all 0.0378/0.0378, cardiac|disp|myo 0.0168/0.145, cardiac|perp|all 0.0013/0.0013, cardiac|perp|myo 0.000709/0.00609, resp_peak|m1|all 0.0459/0.0459, resp_peak|m1|myo 0.00374/0.0322, cardiac+resp_peak|m1|all 0.067/0.067, cardiac+resp_peak|m1|myo 0.0175/0.151
+08:20:53 g_eff water: 6510064 sources -> 1794544 voxels
+[W1111 08:20:53.343911300 CUDACachingAllocator.cpp:3934] memory allocation failed with OOM on device 0 while trying to allocate 964689920 bytes (free: 393347072, total: 25227100160).
+08:20:53 g_eff fat: 1820856 sources -> 711580 voxels
+08:36:29 v2 systole: cardiac|m1|all 0.0335/0.0335, cardiac|m1|myo 0.0161/0.138, cardiac|disp|all 0.0335/0.0335, cardiac|disp|myo 0.0161/0.139, cardiac|perp|all 0.00161/0.00161, cardiac|perp|myo 0.000842/0.00724, resp_peak|m1|all 0.0407/0.0407, resp_peak|m1|myo 0.00363/0.0312, cardiac+resp_peak|m1|all 0.0433/0.0433, cardiac+resp_peak|m1|myo 0.016/0.137
+08:52:06 v2 diastole: cardiac|m1|all 0.028/0.028, cardiac|m1|myo 0.0153/0.132, cardiac|disp|all 0.028/0.028, cardiac|disp|myo 0.0153/0.132, cardiac|perp|all 0.00138/0.00138, cardiac|perp|myo 0.000741/0.00636, resp_peak|m1|all 0.0407/0.0407, resp_peak|m1|myo 0.00363/0.0312, cardiac+resp_peak|m1|all 0.0552/0.0552, cardiac+resp_peak|m1|myo 0.0164/0.141
+08:52:06 done

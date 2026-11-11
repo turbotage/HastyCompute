@@ -117,8 +117,8 @@ fn rotation_structure(girf: &Girf, gb: &Grad, rots: &[Mat3], b0: f64, x: f64) ->
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let opt = |n: &str| args.iter().position(|a| a == n).map(|i| args[i + 1].clone());
-    let flow = PathBuf::from(opt("--flow").unwrap_or("data/hasty/seq/flow_thorax".into()));
-    let out = PathBuf::from(opt("--out").unwrap_or("data/hasty/seq/studies/girfcheck".into()));
+    let flow = opt("--flow").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax"));
+    let out = opt("--out").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/studies/girfcheck"));
     let n_rot: usize = opt("--n-rot").map_or(200, |s| s.parse().unwrap());
     std::fs::create_dir_all(&out).unwrap();
     let sys = System::prisma_xr();

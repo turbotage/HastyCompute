@@ -1,0 +1,77 @@
+23:42:48 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+23:42:52 g_eff water: 6510064 sources -> 1794544 voxels
+23:42:52 g_eff fat: 1820856 sources -> 711580 voxels
+23:44:30 current T1: ['omission'] (97s) omission 59.3
+23:45:42 current T1: ['svdn_L7'] (72s) svdn_L7 0.513
+23:46:54 current T1: ['svdn_L8'] (72s) svdn_L8 0.238
+23:47:56 current T1: ['svdn_L9'] (62s) svdn_L9 0.105
+23:49:08 current T1: ['svdn_L10'] (72s) svdn_L10 0.0572
+23:50:20 current T1: ['svdn_L11'] (72s) svdn_L11 0.0332
+23:51:31 current T1: ['fixed_L12'] (72s) fixed_L12 0.194
+23:52:43 current T1: ['fixed_e_L12'] (72s) fixed_e_L12 0.0874
+23:53:45 current T1: ['fixed_L14'] (61s) fixed_L14 0.0903
+23:54:47 current T1: ['fixed_e_L14'] (62s) fixed_e_L14 0.0401
+23:55:43 current T1: ['fixed_L17'] (56s) fixed_L17 0.0229
+23:56:42 current T1: ['fixed_e_L17'] (59s) fixed_e_L17 0.0122
+00:01:16 current T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (274s) omission 7.46, deviation_omitted 2.17, taylor2_residual 0.0189
+00:03:06 current T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (104s) omission 64, one_map_mean_vs_frame 0.649, one_map_frame0_vs_frame 1.14
+00:04:13 current T3: ['joint_svdn_L11'] (67s) joint_svdn_L11 0.413
+00:05:28 current T3: ['joint_svdn_L12'] (75s) joint_svdn_L12 0.243
+00:06:34 current T3: ['joint_svdn_L13'] (65s) joint_svdn_L13 0.0704
+00:07:44 current T3: ['joint_fixed_e_L15'] (70s) joint_fixed_e_L15 0.182
+00:09:06 current T3: ['joint_fixed_e_L18'] (83s) joint_fixed_e_L18 0.0593
+00:10:34 current T3: ['joint_fixed_e_L22'] (87s) joint_fixed_e_L22 0.0215
+00:17:19 current T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (392s) omission 5.96, table_residual 1.99, eff_complex_residual 0.845, eff_real_residual 1.87
+00:18:34 current T4seg: ['nodecay_svdn_L8'] (72s) nodecay_svdn_L8 0.238
+00:19:54 current T4seg: ['table_svdn_L8'] (80s) table_svdn_L8 0.216
+00:20:31 current T4seg: ['nodecay_svdn_L9'] (36s) nodecay_svdn_L9 0.105
+00:21:04 current T4seg: ['table_svdn_L9'] (33s) table_svdn_L9 0.0952
+00:21:33 current T4seg: ['nodecay_svdn_L10'] (29s) nodecay_svdn_L10 0.0572
+00:22:06 current T4seg: ['table_svdn_L10'] (33s) table_svdn_L10 0.0531
+00:22:35 current T4seg: ['nodecay_fixed_hist_L10'] (29s) nodecay_fixed_hist_L10 0.328
+00:23:08 current T4seg: ['table_fixed_hist_L10'] (33s) table_fixed_hist_L10 0.216
+00:23:37 current T4seg: ['nodecay_fixed_hist_L12'] (29s) nodecay_fixed_hist_L12 0.194
+00:24:10 current T4seg: ['table_fixed_hist_L12'] (33s) table_fixed_hist_L12 0.117
+00:24:39 current T4seg: ['nodecay_fixed_hist_L14'] (29s) nodecay_fixed_hist_L14 0.0903
+00:25:12 current T4seg: ['table_fixed_hist_L14'] (33s) table_fixed_hist_L14 0.0527
+00:26:05 current T9: ['omission', 'absorbed_residual'] (53s) omission 0.424, absorbed_residual 0.825
+00:27:31 current T10: ['girf_omission', 'girf_5pct_residual'] (85s) girf_omission 36.9, girf_5pct_residual 2.13
+00:27:34 g_eff water: 6510064 sources -> 1794544 voxels
+00:27:34 g_eff fat: 1820856 sources -> 711580 voxels
+00:28:15 v2: energy profile
+00:29:00 v2 T1: ['omission'] (45s) omission 23.6
+00:29:31 v2 T1: ['svdn_L8'] (31s) svdn_L8 0.39
+00:30:03 v2 T1: ['svdn_L9'] (31s) svdn_L9 0.2
+00:30:34 v2 T1: ['svdn_L10'] (31s) svdn_L10 0.107
+00:31:05 v2 T1: ['svdn_L11'] (31s) svdn_L11 0.065
+00:31:36 v2 T1: ['svdn_L12'] (31s) svdn_L12 0.0411
+00:32:08 v2 T1: ['fixed_L12'] (31s) fixed_L12 0.307
+00:32:39 v2 T1: ['fixed_e_L12'] (31s) fixed_e_L12 0.2
+00:33:10 v2 T1: ['fixed_L14'] (31s) fixed_L14 0.197
+00:33:41 v2 T1: ['fixed_e_L14'] (31s) fixed_e_L14 0.0909
+00:34:13 v2 T1: ['fixed_L17'] (31s) fixed_L17 0.0643
+00:34:44 v2 T1: ['fixed_e_L17'] (31s) fixed_e_L17 0.0268
+00:37:12 v2 T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (148s) omission 0.536, deviation_omitted 0.152, taylor2_residual 0.00162
+00:38:16 v2 T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (58s) omission 63.4, one_map_mean_vs_frame 0.674, one_map_frame0_vs_frame 1.19
+00:38:52 v2 T3: ['joint_svdn_L13'] (35s) joint_svdn_L13 0.21
+00:39:27 v2 T3: ['joint_svdn_L14'] (35s) joint_svdn_L14 0.105
+00:40:02 v2 T3: ['joint_svdn_L15'] (35s) joint_svdn_L15 0.0644
+00:40:38 v2 T3: ['joint_fixed_e_L15'] (35s) joint_fixed_e_L15 0.45
+00:41:13 v2 T3: ['joint_fixed_e_L18'] (35s) joint_fixed_e_L18 0.15
+00:41:49 v2 T3: ['joint_fixed_e_L22'] (35s) joint_fixed_e_L22 0.0434
+00:44:48 v2 T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (172s) omission 1.66, table_residual 1.4, eff_complex_residual 0.459, eff_real_residual 1.28
+00:45:22 v2 T4seg: ['nodecay_svdn_L9'] (31s) nodecay_svdn_L9 0.2
+00:45:58 v2 T4seg: ['table_svdn_L9'] (35s) table_svdn_L9 0.178
+00:46:29 v2 T4seg: ['nodecay_svdn_L10'] (31s) nodecay_svdn_L10 0.107
+00:47:04 v2 T4seg: ['table_svdn_L10'] (35s) table_svdn_L10 0.0963
+00:47:35 v2 T4seg: ['nodecay_svdn_L11'] (31s) nodecay_svdn_L11 0.065
+00:48:11 v2 T4seg: ['table_svdn_L11'] (35s) table_svdn_L11 0.0591
+00:48:42 v2 T4seg: ['nodecay_fixed_hist_L10'] (31s) nodecay_fixed_hist_L10 0.455
+00:49:17 v2 T4seg: ['table_fixed_hist_L10'] (35s) table_fixed_hist_L10 0.312
+00:49:49 v2 T4seg: ['nodecay_fixed_hist_L12'] (31s) nodecay_fixed_hist_L12 0.307
+00:50:24 v2 T4seg: ['table_fixed_hist_L12'] (35s) table_fixed_hist_L12 0.19
+00:50:55 v2 T4seg: ['nodecay_fixed_hist_L14'] (31s) nodecay_fixed_hist_L14 0.197
+00:51:30 v2 T4seg: ['table_fixed_hist_L14'] (35s) table_fixed_hist_L14 0.111
+00:52:27 v2 T9: ['omission', 'absorbed_residual'] (56s) omission 0.488, absorbed_residual 0.82
+00:53:58 v2 T10: ['girf_omission', 'girf_5pct_residual'] (91s) girf_omission 33.4, girf_5pct_residual 1.85
+00:53:58 done

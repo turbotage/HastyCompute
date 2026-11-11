@@ -1,0 +1,9 @@
+09:56:53 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+09:57:02 v2: svdn L=10 cardinal nodes (ms after TE) [0.0, 0.7, 1.62, 2.79, 3.94, 5.12, 6.31, 7.51, 8.62, 9.49], cond 31.5
+09:57:05 v2: svdn L=12 cardinal nodes (ms after TE) [0.0, 0.5, 1.21, 2.15, 3.1, 4.07, 5.05, 6.04, 7.03, 8.0, 8.9, 9.49], cond 38.3
+[W1111 09:57:44.622520868 CUDACachingAllocator.cpp:3934] memory allocation failed with OOM on device 0 while trying to allocate 2134900736 bytes (free: 1758068736, total: 25227100160).
+09:57:52 v2_systole: 923638 sources, 336026 model voxels (138946 with sources)
+09:58:26 v2_systole: truth (29s)
+10:00:09 v2_systole: models (103s)
+10:00:09 v2_systole: truth_motion_omission 0.221, truth_motion_acc_omission 0.217, truth_motion_all_omission 0.206, truth_motion_omission_cor 0.0155, truth_motion_omission_ves 0.184, static 0.165, omit 0.279/0.221, exact_ideal 0.22/0.186, exact_lanczos3 0.215/0.179, exact_ideal_shear_cos 0.212/0.175, exact_ideal_shear_sinc 0.21/0.174, exact_lanczos3_shear_cos 0.208/0.172, static_cor 0.0239, omit_cor 0.029/0.0155, exact_ideal_cor 0.0252/0.0108, exact_ideal_shear_cos_cor 0.0251/0.0108, exact_lanczos3_shear_cos_cor 0.0249/0.0105, static_ves 0.132, omit_ves 0.231/0.184, exact_ideal_ves 0.183/0.153, exact_ideal_shear_cos_ves 0.173/0.141, exact_lanczos3_shear_cos_ves 0.17/0.139
+10:00:09 done

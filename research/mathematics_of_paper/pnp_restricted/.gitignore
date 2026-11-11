@@ -1,0 +1,11 @@
+# regenerable caches and build outputs
+results/GH.npy
+*.log
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+__pycache__/

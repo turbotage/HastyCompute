@@ -4,3 +4,4 @@ build-cufinufft/
 # FINUFFT v2.5.1 source for the cuFINUFFT baseline (68 MB, not tracked; re-fetch with
 # git clone --branch v2.5.1 https://github.com/flatironinstitute/finufft bench/cpp/vendor/finufft-src)
 bench/cpp/vendor/finufft-src/
+.agents/

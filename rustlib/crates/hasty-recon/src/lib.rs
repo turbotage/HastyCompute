@@ -27,6 +27,7 @@ pub mod vobj;
 pub mod wavelet;
 pub mod vinit;
 pub mod precond;
+pub mod pyramid;
 pub mod segphys;
 pub mod selfgate;
 pub mod sepwt;
@@ -34,6 +35,7 @@ pub mod setop;
 pub mod store;
 pub mod sysmem;
 pub mod tlock;
+pub mod airmap;
 pub mod skeleton;
 
 #[derive(Debug, thiserror::Error)]

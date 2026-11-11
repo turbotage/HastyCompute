@@ -36,11 +36,8 @@ fn nvrtc_version() -> (i32, i32) {
 }
 
 fn cache_dir() -> Option<PathBuf> {
-    if let Ok(d) = std::env::var("HASTY_KERNEL_CACHE") {
-        return Some(PathBuf::from(d));
-    }
-    // inside the repository: rustlib/target/hasty-kernels
-    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/hasty-kernels"))
+    // HASTY_KERNEL_CACHE, else $HASTY_SCRATCH/hasty-kernels, else rustlib/target/hasty-kernels (hasty-site)
+    Some(hasty_site::kernel_cache())
 }
 
 /// Compile CUDA C++ `src` to a cubin for `arch` (e.g. `sm_89`).
@@ -138,8 +135,10 @@ pub fn compile_cubin(
             if let Some(p) = f.parent() {
                 let _ = fs::create_dir_all(p);
             }
-            // write-then-rename so concurrent processes never see a partial file
-            let tmp = f.with_extension(format!("tmp{}", std::process::id()));
+            // write-then-rename so concurrent processes and threads (one per GPU) never see a partial file
+            static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let tmp = f.with_extension(format!("tmp{}-{seq}", std::process::id()));
             if fs::write(&tmp, &cubin).is_ok() {
                 let _ = fs::rename(&tmp, f);
             }

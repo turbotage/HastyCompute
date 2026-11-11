@@ -485,6 +485,28 @@ impl SimData {
         acc
     }
 
+    /// Mean of an f32 field on the native grid over the reconstruction voxel centred at the true position `x_log`:
+    /// trilinear samples at the centres of ⌈vox_a / res⌉ sub-cells per axis (a box filter of the reconstruction
+    /// voxel; [`sample_log`](Self::sample_log) itself when the reconstruction voxel is not larger than the native
+    /// one). The voxel's extent is taken in logical axes, i.e. the GNL Jacobian across one voxel is neglected.
+    pub fn sample_log_box(&self, field: &[f32], comp: usize, x_log: &Vec3) -> f64 {
+        let n: [usize; 3] = std::array::from_fn(|a| ((self.vox[a] / self.res) - 1e-9).ceil().max(1.0) as usize);
+        if n == [1, 1, 1] {
+            return self.sample_log(field, comp, x_log);
+        }
+        let mut acc = 0.0;
+        for k in 0..n[2] {
+            for j in 0..n[1] {
+                for i in 0..n[0] {
+                    let o = [i, j, k];
+                    let p: Vec3 = std::array::from_fn(|a| x_log[a] + ((o[a] as f64 + 0.5) / n[a] as f64 - 0.5) * self.vox[a]);
+                    acc += self.sample_log(field, comp, &p);
+                }
+            }
+        }
+        acc / (n[0] * n[1] * n[2]) as f64
+    }
+
     pub fn physics_grid(&self, gnl_aware: bool, w: &[Vec<f64>]) -> PhysicsGrid {
         let nv = self.nv();
         let nc = self.nc;

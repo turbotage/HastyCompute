@@ -74,6 +74,26 @@ pub struct SegTables {
     pub max_resid_phase: f64,
 }
 
+impl SegTables {
+    /// The tables of the samples `sel` (ascending indices into the set), e.g. a k-space crop to a coarse grid's band
+    /// (`pyramid::KCrop`): built on the whole set (readout × ADC structure), then restricted. `wbar`, `tau_adc` and
+    /// `max_resid_phase` are those of the whole set.
+    pub fn select(&self, sel: &[u32]) -> SegTables {
+        use crate::pyramid::{gather, gather_rows};
+        let m = self.tau.len();
+        SegTables {
+            coords: [0, 1, 2].map(|a| gather(&self.coords[a], sel)),
+            tau: gather(&self.tau, sel),
+            phi0: gather(&self.phi0, sel),
+            dc: gather_rows(&self.dc, m, sel),
+            t: gather(&self.t, sel),
+            wbar: self.wbar.clone(),
+            tau_adc: self.tau_adc.clone(),
+            max_resid_phase: self.max_resid_phase,
+        }
+    }
+}
+
 /// Tables for one sample set (`set.readouts` × ADC samples, in `SimData::sample_set` order). `wbar`: the mean
 /// coefficients the segments were built with (e.g. over all frames of the encode); default: this set's own mean.
 pub fn seg_tables(sd: &SimData, set: &SampleSet, fit: &MonoFit, with_conc: bool, wbar: Option<&[[f64; 4]]>) -> SegTables {
@@ -258,4 +278,132 @@ pub fn seg_tables_hi(sd: &SimData, set: &SampleSet, fit: &MonoFitHi, with_conc: 
 /// the degree-3/4 coefficient table of a fit as `SegNufft::points_hi` takes it: h_qα, q-major (4 × [`NHI`])
 pub fn hi_table(fit: &MonoFitHi) -> Vec<f64> {
     fit.hi.iter().flatten().copied().collect()
+}
+
+// ───────────────────────────────────────────────────────────── smooth B0 part in the sample tables (additions)
+
+/// Low-order polynomial part of the off-resonance ω(ρ) (rad/s) over the apparent logical voxel position ρ (m), in the
+/// basis of [`MonoFit`] ([1, x, y, z, x², y², z², 2xy, 2xz, 2yz]; degree 0, 1 or 2), moved out of the time
+/// segments into the per-sample tables ([`absorb_field_poly`]): sample j sees P(ρ) τ_j =
+///   c₀ τ_j                       → constant phase φ0_j (exact)
+///   + (c₁·ρ) τ_j                 → k-space shift k_j += c₁ τ_j (exact, like the concomitant linear terms)
+///   + Q(ρ) τ_ref + Q(ρ)(τ_j − τ_ref) → a static voxel phase (left in the segment diagonals, rank-neutral) and the
+///                                  per-sample ΔC term of the order-1/2 kernel correction (a Taylor expansion: only for
+///                                  |Q(ρ)| |τ_j − τ_ref| well below 1 rad over the object, i.e. a few Hz of curvature)
+/// so the segments carry only ψ(ρ, τ) − c₀ τ − (c₁·ρ) τ − Q(ρ)(τ − τ_ref) ([`FieldPoly::residual`]).
+#[derive(Clone, Debug)]
+pub struct FieldPoly {
+    pub deg: u32,
+    /// coefficients (rad/s per m^degree), zero beyond `deg`
+    pub c: [f64; 10],
+    /// reference time of the quadratic part (s): the centre of the ADC window
+    pub tau_ref: f64,
+}
+
+impl FieldPoly {
+    /// no absorption
+    pub fn none() -> Self {
+        FieldPoly { deg: 0, c: [0.0; 10], tau_ref: 0.0 }
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.c.iter().all(|&v| v == 0.0)
+    }
+
+    /// P(ρ) (rad/s)
+    pub fn eval(&self, p: &Vec3) -> f64 {
+        let b = basis(p);
+        (0..10).map(|i| self.c[i] * b[i]).sum()
+    }
+
+    /// the linear part c₀ + c₁·ρ (rad/s)
+    pub fn eval_lin(&self, p: &Vec3) -> f64 {
+        self.c[0] + self.c[1] * p[0] + self.c[2] * p[1] + self.c[3] * p[2]
+    }
+
+    /// the phase the segments still have to carry: ψ(v, τ) − (c₀ + c₁·ρ_v) τ − Q(ρ_v)(τ − τ_ref)
+    pub fn residual<'a>(&'a self, sd: &'a SimData, psi: &'a (dyn Fn(usize, f64) -> f64 + Sync)) -> impl Fn(usize, f64) -> f64 + Sync + 'a {
+        move |v: usize, t: f64| self.residual_at(&sd.voxel_log(v), psi(v, t), t)
+    }
+
+    /// the residual of phase `psi` (rad) of a voxel at `p` (m) at time `t` (s)
+    pub fn residual_at(&self, p: &Vec3, psi: f64, t: f64) -> f64 {
+        if self.is_none() {
+            return psi;
+        }
+        let lin = self.eval_lin(p);
+        let quad = self.eval(p) - lin;
+        psi - lin * t - quad * (t - self.tau_ref)
+    }
+}
+
+/// Weighted least-squares fit of ω over `voxels` (weights `w`, e.g. the expected signal energy; None = equal) to
+/// degree `deg` (0, 1 or 2); `tau_ref` = the centre of the ADC window.
+pub fn fit_field_poly(sd: &SimData, grid: &PhysicsGrid, voxels: &[usize], w: Option<&[f64]>, deg: u32, tau_ref: f64) -> FieldPoly {
+    fit_field_poly_at(&|v| sd.voxel_log(v), &grid.omega, voxels, w, deg, tau_ref)
+}
+
+/// [`fit_field_poly`] for any voxel positions `pos(v)` (m) and field `omega` (rad/s, indexed by voxel)
+pub fn fit_field_poly_at(pos: &dyn Fn(usize) -> Vec3, omega: &[f64], voxels: &[usize], w: Option<&[f64]>, deg: u32, tau_ref: f64) -> FieldPoly {
+    assert!(deg <= 2, "--b0-absorb: degree 0, 1 or 2 (higher degrees would need the first-order-only order-3 path)");
+    let nb = match deg {
+        0 => 1,
+        1 => 4,
+        _ => 10,
+    };
+    let mut ata = nalgebra::DMatrix::<f64>::zeros(nb, nb);
+    let mut atb = nalgebra::DVector::<f64>::zeros(nb);
+    for (r, &v) in voxels.iter().enumerate() {
+        let b = basis(&pos(v));
+        let wt = w.map_or(1.0, |w| w[r].max(0.0));
+        for i in 0..nb {
+            for k in 0..nb {
+                ata[(i, k)] += wt * b[i] * b[k];
+            }
+            atb[i] += wt * b[i] * omega[v];
+        }
+    }
+    let tr = (0..nb).map(|i| ata[(i, i)]).sum::<f64>() / nb as f64;
+    for i in 0..nb {
+        ata[(i, i)] += 1e-12 * tr;
+    }
+    let sol = ata.cholesky().expect("field polynomial fit").solve(&atb);
+    let mut c = [0.0; 10];
+    c[..nb].copy_from_slice(sol.as_slice());
+    FieldPoly { deg, c, tau_ref }
+}
+
+/// Add the per-sample phase of the absorbed polynomial part to tables built by [`seg_tables`] / [`seg_tables_hi`]
+/// (before any [`SegTables::select`]): φ0_j += c₀ τ_j, k_j·Δ += c₁ τ_j Δ, ΔC_j += Q (τ_j − τ_ref). Returns the largest
+/// per-sample quadratic phase |Q(ρ)(τ_j − τ_ref)| over `voxels` (rad): the Taylor argument of the kernel correction.
+pub fn absorb_field_poly(tab: &mut SegTables, sd: &SimData, poly: &FieldPoly, voxels: &[usize]) -> f64 {
+    absorb_field_poly_at(tab, sd.vox, poly, &mut voxels.iter().map(|&v| sd.voxel_log(v)))
+}
+
+/// [`absorb_field_poly`] with the voxel size `vox` (m) and the positions (m) over which the Taylor phase is bounded
+pub fn absorb_field_poly_at(tab: &mut SegTables, vox: [f64; 3], poly: &FieldPoly, positions: &mut dyn Iterator<Item = Vec3>) -> f64 {
+    if poly.is_none() {
+        return 0.0;
+    }
+    let m = tab.tau.len();
+    let mut dtmax = 0.0f64;
+    for j in 0..m {
+        let t = tab.tau[j] as f64;
+        tab.phi0[j] += (poly.c[0] * t) as f32;
+        for a in 0..3 {
+            tab.coords[a][j] += (poly.c[1 + a] * t * vox[a]) as f32;
+        }
+        if poly.deg >= 2 {
+            let dt = t - poly.tau_ref;
+            dtmax = dtmax.max(dt.abs());
+            for i in 0..6 {
+                tab.dc[i * m + j] += (poly.c[4 + i] * dt) as f32;
+            }
+        }
+    }
+    if poly.deg < 2 {
+        return 0.0;
+    }
+    let qmax = positions.map(|p| (poly.eval(&p) - poly.eval_lin(&p)).abs()).fold(0.0f64, f64::max);
+    qmax * dtmax
 }

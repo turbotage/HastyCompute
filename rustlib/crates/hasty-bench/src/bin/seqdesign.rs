@@ -13,7 +13,17 @@
 //!             [--spoil physical|endpoint|radial|flowcomp] constant z moment with a per-rotation tail | no tail, the
 //!                            readout end point is the moment | the trajectory continues out along its end direction
 //!                            (rotating) | constant z moment + equal TR M1 per encode (needs --return 0)
+//!             [--shape kg0,wobble,freq]  evaluate this base-spoke shape only (no search)
 //!             [--threads T]  total worker threads (default: all cores); several runs in parallel → split the cores
+//!             [--leg rewind|rewind-m1|asym:B:R[:m1]|double|inout]  readout geometry (research/readout_redesign.md):
+//!                            centre-out to kmax + straight rewind to k = 0 (navigator ADC) | the same with a rewinder
+//!                            that also nulls the readout's first moment (rotation-independent TR M1, needed for RF
+//!                            spoiling of flowing spins; asym:B:R:m1 likewise) | asymmetric out-and-back, return leg
+//!                            designed for B× the spokes (coarser, shorter), sampled to R·kmax, then the rewind | two
+//!                            centre-out legs | in-out (echo in the middle). All end at rest at k = 0 (use with --return 0
+//!                            --spoil flowcomp); --t-adc then bounds the span of the reconstruction samples, the final
+//!                            rewinder is navigator ADC at the tail's slew factor. Writes recon_mask.npy (1 =
+//!                            reconstruction sample, per raster segment).
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -25,7 +35,7 @@ use hasty_phantom::volume::write_npy;
 use hasty_seq::encode::{DualLayout, Scheme};
 use hasty_seq::girf::{trajectory_error, Girf};
 use hasty_seq::metrics::{concomitant_anisotropy, concomitant_phase, coverage, density, max_k_error, readout_m1};
-use hasty_seq::optim::{nelder_mead, shape_of, Eval, Problem, Shape};
+use hasty_seq::optim::{nelder_mead, shape_of, Eval, Leg, Problem, Shape};
 use hasty_seq::pns::{pns, SafeHw};
 use hasty_seq::system::System;
 use hasty_seq::tr::{sequence, Spoil};
@@ -247,6 +257,20 @@ fn main() {
     let res_girf = take("--res-girf");
     let res_weight: f64 = take("--res-weight").map(|s| s.parse().unwrap()).unwrap_or(1.0);
     let ret: Option<f64> = take("--return").map(|s| s.parse().unwrap());
+    let leg_arg = take("--leg");
+    let leg = match leg_arg.as_deref() {
+        None => Leg::Default,
+        Some("rewind") => Leg::Rewind,
+        Some("rewind-m1") => Leg::RewindM1,
+        Some("double") => Leg::Double,
+        Some("inout") => Leg::InOut,
+        Some(a) if a.starts_with("asym") => {
+            let null_m1 = a.ends_with(":m1");
+            let v: Vec<f64> = a.trim_end_matches(":m1").split(':').skip(1).map(|x| x.parse().unwrap()).collect();
+            Leg::Asym { back: *v.first().unwrap_or(&4.0), ret: *v.get(1).unwrap_or(&0.5), null_m1 }
+        }
+        Some(a) => panic!("--leg {a}: rewind | rewind-m1 | asym:B:R[:m1] | double | inout"),
+    };
     // --spoil physical (constant z moment, per-rotation tail) | endpoint (no tail: the readout end point, rotating)
     //         | radial (the trajectory continues out along its end direction to the spoil moment, rotating)
     let spoil_mode = take("--spoil").unwrap_or_else(|| "physical".into());
@@ -260,6 +284,11 @@ fn main() {
     let encode_arg = take("--encode");
     let tail_arg = take("--tail");
     let iters: usize = take("--iters").map(|s| s.parse().unwrap()).unwrap_or(80);
+    // --shape kg0,wobble,freq: evaluate this base-spoke shape only (no grid, no Nelder–Mead), e.g. for design studies
+    let fixed_shape: Option<Shape> = take("--shape").map(|a| {
+        let v: Vec<f64> = a.split(',').map(|x| x.parse().unwrap()).collect();
+        Shape { kg0: v[0], wobble: v[1], wobble_freq: v[2] }
+    });
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let check = flag(&mut args, "--check");
     let out = PathBuf::from(&args[0]);
@@ -293,6 +322,7 @@ fn main() {
             _ => Spoil::Physical([0.0, 0.0, spoil_cycles / (GAMMA_BAR * res)]),
         },
         ret,
+        leg,
         rot_kind,
         n_rot_pns,
         aniso_weight,
@@ -308,13 +338,15 @@ fn main() {
         curve_pts: 60_000,
     };
     assert!(spoil_mode != "flowcomp" || ret == Some(0.0), "--spoil flowcomp needs --return 0");
+    assert!(leg == Leg::Default || ret == Some(0.0), "--leg needs --return 0 (every leg variant ends at rest at k = 0)");
     if ret.is_some() && spoil_mode == "physical" && spoil_cycles > 0.5 {
         println!("  note: spoil {spoil_cycles} cycles/voxel > 0.5 (= kmax): the tail leaves the kmax ball");
     }
     println!("seqdesign: res {:.2} mm, FOV {:.0} mm, kmax {kmax:.0} /m, T_adc {:.2} ms, VENC {venc} m/s {scheme:?}, PNS ≤ {pns_target}% ({hw_note})", res * 1e3, fov * 1e3, t_adc * 1e3);
     let rots = p.pns_rotations();
     // the cache is only valid for the same problem
-    let fp = format!("{:?}|{:?}|{pns_target}|{kmax}|{fov}|{edge}|{t_adc}|{:?}|{scheme:?}|{venc}|{:?}|{rot_kind:?}|{n_rot_pns}|{aniso_weight}|{}{}{}", sys, p.hw, p.vmax, p.spoil, p.curve_pts, ret.map_or(String::new(), |r| format!("|ret{r}")), res_girf.as_ref().map_or(String::new(), |g| format!("|res{g}:{res_weight}")));
+    let fp = format!("{:?}|{:?}|{pns_target}|{kmax}|{fov}|{edge}|{t_adc}|{:?}|{scheme:?}|{venc}|{:?}|{rot_kind:?}|{n_rot_pns}|{aniso_weight}|{}{}{}", sys, p.hw, p.vmax, p.spoil, p.curve_pts, ret.map_or(String::new(), |r| format!("|ret{r}")), res_girf.as_ref().map_or(String::new(), |g| format!("|res{g}:{res_weight}")))
+        + &if leg == Leg::Default { String::new() } else { format!("|leg{leg:?}") };
     let fpf = out.join("problem.txt");
     match std::fs::read_to_string(&fpf) {
         Ok(old) if old != fp => {
@@ -338,6 +370,9 @@ fn main() {
                 grid.push(Shape { kg0, wobble: wob, wobble_freq: fr });
             }
         }
+    }
+    if let Some(s) = fixed_shape {
+        grid = vec![s];
     }
     let next = AtomicUsize::new(0);
     let stopped = std::sync::atomic::AtomicBool::new(false);
@@ -390,12 +425,12 @@ fn main() {
         let r = eval_cached(&p, &rots, &cache, &shape_of(x));
         if r.objective.is_finite() { r.objective } else { 1e30 }
     };
-    let (xb, fb) = nelder_mead(&mut f, &x0, &[0.3, 0.3, 0.5], iters, 1e-4);
+    let (xb, fb) = if fixed_shape.is_some() { (x0.to_vec(), gbest.objective) } else { nelder_mead(&mut f, &x0, &[0.3, 0.3, 0.5], iters, 1e-4) };
     if stop_flag {
         println!("stopped during Nelder–Mead ({} cached); rerun to resume", cache.len());
         return;
     }
-    let best_shape = shape_of(&xb);
+    let best_shape = fixed_shape.unwrap_or_else(|| shape_of(&xb));
     println!("  Nelder–Mead ({:.0} s, {} evaluations): {best_shape:?} → N·TR {fb:.3} s (grid best {:.3})", t0.elapsed().as_secs_f64(), cache.len(), gbest.objective);
 
     // ── final check with a denser PNS rotation set ──
@@ -485,6 +520,12 @@ fn main() {
         best.n_eff, best.n_design, tr.tr() * 1e3, tr.te() * 1e3, sp.t_adc * 1e3, (tr.i_ro - tr.i_enc) as f64 * tr.dt * 1e3, tr.n_tail as f64 * tr.dt * 1e3,
         best.pns.max, best.pns.part, best.slew, best.res
     );
+    if leg != Leg::Default {
+        println!(
+            "  leg {leg:?}: reconstruction samples {:.3} ms over a {:.3} ms span {:?} (raster), navigator ADC {:.3} ms, echo at {:.3} ms after the RF centre, readout end γ|M1| {:.3} rad/(m/s)",
+            sp.t_recon_samples() * 1e3, sp.t_recon() * 1e3, sp.recon, (sp.t_adc - sp.t_recon_samples()) * 1e3, (tr.te() + sp.i_echo as f64 * tr.dt) * 1e3, hasty_seq::GAMMA * hasty_seq::norm(&sp.m1_end())
+        );
+    }
 
     // ── encoding at the echo, from the designed waveforms ──
     let mut enc_rows = vec![];
@@ -536,9 +577,32 @@ fn main() {
 
     // ── metrics ──
     let up = ((2.0 * GAMMA_BAR * sys.gmax * sys.grad_raster * fov).ceil() as usize).max(1);
-    let k = sp.k_adc(up);
+    let k_all = sp.k_adc(up);
     let yarn = p.yarn(&best_shape, best.n_design);
-    let den = density(&k, kmax, fov, |r| yarn.w(r), 60);
+    // density / coverage of the reconstruction samples (the whole ADC window for the default readouts); several
+    // reconstruction ranges (--leg double) are measured separately and their curve densities added
+    let rec_ranges: Vec<std::ops::RangeInclusive<usize>> = sp.recon.iter().map(|r| r[0] * up..=r[1] * up).collect();
+    let k: Vec<Vec3> = if leg == Leg::Default { k_all.clone() } else { rec_ranges.iter().flat_map(|r| k_all[r.clone()].to_vec()).collect() };
+    let den = if leg == Leg::Default || rec_ranges.len() == 1 {
+        density(&k, kmax, fov, |r| yarn.w(r), 60)
+    } else {
+        let parts: Vec<_> = rec_ranges.iter().map(|r| density(&k_all[r.clone()], kmax, fov, |r| yarn.w(r), 60)).collect();
+        let mut d = parts[0].clone();
+        for q in &parts[1..] {
+            for (a, b) in d.l1.iter_mut().zip(&q.l1) {
+                *a += b;
+            }
+        }
+        d.n_star = 0.0;
+        for b in 0..d.r.len() {
+            d.need[b] = if d.l1[b] > 0.0 { fov * fov * yarn.w(d.r[b]) / d.l1[b] } else { f64::INFINITY };
+            if d.need[b] > d.n_star {
+                d.n_star = d.need[b];
+                d.r_star = d.r[b];
+            }
+        }
+        d
+    };
     let lim = sp.grad.limits();
     let m1 = readout_m1(&sp.grad, 0.0, kmax, &[0.1, 0.25, 0.5, 0.99]);
     let pm = sp.grad.moments(0.0);
@@ -626,7 +690,9 @@ fn main() {
     let mut spg = sp.grad.g.clone();
     spg.extend_from_slice(&tr.tail(&rots[0]).g[1..]);
     f8(&out.join("spoke_grad.npy"), &[spg.len(), 3], &flat3(&spg));
-    f8(&out.join("k_adc.npy"), &[k.len(), 3], &flat3(&k));
+    f8(&out.join("k_adc.npy"), &[k_all.len(), 3], &flat3(&k_all));
+    let mask: Vec<f64> = (0..sp.i_adc).map(|i| sp.is_recon(i) as u8 as f64).collect();
+    f8(&out.join("recon_mask.npy"), &[mask.len()], &mask);
     let mut trp = vec![];
     for e in 0..n_enc {
         trp.extend(flat3(&tr.physical(e, &rots[0]).g));
@@ -713,11 +779,14 @@ fn main() {
             gi.extend_from_slice(&ga.g[i + off]);
         }
         f8(&out.join("girf.npy"), &[g0.len(), 7], &gi);
+        // leg readouts: the final rewinder (navigator ADC) is in the tail part (PNS derating, `Tr::part`)
+        let parts_label = if leg == Leg::Default { json!(["RF", "encode (navigator ADC)", "readout (ADC)", "tail / spoiler"]) } else { json!(["RF", "encode (navigator ADC)", "readout (ADC, reconstruction)", "rewind (navigator ADC) + tail / spoiler"]) };
         let fin = json!({"kind": "flow", "dt": tr.dt, "tr": tr.tr(), "te": [tr.te()], "t_rf": tr.t_rf, "kmax": kmax, "res": res, "gmax": sys.gmax, "smax": sys.smax,
                          "slew_factors": {"encode": best.slew[0], "readout": best.slew[1], "tail": best.slew[2]}, "pns_limit": pns_target, "pns_hw": p.hw.name,
                          "n_rot_window": nr, "n_enc": n_enc, "variants": (0..n_enc).map(|e| format!("encode {e}")).collect::<Vec<_>>(),
-                         "parts": ["RF", "encode (navigator ADC)", "readout (ADC)", "tail / spoiler"], "girf": "clinical_example (illustrative)", "encode": encode_desc, "tail": tail_desc,
-                         "title": format!("4D-flow TR: out-and-back yarn {:.1} mm, T_adc {:.2} ms, {scheme_name} p={p_cop}", res * 1e3, sp.t_adc * 1e3)});
+                         "parts": parts_label, "girf": "clinical_example (illustrative)", "encode": encode_desc, "tail": tail_desc,
+                         "title": if leg == Leg::Default { format!("4D-flow TR: out-and-back yarn {:.1} mm, T_adc {:.2} ms, {scheme_name} p={p_cop}", res * 1e3, sp.t_adc * 1e3) }
+                                  else { format!("4D-flow TR: {leg:?} yarn {:.1} mm, recon window {:.2} ms (ADC {:.2} ms), {scheme_name} p={p_cop}", res * 1e3, sp.t_recon() * 1e3, sp.t_adc * 1e3) }});
         std::fs::write(out.join("final.json"), serde_json::to_string_pretty(&fin).unwrap()).unwrap();
     }
     let summary = json!({
@@ -740,6 +809,19 @@ fn main() {
         "evaluations": cache.len(),
         "elapsed_s": t0.elapsed().as_secs_f64(),
     });
+    let mut summary = summary;
+    // readout geometry (research/readout_redesign.md): reconstruction ranges (raster, from the readout start), echo
+    for (key, val) in [
+        ("leg", json!(format!("{leg:?}"))),
+        ("recon", json!(sp.recon)),
+        ("i_echo", json!(sp.i_echo)),
+        ("t_recon", json!(sp.t_recon())),
+        ("t_recon_samples", json!(sp.t_recon_samples())),
+        ("te_echo", json!(tr.te() + sp.i_echo as f64 * tr.dt)),
+        ("readout_gamma_m1_end", json!(hasty_seq::GAMMA * hasty_seq::norm(&sp.m1_end()))),
+    ] {
+        summary["best"][key] = val;
+    }
     std::fs::write(out.join("summary.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
     if check {
         write_check(&out, &p, &best);

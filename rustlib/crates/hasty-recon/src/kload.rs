@@ -165,6 +165,43 @@ impl SimData {
         }
     }
 
+    /// Whitened data energy per ADC sample index: the mean over `ros` of Σ_c |(W y)_c|² (W = `w`, Ψ^{-1/2}), not
+    /// normalised — in the units of the noise σ² per whitened coil, for noise-referenced segment weights
+    /// (`hasty_nufft::snr_time_weights`). Raw data as [`readout_raw`](Self::readout_raw) returns them (lazy files:
+    /// before the noise is added).
+    pub fn adc_energy_whitened(&self, ros: &[usize], w: &[Vec<f64>]) -> Result<Vec<f64>, Error> {
+        use rayon::prelude::*;
+        let (na, nc) = (self.na, self.nc);
+        let parts: Vec<Vec<f64>> = ros
+            .par_chunks(16)
+            .map(|chunk| -> Result<Vec<f64>, Error> {
+                let mut e = vec![0.0f64; na];
+                let mut buf = vec![C32::new(0.0, 0.0); na * nc];
+                for &ro in chunk {
+                    self.readout_raw(ro, &mut buf)?;
+                    for n in 0..na {
+                        let src = &buf[n * nc..(n + 1) * nc];
+                        for c in 0..nc {
+                            let (mut re, mut im) = (0.0f64, 0.0f64);
+                            for c2 in 0..nc {
+                                re += w[c][c2] * src[c2].re as f64;
+                                im += w[c][c2] * src[c2].im as f64;
+                            }
+                            e[n] += re * re + im * im;
+                        }
+                    }
+                }
+                Ok(e)
+            })
+            .collect::<Result<_, _>>()?;
+        let mut e = vec![0.0f64; na];
+        for p in &parts {
+            e.iter_mut().zip(p).for_each(|(a, b)| *a += b);
+        }
+        let k = ros.len().max(1) as f64;
+        Ok(e.into_iter().map(|x| x / k).collect())
+    }
+
     /// Data energy per ADC sample index, Σ over `ros` and coils of |y|², normalised to a maximum of 1 (raw data, memory
     /// or file). For a centre-out readout it falls steeply with the readout time: the weight of each readout time in the
     /// data-norm model error (`hasty_nufft::build_segments_svd_weighted`, time weights).

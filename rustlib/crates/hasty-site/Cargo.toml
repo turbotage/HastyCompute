@@ -1,0 +1,8 @@
+[package]
+name = "hasty-site"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Runtime locations (repository, data, tools, python, caches) resolved at run time, for portable deployment"
+
+[dependencies]

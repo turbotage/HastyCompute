@@ -28,6 +28,12 @@ venc = info["venc"]
 vlim = 0.75 * venc if "venc_range" not in info else 0.5 * max(info["venc_range"])
 truth = np.load(sim / "truth_vel_logical.npy")  # [x,y,z,3,nf]
 frac = np.load(sim / "truth_lumen_fraction.npy")
+# reconstruction grid other than the native one (--grid-scale, pyramid levels): the truth at the reconstruction
+# voxels' centres (same FOV; nearest native voxel of u = (i - d//2) * FOV/d, as recon_p2np's sample_log does trilinearly)
+rdims, ndims = tuple(info.get("dims", frac.shape)), tuple(info.get("native_dims", frac.shape))
+if rdims != ndims:
+    gi = np.ix_(*[np.clip(np.round((np.arange(d) - d // 2) * (n / d) + n // 2).astype(int), 0, n - 1) for d, n in zip(rdims, ndims)])
+    truth, frac = truth[gi], frac[gi]
 lum = frac > 0.9
 nf = truth.shape[-1]
 zs = int(np.argmax(lum.sum(axis=(0, 1))))  # axial slice with the most lumen

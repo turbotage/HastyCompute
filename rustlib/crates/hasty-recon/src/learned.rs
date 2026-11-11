@@ -39,7 +39,7 @@ pub struct LearnedPrior {
 }
 
 pub fn default_plugin() -> PathBuf {
-    std::env::var_os("HASTY_DENOISE_PLUGIN").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/torch/release/libhasty_denoise_torch.so"))
+    std::env::var_os("HASTY_DENOISE_PLUGIN").map(PathBuf::from).unwrap_or_else(|| hasty_site::target().join("torch/release/libhasty_denoise_torch.so"))
 }
 
 fn dl_err() -> String {

@@ -1,0 +1,40 @@
+10:09:40 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+10:09:42 g_eff water: 6510064 sources -> 1794544 voxels
+10:09:42 g_eff fat: 1820856 sources -> 711580 voxels
+10:09:55 v2 T1: ['omission'] (12s) omission 6.34
+10:10:05 v2 T1: ['svdn_L10'] (10s) svdn_L10 0.0441
+10:10:44 v2 T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (39s) omission 0.103, deviation_omitted 0.0246, taylor2_residual 0.000159
+10:11:08 v2 T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (16s) omission 3.71, one_map_mean_vs_frame 0.509, one_map_frame0_vs_frame 0.91
+10:11:20 v2 T3: ['joint_svdn_L14'] (12s) joint_svdn_L14 0.0383
+10:12:22 v2 T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (47s) omission 0.196, table_residual 0.314, eff_complex_residual 0.0594, eff_real_residual 0.127
+10:12:22 done
+10:12:25 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+10:12:29 g_eff water: 6510064 sources -> 1794544 voxels
+10:12:30 g_eff fat: 1820856 sources -> 711580 voxels
+10:12:31 v2 T1: ['omission'] (0s) omission 0.299
+10:12:32 v2 T1: ['svdn_L10'] (0s) svdn_L10 0.0135
+10:12:32 v2 T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (1s) omission 0.0134, deviation_omitted 0.00315, taylor2_residual 1.04e-05
+10:12:42 v2 T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (2s) omission 0.548, one_map_mean_vs_frame 0.106, one_map_frame0_vs_frame 0.214
+10:12:44 v2 T3: ['joint_svdn_L14'] (2s) joint_svdn_L14 0.00955
+10:13:04 v2 T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (4s) omission 0.0395, table_residual 0.0359, eff_complex_residual 0.0115, eff_real_residual 0.0202
+10:13:04 done
+10:13:08 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+10:13:17 g_eff water: 6510064 sources -> 1794544 voxels
+10:13:17 g_eff fat: 1820856 sources -> 711580 voxels
+10:13:19 v2 T1: ['omission'] (1s) omission 0.857
+10:13:20 v2 T1: ['svdn_L10'] (1s) svdn_L10 0.0292
+10:13:22 v2 T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (2s) omission 0.019, deviation_omitted 0.00438, taylor2_residual 1.28e-05
+10:13:30 v2 T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (1s) omission 0.448, one_map_mean_vs_frame 0.219, one_map_frame0_vs_frame 0.446
+10:13:31 v2 T3: ['joint_svdn_L14'] (1s) joint_svdn_L14 0.0169
+10:13:40 v2 T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (3s) omission 0.0521, table_residual 0.0414, eff_complex_residual 0.0134, eff_real_residual 0.0252
+10:13:40 done
+10:13:44 object: 2364426 voxels (support dilated 1), 32 coils, sigma 39.98, lumen>0 170322
+10:13:52 g_eff water: 6510064 sources -> 1794544 voxels
+10:13:52 g_eff fat: 1820856 sources -> 711580 voxels
+10:13:56 v2 T1: ['omission'] (3s) omission 4.22
+10:13:58 v2 T1: ['svdn_L10'] (2s) svdn_L10 0.0283
+10:14:07 v2 T2: ['omission', 'deviation_omitted', 'taylor2_residual'] (8s) omission 0.0826, deviation_omitted 0.0197, taylor2_residual 0.000125
+10:14:17 v2 T3: ['omission', 'one_map_mean_vs_frame', 'one_map_frame0_vs_frame'] (3s) omission 1.73, one_map_mean_vs_frame 0.271, one_map_frame0_vs_frame 0.52
+10:14:19 v2 T3: ['joint_svdn_L14'] (2s) joint_svdn_L14 0.025
+10:14:36 v2 T4: ['omission', 'table_residual', 'eff_complex_residual', 'eff_real_residual'] (10s) omission 0.127, table_residual 0.257, eff_complex_residual 0.0397, eff_real_residual 0.0778
+10:14:36 done

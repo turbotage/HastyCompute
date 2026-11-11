@@ -1,0 +1,15 @@
+shots 8000, k0 1.5, lam 1e-05: sampled locations 983 of 4096, density centre / median over sampled 614
+minimiser: ADMM runs agree to 8.6e-14 (147s); error to truth 0.089
+ista {'final_rel_dist': np.float64(0.34204771634622944), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+fista {'final_rel_dist': np.float64(0.005394001618093518), 'apps_to_1e-1': 415, 'apps_to_1e-2': 1091, 'apps_to_1e-3': None}
+pnp_fixed_a1 {'final_rel_dist': np.float64(0.34204771634622944), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+pnp_fixed_a0.5 {'final_rel_dist': np.float64(0.393434249279397), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+admm_pcg_rho0.003_in3 {'final_rel_dist': np.float64(0.002271778535594155), 'apps_to_1e-1': 264, 'apps_to_1e-2': 932, 'apps_to_1e-3': None}
+admm_pcg_rho0.003_in8 {'final_rel_dist': np.float64(0.02354731092530463), 'apps_to_1e-1': 603, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+admm_pcg_rho0.001_in3 {'final_rel_dist': np.float64(0.00022992491846830944), 'apps_to_1e-1': 200, 'apps_to_1e-2': 548, 'apps_to_1e-3': 1100}
+admm_pcg_rho0.001_in8 {'final_rel_dist': np.float64(0.000581952772541396), 'apps_to_1e-1': 162, 'apps_to_1e-2': 648, 'apps_to_1e-3': 1323}
+admm_pcg_rho0.0003_in3 {'final_rel_dist': np.float64(0.00018049057338382022), 'apps_to_1e-1': 304, 'apps_to_1e-2': 696, 'apps_to_1e-3': 1172}
+admm_pcg_rho0.0003_in8 {'final_rel_dist': np.float64(3.941493723398975e-06), 'apps_to_1e-1': 153, 'apps_to_1e-2': 288, 'apps_to_1e-3': 504}
+fista_dcw {'final_rel_dist': np.float64(0.7472675342259673), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+error_to_truth {'x_star': 0.08891678709394465, 'pnp_fixed_a1': 0.3690881159996414, 'pnp_fixed_a0.5': 0.4182245522302696, 'fista_dcw': 0.7426402074130075}
+pnp_fixed_alpha_dependence 0.09681537747816028

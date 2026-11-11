@@ -1298,3 +1298,119 @@ Capabilities that existed only there (paths at `232eabf`), in case one is needed
 
 Also removed: one-off diagnostics `hasty-bench` bins `angcheck`, `cgcheck`, `coilcheck`, `toepcheck`, `kcover`; tools
 `phantom/blend_explore{,2,3}.py`, `phantom/label_figs.py`, `raclette/inspect_subject.py`, `seq/compare_resaware.py`.
+
+## Clusters and rented nodes: portable multi-GPU (2026-11-10)
+
+Plan in `research/plan_cluster.md`. Targets: Kebnekaise (4× H100, 8× A40, 6× L40s nodes), Arrhenius (4× GH200,
+aarch64), rented 8× RTX 5090 nodes, the local 4090. One process per node, a worker thread per GPU pulling independent
+units (recon sets, sim chunks) from a queue; runtime paths from `HASTY_*` env / site profiles; amd64 + arm64 OCI image
+(Apptainer on clusters); Slurm preemption via SIGUSR1. Work packages C0 (portability hygiene, timing) → C1 (device
+pool, `nodecheck`) → C2 (multi-GPU sim) → C3 (multi-GPU recon) → C4 (container, site profiles, Slurm) → C5 (first node).
+
+## Recon audit of the realistic 10-min scan (2026-11-10)
+
+The 2 mm lock_2mm runs (llr_cold, llr, lock, lock_dfw) all stayed at velocity rel RMSE ≈ 1.0 (0.42–0.46 m/s), getting
+worse with iterations. Audit (CPU diagnostics on the saved arrays: `warm.npy`, `vel_*.npy`, truth):
+- Data fit: ½‖Ax − y‖² = 1.4e15 at iteration 10 against ½‖y‖² ≈ 1.3e16 and a noise floor ≈ 5e12, i.e.
+  ‖Ax − y‖/‖y‖ ≈ 0.33 (noise 2 %). The recon temporal variation (std 0.26 m/s) correlates 0.10 with the truth's; no
+  frame shift helps (binning is fine).
+- Causes, in order of size:
+  1. **Fat not modelled**: the runs had no `--fat-fraction`; fat is 47 % of the PD (six-peak spectrum, ≈ 3.5 cycles
+     over the 7.98 ms readout). §-fat budget above: 54 % forward-model error unmodelled.
+  2. **Plain-model warm start**: PCGLS through the SENSE operator (no B0: the field spans 10.4 phase cycles over the
+     readout, no fat, R2*, concomitant, GNL) → coherent haze (|x| rms in air 2–3× the body median, encode correlation
+     0.998), velocity slope 0.57 against the time-averaged truth.
+  3. **One ZMSHR1 secant for all 280 sets**: P²nP's ZMSHR1 is per image; the global pair gives one step scale (set by
+     the stiffest set) and one curvature direction per iteration for 1.2e9 unknowns. With 10 iterations the PnP fixed
+     point balance (LLR shrinkage vs α λ_min-scaled data steps; paper Prop. 6.1(4)) stays far from the data.
+  4. R2* off in the recon (lungs: short T2*).
+- Not a cause: z-slab truncation (slab 175.5 mm inside the 228 mm FOV, TBW 6), unwrap failures (0.3 %), coil SNR
+  (error 0.24 → 0.16 m/s from the lowest to the highest Σ|S|² quartile). The yarn density is flat over ≈ 90 % of
+  the k-radius (innermost shell ≈ 400× the edge), not the "10⁶" quoted before.
+- Fixes (additive):
+  - `Precond::Zmshr1Set` / `Zmshr1MSet` (`--precond zmshr1s|zmshr1ms`): one secant pair, (a_t, τ_t) and rank-one
+    term per set (block-diagonal; the data term is separable over sets). Device + host solvers; test `host_state`
+    (host = device 4e-6, exact resume).
+  - Shared circulants (`P2np::with_circ_map`, `recon_p2np --circ-share encode|set`, default encode): one circulant
+    per encode from the pooled samples of its frames (7 × 133 MB instead of 280).
+  - Physics-model warm start (`hoststack::pooled_pcg_host`, `recon_p2np --warm-full n`): pooled PCG per encode
+    through the full objective (N p = ∇f(p) − ∇f(0), one gradient pass over all sets per iteration, per-encode
+    circulant when built, raw checkpoints). Test `host_state`: normal-equation residual 1.2e-4, resume 8e-5.
+- Runs: queue6 stopped (14:15). `ph0001/fix_2mm/run.sh`: zmshr1s and zmshr1ms, `--fat-fraction truth --fat-model
+  joint --r2s truth --warm 20 --warm-full 10 --iters 20`.
+
+### Audit follow-ups merged (2026-11-10 evening; built and tested, no reconstruction runs yet)
+
+**Grouped-set operator.**
+- `SegNufft::{forward,adjoint,forward_residual,forward_fat,adjoint_fat}_group`: one FFT per (segment, coil batch) per group.
+- `SetOp::*_group` (with default member loops), `P2np::gradient_groups_host`, and `pooled_pcg_host` now grouped
+  (`--pooled-grad auto|grouped|replicate`).
+- `--tpyramid "RxC:n,…"`.
+- GPU test `grouped_sets`: ≤ 1e-5 against member-wise.
+
+**Air map.**
+- `hasty_recon::airmap` plus the offline bin `airmap`.
+- `--air auto[:IT0[:EVERY]]|fixed`, `--air-init`, `--air-margin`, `--air-tau`.
+- Safe, 0 false air on the real iterates. It marks nothing while the haze is brighter than the weakest tissue; a
+  coarse pyramid level seeds it (42 % recall, 0 false air).
+
+**Spatial pyramid.**
+- `hasty_recon::pyramid`: `--kcrop [FRAC][:prefix]` (store filtered on read, never rewritten), `--init-from`
+  (band-limited resampling), `--truth-sampling box`.
+- Fat-fraction resampling; support and mask dilation in mm.
+- `tools/recon/pyramid.sh`; `HASTY_KSTORE_REUSE_ONLY`.
+
+**Coil maps.** `--coil-mask auto|none|support`, where auto = none for truth maps (25k tissue voxels used to fall outside
+the old mask). `mask_fit.npy` holds the fit region.
+
+**Segment rule and basis** (research/segment_basis.md).
+- `--nseg auto:noise[:R]`: the model error in noise units.
+- `--seg-basis svdn|cheb`, `--seg-weight energy`, `--b0-absorb 0|1|2`.
+- CPU result on ph0001:
+
+  | | water L | water + fat L (one map) | per-frame fat L (uniform nodes, energy weights) |
+  |---|---|---|---|
+  | old rule | 17 | 22 | — |
+  | new rule | 9 | 12 | 15 |
+
+- Degree-1 B0 absorption is exact and free; degree 2 through the Taylor path is unusable.
+- GPU timing (`segbudget`) is not run yet (the user: not now).
+- Per-frame fat with svdn needs separate water/fat diagonals in pad/crop (later).
+
+**Readout redesign** (research/readout_redesign.md; design data/hasty/seq/flow_thorax_v2, not simulated).
+- Today 87 % of the data energy sits in the first 2 ms of the ADC and 12.9 % in the last 2 ms (the out-and-back
+  return).
+- v2: centre-out 9.5 ms + an M1-nulled rewinder with navigator samples. A straight rewind breaks RF spoiling for
+  flowing blood (velocity errors up to 42 mm/s).
+- 15–25× lower B0/T2*/flow-model error sensitivity; segment count unchanged or +1; 20 % fewer readouts per 10 min.
+- `seqdesign --leg rewind|rewind-m1|asym|double|inout`, `recon_mask.npy`.
+- User decisions (2026-11-10): 9.5 ms window (v2) default for the later resim; rewinder samples kept as navigator;
+  per-rotation FlowComp tail not now.
+- v2 resim settings (2026-11-11): flip 15° (blood Ernst post-contrast; spoiling checked, data/hasty/seq/studies/flip_2026-11-11),
+  `--girf resonance` (full illustrative chain); recon uses an *estimated* GIRF. Prerequisite: pass the recon window
+  (`best.recon`) through FlowSchedule meta so the loader drops the navigator samples.
+
+## Readout physics budget + GIRF sensitivity (2026-11-11)
+
+- Budget of 12 physics terms, current vs v2 readout, noise-referenced R: research/readout_physics_budget.md
+  (outputs data/hasty/phantom/factory_arms/ph0001/physics_budget_2026-11-10/). Model: fat per frame (union svdn),
+  effective signal-weighted voxel frequency + R2*, GIRF. Ignore: M1⊥, tissue motion, voxel basis. Readout warp only
+  removes 20–30 % of in-readout displacement at 2 mm; opt-in, not wired into the recon. Unconfirmed: coronary velocity
+  bias (ideal LSQ) worse for v2 than the current readout → reconstruct both after the resim.
+- Merged (additive, `.agents/phys.patch`): hasty-nufft `segwarp.rs` (cardinal form, Lanczos stencil warp CPU/GPU,
+  `SegNufft::set_warp`), `build_segments_svd_fat_union`, recon_p2np `--seg-basis svdn-union`; tests seg_warp_cpu (4),
+  seg_warp_gpu (4 + 1 ignored bench), seg_fat_union_cpu (1) pass in the main tree with segnufft / seg_rule_cpu; release
+  rebuilt 2026-11-11.
+- GIRF sensitivity (research/girf_sensitivity.md, data/hasty/seq/studies/girf_sensitivity_2026-11-11/): resonances
+  under the v2 spectrum (0.4–1.05 kHz) dominate; 200 ms ADC window, alternating slice-select polarity, recon delay /
+  resonance refit, resonance-avoiding readout. Played trajectory needs ~10 previous TRs of history (PlayedStream).
+
+## Recon trial + diagnostics (2026-11-11), research/recon_diag_2026-11-11.md
+
+- Pyramid with the audit follow-ups ran (pyr_2mm): L 14/15/16 vs 22 before; 8 mm ≈ 20 s/it, 4 mm ≈ 90 s/it.
+- κ does not matter (0 … 1 identical f); started from the truth, the 8 mm level drifts back to the same error → coarse
+  model error; 2 mm residual 6.5× noise vs ≈ 2 expected.
+- **Velocity decoder bug fixed**: FlowDecoder was ±1.5 m/s (first stage) for the ±3 m/s coprime design → systolic
+  metrics inflated (0.80 m/s on noise-free truth). `FlowDecoder::with_alias_search`, `recon_p2np --vdecode
+  auto|hier|ml[:MARGIN]` (auto = ml:1.0 for coprime / dual-VENC designs); tests in flow.rs.
+- `recon_p2np --init-truth` (diagnostic), `pyramid.sh {prev_air}`.

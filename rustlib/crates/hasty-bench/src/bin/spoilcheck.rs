@@ -3,12 +3,12 @@
 //! encodes per rotation) for static tissue and plug-flowing blood. Reports the steady-state signal relative to the ideal
 //! (Ernst) value, its TR-to-TR fluctuation, and for flowing blood the velocity error of every encode pair (mean complex
 //! echo per encode). Writes <out>/spoilcheck.json and <out>/traces.npy; figures: tools/seq/plot_spoilcheck.py <out>.
-//!   spoilcheck <out> [--t-adc 8e-3] [--res 2e-3] [--fov 0.32] [--flip 10] [--n-iso 16384]
+//!   spoilcheck <out> [--t-adc 8e-3] [--res 2e-3] [--fov 0.32] [--flip 10] [--n-iso 16384] [--blood-t1 1.7] [--blood-t2 0.2]
 use std::path::PathBuf;
 
 use hasty_phantom::volume::write_npy;
 use hasty_seq::encode::{DualLayout, Scheme};
-use hasty_seq::optim::{Problem, Shape};
+use hasty_seq::optim::{Leg, Problem, Shape};
 use hasty_seq::pns::SafeHw;
 use hasty_seq::spoil::{ernst, simulate, SpoilSim, Tissue, TrMoments};
 use hasty_seq::system::System;
@@ -30,6 +30,9 @@ fn main() {
     let vsweep: Option<String> = take("--vsweep");
     // voxel centre distance from isocentre (m), along a fixed oblique direction
     let off: f64 = take("--offset").map(|s| s.parse().unwrap()).unwrap_or(0.0);
+    // --blood-t1 / --blood-t2 (s): the blood of the velocity sweep and of the tissue table (default pre-contrast 1.7 / 0.2)
+    let blood_t1: f64 = take("--blood-t1").map(|s| s.parse().unwrap()).unwrap_or(1.7);
+    let blood_t2: f64 = take("--blood-t2").map(|s| s.parse().unwrap()).unwrap_or(0.2);
     let offset = { let d = [0.6f64, 0.3, 0.74]; let n = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt(); d.map(|x| x / n * off) };
     let out = PathBuf::from(&args[0]);
     std::fs::create_dir_all(&out).unwrap();
@@ -57,6 +60,7 @@ fn main() {
         res_band: vec![],
         curve_pts: 60_000,
         ret: Some(0.0),
+        leg: Leg::Default,
     };
     let zk = |c: f64| Spoil::Physical([0.0, 0.0, c / (GAMMA_BAR * res)]);
     let rad = |c: f64| Spoil::Radial(c / (GAMMA_BAR * res));
@@ -80,14 +84,31 @@ fn main() {
         ("Dp = D, encode order cycled per group", None, rad(2.0), false, false, true),
         ("Ep = E, encode order cycled per group", None, rad(4.0), false, false, true),
         ("G out-and-back + per-encode block: z spoil 2 cyc/vox + equal TR M1 (FlowComp)", Some(0.0), Spoil::FlowComp([0.0, 0.0, 2.0 / (GAMMA_BAR * res)]), false, false, false),
+        // readout redesign (research/readout_redesign.md): centre-out + rewind / asymmetric return, same FlowComp block
+        ("H centre-out + rewind (navigator) + per-encode FlowComp block", Some(0.0), Spoil::FlowComp([0.0, 0.0, 2.0 / (GAMMA_BAR * res)]), false, false, false),
+        ("J centre-out + M1-nulled rewind (navigator) + per-encode FlowComp block", Some(0.0), Spoil::FlowComp([0.0, 0.0, 2.0 / (GAMMA_BAR * res)]), false, false, false),
+        ("I asymmetric out (yarn) / fast return (4× spokes) to 0.5 kmax + rewind + FlowComp", Some(0.0), Spoil::FlowComp([0.0, 0.0, 2.0 / (GAMMA_BAR * res)]), false, false, false),
     ];
+    // the readout geometry of each variant (by its first letter)
+    let leg_of = |name: &str| match name.split(' ').next() {
+        Some("H") => Leg::Rewind,
+        Some("J") => Leg::RewindM1,
+        Some("I") => Leg::Asym { back: 4.0, ret: 0.5, null_m1: false },
+        _ => Leg::Default,
+    };
     let shape = Shape { kg0: 0.0, wobble: 0.0, wobble_freq: 2.0 };
     let pl = plan(scheme, venc);
     let mut designs = vec![];
     for (vi, (name, ret, spoil, m1eq, ungroup)) in variants.iter().map(|v| (v.0, v.1, v.2, v.3, v.4)).enumerate() {
         let cyc = variants[vi].5;
         let (ret, spoil, m1eq, ungroup) = (&ret, &spoil, &m1eq, &ungroup);
-        let p = Problem { ret: *ret, spoil: *spoil, ..base.clone() };
+        // --vsweep: only the selected variants are designed
+        if let Some(sel) = &vsweep {
+            if !sel.split(',').any(|k| name.starts_with(&format!("{k} "))) {
+                continue;
+            }
+        }
+        let p = Problem { ret: *ret, spoil: *spoil, leg: leg_of(name), ..base.clone() };
         let rots_pns = p.pns_rotations();
         let e = p.evaluate(&shape, &rots_pns).expect("design");
         let n = e.n_eff.ceil() as usize;
@@ -135,7 +156,7 @@ fn main() {
     }
     if let Some(sel) = &vsweep {
         let pick: Vec<usize> = designs.iter().enumerate().filter(|(_, d)| sel.split(',').any(|k| d.0.starts_with(&format!("{k} ")))).map(|(i, _)| i).collect();
-        let blood = Tissue { t1: 1.7, t2: 0.2 };
+        let blood = Tissue { t1: blood_t1, t2: blood_t2 };
         let dirs = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.577, 0.577, 0.577], [0.707, -0.5, 0.5]];
         let mags = [0.05, 0.15, 0.3, 0.5, 0.7, 0.9, 1.2, 1.6, 2.0, 2.5];
         let mut jobs = vec![];
@@ -177,7 +198,7 @@ fn main() {
             (mean / ideal, sd / mean, verr)
         });
         let mut rows = vec![];
-        println!("\nvelocity sweep (blood T1 1.7 s / T2 200 ms, {} velocities × 2 RF increments per variant)", dirs.len() * mags.len());
+        println!("\nvelocity sweep (blood T1 {blood_t1} s / T2 {blood_t2} s, flip {:.1}°, {} velocities × 2 RF increments per variant)", flip.to_degrees(), dirs.len() * mags.len());
         println!(" variant | |S|/ideal min–max | fluct median / max | velocity error median / 90% / max (mm/s)");
         for &d in &pick {
             let r: Vec<_> = jobs.iter().zip(&res_v).filter(|(j, _)| j.0 == d).collect();
@@ -196,7 +217,7 @@ fn main() {
         std::fs::write(out.join("vsweep.json"), serde_json::to_string_pretty(&rows).unwrap()).unwrap();
         return;
     }
-    let tissues = [("myocardium", Tissue { t1: 1.45, t2: 0.045 }, [0.0; 3]), ("blood static", Tissue { t1: 1.7, t2: 0.2 }, [0.0; 3]), ("blood 0.71 m/s", Tissue { t1: 1.7, t2: 0.2 }, [0.5, 0.3, -0.4])];
+    let tissues = [("myocardium", Tissue { t1: 1.45, t2: 0.045 }, [0.0; 3]), ("blood static", Tissue { t1: blood_t1, t2: blood_t2 }, [0.0; 3]), ("blood 0.71 m/s", Tissue { t1: blood_t1, t2: blood_t2 }, [0.5, 0.3, -0.4])];
     let incs = [117.0f64, 50.0];
     let mut jobs = vec![];
     for d in 0..designs.len() {

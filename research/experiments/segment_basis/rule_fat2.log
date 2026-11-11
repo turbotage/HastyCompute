@@ -1,0 +1,7 @@
+data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: [254, 144, 114], 32 coils, 3990 ADC samples; physics grid (GNL-aware) 27s
+coil maps: 31 of 32 virtual coils (fixed 31), 99.801 % energy kept; σ²/Σσ²: [1.2e-1, 1.0e-1, 8.8e-2, 6.7e-2, 6.5e-2, 6.3e-2, 6.0e-2, 4.8e-2, 3.6e-2, 3.6e-2, 3.2e-2, 3.1e-2, 2.9e-2, 2.5e-2, 2.3e-2, 1.9e-2, 1.8e-2, 1.6e-2, 1.5e-2, 1.5e-2, 1.4e-2, 1.2e-2, 1.1e-2, 1.0e-2, 8.4e-3, 7.2e-3, 6.1e-3, 5.7e-3, 3.9e-3, 3.1e-3, 2.6e-3, 2.0e-3]
+set: encode 0, frame 0: 190 readouts (379 of the frame), 758100 samples, 31 virtual coils; noise σ 39.98 per whitened coil
+white floor E_vol / (C σ²) = 37.7
+SNR per ADC sample: first 1.595e5, mid 4.110e1, last 2.394e4; time grid 96 samples
+abs 0 fixed_e: predicted R(L) 2:6.754 3:5.972 4:5.492 5:4.247 6:3.797 7:3.845 8:3.557 9:1.993 10:1.224 11:0.853 12:0.572 14:0.193 16:0.069 18:0.026 20:0.013 22:0.008 24:0.006 26:0.004 | L for R ≤ 0.1 / 0.2 / 0.3: Some(15) / Some(14) / Some(14) (375s)
+abs 1 fixed_e: predicted R(L) 2:6.642 3:5.706 4:5.392 5:4.112 6:3.820 7:3.851 8:3.443 9:2.108 10:1.242 11:0.829 12:0.552 14:0.191 16:0.069 18:0.027 20:0.015 22:0.009 24:0.007 26:0.005 | L for R ≤ 0.1 / 0.2 / 0.3: Some(16) / Some(14) / Some(14) (348s)

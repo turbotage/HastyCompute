@@ -1,0 +1,12 @@
+shots 8000, k0 1.5, lam 1e-05: sampled locations 983 of 4096, density centre / median over sampled 614
+minimiser: ADMM runs agree to 2.0e-02 (169s); error to truth 0.089
+ista {'final_rel_dist': np.float64(0.34202672661555383), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+fista {'final_rel_dist': np.float64(0.005370315342645417), 'apps_to_1e-1': 415, 'apps_to_1e-2': 1093, 'apps_to_1e-3': None}
+pnp_fixed_a1 {'final_rel_dist': np.float64(0.34202672661555383), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+pnp_fixed_a0.5 {'final_rel_dist': np.float64(0.39341660971184145), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+admm_pcg_rho0.05_in5 {'final_rel_dist': np.float64(0.2506341611007361), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+admm_pcg_rho0.02_in5 {'final_rel_dist': np.float64(0.16367197675048425), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+admm_pcg_rho0.05_in10 {'final_rel_dist': np.float64(0.2983129462518838), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+fista_dcw {'final_rel_dist': np.float64(0.7472596862080314), 'apps_to_1e-1': None, 'apps_to_1e-2': None, 'apps_to_1e-3': None}
+error_to_truth {'x_star': 0.08894537109533242, 'pnp_fixed_a1': 0.3690881159996414, 'pnp_fixed_a0.5': 0.4182245522302696, 'fista_dcw': 0.7426402074130075}
+pnp_fixed_alpha_dependence 0.09681620669890238

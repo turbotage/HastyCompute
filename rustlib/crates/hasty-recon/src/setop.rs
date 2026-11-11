@@ -125,6 +125,57 @@ pub trait SetOp {
         }
         Ok(())
     }
+
+    /// Sets sharing one image x (temporal pooling: all frames of an encode, or the frames of one group of a coarse
+    /// temporal level): y_m = E_{t_m} x for every member t_m of `members` (x of the members' common `len_x`, y_m of
+    /// `len_y(t_m)`). Default: one `forward` per member; operators that share work over the members override it
+    /// (`SegSets`: one grid FFT per segment and coil batch for the whole group instead of one per member).
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert_eq!(members.len(), ys.len(), "forward_group: one output per member");
+        for (&t, y) in members.iter().zip(ys.iter_mut()) {
+            self.forward(st, t, x, y)?;
+        }
+        Ok(())
+    }
+
+    /// r_m = E_{t_m} x − y_m for every member (`ys` the members' data). Default: `forward_residual` per member.
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert!(members.len() == ys.len() && members.len() == rs.len(), "forward_residual_group: one data and one output per member");
+        for ((&t, y), r) in members.iter().zip(ys).zip(rs.iter_mut()) {
+            self.forward_residual(st, t, x, y, r)?;
+        }
+        Ok(())
+    }
+
+    /// x = Σ_m E_{t_m}ᴴ y_m (the adjoint of [`forward_group`](Self::forward_group)). Default: one `adjoint` per
+    /// member, summed.
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        self.adjoint(st, members[0], ys[0], x)?;
+        if members.len() > 1 {
+            let one = num_complex::Complex64::new(1.0, 0.0);
+            let mut tmp = st.alloc_zeros::<C32>(x.len())?;
+            for (&t, y) in members.iter().zip(ys).skip(1) {
+                self.adjoint(st, t, y, &mut tmp)?;
+                self.kernels().axpby(st, one, &tmp, one, x)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// r_m −= y_m for every member (group residual from a group forward)
+fn subtract_data(k: &Kernels, st: &Arc<CudaStream>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+    assert_eq!(ys.len(), rs.len(), "one data per output");
+    for (y, r) in ys.iter().zip(rs.iter_mut()) {
+        k.axpby(st, num_complex::Complex64::new(-1.0, 0.0), y, num_complex::Complex64::new(1.0, 0.0), r)?;
+    }
+    Ok(())
+}
+
+/// the entries `idx` (ascending positions) of `ys`
+fn pick_mut<'a>(ys: &'a mut [&mut CudaSlice<C32>], idx: &[usize]) -> Vec<&'a mut CudaSlice<C32>> {
+    ys.iter_mut().enumerate().filter(|(j, _)| idx.binary_search(j).is_ok()).map(|(_, y)| &mut **y).collect()
 }
 
 /// One set of a stack as a [`LinOp`].
@@ -312,6 +363,56 @@ impl SetOp for SegSets {
             _ => Ok(self.eng.adjoint_multi(st, &self.segs[i], &self.pts[t], y, ws, xs)?),
         }
     }
+    /// one grid FFT per (segment, coil batch) for all members of a segment table (`SegNufft::forward_group`);
+    /// members with different tables (encodes) form separate sub-groups
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert_eq!(members.len(), ys.len(), "forward_group: one output per member");
+        for (si, idx) in self.by_table(members) {
+            let pts: Vec<&SegPoints> = idx.iter().map(|&j| &self.pts[members[j]]).collect();
+            let mut out = pick_mut(ys, &idx);
+            match &mut self.surrogate {
+                Some(s) if s.on => s.eng.forward_group(st, &s.segs[si], &pts, x, &mut out)?,
+                _ => self.eng.forward_group(st, &self.segs[si], &pts, x, &mut out)?,
+            }
+        }
+        Ok(())
+    }
+    /// fused group residual (`SegNufft::forward_residual_group`)
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert!(members.len() == ys.len() && members.len() == rs.len(), "forward_residual_group: one data and one output per member");
+        for (si, idx) in self.by_table(members) {
+            let pts: Vec<&SegPoints> = idx.iter().map(|&j| &self.pts[members[j]]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            let mut out = pick_mut(rs, &idx);
+            match &mut self.surrogate {
+                Some(s) if s.on => s.eng.forward_residual_group(st, &s.segs[si], &pts, x, &d, &mut out)?,
+                _ => self.eng.forward_residual_group(st, &self.segs[si], &pts, x, &d, &mut out)?,
+            }
+        }
+        Ok(())
+    }
+    /// one inverse grid FFT per (segment, coil batch) for all members of a segment table (`SegNufft::adjoint_group`)
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        let mut tmp: Option<CudaSlice<C32>> = None;
+        for (k, (si, idx)) in self.by_table(members).into_iter().enumerate() {
+            let pts: Vec<&SegPoints> = idx.iter().map(|&j| &self.pts[members[j]]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            if k > 0 && tmp.is_none() {
+                tmp = Some(st.alloc_zeros::<C32>(x.len())?);
+            }
+            let out: &mut CudaSlice<C32> = if k == 0 { &mut *x } else { tmp.as_mut().unwrap() };
+            match &mut self.surrogate {
+                Some(s) if s.on => s.eng.adjoint_group(st, &s.segs[si], &pts, &d, out)?,
+                _ => self.eng.adjoint_group(st, &self.segs[si], &pts, &d, out)?,
+            }
+            if k > 0 {
+                let one = num_complex::Complex64::new(1.0, 0.0);
+                self.kern.axpby(st, one, tmp.as_ref().unwrap(), one, x)?;
+            }
+        }
+        Ok(())
+    }
     fn table_bytes(&self) -> (usize, usize) {
         (self.pts.iter().map(|p| p.table_bytes()).sum(), self.pts.iter().map(|p| p.table_bytes()).max().unwrap_or(0))
     }
@@ -342,6 +443,20 @@ impl SetOp for SegSets {
 }
 
 impl SegSets {
+    /// positions in `members` by segment table (tables in first-appearance order, positions ascending): the
+    /// sub-groups that can share grid transforms
+    fn by_table(&self, members: &[usize]) -> Vec<(usize, Vec<usize>)> {
+        let mut v: Vec<(usize, Vec<usize>)> = Vec::new();
+        for (j, &t) in members.iter().enumerate() {
+            let s = self.seg_of_set[t];
+            match v.iter_mut().find(|(k, _)| *k == s) {
+                Some((_, p)) => p.push(j),
+                None => v.push((s, vec![j])),
+            }
+        }
+        v
+    }
+
     /// with `stream_prefetch` and host-resident tables: upload set t + 1 into the active engine's slots while the
     /// caller goes on
     fn prefetch_next(&mut self, st: &Arc<CudaStream>, t: usize) -> Result<(), Error> {
@@ -450,6 +565,33 @@ impl SetOp for WeightedSets<'_> {
         self.inner.kernels().sample_weight(st, y, &self.w[t], &mut tmp, m, nc, true, false)?;
         self.inner.adjoint_multi(st, t, &tmp, ws, xs)
     }
+    /// the inner operator's group forward, then each member's weights
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.inner.forward_group(st, members, x, ys)?;
+        for (&t, y) in members.iter().zip(ys.iter_mut()) {
+            let m = self.w[t].len();
+            let mut tmp = unsafe { st.alloc::<C32>(y.len())? };
+            st.memcpy_dtod(&**y, &mut tmp)?;
+            self.inner.kernels().sample_weight(st, &tmp, &self.w[t], y, m, y.len() / m, false, false)?;
+        }
+        Ok(())
+    }
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.forward_group(st, members, x, rs)?;
+        subtract_data(self.inner.kernels(), st, ys, rs)
+    }
+    /// each member's conjugated weights, then the inner operator's group adjoint
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        let mut wy = Vec::with_capacity(members.len());
+        for (&t, y) in members.iter().zip(ys) {
+            let m = self.w[t].len();
+            let mut z = unsafe { st.alloc::<C32>(y.len())? };
+            self.inner.kernels().sample_weight(st, y, &self.w[t], &mut z, m, y.len() / m, true, false)?;
+            wy.push(z);
+        }
+        let refs: Vec<&CudaSlice<C32>> = wy.iter().collect();
+        self.inner.adjoint_group(st, members, &refs, x)
+    }
     fn table_bytes(&self) -> (usize, usize) {
         self.inner.table_bytes()
     }
@@ -482,7 +624,13 @@ pub struct FatSets<'a> {
     pub c: Vec<CudaSlice<C32>>,
     /// both species in one multi-image call of the inner operator (default true); false: two inner applications
     pub shared_gridding: bool,
+    /// group maps of [`SetOp::forward_group`] for members with different maps: the members' map indices (sorted) and
+    /// the mean (1 − ff, ff) pair
+    group_maps: Vec<(Vec<usize>, MapPair)>,
 }
+
+/// a (1 − ff, ff) map pair of [`FatSets`]
+type MapPair = (CudaSlice<C32>, CudaSlice<C32>);
 
 impl<'a> FatSets<'a> {
     /// one fat-fraction map per voxel for every set (repeated over the frames of a time-resolved set); `c` per set
@@ -518,13 +666,40 @@ impl<'a> FatSets<'a> {
             })
             .collect::<Result<_, _>>()?;
         let c = c.iter().map(|v| st.clone_htod(v)).collect::<Result<_, _>>()?;
-        Ok(Self { inner, maps, map_of_set, c, shared_gridding: true })
+        Ok(Self { inner, maps, map_of_set, c, shared_gridding: true, group_maps: Vec::new() })
     }
 
     /// the same operator with the two species applied separately (the path before the multi-image operators)
     pub fn separate(mut self) -> Self {
         self.shared_gridding = false;
         self
+    }
+
+    /// The (1 − ff, ff) pair of a group: (false, i) = map i shared by all members, (true, i) = entry i of
+    /// `group_maps`, the members' mean (built on first use; the approximation of a pooled level whose members' fat
+    /// fractions differ, as `SegNufft::forward_fat_group`)
+    fn group_pair(&mut self, st: &Arc<CudaStream>, members: &[usize]) -> Result<(bool, usize), Error> {
+        let mut key: Vec<usize> = members.iter().map(|&t| self.map_of_set[t]).collect();
+        if key.iter().all(|&k| k == key[0]) {
+            return Ok((false, key[0]));
+        }
+        key.sort_unstable();
+        if let Some(i) = self.group_maps.iter().position(|(k, _)| *k == key) {
+            return Ok((true, i));
+        }
+        let n = self.maps[key[0]].0.len();
+        assert!(key.iter().all(|&k| self.maps[k].0.len() == n), "fat group: members' maps of different lengths");
+        let (mut ww, mut wf) = (st.alloc_zeros::<C32>(n)?, st.alloc_zeros::<C32>(n)?);
+        let (w, one) = (num_complex::Complex64::new(1.0 / key.len() as f64, 0.0), num_complex::Complex64::new(1.0, 0.0));
+        for &k in &key {
+            self.inner.kernels().axpby(st, w, &self.maps[k].0, one, &mut ww)?;
+            self.inner.kernels().axpby(st, w, &self.maps[k].1, one, &mut wf)?;
+        }
+        if self.group_maps.len() >= 64 {
+            self.group_maps.remove(0);
+        }
+        self.group_maps.push((key, (ww, wf)));
+        Ok((true, self.group_maps.len() - 1))
     }
 }
 
@@ -572,6 +747,37 @@ impl SetOp for FatJointSets {
         let s = &mut self.sets;
         Ok(s.eng.adjoint_fat(st, &s.segs[s.seg_of_set[t]], &s.pts[t], &self.maps, self.map_of_set[t], y, x)?)
     }
+    /// one grid FFT per (segment, coil batch) per segment table and ONE fat map per group: the members' map if they
+    /// share one, else their voxel-wise mean (`SegFatMaps::mean`) — exact for a shared map, an approximation of the
+    /// member-wise operator where the pooled frames' fat fractions differ
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.fat_forward_group(st, members, x, None, ys)
+    }
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.fat_forward_group(st, members, x, Some(ys), rs)
+    }
+    /// the adjoint of [`forward_group`](SetOp::forward_group) (same group map)
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        let s = &mut self.sets;
+        let mut tmp: Option<CudaSlice<C32>> = None;
+        for (k, (si, idx)) in s.by_table(members).into_iter().enumerate() {
+            let pts: Vec<&SegPoints> = idx.iter().map(|&j| &s.pts[members[j]]).collect();
+            let of: Vec<Option<usize>> = idx.iter().map(|&j| self.map_of_set[members[j]]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            let (maps, map) = group_fat_map(&mut self.maps, st, &of)?;
+            if k > 0 && tmp.is_none() {
+                tmp = Some(st.alloc_zeros::<C32>(x.len())?);
+            }
+            let out: &mut CudaSlice<C32> = if k == 0 { &mut *x } else { tmp.as_mut().unwrap() };
+            s.eng.adjoint_fat_group(st, &s.segs[si], &pts, maps, map, &d, out)?;
+            if k > 0 {
+                let one = num_complex::Complex64::new(1.0, 0.0);
+                s.kern.axpby(st, one, tmp.as_ref().unwrap(), one, x)?;
+            }
+        }
+        Ok(())
+    }
     fn table_bytes(&self) -> (usize, usize) {
         self.sets.table_bytes()
     }
@@ -581,6 +787,37 @@ impl SetOp for FatJointSets {
     fn place_tables(&mut self, ctx: &Arc<CudaContext>, st: &Arc<CudaStream>, on_host: bool) -> Result<i64, Error> {
         self.sets.place_tables(ctx, st, on_host)
     }
+}
+
+impl FatJointSets {
+    /// group forward (data: residuals) per segment table with one fat map per sub-group
+    fn fat_forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, data: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert!(members.len() == ys.len() && data.is_none_or(|d| d.len() == members.len()), "forward_group: one output (and data) per member");
+        let s = &mut self.sets;
+        for (si, idx) in s.by_table(members) {
+            let pts: Vec<&SegPoints> = idx.iter().map(|&j| &s.pts[members[j]]).collect();
+            let of: Vec<Option<usize>> = idx.iter().map(|&j| self.map_of_set[members[j]]).collect();
+            let d: Option<Vec<&CudaSlice<C32>>> = data.map(|d| idx.iter().map(|&j| d[j]).collect());
+            let (maps, map) = group_fat_map(&mut self.maps, st, &of)?;
+            let mut out = pick_mut(ys, &idx);
+            s.eng.forward_fat_group(st, &s.segs[si], &pts, maps, map, x, d.as_deref(), &mut out)?;
+        }
+        Ok(())
+    }
+}
+
+/// The fat map of a group from its members' maps (`map_of_set` entries): all per-frame (None) → the per-frame maps;
+/// one shared map → that map; different maps → their voxel-wise mean (cached in `maps`, one-map form, index 0).
+fn group_fat_map<'m>(maps: &'m mut SegFatMaps, st: &Arc<CudaStream>, of: &[Option<usize>]) -> Result<(&'m SegFatMaps, Option<usize>), Error> {
+    if of.iter().all(|m| m.is_none()) {
+        return Ok((&*maps, None));
+    }
+    assert!(of.iter().all(|m| m.is_some()), "fat group: members with per-frame and with fixed maps mixed");
+    let ids: Vec<usize> = of.iter().map(|m| m.unwrap()).collect();
+    if ids.iter().all(|&i| i == ids[0]) {
+        return Ok((&*maps, Some(ids[0])));
+    }
+    Ok((maps.mean(st, &ids)?, Some(0)))
 }
 
 /// c(τ) per sample of a set: the fat spectrum relative to water at field `b0` (T), τ = time since excitation (s)
@@ -673,5 +910,57 @@ impl SetOp for FatSets<'_> {
         let mut xf = st.alloc_zeros::<C32>(x.len())?;
         self.inner.kernels().mul_real(st, &xs, wf, &mut xf)?;
         self.inner.kernels().axpby(st, num_complex::Complex64::new(1.0, 0.0), &xf, num_complex::Complex64::new(1.0, 0.0), x)
+    }
+    /// y_m = E_m((1 − ff) x) + c_m ⊙ E_m(ff x): two inner group forwards (one image each) with the group's map (the
+    /// members' mean where their maps differ, see `group_pair`)
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert_eq!(members.len(), ys.len(), "forward_group: one output per member");
+        let (mean, i) = self.group_pair(st, members)?;
+        let (ww, wf) = if mean { (&self.group_maps[i].1 .0, &self.group_maps[i].1 .1) } else { (&self.maps[i].0, &self.maps[i].1) };
+        let mut xw = st.alloc_zeros::<C32>(x.len())?;
+        let mut xf = st.alloc_zeros::<C32>(x.len())?;
+        self.inner.kernels().mul_real(st, x, ww, &mut xw)?;
+        self.inner.kernels().mul_real(st, x, wf, &mut xf)?;
+        self.inner.forward_group(st, members, &xw, ys)?;
+        drop(xw);
+        let mut yf: Vec<CudaSlice<C32>> = ys.iter().map(|y| unsafe { st.alloc::<C32>(y.len()) }).collect::<Result<_, _>>()?;
+        {
+            let mut refs: Vec<&mut CudaSlice<C32>> = yf.iter_mut().collect();
+            self.inner.forward_group(st, members, &xf, &mut refs)?;
+        }
+        for ((&t, y), z) in members.iter().zip(ys.iter_mut()).zip(&yf) {
+            let m = self.c[t].len();
+            self.inner.kernels().sample_weight(st, z, &self.c[t], y, m, y.len() / m, false, true)?;
+        }
+        Ok(())
+    }
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.forward_group(st, members, x, rs)?;
+        subtract_data(self.inner.kernels(), st, ys, rs)
+    }
+    /// x = (1 − ff) Σ_m E_mᴴ y_m + ff Σ_m E_mᴴ(c̄_m ⊙ y_m), the adjoint of `forward_group` (same group map)
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        let (mean, i) = self.group_pair(st, members)?;
+        let mut aw = st.alloc_zeros::<C32>(x.len())?;
+        self.inner.adjoint_group(st, members, ys, &mut aw)?;
+        let mut yc = Vec::with_capacity(members.len());
+        for (&t, y) in members.iter().zip(ys) {
+            let m = self.c[t].len();
+            let mut z = unsafe { st.alloc::<C32>(y.len())? };
+            self.inner.kernels().sample_weight(st, y, &self.c[t], &mut z, m, y.len() / m, true, false)?;
+            yc.push(z);
+        }
+        let mut af = st.alloc_zeros::<C32>(x.len())?;
+        {
+            let refs: Vec<&CudaSlice<C32>> = yc.iter().collect();
+            self.inner.adjoint_group(st, members, &refs, &mut af)?;
+        }
+        drop(yc);
+        let (ww, wf) = if mean { (&self.group_maps[i].1 .0, &self.group_maps[i].1 .1) } else { (&self.maps[i].0, &self.maps[i].1) };
+        self.inner.kernels().mul_real(st, &aw, ww, x)?;
+        self.inner.kernels().mul_real(st, &af, wf, &mut aw)?;
+        let one = num_complex::Complex64::new(1.0, 0.0);
+        self.inner.kernels().axpby(st, one, &aw, one, x)
     }
 }

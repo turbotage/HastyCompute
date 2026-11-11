@@ -1,7 +1,10 @@
 //! Interruptible, resumable runs. A [`RunCtl`] owns the run directory: iterative loops save their state there
 //! (`state_<name>.hv`, hasty value format, LZ4, written atomically) every `every` iterations and when a stop is
-//! requested — SIGINT / SIGTERM, or a file named `STOP` in the run directory — and then return
+//! requested — SIGINT / SIGTERM / SIGUSR1, or a file named `STOP` in the run directory — and then return
 //! [`Outcome::Stopped`]; rerunning the same command loads the state and continues from that iteration.
+//!
+//! SIGUSR1 is the batch-system signal (Slurm `--signal=B:USR1@<lead>`, forwarded by the job script): it behaves like
+//! the STOP file, and repeated SIGUSR1 never aborts. A second SIGINT / SIGTERM exits without a checkpoint.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +18,30 @@ use crate::p2np::Stack;
 use crate::Error;
 
 static STOP: AtomicBool = AtomicBool::new(false);
+/// set by SIGUSR1 (async-signal-safe: the handler only stores); announced once by `stop_requested`
+static USR1: AtomicBool = AtomicBool::new(false);
+static USR1_SEEN: AtomicBool = AtomicBool::new(false);
 static INSTALL: Once = Once::new();
+
+#[cfg(unix)]
+extern "C" fn on_usr1(_: libc::c_int) {
+    USR1.store(true, Ordering::SeqCst);
+}
+
+#[cfg(unix)]
+fn install_usr1() {
+    // SAFETY: plain sigaction with a handler that only touches an atomic
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = on_usr1 as extern "C" fn(libc::c_int) as usize;
+        sa.sa_flags = libc::SA_RESTART;
+        libc::sigemptyset(&mut sa.sa_mask);
+        libc::sigaction(libc::SIGUSR1, &sa, std::ptr::null_mut());
+    }
+}
+
+#[cfg(not(unix))]
+fn install_usr1() {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -40,6 +66,7 @@ impl RunCtl {
                 }
                 eprintln!("stop requested: finishing the current iteration and saving a checkpoint (interrupt again to abort)");
             });
+            install_usr1();
         });
         let _ = std::fs::remove_file(dir.join("STOP"));
         Self { dir: dir.to_path_buf(), every }
@@ -50,6 +77,12 @@ impl RunCtl {
     }
 
     pub fn stop_requested(&self) -> bool {
+        if USR1.load(Ordering::SeqCst) {
+            if !USR1_SEEN.swap(true, Ordering::SeqCst) {
+                eprintln!("SIGUSR1: stopping at the next safe point and saving a checkpoint");
+            }
+            return true;
+        }
         STOP.load(Ordering::SeqCst) || self.dir.join("STOP").exists()
     }
 

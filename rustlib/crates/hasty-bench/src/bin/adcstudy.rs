@@ -86,6 +86,7 @@ fn main() {
         res_band: vec![],
         curve_pts: 60_000,
         ret: None,
+        leg: Default::default(),
     };
     let fp = format!("{res}|{fov}|{scheme:?}|{venc}|{n_rot_pns}|{spoil_cycles}|{:?}", p.hw);
     let fp_file = out.join("problem.txt");

@@ -17,7 +17,9 @@
 //!   ΔC terms are shared; the K grids come out of the engine's grid memory (smaller coil batch) or, within
 //!   `max_grid_bytes + multi_extra_bytes`, extra buffers;
 //! * correction order 3 ([`SegNufft::points_hi`]): order 2 plus a per-sample degree-3/4 polynomial phase to first
-//!   order (the higher-order part of the concomitant fit at GNL-warped positions), applied by the multi kernels.
+//!   order (the higher-order part of the concomitant fit at GNL-warped positions), applied by the multi kernels;
+//! * several sample sets on one image ([`SegNufft::forward_group`] / [`SegNufft::adjoint_group`], temporal pooling):
+//!   one grid FFT per (frame slot, coil batch) for the whole group, every member gathering from / scattering into it.
 
 use std::sync::Arc;
 
@@ -575,6 +577,8 @@ pub struct SegSegments {
 pub struct SegFatMaps {
     ff: CudaSlice<f32>,
     pub nmap: usize,
+    /// voxel-wise means of map multisets ([`SegFatMaps::mean`]), keyed by the sorted map indices
+    means: Vec<(Vec<usize>, SegFatMaps)>,
 }
 
 /// Engine shared by all sample sets of one image grid: FFT plans, generated kernels, grid slots, coil maps.
@@ -614,6 +618,10 @@ pub struct SegNufft {
     pub stream_prefetch: bool,
     /// all coils' maps and count while a coil subset is selected ([`SegNufft::select_coils`])
     coils_all: Option<(CudaSlice<C32>, usize)>,
+    /// fine-grid transforms executed so far (each over one coil batch × NSEG channels), [`SegNufft::fft_calls`]
+    ffts: usize,
+    /// in-readout motion warp of the moving voxels, one per frame ([`SegNufft::set_warp`]); None: the plain operator
+    warp: Option<(crate::segwarp::WarpFuncs, Vec<crate::segwarp::WarpDev>)>,
 }
 
 /// Pinned staging buffer of one table slot for packed tables, and the event of its last upload.
@@ -879,7 +887,42 @@ impl SegNufft {
             stream: None,
             stream_prefetch: false,
             coils_all: None,
+            ffts: 0,
+            warp: None,
         })
+    }
+
+    /// In-readout motion of the moving voxels (`segwarp`): one [`crate::SegWarp`] per frame (its node displacements
+    /// must belong to the segments' nodes in cardinal form, [`crate::cardinal_form`]), applied as a sparse correction of
+    /// every segment image before the FFT (forward) and after the inverse FFT (adjoint), all coil batches. `None`
+    /// restores the plain operator. Single-image path, correction order ≤ 2 (the multi-image, fat and order-3 paths
+    /// return an error while a warp is set).
+    pub fn set_warp(&mut self, st: &Arc<CudaStream>, warps: Option<&[crate::SegWarp]>) -> Result<(), NufftError> {
+        let Some(ws) = warps else {
+            self.warp = None;
+            return Ok(());
+        };
+        if ws.len() != self.frames || self.order >= 3 {
+            return Err(NufftError::Invalid(format!("set_warp: {} warps for {} frames (order {})", ws.len(), self.frames, self.order)));
+        }
+        let modes = [self.plan.modes[0], self.plan.modes[1], self.plan.modes[2]];
+        for w in ws {
+            if w.nseg != self.nseg || w.dims != modes {
+                return Err(NufftError::Invalid(format!("set_warp: warp of {} segments on {:?}, engine {} on {:?}", w.nseg, w.dims, self.nseg, modes)));
+            }
+        }
+        let funcs = match self.warp.take() {
+            Some((f, _)) => f,
+            None => crate::segwarp::WarpFuncs::new(&self.dev)?,
+        };
+        let devs = ws.iter().map(|w| w.upload(st)).collect::<Result<Vec<_>, _>>()?;
+        self.warp = Some((funcs, devs));
+        Ok(())
+    }
+
+    /// whether a readout-motion warp is set
+    pub fn has_warp(&self) -> bool {
+        self.warp.is_some()
     }
 
     fn shape(&self) -> Shape {
@@ -889,6 +932,12 @@ impl SegNufft {
     /// whether the fine-grid transforms are pruned to the image block ([`hasty_fft::PrunedChanFft3`])
     pub fn grid_fft_pruned(&self) -> bool {
         self.gfft.is_pruned()
+    }
+
+    /// fine-grid transforms executed since construction (forward and inverse, each over one coil batch × NSEG
+    /// channels): the cost the grouped calls ([`SegNufft::forward_group`]) share over their members
+    pub fn fft_calls(&self) -> usize {
+        self.ffts
     }
 
     /// voxels of one frame image
@@ -1047,7 +1096,22 @@ impl SegNufft {
                     .launch(lc(nv))?;
             }
         }
+        if let Some(mut wp) = self.warp.take() {
+            let nch = self.cb * self.nseg;
+            let r = (|| {
+                let xf = x.slice(f * nv..(f + 1) * nv);
+                let w = &mut wp.1[f];
+                // the correction images depend on the frame image only: built with the first coil batch, reused
+                if c0 == 0 {
+                    w.build(&wp.0, st, &seg.segph, &xf)?;
+                }
+                w.scatter(&wp.0, st, self.smaps.as_ref().unwrap(), &mut self.slots[slot], [&self.plan.invphi[0], &self.plan.invphi[1], &self.plan.invphi[2]], c0, ncb, nch, md, d)
+            })();
+            self.warp = Some(wp);
+            r?;
+        }
         self.gfft.forward(st, &mut self.slots[slot])?;
+        self.ffts += 1;
         Ok(())
     }
 
@@ -1057,6 +1121,17 @@ impl SegNufft {
         let nv = self.nv();
         let (md, d, c0_i, ncb_i, acc) = (self.mdims(), self.plan.dims(), c0 as i32, ncb as i32, 1i32);
         self.gfft.inverse(st, &mut self.slots[slot])?;
+        self.ffts += 1;
+        if let Some(mut wp) = self.warp.take() {
+            let nch = self.cb * self.nseg;
+            let r = (|| {
+                // gathered (accumulated) over every flush of the frame; the transposed push is applied once at the end of
+                // `adjoint`
+                wp.1[f].gather(&wp.0, st, self.smaps.as_ref().unwrap(), &self.slots[slot], [&self.plan.invphi[0], &self.plan.invphi[1], &self.plan.invphi[2]], c0, ncb, nch, md, d)
+            })();
+            self.warp = Some(wp);
+            r?;
+        }
         let (gp, _g) = self.slots[slot].device_ptr(st);
         let mut xf = x.slice_mut(f * nv..(f + 1) * nv);
         unsafe {
@@ -1183,6 +1258,11 @@ impl SegNufft {
         let (nv, m) = (self.nv(), pts.m);
         assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
         st.memset_zeros(&mut x.slice_mut(0..self.frames * nv))?;
+        if let Some((_, wd)) = self.warp.as_mut() {
+            for w in wd.iter_mut() {
+                w.zero(st)?;
+            }
+        }
         let (adj, tc) = (self.f.adj.clone(), self.tiles_adj);
         let mut c0 = 0;
         while c0 < self.nc {
@@ -1219,6 +1299,12 @@ impl SegNufft {
                 }
             }
             c0 += ncb;
+        }
+        if let Some((wf, wd)) = self.warp.as_mut() {
+            for (f, w) in wd.iter_mut().enumerate() {
+                let mut xf = x.slice_mut(f * nv..(f + 1) * nv);
+                w.apply_adjoint(wf, st, &seg.segph, &mut xf)?;
+            }
         }
         Ok(())
     }
@@ -1680,6 +1766,7 @@ impl SegNufft {
             }
         }
         ms.fft.as_ref().unwrap_or(&self.gfft).forward(st, &mut view)?;
+        self.ffts += 1;
         Ok(())
     }
 
@@ -1693,6 +1780,7 @@ impl SegNufft {
         let buf = if eng { &mut self.slots[b] } else { &mut ms.extra[b] };
         let mut view = buf.slice_mut(off..off + len);
         ms.fft.as_ref().unwrap_or(&self.gfft).inverse(st, &mut view)?;
+        self.ffts += 1;
         let (gp, _g) = view.device_ptr(st);
         let mut xf = x.slice_mut(f * nv..(f + 1) * nv);
         if let Some(fa) = fat {
@@ -1836,6 +1924,9 @@ impl SegNufft {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
     fn forward_multi_in(&mut self, ms: &mut Multi, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &SegPoints, xs: &[&CudaSlice<C32>], ws: &[Option<&CudaSlice<C32>>], init: Option<&CudaSlice<C32>>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        if self.warp.is_some() {
+            return Err(NufftError::Invalid("the readout-motion warp (set_warp) is not supported on the multi-image / fat / order-3 paths".into()));
+        }
         let (k, m) = (xs.len(), pts.m);
         let (f, tc, km) = (ms.fwd.clone(), ms.tf, ms.g);
         let mut c0 = 0;
@@ -1888,6 +1979,9 @@ impl SegNufft {
 
     #[allow(clippy::too_many_arguments)]
     fn adjoint_multi_in(&mut self, ms: &mut Multi, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &SegPoints, y: &CudaSlice<C32>, ws: &[Option<&CudaSlice<C32>>], xs: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        if self.warp.is_some() {
+            return Err(NufftError::Invalid("the readout-motion warp (set_warp) is not supported on the multi-image / fat / order-3 paths".into()));
+        }
         let k = xs.len();
         let (f, tc, km) = (ms.adj.clone(), ms.ta, ms.g);
         let mut c0 = 0;
@@ -1993,7 +2087,7 @@ impl SegNufft {
         let nv = self.nv();
         assert!(!ff.is_empty() && ff.len() % nv == 0, "{} fat-fraction values for {nv} voxels", ff.len());
         let v: Vec<f32> = ff.iter().map(|f| f.clamp(0.0, 1.0)).collect();
-        Ok(SegFatMaps { ff: st.clone_htod(&v)?, nmap: ff.len() / nv })
+        Ok(SegFatMaps { ff: st.clone_htod(&v)?, nmap: ff.len() / nv, means: Vec::new() })
     }
 
     /// y = A x with the joint water + fat diagonals P_l (1 + ff (c_l − 1)) of `seg` ([`SegNufft::segments_fat`]):
@@ -2210,6 +2304,11 @@ fn ls_interpolators(b: &nalgebra::DMatrix<num_complex::Complex64>, nseg: usize, 
         }
     });
     atab
+}
+
+/// [`ls_interpolators`] for the segment-basis additions (`segbasis`)
+pub(crate) fn ls_interpolators_pub(b: &nalgebra::DMatrix<num_complex::Complex64>, nseg: usize, t_min: f64, t_max: f64, ntab: usize, y: &(dyn Fn(f64) -> nalgebra::DVector<num_complex::Complex64> + Sync)) -> Vec<C32> {
+    ls_interpolators(b, nseg, t_min, t_max, ntab, y)
 }
 
 /// Joint water + fat segments that do not depend on the fat fraction: water diagonals P_l = e^{−iψ(·, τ_l)} (as
@@ -2538,5 +2637,272 @@ mod seg_build_tests {
         let (p2, a2, _, _) = build_segments_complex(nv, 9, 1e-4, 4e-3, 700, &fit, &g);
         let d = |x: &[C32], y: &[C32]| x.iter().zip(y).map(|(a, b)| ((a.re - b.re).abs()).max((a.im - b.im).abs())).fold(0.0f32, f32::max);
         assert!(d(&p0, &p2) < 1e-6 && d(&a0, &a2) < 1e-5, "complex builder: {} {}", d(&p0, &p2), d(&a0, &a2));
+    }
+}
+
+// ───────────────────────────────────────────────────────────── grouped point sets on one image (additions)
+//
+// Temporal pooling: the members m of a group are point sets (e.g. all frames of an encode) that measure ONE image x
+// through the same segment table. Since A_m = Σ_l D_m,l G_m F P_l S_c (D_m,l: interpolator and correction factors of
+// member m's samples, G_m its gridding), the grid F P_l S_c x of a (segment, coil batch) is shared by all members:
+//   forward:  one transform per (frame slot, coil batch), then every member gathers from it;
+//   adjoint:  every member scatters into the same grid (the first one stores, the rest add), then one transform.
+// The FFT cost of a group is that of one set; the gridding kernels still run once per member. Host-resident members are
+// staged one after another into the two table slots, in serpentine order over the sweeps (coil batch × frame
+// interval): the member visited last stays in its slot for the next sweep.
+
+/// visiting order of the members in sweep k: forwards on even sweeps, backwards on odd ones
+fn sweep_order(n: usize, k: usize) -> impl Iterator<Item = usize> {
+    (0..n).map(move |j| if k.is_multiple_of(2) { j } else { n - 1 - j })
+}
+
+impl SegFatMaps {
+    /// The voxel-wise mean of maps `idx` (one entry per member: a repeated index counts repeatedly) as a one-map
+    /// [`SegFatMaps`], cached per index multiset (at most 64 entries): the fat map of a group of sets sharing one
+    /// image ([`SegNufft::forward_fat_group`]).
+    pub fn mean(&mut self, st: &Arc<CudaStream>, idx: &[usize]) -> Result<&SegFatMaps, NufftError> {
+        let mut key: Vec<usize> = idx.to_vec();
+        key.sort_unstable();
+        assert!(!key.is_empty() && key.iter().all(|&i| i < self.nmap), "fat map mean: indices {key:?} of {} maps", self.nmap);
+        if let Some(p) = self.means.iter().position(|(k, _)| *k == key) {
+            return Ok(&self.means[p].1);
+        }
+        let nv = self.ff.len() / self.nmap;
+        let mut acc = vec![0f64; nv];
+        let mut uniq = key.clone();
+        uniq.dedup();
+        for &i in &uniq {
+            let c = key.iter().filter(|&&k| k == i).count() as f64;
+            let h = st.clone_dtoh(&self.ff.slice(i * nv..(i + 1) * nv))?;
+            acc.iter_mut().zip(&h).for_each(|(a, &v)| *a += c * v as f64);
+        }
+        let w = 1.0 / key.len() as f64;
+        let mean: Vec<f32> = acc.iter().map(|&a| (a * w) as f32).collect();
+        if self.means.len() >= 64 {
+            self.means.remove(0);
+        }
+        self.means.push((key, SegFatMaps { ff: st.clone_htod(&mean)?, nmap: 1, means: Vec::new() }));
+        Ok(&self.means.last().unwrap().1)
+    }
+}
+
+impl SegNufft {
+    /// run `f` with `pts`'s tables on the device (staged into a table slot when host-resident)
+    fn on_device<R>(&mut self, st: &Arc<CudaStream>, pts: &SegPoints, f: impl FnOnce(&mut Self, &SegPoints) -> Result<R, NufftError>) -> Result<R, NufftError> {
+        if pts.is_host() { self.with_staged(st, pts, f) } else { f(self, pts) }
+    }
+
+    /// Group forward: y_m = A_m x for every member m of `pts` (point sets of this engine sharing the image x, frames ×
+    /// nv, and the segment table `seg`). One grid transform per (frame slot, coil batch) for the whole group, then
+    /// every member's gather; equal to `forward` per member up to f32 summation order. Order 3 runs through the
+    /// multi-image kernels (K = 1) as `forward` does. Host-resident members are staged within the transform window
+    /// (time-resolved members: once per frame interval and coil batch).
+    pub fn forward_group(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &[&SegPoints], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        self.group_fwd(st, seg, None, pts, x, None, ys)
+    }
+
+    /// Group residual: r_m = A_m x − y_m (`data` = the y_m), the gathers accumulate onto −y_m ([`forward_residual`](Self::forward_residual)).
+    pub fn forward_residual_group(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &[&SegPoints], x: &CudaSlice<C32>, data: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        self.group_fwd(st, seg, None, pts, x, Some(data), rs)
+    }
+
+    /// Group adjoint: x = Σ_m A_mᴴ y_m. Every member scatters into the shared grid of a (frame slot, coil batch)
+    /// before its one inverse transform; equal to the sum of `adjoint` per member up to f32 summation order.
+    pub fn adjoint_group(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &[&SegPoints], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.group_adj(st, seg, None, pts, ys, x)
+    }
+
+    /// [`forward_fat`](Self::forward_fat) for a group: ONE fat map for all members (`map` as in forward_fat). The map
+    /// enters at the pad, before the shared transform, so members with different maps cannot share it exactly: a
+    /// pooled level uses one map for its group (e.g. the members' mean, [`SegFatMaps::mean`]) — an approximation
+    /// of the member-wise operator wherever the members' fat fractions differ (fat moving between pooled frames).
+    /// `data`: Some(y_m) gives the residuals A_m x − y_m.
+    #[allow(clippy::too_many_arguments)]
+    pub fn forward_fat_group(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &[&SegPoints], maps: &SegFatMaps, map: Option<usize>, x: &CudaSlice<C32>, data: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        let cl = seg.fatc.as_ref().expect("forward_fat_group needs segments_fat");
+        assert!(map.map_or(maps.nmap == self.frames, |i| i < maps.nmap), "fat map {map:?} of {} (frames {})", maps.nmap, self.frames);
+        self.group_fwd(st, seg, Some(FatArg { maps, map, cl }), pts, x, data, ys)
+    }
+
+    /// x = Σ_m A_mᴴ y_m with one fat map for the group, the adjoint of [`forward_fat_group`](Self::forward_fat_group)
+    #[allow(clippy::too_many_arguments)]
+    pub fn adjoint_fat_group(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &[&SegPoints], maps: &SegFatMaps, map: Option<usize>, ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        let cl = seg.fatc.as_ref().expect("adjoint_fat_group needs segments_fat");
+        assert!(map.map_or(maps.nmap == self.frames, |i| i < maps.nmap), "fat map {map:?} of {} (frames {})", maps.nmap, self.frames);
+        self.group_adj(st, seg, Some(FatArg { maps, map, cl }), pts, ys, x)
+    }
+
+    /// the multi-image state (K = 1) when the group runs through the multi kernels (fat maps, order 3)
+    fn group_multi(&mut self, st: &Arc<CudaStream>, fat: bool) -> Result<Option<Multi>, NufftError> {
+        if !fat && self.order < 3 {
+            return Ok(None);
+        }
+        let i = self.multi_index(st, 1)?;
+        Ok(Some(self.multi.swap_remove(i)))
+    }
+
+    /// the visiting sequence of all sweeps (coil batches × frame intervals) for `n` members and a coil batch of `cb`
+    fn group_seq(&self, n: usize, cb: usize) -> Vec<usize> {
+        (0..self.nc.div_ceil(cb) * self.frames).flat_map(|k| sweep_order(n, k)).collect()
+    }
+
+    /// prefetch the member visited after position `pos` of `seq` (no-op without `stream_prefetch` or when resident)
+    fn group_prefetch(&mut self, st: &Arc<CudaStream>, pts: &[&SegPoints], seq: &[usize], pos: usize) -> Result<(), NufftError> {
+        match seq.get(pos + 1) {
+            Some(&nx) if nx != seq[pos] => self.prefetch(st, pts[nx]),
+            _ => Ok(()),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn group_fwd(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], x: &CudaSlice<C32>, init: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        let n = pts.len();
+        assert!(n >= 1 && ys.len() == n && init.is_none_or(|d| d.len() == n), "group of {n} point sets, {} outputs, {:?} data", ys.len(), init.map(|d| d.len()));
+        assert!(x.len() >= self.frames * self.nv());
+        for j in 0..n {
+            assert!(ys[j].len() >= self.nc * pts[j].m, "group member {j}: output of {} values, need {} × {}", ys[j].len(), self.nc, pts[j].m);
+            assert!(init.is_none_or(|d| d[j].len() >= self.nc * pts[j].m), "group member {j}: data shorter than {} × {}", self.nc, pts[j].m);
+        }
+        let mut ms = self.group_multi(st, fat.is_some())?;
+        let r = self.group_fwd_in(ms.as_mut(), st, seg, fat, pts, x, init, ys);
+        if let Some(ms) = ms {
+            self.multi.push(ms);
+        }
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn group_fwd_in(&mut self, mut ms: Option<&mut Multi>, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], x: &CudaSlice<C32>, init: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        let n = pts.len();
+        let cb = ms.as_ref().map_or(self.cb, |m| m.cb);
+        let seq = self.group_seq(n, cb);
+        let mut pos = 0;
+        let mut c0 = 0;
+        while c0 < self.nc {
+            let ncb = cb.min(self.nc - c0);
+            for j in 0..n {
+                let m = pts[j].m;
+                self.init_rows(st, init.map(|d| d[j]), &mut *ys[j], c0 * m, (c0 + ncb) * m)?;
+            }
+            let mut held: Vec<Option<usize>> = vec![None; self.nf];
+            for i in 0..self.frames {
+                let need = self.frames_of(i);
+                let (map, fresh, _) = Self::assign(&mut held, &need);
+                for s in fresh {
+                    let f = held[s].unwrap();
+                    match ms.as_deref_mut() {
+                        Some(m) => self.mload(m, st, seg, fat, 0, s, x, f, c0, ncb)?,
+                        None => self.load_frame(st, seg, s, x, f, c0, ncb)?,
+                    }
+                }
+                for _ in 0..n {
+                    let j = seq[pos];
+                    let y = &mut *ys[j];
+                    match ms.as_deref() {
+                        Some(m) => {
+                            let (f, tc, km, g) = (m.fwd.clone(), m.tf, m.g, self.mgrids(m, st, &map, 1));
+                            self.on_device(st, pts[j], |e, p| e.mlaunch_fwd(km, &f, &tc, st, seg, p, i, g, WPtrs { p: [0; 4] }, 1, y, c0, ncb))?;
+                        }
+                        None => {
+                            let (f, tc, g) = (self.f.fwd.clone(), self.tiles_fwd, self.grids(st, &map));
+                            self.on_device(st, pts[j], |e, p| e.launch_fwd(st, &f, &tc, seg, p, i, g, y, c0, ncb))?;
+                        }
+                    }
+                    self.group_prefetch(st, pts, &seq, pos)?;
+                    pos += 1;
+                }
+            }
+            c0 += ncb;
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn group_adj(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        let n = pts.len();
+        assert!(n >= 1 && ys.len() == n, "group of {n} point sets, {} inputs", ys.len());
+        let nv = self.nv();
+        assert!(x.len() >= self.frames * nv);
+        for j in 0..n {
+            assert!(ys[j].len() >= self.nc * pts[j].m, "group member {j}: data of {} values, need {} × {}", ys[j].len(), self.nc, pts[j].m);
+        }
+        st.memset_zeros(&mut x.slice_mut(0..self.frames * nv))?;
+        let mut ms = self.group_multi(st, fat.is_some())?;
+        let r = self.group_adj_in(ms.as_mut(), st, seg, fat, pts, ys, x);
+        if let Some(ms) = ms {
+            self.multi.push(ms);
+        }
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn group_adj_in(&mut self, mut ms: Option<&mut Multi>, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        let n = pts.len();
+        let cb = ms.as_ref().map_or(self.cb, |m| m.cb);
+        let seq = self.group_seq(n, cb);
+        let mut pos = 0;
+        let mut c0 = 0;
+        while c0 < self.nc {
+            let ncb = cb.min(self.nc - c0);
+            let mut held: Vec<Option<usize>> = vec![None; self.nf];
+            // slot holds partial sums (add instead of store)
+            let mut stale = vec![false; self.nf];
+            for i in 0..self.frames {
+                let need = self.frames_of(i);
+                let (map, fresh, evicted) = Self::assign(&mut held, &need);
+                for (s, g) in evicted {
+                    match ms.as_deref_mut() {
+                        Some(m) => self.mflush(m, st, seg, fat, 0, s, x, g, c0, ncb)?,
+                        None => self.flush_frame(st, seg, s, x, g, c0, ncb)?,
+                    }
+                }
+                for &s in &fresh {
+                    stale[s] = false;
+                }
+                for _ in 0..n {
+                    let j = seq[pos];
+                    // the first member to touch a fresh slot stores (its items cover every tile), the rest add; split
+                    // lists accumulate atomically into a zeroed slot
+                    let split = pts[j].ivals[i].split;
+                    let mut addmask = 0i32;
+                    for (o, &s) in map.iter().enumerate() {
+                        if !stale[s] && split {
+                            match ms.as_deref_mut() {
+                                Some(m) => self.mzero(m, st, 0, s)?,
+                                None => st.memset_zeros(&mut self.slots[s])?,
+                            }
+                            stale[s] = true;
+                        }
+                        if stale[s] {
+                            addmask |= 1 << o;
+                        }
+                    }
+                    let y = ys[j];
+                    match ms.as_deref() {
+                        Some(m) => {
+                            let (f, tc, km, g) = (m.adj.clone(), m.ta, m.g, self.mgrids(m, st, &map, 1));
+                            self.on_device(st, pts[j], |e, p| e.mlaunch_adj(km, &f, &tc, st, seg, p, i, g, addmask, WPtrs { p: [0; 4] }, 1, y, c0, ncb))?;
+                        }
+                        None => {
+                            let (f, tc, g) = (self.f.adj.clone(), self.tiles_adj, self.grids(st, &map));
+                            self.on_device(st, pts[j], |e, p| e.launch_adj(st, &f, &tc, seg, p, i, g, addmask, y, c0, ncb))?;
+                        }
+                    }
+                    map.iter().for_each(|&s| stale[s] = true);
+                    self.group_prefetch(st, pts, &seq, pos)?;
+                    pos += 1;
+                }
+            }
+            for s in 0..self.nf {
+                if let Some(g) = held[s] {
+                    match ms.as_deref_mut() {
+                        Some(m) => self.mflush(m, st, seg, fat, 0, s, x, g, c0, ncb)?,
+                        None => self.flush_frame(st, seg, s, x, g, c0, ncb)?,
+                    }
+                }
+            }
+            c0 += ncb;
+        }
+        Ok(())
     }
 }

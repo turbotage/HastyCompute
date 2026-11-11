@@ -32,6 +32,40 @@ pub enum Precond {
     Zmshr1,
     /// ZMSHR1 in the metric of the circulant M: P_k = τ_k M + rank one (secant on M^{-1/2}-transformed variables)
     Zmshr1M,
+    /// ZMSHR1 per set (block-diagonal): every set t (frame × encode, or parameter image × frame) has its own secant pair
+    /// (s_t, m_t), mixing a_t, scale τ_t and rank-one term. The data term is separable over the sets (H = blockdiag H_t),
+    /// so the block-diagonal quasi-Newton matrix is the natural structure: one step scale per set instead of one for the
+    /// whole stack (limited by the stiffest set), and one curvature direction per set and iteration instead of one.
+    Zmshr1Set,
+    /// [`Precond::Zmshr1Set`] in the circulant metric M (per set: P_t = τ_t M_t + rank one)
+    Zmshr1MSet,
+}
+
+impl Precond {
+    /// quasi-Newton (keeps a secant pair)
+    pub fn quasi(self) -> bool {
+        matches!(self, Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet)
+    }
+    /// uses the circulant metric M
+    pub fn metric(self) -> bool {
+        matches!(self, Precond::Circulant | Precond::Zmshr1M | Precond::Zmshr1MSet)
+    }
+    /// one secant pair and scalar set per set (block-diagonal) instead of one for the whole stack
+    pub fn per_set(self) -> bool {
+        matches!(self, Precond::Zmshr1Set | Precond::Zmshr1MSet)
+    }
+    /// parse a command-line name: none, circ, zmshr1, zmshr1m, zmshr1s (per set), zmshr1ms (per set, metric)
+    pub fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "none" => Precond::None,
+            "circ" => Precond::Circulant,
+            "zmshr1" => Precond::Zmshr1,
+            "zmshr1m" => Precond::Zmshr1M,
+            "zmshr1s" => Precond::Zmshr1Set,
+            "zmshr1ms" => Precond::Zmshr1MSet,
+            _ => return None,
+        })
+    }
 }
 
 pub struct Stack {
@@ -61,6 +95,9 @@ pub struct P2np<'a> {
     /// per-set fixed preconditioners: one circulant per frame block of the set's image (block-diagonal for
     /// time-resolved sets), empty if unused
     pub circ: Vec<Vec<CirculantPrecond>>,
+    /// set → index into `circ` when preconditioners are shared (e.g. one per encode, built from the pooled sampling of
+    /// that encode's frames); empty = one per set
+    pub circ_map: Vec<usize>,
     /// per-set residual buffers
     res: Vec<CudaSlice<C32>>,
     /// frame-block scratch (block-diagonal preconditioners)
@@ -86,6 +123,10 @@ pub struct P2np<'a> {
     lag_hist: [(u64, bool); 2],
     /// set streaming of host-resident stacks ([`Objective::gradient_host`])
     streamer: Option<crate::hoststack::SetStreamer>,
+    /// device bytes the grouped gradient may hold in member residuals at once ([`P2np::gradient_groups_host`]; larger
+    /// groups are split into sub-groups, each paying its own grid transforms); 0 (default) = half the free device
+    /// memory at the call
+    pub group_bytes: usize,
 }
 
 /// Stochastic coil sampling for the data term of [`P2np`]: each gradient uses a subset of the coils and stays
@@ -219,6 +260,13 @@ pub trait Objective {
         st.memcpy_dtoh(&zd, z)?;
         Ok(())
     }
+    /// Grouped gradient on host stacks: chunk g of `x` is the image shared by the chunks (sets) `groups[g]`;
+    /// g_g = Σ_{t ∈ G_g} ∇f_t(x_g), G_g = `groups[g]` (the gradient of f(x_t = x_g) with respect to x_g). Returns Some(f), or None
+    /// when the objective has no grouped form (callers then replicate the group images into a full stack and sum
+    /// [`gradient_host`](Self::gradient_host); same result). Default: None.
+    fn gradient_groups_host(&mut self, _st: &Arc<CudaStream>, _groups: &[Vec<usize>], _x: &crate::hoststack::HostStack, _g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
+        Ok(None)
+    }
 }
 
 impl Objective for P2np<'_> {
@@ -283,6 +331,16 @@ impl Objective for P2np<'_> {
         r?;
         Ok(f)
     }
+    /// streamed per group (`SetStreamer` over the group images), data resident or staged per member from the store:
+    /// g_g = Σ_{t∈g} E_tᴴ(E_t x_g − y_t) through `SetOp::forward_group` / `adjoint_group` (`SegSets`: one grid FFT per
+    /// segment and coil batch for each group instead of one per set). None with coil sampling or lagged gradients
+    /// (their per-set paths stay in charge).
+    fn gradient_groups_host(&mut self, st: &Arc<CudaStream>, groups: &[Vec<usize>], x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
+        if self.cur.is_some() || self.lagged.is_some() {
+            return Ok(None);
+        }
+        P2np::gradient_groups_host(self, st, groups, x, g).map(Some)
+    }
     fn begin_iteration(&mut self, k: usize, iters: usize) {
         self.cur_k = k;
         self.iters_total = iters;
@@ -312,7 +370,8 @@ impl Objective for P2np<'_> {
 impl<'a> P2np<'a> {
     pub fn new(op: &'a mut dyn SetOp, ys: Vec<&'a CudaSlice<C32>>, circ: Vec<Vec<CirculantPrecond>>, st: &Arc<CudaStream>) -> Result<Self, Error> {
         assert_eq!(ys.len(), op.nsets());
-        assert!(circ.is_empty() || circ.len() == op.nsets());
+        // one per set, or fewer shared ones (then `with_circ_map` assigns them)
+        assert!(circ.is_empty() || circ.len() <= op.nsets());
         // no persistent residual buffers: each set's residual is formed in a stream-ordered temporary by the fused
         // `SetOp::forward_residual` (one set in flight instead of a second copy of all data)
         let res = vec![];
@@ -323,7 +382,7 @@ impl<'a> P2np<'a> {
             }
             None => None,
         };
-        Ok(Self { op, ys, circ, res, blk, sampling: None, cur: None, cur_k: 0, iters_total: 0, m_set: vec![], stage: None, lagged: None, anchor: None, lag_stats: (0, 0), lag_hist: [(0, false); 2], streamer: None })
+        Ok(Self { op, ys, circ, res, blk, sampling: None, cur: None, cur_k: 0, iters_total: 0, m_set: vec![], stage: None, lagged: None, anchor: None, lag_stats: (0, 0), lag_hist: [(0, false); 2], streamer: None, circ_map: vec![], group_bytes: 0 })
     }
 
     /// Data on the host: each gradient stages y_t from the store set by set (the next set decoded while the GPU works
@@ -340,7 +399,8 @@ impl<'a> P2np<'a> {
     }
 
     fn with_res(op: &'a mut dyn SetOp, ys: Vec<&'a CudaSlice<C32>>, circ: Vec<Vec<CirculantPrecond>>, st: &Arc<CudaStream>, res: bool) -> Result<Self, Error> {
-        assert!(circ.is_empty() || circ.len() == op.nsets());
+        // one per set, or fewer shared ones (then `with_circ_map` assigns them)
+        assert!(circ.is_empty() || circ.len() <= op.nsets());
         let res = if res { (0..op.nsets()).map(|t| st.alloc_zeros(op.len_y(t))).collect::<Result<_, _>>()? } else { vec![] };
         let blk = match circ.iter().position(|c| c.len() > 1) {
             Some(t) => {
@@ -349,7 +409,7 @@ impl<'a> P2np<'a> {
             }
             None => None,
         };
-        Ok(Self { op, ys, circ, res, blk, sampling: None, cur: None, cur_k: 0, iters_total: 0, m_set: vec![], stage: None, lagged: None, anchor: None, lag_stats: (0, 0), lag_hist: [(0, false); 2], streamer: None })
+        Ok(Self { op, ys, circ, res, blk, sampling: None, cur: None, cur_k: 0, iters_total: 0, m_set: vec![], stage: None, lagged: None, anchor: None, lag_stats: (0, 0), lag_hist: [(0, false); 2], streamer: None, circ_map: vec![], group_bytes: 0 })
     }
 
     /// set-streaming statistics of host-resident runs: (sets, bytes up, bytes down)
@@ -415,8 +475,24 @@ impl<'a> P2np<'a> {
         Ok(())
     }
 
+    /// Share circulant preconditioners between sets: `map[t]` is the index into `circ` of set t's preconditioner (e.g.
+    /// the encode of the set, with one circulant per encode built from all of its frames' samples).
+    pub fn with_circ_map(mut self, map: Vec<usize>) -> Self {
+        assert_eq!(map.len(), self.op.nsets(), "circulant map: one entry per set");
+        assert!(map.iter().all(|&i| i < self.circ.len()), "circulant map: index out of range");
+        self.circ_map = map;
+        self
+    }
+
+    /// [`with_circ_map`](Self::with_circ_map) for a non-empty map, unchanged otherwise
+    pub fn with_circ_map_opt(self, map: Vec<usize>) -> Self {
+        if map.is_empty() { self } else { self.with_circ_map(map) }
+    }
+
     /// z = M_t r (or M_t⁻¹ r), M_t block-diagonal over the set's frames
     fn precond(&mut self, st: &Arc<CudaStream>, t: usize, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>, inverse: bool) -> Result<(), Error> {
+        assert!(self.circ_map.len() == self.op.nsets() || self.circ.len() == self.op.nsets(), "shared circulants need with_circ_map");
+        let t = if self.circ_map.is_empty() { t } else { self.circ_map[t] };
         let nb = self.circ[t].len();
         if nb == 1 {
             let c = &mut self.circ[t][0];
@@ -507,6 +583,103 @@ impl<'a> P2np<'a> {
         op.use_surrogate(false);
         self.lag_stats.1 += 1;
         r
+    }
+
+    /// The exact grouped gradient (all coils) on host stacks: chunk g of `x` / `g` is the image of group `groups[g]`
+    /// (sets sharing it), g_g = Σ_{t∈g} E_tᴴ(E_t x_g − y_t); returns f = ½ Σ_g Σ_{t∈g} ‖E_t x_g − y_t‖². Per group:
+    /// residuals of all members by one `SetOp::forward_group` (resident data: fused, `forward_residual_group`; staged
+    /// data: the forward first, then each member's y_t subtracted as it is decoded, so the device holds one copy of the
+    /// group's data), then one `adjoint_group`. A group whose residuals exceed [`group_bytes`](Self::group_bytes) is
+    /// split into consecutive sub-groups (results summed). Coil sampling and lagged gradients are ignored here
+    /// (exact gradient).
+    pub fn gradient_groups_host(&mut self, st: &Arc<CudaStream>, groups: &[Vec<usize>], x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack) -> Result<f64, Error> {
+        let ng = groups.len();
+        assert!(ng > 0 && x.nsets() == ng && g.nsets() == ng, "grouped gradient: {ng} groups, {} / {} chunks", x.nsets(), g.nsets());
+        let n = x.lens[0];
+        assert!(x.lens.iter().chain(&g.lens).all(|&l| l == n), "grouped gradient: every group image must have {n} elements");
+        for (gi, m) in groups.iter().enumerate() {
+            assert!(!m.is_empty(), "grouped gradient: group {gi} is empty");
+            assert!(m.iter().all(|&t| t < self.op.nsets() && self.op.len_x(t) == n), "grouped gradient: group {gi} has a set outside the stack or of another image size");
+        }
+        // member residual budget per sub-group
+        let budget = if self.group_bytes > 0 {
+            self.group_bytes
+        } else {
+            st.context().mem_get_info().map(|(free, _)| free / 2).unwrap_or(1 << 30)
+        };
+        let mut sr = match self.streamer.take() {
+            Some(s) if s.device_bytes() == 4 * n * 8 => s,
+            _ => crate::hoststack::SetStreamer::new(&st.context().clone(), st, n)?,
+        };
+        let mut stage = self.stage.take();
+        let order: Vec<usize> = (0..ng).collect();
+        let mut f = 0.0;
+        let op = &mut *self.op;
+        let ys = &self.ys;
+        let one = Complex64::new(1.0, 0.0);
+        let r = sr.for_each(st, x, g, &order, &mut |gi, xd, gd| {
+            // consecutive sub-groups within the residual budget (at least one member each)
+            let mem = &groups[gi];
+            let mut subs: Vec<&[usize]> = Vec::new();
+            let (mut a, mut bytes) = (0, 0usize);
+            for (j, &t) in mem.iter().enumerate() {
+                let b = op.len_y(t) * 8;
+                if j > a && bytes + b > budget {
+                    subs.push(&mem[a..j]);
+                    a = j;
+                    bytes = 0;
+                }
+                bytes += b;
+            }
+            subs.push(&mem[a..]);
+            let mut tmp: Option<CudaSlice<C32>> = None;
+            for (k, sub) in subs.iter().enumerate() {
+                // every entry is written by the group forward: no zeroing
+                let mut rs: Vec<CudaSlice<C32>> = sub.iter().map(|&t| unsafe { st.alloc::<C32>(op.len_y(t)) }).collect::<Result<_, _>>()?;
+                match stage.as_mut() {
+                    Some(sg) => {
+                        {
+                            let mut refs: Vec<&mut CudaSlice<C32>> = rs.iter_mut().collect();
+                            op.forward_group(st, sub, xd, &mut refs)?;
+                        }
+                        let pos: std::collections::HashMap<usize, usize> = sub.iter().enumerate().map(|(j, &t)| (t, j)).collect();
+                        sg.for_each(st, sub, None, &mut |t, y| {
+                            let r = &mut rs[pos[&t]];
+                            op.kernels().axpby(st, Complex64::new(-1.0, 0.0), y, one, r)?;
+                            f += 0.5 * op.kernels().dot(st, r, r)?.re;
+                            Ok(())
+                        })?;
+                    }
+                    None => {
+                        let d: Vec<&CudaSlice<C32>> = sub.iter().map(|&t| ys[t]).collect();
+                        {
+                            let mut refs: Vec<&mut CudaSlice<C32>> = rs.iter_mut().collect();
+                            op.forward_residual_group(st, sub, xd, &d, &mut refs)?;
+                        }
+                        for r in &rs {
+                            f += 0.5 * op.kernels().dot(st, r, r)?.re;
+                        }
+                    }
+                }
+                let refs: Vec<&CudaSlice<C32>> = rs.iter().collect();
+                if k == 0 {
+                    op.adjoint_group(st, sub, &refs, gd)?;
+                } else {
+                    if tmp.is_none() {
+                        tmp = Some(st.alloc_zeros::<C32>(n)?);
+                    }
+                    let tb = tmp.as_mut().unwrap();
+                    op.adjoint_group(st, sub, &refs, tb)?;
+                    op.kernels().axpby(st, one, tb, one, gd)?;
+                }
+                hasty_cuda::pace::pace(st);
+            }
+            Ok(())
+        });
+        self.stage = stage;
+        self.streamer = Some(sr);
+        r?;
+        Ok(f)
     }
 
     /// the exact gradient (all coils), resident or staged data
@@ -780,6 +953,75 @@ pub fn zmshr1_scalars(ss: f64, sm: f64, mm: f64) -> (f64, f64) {
     (a, tau)
 }
 
+/// [`zmshr1_scalars`] guarded for one set of a per-set preconditioner: a set whose secant vanishes (unchanged iterate,
+/// or no finite curvature information) gets the plain scaled-gradient step (a = 1, τ = 1, no rank-one term)
+pub fn zmshr1_scalars_guarded(ss: f64, sm: f64, mm: f64) -> (f64, f64) {
+    if !(ss > 0.0) || !ss.is_finite() || !sm.is_finite() || !mm.is_finite() {
+        return (1.0, 1.0);
+    }
+    let (a, tau) = zmshr1_scalars(ss, sm, mm);
+    if tau.is_finite() && tau > 0.0 { (a, tau) } else { (1.0, 1.0) }
+}
+
+/// The (a, τ) of every set: per set for a per-set preconditioner, else the global pair from the summed inner products
+pub fn zmshr1_scalars_sets(d: &[[f64; 3]], per_set: bool) -> Vec<(f64, f64)> {
+    if per_set {
+        d.iter().map(|v| zmshr1_scalars_guarded(v[0], v[1], v[2])).collect()
+    } else {
+        let s = d.iter().fold([0.0; 3], |a, v| [a[0] + v[0], a[1] + v[1], a[2] + v[2]]);
+        vec![zmshr1_scalars(s[0], s[1], s[2]); d.len()]
+    }
+}
+
+/// The rank-one coefficients c_t = ⟨w, g⟩ / ⟨w, z⟩ of every set from the per-set sums [uv, ww, zz, wg] (per set, or
+/// from the summed values for the global preconditioner), 0 where the safeguard ⟨w, z⟩ ≤ 10⁻⁸‖w‖‖z‖ fires
+pub fn zmshr1_rank_one_sets(d: &[[f64; 4]], per_set: bool) -> Vec<f64> {
+    let c = |v: &[f64; 4]| if v[0] > 1e-8 * v[1].sqrt() * v[2].sqrt() { v[3] / v[0] } else { 0.0 };
+    if per_set {
+        d.iter().map(c).collect()
+    } else {
+        let s = d.iter().fold([0.0; 4], |a, v| [a[0] + v[0], a[1] + v[1], a[2] + v[2], a[3] + v[3]]);
+        vec![c(&s); d.len()]
+    }
+}
+
+/// Wall time of the phases of one solver iteration (gradient = data term on the GPU(s), step = preconditioned update,
+/// prior = denoiser / regulariser incl. host↔device copies, report = metrics). Logged per iteration and appended to
+/// `<run dir>/timing_<name>.csv`: it shows which phase limits scaling to more GPUs.
+pub(crate) struct IterTimer {
+    t: std::time::Instant,
+    pub(crate) secs: [f64; 4],
+}
+
+impl IterTimer {
+    pub(crate) const PHASES: [&'static str; 4] = ["gradient", "step", "prior", "report"];
+    pub(crate) fn start() -> Self {
+        Self { t: std::time::Instant::now(), secs: [0.0; 4] }
+    }
+    /// close phase `i` (after synchronising `st`, so asynchronous GPU work is attributed to it)
+    pub(crate) fn lap(&mut self, st: &Arc<CudaStream>, i: usize) {
+        let _ = st.synchronize();
+        let now = std::time::Instant::now();
+        self.secs[i] += (now - self.t).as_secs_f64();
+        self.t = now;
+    }
+    pub(crate) fn log(&self, k: usize, ctl: Option<(&RunCtl, &str)>) {
+        let s = &self.secs;
+        eprintln!("    time it {k}: gradient {:.1}s, step {:.1}s, prior {:.1}s, report {:.1}s", s[0], s[1], s[2], s[3]);
+        if let Some((c, name)) = ctl {
+            use std::io::Write;
+            let path = c.dir().join(format!("timing_{name}.csv"));
+            let new = !path.exists();
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                if new {
+                    let _ = writeln!(f, "iter,{}", Self::PHASES.join(","));
+                }
+                let _ = writeln!(f, "{k},{:.3},{:.3},{:.3},{:.3}", s[0], s[1], s[2], s[3]);
+            }
+        }
+    }
+}
+
 /// [`run_objective`] with planner-placed state. The ZMSHR1 / ZMSHR1-M step is evaluated chunk by chunk in two or three
 /// passes (secant inner products; rank-one direction; its contribution), so besides x, g and the step only chunk-sized
 /// scratch is needed on the device.
@@ -800,8 +1042,10 @@ pub fn run_objective_with(
     let nt = x.v.len();
     let lens = obj.lens();
     let off: Vec<usize> = lens.iter().scan(0, |a, &n| { let o = *a; *a += n; Some(o) }).collect();
-    let quasi = matches!(precond, Precond::Zmshr1 | Precond::Zmshr1M);
-    let metric = precond == Precond::Zmshr1M;
+    let quasi = precond.quasi();
+    // ZMSHR1 in the circulant metric (the plain circulant step has its own arm)
+    let metric = quasi && precond.metric();
+    let per_set = precond.per_set();
     let ctx = || opts.ctx.clone().ok_or_else(|| Error::Format("StateOpts: host placement needs a context".into()));
     let mut g = Stack::zeros_lens(st, &lens)?;
     let mut pg = Stack::zeros_lens(st, &lens)?;
@@ -841,8 +1085,10 @@ pub fn run_objective_with(
     let one = Complex64::new(1.0, 0.0);
     let re = |v: f64| Complex64::new(v, 0.0);
     for k in k0..iters {
+        let mut tm = IterTimer::start();
         obj.begin_iteration(k, iters);
         let f = obj.gradient(st, x, &mut g)?;
+        tm.lap(st, 0);
         // scaled gradient α g
         axpby(obj.kernels(), st, 0.0, x, alpha, &mut g)?;
         match precond {
@@ -853,12 +1099,12 @@ pub fn run_objective_with(
                 }
             }
             // first iteration, or a new coil subset (stochastic objectives): no exact secant pair → the metric step
-            Precond::Zmshr1 | Precond::Zmshr1M if k == 0 || !obj.curvature_pair_ok() => {
+            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if k == 0 || !obj.curvature_pair_ok() => {
                 for t in 0..nt {
                     if metric { obj.metric(st, t, &g.v[t], &mut pg.v[t], false)? } else { st.memcpy_dtod(&g.v[t], &mut pg.v[t])? }
                 }
             }
-            Precond::Zmshr1 | Precond::Zmshr1M => {
+            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet => {
                 // chunk t: s = x − x_prev, m = g − g_prev, ms = M⁻¹ s, mm = M m (M = I for plain ZMSHR1); buffers
                 // [s, m, ms, mm, stage_a, stage_b] of the chunk's length
                 let secant = |obj: &mut dyn Objective, sc: &mut Vec<CudaSlice<C32>>, t: usize, xp: &Store, gp: &Store| -> Result<(), Error> {
@@ -877,20 +1123,20 @@ pub fn run_objective_with(
                     }
                     Ok(())
                 };
-                // pass 1: secant inner products
-                let (mut ss, mut sm, mut mm) = (0.0, 0.0, 0.0);
+                // pass 1: secant inner products per set [⟨s, M⁻¹s⟩, ⟨s, m⟩, ⟨m, M m⟩]
+                let mut d1 = vec![[0.0f64; 3]; nt];
                 for t in 0..nt {
                     let sc = scratch.get(st, lens[t], 6)?;
                     secant(obj, sc, t, &x_prev, &g_prev)?;
                     let (s_, m_, ms, mmv) = if metric { (&sc[0], &sc[1], &sc[2], &sc[3]) } else { (&sc[0], &sc[1], &sc[0], &sc[1]) };
-                    ss += obj.kernels().dot(st, s_, ms)?.re;
-                    sm += obj.kernels().dot(st, s_, m_)?.re;
-                    mm += obj.kernels().dot(st, m_, mmv)?.re;
+                    d1[t] = [obj.kernels().dot(st, s_, ms)?.re, obj.kernels().dot(st, s_, m_)?.re, obj.kernels().dot(st, m_, mmv)?.re];
                 }
-                let (a, tau) = zmshr1_scalars(ss, sm, mm);
-                // pass 2: w = (1 − τa) s − τ(1−a) mm, z = (1−a) m + a ms; uv, norms, ⟨w, g⟩; step = τ M g
-                let (mut uv, mut ww, mut zz, mut wg) = (0.0, 0.0, 0.0, 0.0);
+                // (a, τ) per set, or the global pair from the summed products (identical for every set)
+                let at = zmshr1_scalars_sets(&d1, per_set);
+                // pass 2: w = (1 − τa) s − τ(1−a) mm, z = (1−a) m + a ms; uv, norms, ⟨w, g⟩ per set; step = τ M g
+                let mut d2 = vec![[0.0f64; 4]; nt];
                 for t in 0..nt {
+                    let (a, tau) = at[t];
                     let sc = scratch.get(st, lens[t], 6)?;
                     secant(obj, sc, t, &x_prev, &g_prev)?;
                     let (w_, rest) = sc.split_at_mut(1);
@@ -903,21 +1149,29 @@ pub fn run_objective_with(
                         obj.kernels().axpby(st, re(a), &w_[0], re(1.0 - a), &mut z_[0])?;
                         obj.kernels().axpby(st, re(-tau), &z_[0], one, &mut w_[0])?;
                     }
-                    uv += obj.kernels().dot(st, &w_[0], &z_[0])?.re;
-                    ww += obj.kernels().dot(st, &w_[0], &w_[0])?.re;
-                    zz += obj.kernels().dot(st, &z_[0], &z_[0])?.re;
-                    wg += obj.kernels().dot(st, &w_[0], &g.v[t])?.re;
+                    d2[t] = [
+                        obj.kernels().dot(st, &w_[0], &z_[0])?.re,
+                        obj.kernels().dot(st, &w_[0], &w_[0])?.re,
+                        obj.kernels().dot(st, &z_[0], &z_[0])?.re,
+                        obj.kernels().dot(st, &w_[0], &g.v[t])?.re,
+                    ];
                     if let Some(ws) = w_store.as_mut() {
                         ws.put(st, t, &w_[0])?;
                     }
                     if metric { obj.metric(st, t, &g.v[t], &mut pg.v[t], false)? } else { st.memcpy_dtod(&g.v[t], &mut pg.v[t])? }
                     obj.kernels().axpby(st, re(0.0), &g.v[t], re(tau), &mut pg.v[t])?;
                 }
-                let ok = uv > 1e-8 * ww.sqrt() * zz.sqrt();
+                // rank-one coefficients c_t = ⟨w, g⟩ / ⟨w, z⟩ (0 where the safeguard fires)
+                let ct = zmshr1_rank_one_sets(&d2, per_set);
+                let ok = ct.iter().any(|&c| c != 0.0);
                 if ok {
-                    // pass 3: step += (⟨w, g⟩ / ⟨w, z⟩) w
-                    let c = wg / uv;
+                    // pass 3: step += c_t w
                     for t in 0..nt {
+                        let (a, tau) = at[t];
+                        let c = ct[t];
+                        if c == 0.0 {
+                            continue;
+                        }
                         let sc = scratch.get(st, lens[t], 6)?;
                         if let Some(ws) = w_store.as_ref() {
                             let w = ws.view(st, t, &mut sc[0])?;
@@ -934,8 +1188,11 @@ pub fn run_objective_with(
                         }
                     }
                 }
-                if metric && k % 10 == 0 {
-                    eprintln!("    zmshr1-M it {k}: a {a:.3} tau {tau:.3e} uv>thr {ok}");
+                if k % 10 == 0 && (metric || per_set) {
+                    let taus: Vec<f64> = at.iter().map(|p| p.1).collect();
+                    let (lo, hi) = taus.iter().fold((f64::INFINITY, 0.0f64), |(l, h), &v| (l.min(v), h.max(v)));
+                    let mixed = at.iter().filter(|p| p.0 > 0.0).count();
+                    eprintln!("    zmshr1{} it {k}: tau {lo:.3e}..{hi:.3e}, a > 0 in {mixed}/{nt} sets, rank-one in {}/{nt}", if metric { "-M" } else { "" }, ct.iter().filter(|&&c| c != 0.0).count());
                 }
             }
         }
@@ -947,6 +1204,7 @@ pub fn run_objective_with(
         }
         // z = x − P α g, x = D(z)
         axpby(obj.kernels(), st, -1.0, &pg, 1.0, x)?;
+        tm.lap(st, 1);
         for t in 0..nt {
             let h = st.clone_dtoh(&x.v[t])?;
             host[off[t]..off[t] + lens[t]].copy_from_slice(&h);
@@ -955,7 +1213,10 @@ pub fn run_objective_with(
         for t in 0..nt {
             st.memcpy_htod(&host[off[t]..off[t] + lens[t]], &mut x.v[t])?;
         }
+        tm.lap(st, 2);
         report(k, x, f);
+        tm.lap(st, 3);
+        tm.log(k, ctl);
         if let Some((c, name)) = ctl {
             let next = k + 1;
             if c.stop_requested() && next < iters {

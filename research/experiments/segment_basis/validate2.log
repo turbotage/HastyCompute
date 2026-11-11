@@ -1,0 +1,14 @@
+case: 3321192 fit voxels, 56046 blocks, near-centre n 78, far n 63, conc max 0.31 cycles, sigma 40.47, fat False, r2s False
+n=10 kap=5: rss-FFT shell 4.562e+05   32-coil FFT shell nan
+n=30 kap=43: rss-FFT shell 1.447e+06   32-coil FFT shell nan
+n=50 kap=116: rss-FFT shell 9.988e+05   32-coil FFT shell nan
+n=80 kap=224: rss-FFT shell 4.313e+05   32-coil FFT shell 4.884e+05
+n=120 kap=336: rss-FFT shell 3.092e+05   32-coil FFT shell nan
+n=300 kap=645: rss-FFT shell 1.772e+04   32-coil FFT shell 1.771e+04
+n=600 kap=923: rss-FFT shell 1.872e+04   32-coil FFT shell nan
+n=1990 kap=1570: rss-FFT shell 7.544e+03   32-coil FFT shell nan
+n=3700 kap=619: rss-FFT shell 2.009e+04   32-coil FFT shell nan
+n=3850 kap=359: rss-FFT shell 2.260e+05   32-coil FFT shell 2.277e+05
+n=3930 kap=114: rss-FFT shell 6.219e+05   32-coil FFT shell nan
+n=3960 kap=18: rss-FFT shell 4.875e+05   32-coil FFT shell nan
+n=3985 kap=0: rss-FFT shell 8.168e+03   32-coil FFT shell nan

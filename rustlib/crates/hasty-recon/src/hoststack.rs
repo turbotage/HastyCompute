@@ -213,7 +213,7 @@ impl SetStreamer {
     }
 }
 
-use crate::p2np::zmshr1_scalars;
+use crate::p2np::{zmshr1_rank_one_sets, zmshr1_scalars_sets};
 
 /// [`crate::p2np::run_objective_with`] on host stacks: x, ∇f, the step and the ZMSHR1 secant pair live in host memory;
 /// the gradient streams set by set ([`Objective::gradient_host`]); the update arithmetic runs on the CPU.
@@ -285,6 +285,253 @@ pub fn load_raw(c: &RunCtl, name: &str, stacks: &mut [&mut HostStack]) -> Result
     Ok(Some(h["meta"].clone()))
 }
 
+/// How [`pooled_pcg_host_with`] evaluates the group gradients Σ_{t∈g} ∇f_t(x_g).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PooledGrad {
+    /// the objective's grouped gradient ([`Objective::gradient_groups_host`]) when it has one, else `Replicate`
+    Auto,
+    /// the grouped gradient (an error if the objective has none): each group image is used once by all of its sets
+    /// (`SetOp::forward_group` / `adjoint_group`: for the segmented operator one grid FFT per segment and coil batch
+    /// per group instead of per set); no full-size host stacks
+    Grouped,
+    /// copy every group image into each of its sets, one full-stack `gradient_host`, sum per group (two host stacks
+    /// of all sets; every set pays its own transforms)
+    Replicate,
+}
+
+impl PooledGrad {
+    /// parse a command-line name: auto, grouped, replicate
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "auto" => PooledGrad::Auto,
+            "grouped" => PooledGrad::Grouped,
+            "replicate" => PooledGrad::Replicate,
+            _ => return None,
+        })
+    }
+}
+
+/// Pooled preconditioned CG through the full objective (the physics-model warm start).
+///
+/// For every group g of sets (e.g. all frames of one encode) solve min_x Σ_{t∈g} f_t(x) for one image x_g shared by
+/// the group's sets: CG on the normal equations Σ_{t∈g} N_t x = Σ_{t∈g} A_t^H y_t, independently per group (own CG
+/// scalars), all groups advanced by one gradient pass over all sets per iteration. The products use only the
+/// objective's gradient (affine in x): N p = ∇f(p) − ∇f(0). `metric`: precondition group g by the objective's metric
+/// of its first set (with shared circulants, the group's circulant). `x[g]` is the initial guess, updated in place.
+/// Resumable through raw checkpoints every `every` iterations (`state_<name>.hsk`). The group gradients come from
+/// the objective's grouped gradient when it has one ([`PooledGrad::Auto`], [`pooled_pcg_host_with`]).
+#[allow(clippy::too_many_arguments)]
+pub fn pooled_pcg_host(
+    obj: &mut dyn Objective,
+    st: &Arc<CudaStream>,
+    group_of: &[usize],
+    x: &mut [Vec<C32>],
+    iters: usize,
+    metric: bool,
+    ctl: Option<(&RunCtl, &str)>,
+    every: usize,
+) -> Result<Outcome, Error> {
+    pooled_pcg_host_with(obj, st, group_of, x, iters, metric, ctl, every, PooledGrad::Auto)
+}
+
+/// [`pooled_pcg_host`] with the group-gradient evaluation chosen by `grad`. The iterates do not depend on it (up to
+/// float32 summation order), so a checkpoint written under one mode resumes under the other.
+#[allow(clippy::too_many_arguments)]
+pub fn pooled_pcg_host_with(
+    obj: &mut dyn Objective,
+    st: &Arc<CudaStream>,
+    group_of: &[usize],
+    x: &mut [Vec<C32>],
+    iters: usize,
+    metric: bool,
+    ctl: Option<(&RunCtl, &str)>,
+    every: usize,
+    grad: PooledGrad,
+) -> Result<Outcome, Error> {
+    let lens = obj.lens();
+    let nt = lens.len();
+    let ng = x.len();
+    let nv = x[0].len();
+    assert_eq!(group_of.len(), nt, "pooled PCG: one group per set");
+    assert!(lens.iter().all(|&l| l == nv), "pooled PCG: every set must hold one image of the group's size");
+    assert!(group_of.iter().all(|&g| g < ng));
+    let rep: Vec<usize> = (0..ng).map(|g| group_of.iter().position(|&h| h == g).expect("pooled PCG: empty group")).collect();
+    let glens = vec![nv; ng];
+    let groups: Vec<Vec<usize>> = (0..ng).map(|g| (0..nt).filter(|&t| group_of[t] == g).collect()).collect();
+    // replicate path: full stacks (all sets), allocated on first use
+    let mut full: Option<(HostStack, HostStack)> = None;
+    // per-group vectors as host stacks of ng chunks (raw checkpoints)
+    let (mut xs, mut rs, mut ps, mut g0) = (HostStack::zeros(&glens), HostStack::zeros(&glens), HostStack::zeros(&glens), HostStack::zeros(&glens));
+    for g in 0..ng {
+        xs.chunk_mut(g).copy_from_slice(&x[g]);
+    }
+    let mut rz = vec![0.0f64; ng];
+    let mut r0 = vec![0.0f64; ng];
+    let mut k0 = 0;
+    let replicate = |v: &HostStack, big: &mut HostStack| {
+        for t in 0..nt {
+            big.chunk_mut(t).copy_from_slice(v.chunk(group_of[t]));
+        }
+    };
+    // Σ_{t∈g} G_t − sub_g into out (f64 accumulation per group)
+    let group_sum = |grad: &HostStack, sub: Option<&HostStack>, out: &mut HostStack| {
+        for g in 0..ng {
+            let mut acc = vec![[0.0f64; 2]; nv];
+            for t in (0..nt).filter(|&t| group_of[t] == g) {
+                acc.par_chunks_mut(PAR).zip(grad.chunk(t).par_chunks(PAR)).for_each(|(a, b)| {
+                    for (ai, bi) in a.iter_mut().zip(b) {
+                        ai[0] += bi.re as f64;
+                        ai[1] += bi.im as f64;
+                    }
+                });
+            }
+            let o = out.chunk_mut(g);
+            match sub {
+                Some(s) => {
+                    let sg = s.chunk(g);
+                    o.par_chunks_mut(PAR).zip(acc.par_chunks(PAR)).zip(sg.par_chunks(PAR)).for_each(|((oc, ac), sc)| {
+                        for ((oi, ai), si) in oc.iter_mut().zip(ac).zip(sc) {
+                            *oi = C32::new((ai[0] - si.re as f64) as f32, (ai[1] - si.im as f64) as f32);
+                        }
+                    })
+                }
+                None => o.par_chunks_mut(PAR).zip(acc.par_chunks(PAR)).for_each(|(oc, ac)| {
+                    for (oi, ai) in oc.iter_mut().zip(ac) {
+                        *oi = C32::new(ai[0] as f32, ai[1] as f32);
+                    }
+                }),
+            }
+        }
+    };
+    let precond = |obj: &mut dyn Objective, r: &HostStack, z: &mut HostStack| -> Result<(), Error> {
+        for g in 0..ng {
+            if metric {
+                let (o, l) = (z.off[g], z.lens[g]);
+                obj.metric_host(st, rep[g], r.chunk(g), &mut z.data[o..o + l], false)?;
+            } else {
+                z.chunk_mut(g).copy_from_slice(r.chunk(g));
+            }
+        }
+        Ok(())
+    };
+    let gdot = |a: &HostStack, b: &HostStack, g: usize| -> f64 {
+        a.chunk(g).par_chunks(PAR).zip(b.chunk(g).par_chunks(PAR)).map(|(x, y)| x.iter().zip(y).map(|(p, q)| p.re as f64 * q.re as f64 + p.im as f64 * q.im as f64).sum::<f64>()).sum()
+    };
+    let gaxpy = |alpha: f64, a: &HostStack, b: &mut HostStack, g: usize, beta: f64| {
+        let (al, be) = (alpha as f32, beta as f32);
+        b.chunk_mut(g).par_chunks_mut(PAR).zip(a.chunk(g).par_chunks(PAR)).for_each(|(y, x)| {
+            for (yi, xi) in y.iter_mut().zip(x) {
+                *yi = C32::new(al * xi.re + be * yi.re, al * xi.im + be * yi.im);
+            }
+        });
+    };
+    // out_g = Σ_{t∈g} ∇f_t(v_g) − sub_g: grouped, or replicated into the full stack and summed (f64)
+    let mut group_grad = |obj: &mut dyn Objective, v: &HostStack, sub: Option<&HostStack>, out: &mut HostStack| -> Result<(), Error> {
+        if grad != PooledGrad::Replicate {
+            if obj.gradient_groups_host(st, &groups, v, out)?.is_some() {
+                if let Some(s) = sub {
+                    HostStack::axpby(-1.0, s, 1.0, out);
+                }
+                return Ok(());
+            }
+            if grad == PooledGrad::Grouped {
+                return Err(Error::Format("pooled PCG: the objective has no grouped gradient (PooledGrad::Grouped)".into()));
+            }
+        }
+        let (big, gradf) = full.get_or_insert_with(|| (HostStack::zeros(&lens), HostStack::zeros(&lens)));
+        replicate(v, big);
+        obj.gradient_host(st, big, gradf)?;
+        group_sum(gradf, sub, out);
+        Ok(())
+    };
+    let mut loaded = false;
+    if let Some((c, name)) = ctl {
+        if let Some(m) = load_raw(c, name, &mut [&mut xs, &mut rs, &mut ps, &mut g0])? {
+            k0 = m["k"].as_u64().unwrap_or(0) as usize;
+            rz = serde_json::from_value(m["rz"].clone()).map_err(|e| Error::Format(format!("pooled PCG checkpoint: {e}")))?;
+            r0 = serde_json::from_value(m["r0"].clone()).map_err(|e| Error::Format(format!("pooled PCG checkpoint: {e}")))?;
+            loaded = true;
+            eprintln!("  resuming pooled PCG {name} at iteration {k0} / {iters}");
+        }
+    }
+    if !loaded {
+        // g0 = Σ ∇f(0) = −b (one pass); r = b − N x = −Σ ∇f(x) (a second pass unless x = 0)
+        group_grad(obj, &HostStack::zeros(&glens), None, &mut g0)?;
+        let x_zero = xs.data.iter().all(|v| v.re == 0.0 && v.im == 0.0);
+        if x_zero {
+            rs.copy_from(&g0);
+        } else {
+            group_grad(obj, &xs, None, &mut rs)?;
+        }
+        rs.data.par_chunks_mut(PAR).for_each(|c| c.iter_mut().for_each(|v| *v = C32::new(-v.re, -v.im)));
+        let mut zs = HostStack::zeros(&glens);
+        precond(obj, &rs, &mut zs)?;
+        ps.copy_from(&zs);
+        for g in 0..ng {
+            rz[g] = gdot(&rs, &zs, g);
+            r0[g] = gdot(&rs, &rs, g).sqrt();
+        }
+    }
+    let mut zs = HostStack::zeros(&glens);
+    let mut qs = HostStack::zeros(&glens);
+    for k in k0..iters {
+        // q = N p = Σ ∇f(p) − Σ ∇f(0)
+        group_grad(obj, &ps, Some(&g0), &mut qs)?;
+        for g in 0..ng {
+            let pq = gdot(&ps, &qs, g);
+            if !(pq > 0.0) || rz[g] == 0.0 {
+                continue;
+            }
+            let a = rz[g] / pq;
+            gaxpy(a, &ps, &mut xs, g, 1.0);
+            gaxpy(-a, &qs, &mut rs, g, 1.0);
+        }
+        precond(obj, &rs, &mut zs)?;
+        let mut rel = Vec::with_capacity(ng);
+        for g in 0..ng {
+            let rz_new = gdot(&rs, &zs, g);
+            let b = if rz[g] != 0.0 { rz_new / rz[g] } else { 0.0 };
+            rz[g] = rz_new;
+            gaxpy(1.0, &zs, &mut ps, g, b);
+            rel.push(gdot(&rs, &rs, g).sqrt() / r0[g].max(1e-300));
+        }
+        eprintln!("  pooled PCG it {}: ‖r‖/‖r₀‖ per group {}", k + 1, rel.iter().map(|v| format!("{v:.2e}")).collect::<Vec<_>>().join(" "));
+        if let Some((c, name)) = ctl {
+            let next = k + 1;
+            let meta = serde_json::json!({ "k": next, "rz": rz, "r0": r0 });
+            if c.stop_requested() && next < iters {
+                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0])?;
+                return Ok(Outcome::Stopped(next));
+            }
+            if every > 0 && next % every == 0 && next < iters {
+                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0])?;
+            }
+        }
+    }
+    for g in 0..ng {
+        x[g].copy_from_slice(xs.chunk(g));
+    }
+    if let Some((c, name)) = ctl {
+        clear_raw(c, name);
+    }
+    Ok(Outcome::Finished)
+}
+
+/// Re⟨a_t, b_t⟩ over set t (f64 accumulation)
+fn rdot_chunk(a: &HostStack, b: &HostStack, t: usize) -> f64 {
+    a.chunk(t).par_chunks(PAR).zip(b.chunk(t).par_chunks(PAR)).map(|(x, y)| x.iter().zip(y).map(|(p, q)| p.re as f64 * q.re as f64 + p.im as f64 * q.im as f64).sum::<f64>()).sum()
+}
+
+/// b_t = α a_t + β b_t over set t (real scalars)
+fn axpby_chunk(alpha: f64, a: &HostStack, beta: f64, b: &mut HostStack, t: usize) {
+    let (al, be) = (alpha as f32, beta as f32);
+    b.chunk_mut(t).par_chunks_mut(PAR).zip(a.chunk(t).par_chunks(PAR)).for_each(|(y, x)| {
+        for (yi, xi) in y.iter_mut().zip(x) {
+            *yi = C32::new(al * xi.re + be * yi.re, al * xi.im + be * yi.im);
+        }
+    });
+}
+
 pub fn clear_raw(c: &RunCtl, name: &str) {
     let _ = std::fs::remove_file(ck_path(c, name));
 }
@@ -302,11 +549,13 @@ pub fn run_objective_host(
 ) -> Result<Outcome, Error> {
     let lens = x.lens.clone();
     let nt = lens.len();
-    let quasi = matches!(precond, Precond::Zmshr1 | Precond::Zmshr1M);
-    let metric = precond == Precond::Zmshr1M;
+    let quasi = precond.quasi();
+    // ZMSHR1 in the circulant metric (the plain circulant step has its own arm)
+    let metric = quasi && precond.metric();
+    let per_set = precond.per_set();
     let mut g = HostStack::zeros(&lens);
     // the step as a stack only for the metric preconditioners; plain steps are fused into the update below
-    let needs_pg = matches!(precond, Precond::Circulant | Precond::Zmshr1M);
+    let needs_pg = precond.metric();
     let mut pg = if needs_pg { HostStack::zeros(&lens) } else { HostStack::default() };
     let (mut x_prev, mut g_prev) = if quasi { (HostStack::zeros(&lens), HostStack::zeros(&lens)) } else { (HostStack::default(), HostStack::default()) };
     let mut k0 = 0;
@@ -350,8 +599,10 @@ pub fn run_objective_host(
         Ok(())
     };
     for k in k0..iters {
+        let mut tm = crate::p2np::IterTimer::start();
         obj.begin_iteration(k, iters);
         let f = obj.gradient_host(st, x, &mut g)?;
+        tm.lap(st, 0);
         // scaled gradient α g
         g.data.par_chunks_mut(PAR).for_each(|c| c.iter_mut().for_each(|v| *v = C32::new(v.re * alpha as f32, v.im * alpha as f32)));
         // step kinds: `plain` = the scaled gradient itself, `fused` = already applied (x, x_prev, g_prev updated)
@@ -359,16 +610,18 @@ pub fn run_objective_host(
         match precond {
             Precond::None => plain = true,
             Precond::Circulant => apply_metric(obj, &g, &mut pg, false)?,
-            Precond::Zmshr1 | Precond::Zmshr1M if k == 0 || !obj.curvature_pair_ok() => {
+            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if k == 0 || !obj.curvature_pair_ok() => {
                 if metric { apply_metric(obj, &g, &mut pg, false)? } else { plain = true }
             }
-            Precond::Zmshr1 => {
+            Precond::Zmshr1 | Precond::Zmshr1Set => {
                 // plain ZMSHR1 fused over the elements: s = x − x_prev, m = g − g_prev are never stored
                 let el = |i: usize, x: &[C32], xp: &[C32], g: &[C32], gp: &[C32]| -> ([f64; 2], [f64; 2]) {
                     ([(x[i].re - xp[i].re) as f64, (x[i].im - xp[i].im) as f64], [(g[i].re - gp[i].re) as f64, (g[i].im - gp[i].im) as f64])
                 };
-                let dots = |f: &(dyn Fn([f64; 2], [f64; 2], [f64; 2]) -> [f64; 4] + Sync)| -> [f64; 4] {
-                    x.data.par_chunks(PAR).zip(x_prev.data.par_chunks(PAR)).zip(g.data.par_chunks(PAR)).zip(g_prev.data.par_chunks(PAR))
+                // element ranges: one per set (per-set ZMSHR1) or the whole stack (global)
+                let ranges: Vec<std::ops::Range<usize>> = if per_set { (0..nt).map(|t| x.off[t]..x.off[t] + lens[t]).collect() } else { vec![0..x.data.len()] };
+                let dots = |r: &std::ops::Range<usize>, f: &(dyn Fn([f64; 2], [f64; 2], [f64; 2]) -> [f64; 4] + Sync)| -> [f64; 4] {
+                    x.data[r.clone()].par_chunks(PAR).zip(x_prev.data[r.clone()].par_chunks(PAR)).zip(g.data[r.clone()].par_chunks(PAR)).zip(g_prev.data[r.clone()].par_chunks(PAR))
                         .map(|(((xc, xpc), gc), gpc)| {
                             let mut acc = [0.0f64; 4];
                             for i in 0..xc.len() {
@@ -380,31 +633,41 @@ pub fn run_objective_host(
                         })
                         .reduce(|| [0.0; 4], |a, b| [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]])
                 };
-                let d1 = dots(&|s, m, _| [s[0] * s[0] + s[1] * s[1], s[0] * m[0] + s[1] * m[1], m[0] * m[0] + m[1] * m[1], 0.0]);
-                let (a, tau) = zmshr1_scalars(d1[0], d1[1], d1[2]);
+                let d1: Vec<[f64; 3]> = ranges.iter().map(|r| {
+                    let v = dots(r, &|s, m, _| [s[0] * s[0] + s[1] * s[1], s[0] * m[0] + s[1] * m[1], m[0] * m[0] + m[1] * m[1], 0.0]);
+                    [v[0], v[1], v[2]]
+                }).collect();
+                let at = zmshr1_scalars_sets(&d1, per_set);
                 // z = a s + (1−a) m, w = s − τ z
-                let wz = move |s: [f64; 2], m: [f64; 2]| -> ([f64; 2], [f64; 2]) {
+                let wz = |a: f64, tau: f64, s: [f64; 2], m: [f64; 2]| -> ([f64; 2], [f64; 2]) {
                     let z = [a * s[0] + (1.0 - a) * m[0], a * s[1] + (1.0 - a) * m[1]];
                     ([s[0] - tau * z[0], s[1] - tau * z[1]], z)
                 };
-                let d2 = dots(&|s, m, gv| { let (w, z) = wz(s, m); [w[0] * z[0] + w[1] * z[1], w[0] * w[0] + w[1] * w[1], z[0] * z[0] + z[1] * z[1], w[0] * gv[0] + w[1] * gv[1]] });
-                let (uv, ww, zz, wg) = (d2[0], d2[1], d2[2], d2[3]);
-                let c = if uv > 1e-8 * ww.sqrt() * zz.sqrt() { wg / uv } else { 0.0 };
+                let d2: Vec<[f64; 4]> = ranges.iter().zip(&at).map(|(r, &(a, tau))| {
+                    dots(r, &|s, m, gv| { let (w, z) = wz(a, tau, s, m); [w[0] * z[0] + w[1] * z[1], w[0] * w[0] + w[1] * w[1], z[0] * z[0] + z[1] * z[1], w[0] * gv[0] + w[1] * gv[1]] })
+                }).collect();
+                let ct = zmshr1_rank_one_sets(&d2, per_set);
                 // step = τ g + c w, fused with the update: x_prev ← x, g_prev ← g, x ← x − step (no step stack)
-                x.data.par_chunks_mut(PAR).zip(x_prev.data.par_chunks_mut(PAR)).zip(g.data.par_chunks(PAR)).zip(g_prev.data.par_chunks_mut(PAR))
-                    .for_each(|(((xc, xpc), gc), gpc)| {
-                        for i in 0..xc.len() {
-                            let (s, m) = el(i, xc, xpc, gc, gpc);
-                            let (w, _) = wz(s, m);
-                            let step = C32::new((tau * gc[i].re as f64 + c * w[0]) as f32, (tau * gc[i].im as f64 + c * w[1]) as f32);
-                            xpc[i] = xc[i];
-                            gpc[i] = gc[i];
-                            xc[i] = C32::new(xc[i].re - step.re, xc[i].im - step.im);
-                        }
-                    });
+                for ((r, &(a, tau)), &c) in ranges.iter().zip(&at).zip(&ct) {
+                    x.data[r.clone()].par_chunks_mut(PAR).zip(x_prev.data[r.clone()].par_chunks_mut(PAR)).zip(g.data[r.clone()].par_chunks(PAR)).zip(g_prev.data[r.clone()].par_chunks_mut(PAR))
+                        .for_each(|(((xc, xpc), gc), gpc)| {
+                            for i in 0..xc.len() {
+                                let (s, m) = el(i, xc, xpc, gc, gpc);
+                                let (w, _) = wz(a, tau, s, m);
+                                let step = C32::new((tau * gc[i].re as f64 + c * w[0]) as f32, (tau * gc[i].im as f64 + c * w[1]) as f32);
+                                xpc[i] = xc[i];
+                                gpc[i] = gc[i];
+                                xc[i] = C32::new(xc[i].re - step.re, xc[i].im - step.im);
+                            }
+                        });
+                }
+                if per_set && k % 10 == 0 {
+                    let (lo, hi) = at.iter().fold((f64::INFINITY, 0.0f64), |(l, h), p| (l.min(p.1), h.max(p.1)));
+                    eprintln!("    zmshr1 per set it {k}: tau {lo:.3e}..{hi:.3e}, a > 0 in {}/{nt} sets, rank-one in {}/{nt}", at.iter().filter(|p| p.0 > 0.0).count(), ct.iter().filter(|&&c| c != 0.0).count());
+                }
                 fused = true;
             }
-            Precond::Zmshr1M => {
+            Precond::Zmshr1M | Precond::Zmshr1MSet => {
                 // with the metric: s, m and M⁻¹ s, M m as host temporaries (the metric is applied chunk by chunk)
                 let mut s = x.clone();
                 HostStack::axpby(-1.0, &x_prev, 1.0, &mut s);
@@ -416,24 +679,29 @@ pub fn run_objective_host(
                     apply_metric(obj, &m, &mut b, false)?;
                     (a, b)
                 };
-                let ss = HostStack::rdot(&s, &ms);
-                let sm = HostStack::rdot(&s, &m);
-                let mm = HostStack::rdot(&m, &mm_);
-                let (a, tau) = zmshr1_scalars(ss, sm, mm);
-                // w = (1 − τa) s − τ(1−a) Mm, z = (1−a) m + a M⁻¹s
+                let d1: Vec<[f64; 3]> = (0..nt).map(|t| [rdot_chunk(&s, &ms, t), rdot_chunk(&s, &m, t), rdot_chunk(&m, &mm_, t)]).collect();
+                let at = zmshr1_scalars_sets(&d1, per_set);
+                // w = (1 − τa) s − τ(1−a) Mm, z = (1−a) m + a M⁻¹s (per set)
                 let mut w = s;
-                HostStack::axpby(-tau * (1.0 - a), &mm_, 1.0 - tau * a, &mut w);
                 let mut z = m;
-                HostStack::axpby(a, &ms, 1.0 - a, &mut z);
-                let (uv, ww, zz, wg) = (HostStack::rdot(&w, &z), HostStack::rdot(&w, &w), HostStack::rdot(&z, &z), HostStack::rdot(&w, &g));
-                // step = τ M g (+ (⟨w, g⟩ / ⟨w, z⟩) w)
+                for t in 0..nt {
+                    let (a, tau) = at[t];
+                    axpby_chunk(-tau * (1.0 - a), &mm_, 1.0 - tau * a, &mut w, t);
+                    axpby_chunk(a, &ms, 1.0 - a, &mut z, t);
+                }
+                let d2: Vec<[f64; 4]> = (0..nt).map(|t| [rdot_chunk(&w, &z, t), rdot_chunk(&w, &w, t), rdot_chunk(&z, &z, t), rdot_chunk(&w, &g, t)]).collect();
+                let ct = zmshr1_rank_one_sets(&d2, per_set);
+                // step = τ_t M g (+ c_t w)
                 apply_metric(obj, &g, &mut pg, false)?;
-                HostStack::axpby(0.0, &g, tau, &mut pg);
-                if uv > 1e-8 * ww.sqrt() * zz.sqrt() {
-                    HostStack::axpby(wg / uv, &w, 1.0, &mut pg);
+                for t in 0..nt {
+                    axpby_chunk(0.0, &g, at[t].1, &mut pg, t);
+                    if ct[t] != 0.0 {
+                        axpby_chunk(ct[t], &w, 1.0, &mut pg, t);
+                    }
                 }
                 if k % 10 == 0 {
-                    eprintln!("    zmshr1-M it {k}: a {a:.3} tau {tau:.3e}");
+                    let (lo, hi) = at.iter().fold((f64::INFINITY, 0.0f64), |(l, h), p| (l.min(p.1), h.max(p.1)));
+                    eprintln!("    zmshr1-M{} it {k}: a {:.3} tau {lo:.3e}..{hi:.3e}, rank-one in {}/{nt}", if per_set { " per set" } else { "" }, at[0].0, ct.iter().filter(|&&c| c != 0.0).count());
                 }
             }
         }
@@ -458,8 +726,12 @@ pub fn run_objective_host(
             }
             HostStack::axpby(-1.0, &pg, 1.0, x);
         }
+        tm.lap(st, 1);
         denoise(k, &mut x.data);
+        tm.lap(st, 2);
         report(k, x, f);
+        tm.lap(st, 3);
+        tm.log(k, ctl);
         if let Some((c, name)) = ctl {
             let next = k + 1;
             if c.stop_requested() && next < iters {

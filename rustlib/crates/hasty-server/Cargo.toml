@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+hasty-site = { path = "../hasty-site" }
 hasty-value = { path = "../hasty-value" }
 num-complex.workspace = true
 rustfft.workspace = true

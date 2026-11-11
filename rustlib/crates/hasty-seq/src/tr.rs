@@ -184,7 +184,14 @@ impl Tr {
         } else if i < self.i_ro {
             Part::Encode
         } else if i < self.i_tail {
-            Part::Readout
+            // navigator samples after the last reconstruction sample of a leg readout (its final rewinder,
+            // `optim::Leg`) count as the tail: it is designed and PNS-derated at the tail's slew factor
+            let rec_end = self.spoke.recon.iter().map(|r| r[1]).max().unwrap_or(self.spoke.i_adc);
+            if rec_end < self.spoke.i_adc && i >= self.i_ro + rec_end {
+                Part::Tail
+            } else {
+                Part::Readout
+            }
         } else {
             Part::Tail
         }
