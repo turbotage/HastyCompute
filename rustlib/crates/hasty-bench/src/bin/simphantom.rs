@@ -2,7 +2,7 @@
 //!   simphantom <sim_input.hv> <out_dir> [--bin-ms 10] [--venc 1.5] [--venc-hi v] [--noise 0.02] [--rr-std 0] [--flip 12]
 //!              [--ideal] [--static] [--write-noisy] [--fat six|single] [--scan-time s] [--plan]
 //!              [--seq spiral | b0 [--b0-res 2e-3] [--b0-k 24] [--b0-pns 80] [--dwell 3e-6]
-//!                     | flow [--flow-run data/hasty/seq/flow_thorax] [--girf ideal|clinical|<variant>] [--dwell 2e-6]]
+//!                     | flow [--flow-run data/hasty/seq/flow_thorax] [--girf ideal|clinical|<variant>|<girf.json>] [--girf-hist N] [--dwell 2e-6]]
 //! `--seq` picks the schedule (`hasty_mrsim::sequence::Schedule`): the spiral 4D-flow `Acquisition` (default) or the
 //! hasty-seq B0 / R2* / fat train (`hasty_bench::seqsched::EchoSchedule`, also writes samples.npy [readout][adc][4] =
 //! k (rad/m, physical) and the time since excitation). Fat sources (shift ≠ 0) are split into the six-peak spectrum
@@ -12,6 +12,11 @@
 //! samples_played.npy [readout][adc][8] the played one (γM0 = k (rad/m), γM1 (rad·s/m), τ, B0-term phase), physical axes.
 //! Flow sims also write sched_nominal.npy (and sched_played.npy) [readout][adc][16]: the full per-sample records the
 //! reconstruction loader (hasty-recon `SimData`, `HASTY_TRAJ=nominal|played`) uses.
+//! `--girf <file.json>`: a measured / estimated chain (`hasty-girf-1` table file, hasty_seq `Girf::from_measurement`).
+//! `--girf-hist N`: play every TR with the chain's N previous TRs (hasty_seq `PlayedStream`, exact LTI superposition;
+//! research/girf_sensitivity.md: ≈ 10 needed for 10–30 ms eddy terms); default 0 = one previous TR (the original path).
+//! The meta records the design's reconstruction window (`sequence.recon_adc`: ADC-index ranges; seqdesign `recon`):
+//! the reconstruction loader keeps those samples, the rest (e.g. v2's rewinder) is navigator data.
 //! `--plan`: build the schedule, write readouts.npy, samples*.npy and plan.json (cost estimate), no GPU work.
 //! Readouts are grouped into absolute-time bins; per bin (cardiac time from the ECG, breathing state r, ṙ):
 //! - tissue sources (Lagrangian, reference pose) are moved by the cardiac displacement (periodic Catmull-Rom of the
@@ -387,6 +392,7 @@ fn main() {
     let dwell_opt: Option<f64> = take("--dwell").map(|s| s.parse().unwrap());
     let flow_run = take("--flow-run").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax"));
     let girf_name = take("--girf").unwrap_or_else(|| "ideal".into());
+    let girf_hist: usize = take("--girf-hist").map(|s| s.parse().expect("--girf-hist N")).unwrap_or(0);
     // --beats <lbm_run>: per-heartbeat chamber flow from the LBM beat library (hasty_bench::beats), each heartbeat a
     // library beat (seeded shuffle, the first --beat-max of the library), the intravoxel distribution as six
     // moment-matched sub-sources per covered voxel (coverage ≥ --beat-cover); a beat's moments are computed on first use
@@ -471,9 +477,11 @@ fn main() {
             let girf = match girf_name.as_str() {
                 "ideal" | "none" => hasty_seq::girf::Girf::ideal(),
                 "clinical" => hasty_seq::girf::Girf::clinical_example(),
-                name => hasty_seq::girf::Girf::variants().into_iter().find(|v| v.0 == name).unwrap_or_else(|| panic!("--girf {name}: ideal | clinical | a Girf::variants() name")).1,
+                f if f.ends_with(".json") => hasty_seq::girf::Girf::from_measurement(std::path::Path::new(f)).unwrap_or_else(|e| panic!("--girf {f}: {e}")),
+                name => hasty_seq::girf::Girf::variants().into_iter().find(|v| v.0 == name).unwrap_or_else(|| panic!("--girf {name}: ideal | clinical | a Girf::variants() name | <girf.json>")).1,
             };
             let fs = FlowSchedule::load(&flow_run, scan_time, dwell_arg, fp.b0, ecg.clone(), fp.n_frames, girf, &girf_name);
+            let fs = if girf_hist > 0 { fs.with_history(girf_hist) } else { fs };
             seq_meta = fs.meta.clone();
             if girf_name != "ideal" && girf_name != "none" {
                 nominal = Some(Box::new(fs.with_girf(hasty_seq::girf::Girf::ideal(), "ideal")));

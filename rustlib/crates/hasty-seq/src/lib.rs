@@ -13,6 +13,10 @@
 //! - [`multiecho`]: short out-and-back multi-echo train (B0 / R2* / fat mapping), flow moments, PNS-fitted slew.
 //! - [`metrics`]: information per spoke (rotation-averaged density, spokes to Nyquist), concomitant anisotropy.
 //! - [`optim`]: parametric search over base spokes under G_max / S_max / PNS.
+//! - [`pulseq`]: Pulseq `.seq` writer (1.5.0 / 1.4.1, labels, rotations, signature) and reader for round-trip checks.
+//! - [`pnsge`]: GE's PNS model (TOPPE `pns.m` / pge2 checks, IEC 60601-2-33 form) with the Premier coil parameters.
+//! - [`girfqa`]: the GIRF QA measurement protocol (thin slices, phase encoding, inputs, heating, v2 validation).
+//! - [`girfmeas`]: measured-GIRF file (JSON) → [`girf::Girf`] at a thermal state, resonance list for the designer.
 //!
 //! Units: SI throughout (T/m, T/m/s, s, m); k in cycles/m (k = γ̄ M0).
 
@@ -20,8 +24,12 @@ pub mod encode;
 pub mod girf;
 pub mod metrics;
 pub mod multiecho;
+pub mod girfmeas;
+pub mod girfqa;
 pub mod optim;
 pub mod pns;
+pub mod pnsge;
+pub mod pulseq;
 pub mod robust;
 pub mod spoil;
 pub mod system;

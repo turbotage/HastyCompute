@@ -46,11 +46,13 @@ pub struct Options {
     pub checksum: bool,
     /// compress blocks in parallel (rayon)
     pub parallel: bool,
+    /// end-to-end stream digest (trailer); `None` costs nothing
+    pub integrity: crate::Integrity,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { codec: Codec::Lz4, block_size: 1 << 20, shuffle: true, delta: false, checksum: false, parallel: true }
+        Self { codec: Codec::Lz4, block_size: 1 << 20, shuffle: true, delta: false, checksum: false, parallel: true, integrity: crate::Integrity::None }
     }
 }
 

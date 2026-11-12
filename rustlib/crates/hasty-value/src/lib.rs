@@ -8,8 +8,10 @@
 
 pub mod codec;
 mod dtype;
+pub mod integrity;
 pub mod format;
 pub mod lazy;
+pub mod lossy;
 pub mod npy;
 pub mod quant;
 pub mod slice;
@@ -17,8 +19,10 @@ mod tensor;
 mod value;
 
 pub use codec::{Codec, Options};
+pub use integrity::Integrity;
 pub use dtype::{DType, Element};
-pub use format::{decode, encode, encode_to_vec, encode_with, read, write, Decoder};
+pub use format::{decode, encode, encode_lossy, encode_to_vec, encode_with, read, write, Decoder};
+pub use lossy::{Loss, LossPlan, Quant, Scope, Transfer};
 pub use lazy::{Lazy, LazyFile, TensorRef};
 pub use tensor::{Buffer, Tensor};
 pub use value::Value;

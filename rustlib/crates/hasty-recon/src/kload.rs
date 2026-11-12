@@ -156,6 +156,30 @@ impl SimData {
     pub fn readout_raw(&self, ro: usize, out: &mut [C32]) -> Result<(), Error> {
         let n = self.na * self.nc;
         assert_eq!(out.len(), n);
+        if let Some(keep) = &self.adc_keep {
+            // reconstruction window: the kept samples of the file's ADC row
+            let nc = self.nc;
+            let mut full = vec![C32::new(0.0, 0.0); self.na_file * nc];
+            self.readout_raw_full(ro, &mut full)?;
+            for (j, &i) in keep.iter().enumerate() {
+                out[j * nc..(j + 1) * nc].copy_from_slice(&full[i * nc..(i + 1) * nc]);
+            }
+            return Ok(());
+        }
+        match &self.lazy {
+            None => {
+                out.copy_from_slice(&self.data[ro * n..(ro + 1) * n]);
+                Ok(())
+            }
+            Some(l) => l.data.read_c32(ro * n, out),
+        }
+    }
+
+    /// raw (unwhitened) coil data of readout `ro` at every ADC sample of the file, [adc][coil] (window ignored; noise
+    /// as [`readout_raw`](Self::readout_raw): in memory already added, from a file none)
+    pub fn readout_raw_full(&self, ro: usize, out: &mut [C32]) -> Result<(), Error> {
+        let n = self.na_file * self.nc;
+        assert_eq!(out.len(), n);
         match &self.lazy {
             None => {
                 out.copy_from_slice(&self.data[ro * n..(ro + 1) * n]);
@@ -287,7 +311,8 @@ impl SimData {
                         z[c] = Complex64::new(re, im);
                     }
                     if let Some(sg) = noise {
-                        noise_pairs(seed, (ro * na + n) as u64, &mut g);
+                        // counter = the sample's index in the file (independent of a reconstruction window)
+                        noise_pairs(seed, (ro * self.na_file + self.adc_file_index(n)) as u64, &mut g);
                         for c in 0..nc {
                             z[c] += Complex64::new(sg * g[c].0, sg * g[c].1);
                         }

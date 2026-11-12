@@ -6,7 +6,7 @@ use std::path::Path;
 
 use hasty_mrsim::physio::Ecg;
 use hasty_mrsim::sequence::{sample_record, Schedule, SAMPLE_FLOATS};
-use hasty_seq::girf::{played_moments, Girf};
+use hasty_seq::girf::{played_moments, Girf, PlayedStream};
 use hasty_seq::multiecho::{golden_dirs, EchoTrain};
 use hasty_seq::traj::{acquisition_order, rotations, RotSet};
 use hasty_seq::wave::Grad;
@@ -129,6 +129,13 @@ pub struct FlowSchedule {
     pub girf: Girf,
     pub girf_name: String,
     pub meta: serde_json::Value,
+    /// raster ranges [a, b] of the base readout (from its start) holding reconstruction samples (seqdesign
+    /// `best.recon`; default the whole ADC window); the rest of the ADC is navigator data
+    pub recon: Vec<[usize; 2]>,
+    /// previous TRs carried by the chain ([`FlowSchedule::with_history`]); 0 = the original path (one previous TR
+    /// through `played_moments`)
+    pub hist: usize,
+    stream: Option<std::sync::Arc<PlayedStream>>,
 }
 
 impl FlowSchedule {
@@ -149,7 +156,9 @@ impl FlowSchedule {
         let tr_grad: Vec<Vec<Vec3>> = (0..n_enc).map(|e| (0..ntr1).map(|i| [tg[(e * ntr1 + i) * 3], tg[(e * ntr1 + i) * 3 + 1], tg[(e * ntr1 + i) * 3 + 2]]).collect()).collect();
         let sg = rd("spoke_grad.npy").f64s();
         let base: Vec<Vec3> = (0..=i_adc).map(|i| [sg[3 * i], sg[3 * i + 1], sg[3 * i + 2]]).collect();
+        let recon: Vec<[usize; 2]> = b["recon"].as_array().map(|a| a.iter().map(|r| [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]).collect()).unwrap_or_else(|| vec![[0, i_adc]]);
         let mut fs = Self::assemble(dt, t_rf, i_ro, i_adc, n_tr, tr_grad, base, scan_time, dwell, b0, ecg, n_frames, girf, girf_name);
+        fs.set_recon(recon);
         fs.meta["run"] = serde_json::json!(run);
         fs.meta["encoding"] = summ["encoding"].clone();
         fs.meta["encode"] = summ.get("encode").cloned().unwrap_or(serde_json::json!({"shape": "two-lobe"}));
@@ -162,7 +171,9 @@ impl FlowSchedule {
         assert!(tr.enc_tail.is_some(), "FlowSchedule needs the per-encode physical tail (Spoil::FlowComp)");
         let tr_grad: Vec<Vec<Vec3>> = (0..tr.n_enc()).map(|e| tr.physical(e, &hasty_seq::IDENTITY).g).collect();
         let base = tr.spoke.grad.g.clone();
-        Self::assemble(tr.dt, tr.t_rf, tr.i_ro, tr.spoke.i_adc, tr.n, tr_grad, base, scan_time, dwell, b0, ecg, n_frames, girf, girf_name)
+        let mut fs = Self::assemble(tr.dt, tr.t_rf, tr.i_ro, tr.spoke.i_adc, tr.n, tr_grad, base, scan_time, dwell, b0, ecg, n_frames, girf, girf_name);
+        fs.set_recon(tr.spoke.recon.clone());
+        fs
     }
     #[allow(clippy::too_many_arguments)]
     fn assemble(dt: f64, t_rf: f64, i_ro: usize, i_adc: usize, n_tr: usize, tr_grad: Vec<Vec<Vec3>>, base: Vec<Vec3>, scan_time: f64, dwell: f64, b0: f64, ecg: Ecg, n_frames: usize, girf: Girf, girf_name: &str) -> Self {
@@ -179,7 +190,45 @@ impl FlowSchedule {
             "n_rot": n_rot, "rotations": "super-Fibonacci (n_rot), acquisition_order; readout i = rotation i / n_enc, encode i % n_enc",
             "girf": girf_name,
         });
-        Self { dt, t_rf, i_ro, i_adc, n_tr, n_enc, tr_grad, base, rots, n_readouts, dwell, n_adc, b0, ecg, n_frames, girf, girf_name: girf_name.into(), meta }
+        Self { dt, t_rf, i_ro, i_adc, n_tr, n_enc, tr_grad, base, rots, n_readouts, dwell, n_adc, b0, ecg, n_frames, girf, girf_name: girf_name.into(), meta, recon: vec![[0, i_adc]], hist: 0, stream: None }
+    }
+    /// set the reconstruction ranges of the base readout and record them in the meta (`recon_raster`, and
+    /// `recon_adc`: half-open ADC-index ranges of the samples inside them, n·dwell ∈ [a·dt, b·dt] — what the
+    /// reconstruction loader keeps; the rest of the ADC is navigator data)
+    pub fn set_recon(&mut self, recon: Vec<[usize; 2]>) {
+        self.meta["recon_raster"] = serde_json::json!(recon);
+        self.meta["recon_adc"] = serde_json::json!(recon_adc_ranges(&recon, self.dt, self.dwell, self.n_adc));
+        self.recon = recon;
+    }
+    /// ADC-index ranges [lo, hi) of the reconstruction samples
+    pub fn recon_adc(&self) -> Vec<[usize; 2]> {
+        recon_adc_ranges(&self.recon, self.dt, self.dwell, self.n_adc)
+    }
+    /// play every TR through the chain with `hist` previous TRs (hasty_seq::girf::PlayedStream, exact LTI
+    /// superposition; research/girf_sensitivity.md: ≈ 10 TRs needed). 0 restores the original path (one previous TR).
+    pub fn with_history(mut self, hist: usize) -> Self {
+        self.hist = hist;
+        self.meta["girf_history"] = serde_json::json!(hist);
+        self.stream = (hist > 0).then(|| std::sync::Arc::new(self.played_stream(&self.girf, hist)));
+        self
+    }
+    /// the played-trajectory engine of this schedule for chain `girf` with `hist` previous TRs
+    pub fn played_stream(&self, girf: &Girf, hist: usize) -> PlayedStream {
+        let nb = self.base.len();
+        let fixed: Vec<Vec<Vec3>> = (0..self.n_enc)
+            .map(|e| {
+                let mut g = self.tr_wave(e, &hasty_seq::IDENTITY);
+                for v in g[self.i_ro..self.i_ro + nb].iter_mut() {
+                    *v = [0.0; 3];
+                }
+                g
+            })
+            .collect();
+        PlayedStream::new(girf, &fixed, &self.base, self.i_ro, self.n_tr, self.dt, hist.max(1))
+    }
+    /// (encode, rotation) of readouts i − hist ..= i (acquisition order)
+    pub fn history(&self, i: usize, hist: usize) -> Vec<(usize, Mat3)> {
+        (i.saturating_sub(hist)..=i).map(|j| (j % self.n_enc, self.rots[j / self.n_enc])).collect()
     }
     /// physical TR samples 0..=n_tr of encode e, rotation r
     pub fn tr_wave(&self, e: usize, r: &Mat3) -> Vec<Vec3> {
@@ -198,7 +247,8 @@ impl FlowSchedule {
     pub fn with_girf(&self, girf: Girf, name: &str) -> Self {
         let mut meta = self.meta.clone();
         meta["girf"] = serde_json::json!(name);
-        Self { tr_grad: self.tr_grad.clone(), base: self.base.clone(), rots: self.rots.clone(), ecg: self.ecg.clone(), girf, girf_name: name.into(), meta, ..*self }
+        let s = Self { tr_grad: self.tr_grad.clone(), base: self.base.clone(), rots: self.rots.clone(), ecg: self.ecg.clone(), girf, girf_name: name.into(), meta, recon: self.recon.clone(), stream: None, ..*self };
+        if self.hist > 0 { s.with_history(self.hist) } else { s }
     }
 }
 
@@ -234,6 +284,20 @@ impl Schedule for FlowSchedule {
     fn sample_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
         let times = self.adc_times();
         let ideal = matches!(self.girf_name.as_str(), "ideal" | "none" | "");
+        if let (Some(ps), false) = (&self.stream, ideal) {
+            // the chain's TR history (with_history): LTI superposition of the precomputed block responses
+            let per: Vec<Vec<f32>> = hasty_seq::par_map(&range.collect::<Vec<_>>(), |&i| {
+                let pl = ps.moments(&self.history(i, self.hist), self.t_rf, &times);
+                let mut out = Vec::with_capacity(self.n_adc * SAMPLE_FLOATS);
+                for (m, &t) in pl.iter().zip(&times) {
+                    let mut r = sample_record(&m.m0, &m.m1, &m.m2, &m.p, self.b0, t - self.t_rf);
+                    r[15] = m.phi_b0 as f32;
+                    out.extend_from_slice(&r);
+                }
+                out
+            });
+            return per.concat();
+        }
         let per: Vec<Vec<f32>> = hasty_seq::par_map(&range.collect::<Vec<_>>(), |&i| {
             let (j, e) = (i / self.n_enc, i % self.n_enc);
             let this = Grad { dt: self.dt, t0: 0.0, g: self.tr_wave(e, &self.rots[j]) };
@@ -259,7 +323,7 @@ impl Schedule for FlowSchedule {
     }
     fn describe(&self) -> String {
         format!(
-            "4D-flow yarn TR ({}): {} encodes, TR {:.3} ms, TE {:.3} ms, T_adc {:.2} ms, dwell {:.1} µs, {} rotations, GIRF {}",
+            "4D-flow yarn TR ({}): {} encodes, TR {:.3} ms, TE {:.3} ms, T_adc {:.2} ms, dwell {:.1} µs, {} rotations, GIRF {}{}",
             self.meta["run"].as_str().unwrap_or("?"),
             self.n_enc,
             self.tr() * 1e3,
@@ -267,9 +331,28 @@ impl Schedule for FlowSchedule {
             self.i_adc as f64 * self.dt * 1e3,
             self.dwell * 1e6,
             self.rots.len(),
-            self.girf_name
+            self.girf_name,
+            if self.hist > 0 { format!(" ({} previous TRs)", self.hist) } else { String::new() }
         )
     }
+}
+
+/// half-open ADC-index ranges [lo, hi) of the samples n (time n·dwell from the readout start, n < n_adc) inside the
+/// raster ranges [a·dt, b·dt] (closed, 1e-9 dwell of slack), merged
+pub fn recon_adc_ranges(recon: &[[usize; 2]], dt: f64, dwell: f64, n_adc: usize) -> Vec<[usize; 2]> {
+    let mut out: Vec<[usize; 2]> = vec![];
+    for r in recon {
+        let lo = ((r[0] as f64 * dt / dwell) - 1e-9).ceil().max(0.0) as usize;
+        let hi = (((r[1] as f64 * dt / dwell) + 1e-9).floor() as usize + 1).min(n_adc);
+        if lo >= hi {
+            continue;
+        }
+        match out.last_mut() {
+            Some(l) if lo <= l[1] => l[1] = l[1].max(hi),
+            _ => out.push([lo, hi]),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -359,6 +442,70 @@ mod tests {
             let k = &p[n * SAMPLE_FLOATS..n * SAMPLE_FLOATS + 3];
             let kn = (k[0] * k[0] + k[1] * k[1] + k[2] * k[2]).sqrt() as f64 / (2.0 * std::f64::consts::PI);
             assert!((kn - tr.kmax).abs() < 1e-3 * tr.kmax, "{kn} vs {}", tr.kmax);
+        }
+    }
+
+    #[test]
+    fn flow_schedule_history_and_recon_window() {
+        let tr = flow_tr();
+        let ecg = Ecg::new(2.0, 1.0, 0.0, 1);
+        let vars = Girf::variants();
+        let g = vars.iter().find(|v| v.0 == "resonance").unwrap().1.clone();
+        let fs = FlowSchedule::from_tr(&tr, 0.5, 4e-6, 2.89, ecg.clone(), 20, g.clone(), "resonance");
+        // the whole ADC is reconstruction data for the default readout
+        assert_eq!(fs.recon_adc(), vec![[0, fs.n_adc]]);
+        assert_eq!(fs.meta["recon_adc"], serde_json::json!([[0, fs.n_adc]]));
+        // with_history(1) reproduces the original path (one previous TR) to rounding
+        let n = 2 * fs.n_enc + 3;
+        let a = fs.sample_params(n..n + 2);
+        let f1 = fs.with_girf(g.clone(), "resonance").with_history(1);
+        let b = f1.sample_params(n..n + 2);
+        let kmax = a.chunks(SAMPLE_FLOATS).map(|r| (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt()).fold(0.0f32, f32::max);
+        let dk = a.chunks(SAMPLE_FLOATS).zip(b.chunks(SAMPLE_FLOATS)).map(|(p, q)| (0..3).map(|k| (p[k] - q[k]).abs()).fold(0.0f32, f32::max)).fold(0.0f32, f32::max);
+        let dph = a.chunks(SAMPLE_FLOATS).zip(b.chunks(SAMPLE_FLOATS)).map(|(p, q)| (p[15] - q[15]).abs()).fold(0.0f32, f32::max);
+        eprintln!("history 1 vs the original path: max |Δk| {dk:.2e} of {kmax:.1} rad/m, |Δφ_B0| {dph:.2e} rad");
+        assert!(dk < 2e-5 * kmax && dph < 1e-5, "{dk} {dph}");
+        // 10 TRs of history differ from 1 (the chain's 1–4 ms eddy / B0 terms reach past one TR)
+        let f10 = fs.with_girf(g, "resonance").with_history(10);
+        let c = f10.sample_params(n..n + 2);
+        let d10 = a.chunks(SAMPLE_FLOATS).zip(c.chunks(SAMPLE_FLOATS)).map(|(p, q)| (0..3).map(|k| (p[k] - q[k]).abs()).fold(0.0f32, f32::max)).fold(0.0f32, f32::max);
+        eprintln!("history 10 vs 1: max |Δk| {d10:.2e} rad/m");
+        assert!(d10 > 10.0 * dk);
+        // a reconstruction window inside the ADC
+        let mut fw = fs.with_girf(Girf::ideal(), "ideal");
+        let ia = fw.i_adc;
+        fw.set_recon(vec![[0, ia / 2], [ia / 2 + 10, ia - 5]]);
+        let r = fw.recon_adc();
+        assert_eq!(r.len(), 2);
+        let t = |n: usize| n as f64 * fw.dwell;
+        assert!(t(r[0][1] - 1) <= (ia / 2) as f64 * fw.dt + 1e-12 && t(r[0][1]) > (ia / 2) as f64 * fw.dt);
+        assert!(t(r[1][0]) >= (ia / 2 + 10) as f64 * fw.dt - 1e-12 && t(r[1][0] - 1) < (ia / 2 + 10) as f64 * fw.dt);
+        assert!(r[1][1] <= fw.n_adc && t(r[1][1] - 1) <= (ia - 5) as f64 * fw.dt + 1e-12);
+    }
+
+    /// the reconstruction-side model records (hasty_recon::played, `HASTY_TRAJ=girf:`) equal the simulator's schedule
+    /// for the same chain and history, on the real v2 design (skipped when the design is absent)
+    #[test]
+    fn model_records_match_the_schedule() {
+        let run = hasty_site::data().join("seq/flow_thorax_v2");
+        if !run.join("summary.json").exists() {
+            eprintln!("skipped: {} absent", run.display());
+            return;
+        }
+        let g = Girf::variants().into_iter().find(|v| v.0 == "resonance").unwrap().1;
+        let fs = FlowSchedule::load(&run, 1.0, 2e-6, 3.0, Ecg::new(3.0, 0.85, 0.0, 1), 20, g.clone(), "resonance").with_history(10);
+        // v2: 10.79 ms of ADC at 2 µs, reconstruction window 0 – 9.49 ms (raster [0, 949])
+        assert_eq!(fs.n_adc, 5395);
+        assert_eq!(fs.recon_adc(), vec![[0, 4746]]);
+        let meta = serde_json::json!({"sequence": fs.meta, "n_adc": fs.n_adc, "b0": 3.0, "dwell": 2e-6});
+        let tab: Vec<f64> = (0..fs.n_readouts).flat_map(|i| fs.readout_row(i)).collect();
+        let mt = hasty_recon::played::ModelTraj::new(&meta, &tab, &g, "resonance", 10).unwrap();
+        for i in [0usize, 6, 37, fs.n_readouts - 1] {
+            let a = fs.sample_params(i..i + 1);
+            let b = mt.records(i);
+            assert_eq!(a.len(), b.len());
+            let d = a.iter().zip(&b).map(|(p, q)| (p - q).abs()).fold(0.0f32, f32::max);
+            assert!(d == 0.0, "readout {i}: max |Δ| {d}");
         }
     }
 }

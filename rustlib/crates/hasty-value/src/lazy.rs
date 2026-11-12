@@ -9,14 +9,15 @@ use std::path::Path;
 use rayon::prelude::*;
 
 use crate::codec::BlockHeader;
-use crate::format::{chunk_box, copy_sub, decode_blocks, MAGIC, STREAM_HEADER, TAG_BOOL, TAG_CHUNKED, TAG_DICT, TAG_FLOAT, TAG_INT, TAG_LIST, TAG_NONE, TAG_STR, TAG_TENSOR, TAG_TUPLE, VERSION};
+use crate::integrity::{Hasher, Integrity};
+use crate::format::{chunk_box, copy_sub, decode_blocks, decode_chunk_data, MAGIC, STREAM_HEADER, TAG_BOOL, TAG_CHUNKED, TAG_QCHUNKED, TAG_DICT, TAG_FLOAT, TAG_INT, TAG_LIST, TAG_NONE, TAG_STR, TAG_TENSOR, TAG_TUPLE, VERSION};
 use crate::{DType, Error, Result, Tensor, Value};
 
 #[derive(Clone, Debug)]
 enum Layout {
     /// blocks from `offset` to `end`
     Plain { offset: u64, end: u64 },
-    Chunked { chunk: Vec<usize>, grid: Vec<usize>, index: Vec<(u64, u64)>, data: u64 },
+    Chunked { chunk: Vec<usize>, grid: Vec<usize>, index: Vec<(u64, u64)>, data: u64, quant: bool },
 }
 
 /// A tensor in a file (not read yet).
@@ -65,6 +66,7 @@ impl Lazy {
 
 pub struct LazyFile {
     file: File,
+    integrity: Integrity,
     pub root: Lazy,
 }
 
@@ -123,7 +125,7 @@ impl Cur<'_> {
                 }
                 Lazy::Dict(items)
             }
-            TAG_TENSOR | TAG_CHUNKED => {
+            TAG_TENSOR | TAG_CHUNKED | TAG_QCHUNKED => {
                 let h = self.bytes(7)?;
                 let dtype = DType::from_code(h[0])?;
                 let nd = h[1] as usize;
@@ -151,7 +153,7 @@ impl Cur<'_> {
                     let grid: Vec<usize> = shape.iter().zip(&chunk).map(|(&s, &c)| s.div_ceil(c.max(1))).collect();
                     let data = self.pos;
                     self.pos += index.iter().map(|x| x.1).sum::<u64>();
-                    Lazy::Tensor(TensorRef { dtype, shape, block_size, layout: Layout::Chunked { chunk, grid, index, data } })
+                    Lazy::Tensor(TensorRef { dtype, shape, block_size, layout: Layout::Chunked { chunk, grid, index, data, quant: tag == TAG_QCHUNKED } })
                 }
             }
             t => return Err(Error::Format(format!("unknown value tag {t}"))),
@@ -160,6 +162,35 @@ impl Cur<'_> {
 }
 
 impl LazyFile {
+    /// Check the whole file against its integrity digest (one sequential read of the file; `open` and the tensor
+    /// reads never do this). Ok(false): the file carries no digest. Err: mismatch or truncation.
+    pub fn verify(&self) -> Result<bool> {
+        let Some(mut h) = Hasher::new(self.integrity) else { return Ok(false) };
+        let (len, n) = (self.file.metadata()?.len(), self.integrity.digest_len() as u64);
+        if len < STREAM_HEADER as u64 + n {
+            return Err(Error::Format("truncated file: integrity digest missing".into()));
+        }
+        let end = len - n;
+        let mut buf = vec![0u8; 4 << 20];
+        let mut p = 0u64;
+        while p < end {
+            let m = ((end - p) as usize).min(buf.len());
+            self.file.read_exact_at(&mut buf[..m], p)?;
+            h.update(&buf[..m]);
+            p += m as u64;
+        }
+        let mut want = vec![0u8; n as usize];
+        self.file.read_exact_at(&mut want, end)?;
+        if h.finalize() != want {
+            return Err(Error::Codec("integrity digest mismatch".into()));
+        }
+        Ok(true)
+    }
+
+    pub fn integrity(&self) -> Integrity {
+        self.integrity
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let file = File::open(path)?;
         let mut c = Cur { f: &file, pos: 0 };
@@ -167,8 +198,9 @@ impl LazyFile {
         if h[..4] != MAGIC || h[4] != VERSION {
             return Err(Error::Format(format!("{}: not a hasty value file (v{VERSION})", path.display())));
         }
+        let integrity = Integrity::from_code(h[5])?;
         let root = c.value()?;
-        Ok(Self { file, root })
+        Ok(Self { file, integrity, root })
     }
 
     /// the whole tensor
@@ -204,7 +236,7 @@ impl LazyFile {
                 let full = self.read(t)?;
                 copy_sub(full.bytes(), &t.shape, lo, out.bytes_mut(), &ext, &vec![0; nd], &ext, es);
             }
-            Layout::Chunked { chunk, grid, index, data } => {
+            Layout::Chunked { chunk, grid, index, data, quant } => {
                 // chunks overlapping the box, C-order
                 let ranges: Vec<(usize, usize)> = (0..nd).map(|d| (lo[d] / chunk[d], (hi[d] - 1) / chunk[d] + 1)).collect();
                 let mut ids = vec![];
@@ -231,7 +263,7 @@ impl LazyFile {
                         let mut b = vec![0u8; len as usize];
                         self.file.read_exact_at(&mut b, data + off)?;
                         let (_, cext) = chunk_box(ci, grid, chunk, &t.shape);
-                        Ok((ci, decode_blocks(&b, cext.iter().product::<usize>() * es, t.block_size)?))
+                        Ok((ci, decode_chunk_data(t.dtype, *quant, &cext, &b, t.block_size)?))
                     })
                     .collect::<Result<_>>()?;
                 for (ci, raw) in parts {

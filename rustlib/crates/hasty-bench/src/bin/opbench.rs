@@ -322,6 +322,9 @@ fn physics(a: &Args, dims: [usize; 3], nc: usize, frames: usize) -> (SimData, Ph
         truth_frac: vec![],
         n_frames: frames,
         lazy: None,
+        na_file: 0,
+        adc_keep: None,
+        model_traj: None,
     };
     let t = Instant::now();
     let mut grid = sd.physics_grid(a.gnl, &ident);

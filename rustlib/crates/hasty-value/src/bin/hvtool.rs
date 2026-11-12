@@ -3,6 +3,10 @@
 //!   hvtool info <file>                         tree summary (JSON)
 //!   hvtool digest <file>                       canonical digest: summary with a CRC32 per tensor (cross-language tests)
 //!   hvtool convert <in> <out> [--codec lz4|zstd|none] [--level n] [--delta] [--checksum] [--block-size bytes]
+//!       lossy float storage: --loss abs:<step>|relmax:<bits>|relrms:<eps>|mantissa:<bits> [--asinh <knee>] [--scope tensor]
+//!       [--chunk <n>] (float tensors only; chunk edge n per dimension, default: one chunk per tensor)
+//!       integrity digest: --integrity xxh3|blake3 (verified by a read-back pass after writing)
+//!   hvtool verify <file>                       check a file against its integrity digest
 //!   hvtool gen <dir>                           the deterministic test sample, once per codec / filter combination
 //!   hvtool pack-tree <root> [--level 19] [--keep-npy]
 //!       every case directory (case.json + *.npy) under <root> → one case.hv: zstd + shuffle, x chunked
@@ -11,7 +15,7 @@
 
 use std::path::Path;
 
-use hasty_value::{encode_with, npy, read, write, Codec, LazyFile, Options, Tensor, Value};
+use hasty_value::{encode_lossy, encode_with, npy, read, write, Codec, Integrity, LazyFile, Loss, Options, Quant, Scope, Tensor, Transfer, Value};
 use num_complex::Complex32;
 
 fn digest(v: &Value) -> serde_json::Value {
@@ -148,8 +152,45 @@ fn main() {
             if let Some(b) = opt(&args, "--block-size") {
                 o.block_size = b.parse().unwrap();
             }
-            write(&v, &o, &mut std::io::BufWriter::new(std::fs::File::create(&args[2]).unwrap())).unwrap();
+            o.integrity = Integrity::parse(&opt(&args, "--integrity").unwrap_or_default()).unwrap();
+            let mut w = std::io::BufWriter::new(std::fs::File::create(&args[2]).unwrap());
+            if let Some(spec) = opt(&args, "--loss") {
+                let (kind, x) = spec.split_once(':').expect("--loss kind:value");
+                let x: f64 = x.parse().expect("--loss value");
+                let mut q = Quant::new(match kind {
+                    "abs" => Loss::Abs(x),
+                    "relmax" => Loss::RelMax(x as u32),
+                    "relrms" => Loss::RelRms(x),
+                    "mantissa" => Loss::Mantissa(x as u32),
+                    k => panic!("unknown loss {k}"),
+                });
+                if let Some(k) = opt(&args, "--asinh") {
+                    q = q.transfer(Transfer::Asinh(k.parse().unwrap()));
+                }
+                if opt(&args, "--scope").as_deref() == Some("tensor") {
+                    q = q.scope(Scope::Tensor);
+                }
+                let edge: Option<usize> = opt(&args, "--chunk").map(|c| c.parse().unwrap());
+                let plan = |_: &str, t: &Tensor| edge.map(|e| t.shape().iter().map(|&d| d.min(e).max(1)).collect::<Vec<_>>());
+                let loss = |_: &str, t: &Tensor| t.dtype().name().starts_with("float").then_some(q).filter(|_| !matches!(t.dtype().name(), "float16" | "bfloat16")).or_else(|| t.dtype().is_complex().then_some(q));
+                encode_lossy(&v, &o, Some(&plan), &loss, &mut |c| Ok(std::io::Write::write_all(&mut w, &c)?)).unwrap();
+            } else {
+                write(&v, &o, &mut w).unwrap();
+            }
+            drop(w);
+            if o.integrity != Integrity::None {
+                LazyFile::open(Path::new(&args[2])).unwrap().verify().expect("read-back verification");
+                eprintln!("verified {:?} digest of {}", o.integrity, args[2]);
+            }
         }
+        Some("verify") => match LazyFile::open(Path::new(&args[1])).and_then(|f| f.verify()) {
+            Ok(true) => println!("ok"),
+            Ok(false) => println!("no digest in file"),
+            Err(e) => {
+                eprintln!("FAILED: {e}");
+                std::process::exit(1);
+            }
+        },
         Some("gen") => {
             let dir = Path::new(&args[1]);
             std::fs::create_dir_all(dir).unwrap();
@@ -186,6 +227,6 @@ fn main() {
                 }
             }
         }
-        _ => eprintln!("usage: hvtool info|digest|convert|gen|pack-tree ..."),
+        _ => eprintln!("usage: hvtool info|digest|convert|verify|gen|pack-tree ..."),
     }
 }

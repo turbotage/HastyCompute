@@ -13,6 +13,8 @@ use std::io::{Read, Write};
 use rayon::prelude::*;
 
 use crate::codec::{decode_block, encode_block, BlockHeader, Options};
+use crate::integrity::{Hasher, Integrity};
+use crate::lossy::{self, Loss, LossPlan, Quant, Scope};
 use crate::{Buffer, DType, Error, Result, Tensor, Value};
 
 pub const MAGIC: [u8; 4] = *b"HSTV";
@@ -29,6 +31,8 @@ pub(crate) const TAG_TUPLE: u8 = 6;
 pub(crate) const TAG_DICT: u8 = 7;
 pub(crate) const TAG_TENSOR: u8 = 8;
 pub(crate) const TAG_CHUNKED: u8 = 9;
+/// chunked tensor whose chunks are quantised (see `lossy`)
+pub(crate) const TAG_QCHUNKED: u8 = 10;
 
 /// chunk shape for a tensor at a slice path (`["x"]`, `[0]["y"]`, … ; "" for the root), or None for a plain tensor
 pub type ChunkPlan<'a> = &'a dyn Fn(&str, &Tensor) -> Option<Vec<usize>>;
@@ -40,7 +44,9 @@ struct Enc<'a> {
     buf: Vec<u8>,
     sink: &'a mut dyn FnMut(Vec<u8>) -> Result<()>,
     plan: Option<ChunkPlan<'a>>,
+    loss: Option<LossPlan<'a>>,
     path: String,
+    hasher: Option<Hasher>,
 }
 
 /// C-order strides (elements)
@@ -136,10 +142,23 @@ pub(crate) fn decode_blocks(bytes: &[u8], raw_len: usize, bs: usize) -> Result<V
     Ok(out)
 }
 
+/// decode the data of one chunk with box extent `ext` (plain blocks, or prefix + blocks if quantised)
+pub(crate) fn decode_chunk_data(dtype: DType, quant: bool, ext: &[usize], bytes: &[u8], bs: usize) -> Result<Vec<u8>> {
+    let numel: usize = ext.iter().product();
+    if quant {
+        lossy::decode_chunk(dtype, numel, bytes, bs)
+    } else {
+        decode_blocks(bytes, numel * dtype.size(), bs)
+    }
+}
+
 impl Enc<'_> {
     fn flush(&mut self, force: bool) -> Result<()> {
         if self.buf.len() >= FLUSH || (force && !self.buf.is_empty()) {
             let b = std::mem::replace(&mut self.buf, Vec::with_capacity(FLUSH + (FLUSH >> 2)));
+            if let Some(h) = &mut self.hasher {
+                h.update(&b);
+            }
             (self.sink)(b)?;
         }
         Ok(())
@@ -189,10 +208,27 @@ impl Enc<'_> {
                     self.flush(false)?;
                 }
             }
-            Value::Tensor(t) => match self.plan.and_then(|p| p(&self.path, t)) {
-                Some(c) => self.chunked(t, &c)?,
-                None => self.tensor(t)?,
-            },
+            Value::Tensor(t) => {
+                let q = self.loss.and_then(|l| l(&self.path, t)).filter(|q| q.loss != Loss::Lossless);
+                if let Some(q) = &q {
+                    q.validate(t.dtype())?;
+                }
+                let chunk = self.plan.and_then(|p| p(&self.path, t));
+                match q {
+                    Some(q) if q.is_int() => self.chunked(t, &chunk.unwrap_or_else(|| t.shape().to_vec()), Some(&q))?,
+                    Some(Quant { loss: Loss::Mantissa(m), .. }) => {
+                        let r = Tensor::new(t.dtype(), t.shape().to_vec(), Buffer::from_bytes(&lossy::round_mantissa(t.dtype(), m, t.bytes())))?;
+                        match chunk {
+                            Some(c) => self.chunked(&r, &c, None)?,
+                            None => self.tensor(&r)?,
+                        }
+                    }
+                    _ => match chunk {
+                        Some(c) => self.chunked(t, &c, None)?,
+                        None => self.tensor(t)?,
+                    },
+                }
+            }
         }
         Ok(())
     }
@@ -233,7 +269,7 @@ impl Enc<'_> {
 }
 
 impl Enc<'_> {
-    fn chunked(&mut self, t: &Tensor, chunk: &[usize]) -> Result<()> {
+    fn chunked(&mut self, t: &Tensor, chunk: &[usize], quant: Option<&Quant>) -> Result<()> {
         let shape = t.shape();
         let nd = shape.len();
         if chunk.len() != nd || nd > 255 {
@@ -243,18 +279,30 @@ impl Enc<'_> {
         let grid: Vec<usize> = shape.iter().zip(&chunk).map(|(&n, &c)| n.div_ceil(c)).collect();
         let nchunks: usize = if shape.iter().any(|&n| n == 0) { 0 } else { grid.iter().product() };
         let (es, bs, word, delta_ok, o) = (t.dtype().size(), self.o.block_bytes(), t.dtype().word(), t.dtype().is_integer(), *self.o);
+        let global = quant.filter(|q| q.scope == Scope::Tensor).map(|q| lossy::tensor_stats(q, t));
         let enc = |ci: usize| -> Vec<u8> {
             let (lo, ext) = chunk_box(ci, &grid, &chunk, shape);
             let mut raw = vec![0u8; ext.iter().product::<usize>() * es];
             copy_sub(t.bytes(), shape, &lo, &mut raw, &ext, &vec![0; nd], &ext, es);
             let mut out = Vec::with_capacity(raw.len() / 2 + 32);
-            for b in raw.chunks(bs) {
-                encode_block(b, word, delta_ok, &o, &mut out);
+            match quant {
+                Some(q) => {
+                    let (payload, qw) = lossy::encode_chunk(q, t.dtype(), &raw, global.as_ref());
+                    out.extend_from_slice(&payload[..lossy::PREFIX]);
+                    for b in payload[lossy::PREFIX..].chunks(bs) {
+                        encode_block(b, qw, false, &o, &mut out);
+                    }
+                }
+                None => {
+                    for b in raw.chunks(bs) {
+                        encode_block(b, word, delta_ok, &o, &mut out);
+                    }
+                }
             }
             out
         };
         let encoded: Vec<Vec<u8>> = if self.o.parallel { (0..nchunks).into_par_iter().map(enc).collect() } else { (0..nchunks).map(enc).collect() };
-        self.buf.extend_from_slice(&[TAG_CHUNKED, t.dtype() as u8, nd as u8, 0]);
+        self.buf.extend_from_slice(&[if quant.is_some() { TAG_QCHUNKED } else { TAG_CHUNKED }, t.dtype() as u8, nd as u8, 0]);
         self.buf.extend_from_slice(&(bs as u32).to_le_bytes());
         for &d in shape.iter().chain(&chunk) {
             self.len_u64(d);
@@ -284,12 +332,26 @@ pub fn encode_with(value: &Value, o: &Options, plan: ChunkPlan, sink: &mut dyn F
     encode_plan(value, o, Some(plan), sink)
 }
 
+/// [`encode_with`] with controlled-loss storage: tensors for which `loss` returns a spec are quantised (see
+/// [`crate::lossy`]); integer quantisation makes them chunked tensors (tag 10; one chunk if `plan` gives no shape).
+pub fn encode_lossy(value: &Value, o: &Options, plan: Option<ChunkPlan>, loss: LossPlan, sink: &mut dyn FnMut(Vec<u8>) -> Result<()>) -> Result<()> {
+    encode_all(value, o, plan, Some(loss), sink)
+}
+
 fn encode_plan(value: &Value, o: &Options, plan: Option<ChunkPlan>, sink: &mut dyn FnMut(Vec<u8>) -> Result<()>) -> Result<()> {
-    let mut e = Enc { o, buf: Vec::with_capacity(FLUSH + (FLUSH >> 2)), sink, plan, path: String::new() };
+    encode_all(value, o, plan, None, sink)
+}
+
+fn encode_all(value: &Value, o: &Options, plan: Option<ChunkPlan>, loss: Option<LossPlan>, sink: &mut dyn FnMut(Vec<u8>) -> Result<()>) -> Result<()> {
+    let mut e = Enc { o, buf: Vec::with_capacity(FLUSH + (FLUSH >> 2)), sink, plan, loss, path: String::new(), hasher: Hasher::new(o.integrity) };
     e.buf.extend_from_slice(&MAGIC);
-    e.buf.extend_from_slice(&[VERSION, 0, 0, 0]);
+    e.buf.extend_from_slice(&[VERSION, o.integrity.code(), 0, 0]);
     e.value(value)?;
-    e.flush(true)
+    e.flush(true)?;
+    if let Some(h) = e.hasher.take() {
+        (e.sink)(h.finalize())?;
+    }
+    Ok(())
 }
 
 pub fn encode_to_vec(value: &Value, o: &Options) -> Result<Vec<u8>> {
@@ -317,6 +379,7 @@ struct ChunkedIn {
     grid: Vec<usize>,
     index: Vec<(u64, u64)>,
     block_size: usize,
+    quant: bool,
 }
 
 struct TensorIn {
@@ -338,6 +401,10 @@ pub struct Decoder {
     chunked: Option<ChunkedIn>,
     done: Option<Value>,
     parallel: bool,
+    /// integrity digest still to be verified (stream header flags), the hashed prefix of `buf`
+    hasher: Option<Hasher>,
+    algo: Integrity,
+    hpos: usize,
 }
 
 impl Default for Decoder {
@@ -355,7 +422,7 @@ fn u64_at(b: &[u8], i: usize) -> u64 {
 
 impl Decoder {
     pub fn new() -> Self {
-        Self { buf: Vec::new(), pos: 0, header: false, stack: Vec::new(), tensor: None, chunked: None, done: None, parallel: true }
+        Self { buf: Vec::new(), pos: 0, header: false, stack: Vec::new(), tensor: None, chunked: None, done: None, parallel: true, hasher: None, algo: Integrity::None, hpos: 0 }
     }
 
     /// decode blocks on the calling thread only
@@ -364,8 +431,9 @@ impl Decoder {
         self
     }
 
+    /// the value is complete (and its integrity digest, if the stream carries one, verified)
     pub fn is_done(&self) -> bool {
-        self.done.is_some()
+        self.done.is_some() && self.hasher.is_none()
     }
 
     /// bytes buffered but not yet consumed
@@ -374,22 +442,44 @@ impl Decoder {
     }
 
     pub fn push(&mut self, data: &[u8]) -> Result<()> {
-        if self.done.is_some() {
+        if self.done.is_some() && self.hasher.is_none() {
             return if data.is_empty() { Ok(()) } else { Err(Error::Format("data after the end of the value".into())) };
         }
         self.buf.extend_from_slice(data);
         self.advance()?;
+        self.verify()?;
         if self.pos == self.buf.len() {
             self.buf.clear();
             self.pos = 0;
+            self.hpos = 0;
         } else if self.pos > (1 << 23) || self.pos > self.buf.len() / 2 {
             self.buf.drain(..self.pos);
             self.pos = 0;
+            self.hpos = 0;
+        }
+        Ok(())
+    }
+
+    /// feed the consumed bytes to the hasher; once the value is complete, check the trailing digest
+    fn verify(&mut self) -> Result<()> {
+        let Some(h) = &mut self.hasher else { return Ok(()) };
+        h.update(&self.buf[self.hpos..self.pos]);
+        self.hpos = self.pos;
+        let n = self.algo.digest_len();
+        if self.done.is_some() && self.buf.len() - self.pos >= n {
+            let d = self.hasher.take().unwrap().finalize();
+            if d[..] != self.buf[self.pos..self.pos + n] {
+                return Err(Error::Codec("integrity digest mismatch".into()));
+            }
+            self.pos += n;
         }
         Ok(())
     }
 
     pub fn finish(self) -> Result<Value> {
+        if self.done.is_some() && self.hasher.is_some() {
+            return Err(Error::Format("truncated stream: integrity digest missing".into()));
+        }
         if self.pending() != 0 && self.done.is_some() {
             return Err(Error::Format(format!("{} trailing bytes", self.pending())));
         }
@@ -438,6 +528,8 @@ impl Decoder {
             if a[4] != VERSION {
                 return Err(Error::Format(format!("unsupported format version {}", a[4])));
             }
+            self.algo = Integrity::from_code(a[5])?;
+            self.hasher = Hasher::new(self.algo);
             self.pos += STREAM_HEADER;
             self.header = true;
         }
@@ -547,7 +639,7 @@ impl Decoder {
                         self.tensor = Some(t);
                     }
                 }
-                TAG_CHUNKED => {
+                TAG_CHUNKED | TAG_QCHUNKED => {
                     if a.len() < 8 {
                         break;
                     }
@@ -574,7 +666,7 @@ impl Decoder {
                         return Err(Error::Format(format!("{n} chunks for grid {grid:?}")));
                     }
                     self.pos += head + 16 * n;
-                    self.chunked = Some(ChunkedIn { dtype, shape, chunk, grid, index, block_size });
+                    self.chunked = Some(ChunkedIn { dtype, shape, chunk, grid, index, block_size, quant: tag == TAG_QCHUNKED });
                 }
                 t => return Err(Error::Format(format!("unknown value tag {t}"))),
             }
@@ -594,11 +686,10 @@ impl Decoder {
         let dec = |ci: usize| -> Result<(usize, Vec<u8>)> {
             let (off, len) = c.index[ci];
             let (_, ext) = chunk_box(ci, &c.grid, &c.chunk, &c.shape);
-            let raw_len = ext.iter().product::<usize>() * es;
             if off + len > total {
                 return Err(Error::Format("chunk index out of range".into()));
             }
-            Ok((ci, decode_blocks(&a[off as usize..(off + len) as usize], raw_len, c.block_size)?))
+            Ok((ci, decode_chunk_data(c.dtype, c.quant, &ext, &a[off as usize..(off + len) as usize], c.block_size)?))
         };
         let parts: Vec<(usize, Vec<u8>)> = if self.parallel { (0..c.index.len()).into_par_iter().map(dec).collect::<Result<_>>()? } else { (0..c.index.len()).map(dec).collect::<Result<_>>()? };
         let mut t = Tensor::zeros(c.dtype, c.shape.clone());

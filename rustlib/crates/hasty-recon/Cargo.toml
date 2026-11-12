@@ -12,6 +12,7 @@ hasty-nufft = { path = "../hasty-nufft" }
 hasty-fft = { path = "../hasty-fft" }
 hasty-toeplitz = { path = "../hasty-toeplitz" }
 hasty-mrsim = { path = "../hasty-mrsim" }
+hasty-seq = { path = "../hasty-seq" }
 cudarc.workspace = true
 num-complex.workspace = true
 thiserror.workspace = true

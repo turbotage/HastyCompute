@@ -1414,3 +1414,19 @@ the old mask). `mask_fit.npy` holds the fit region.
   metrics inflated (0.80 m/s on noise-free truth). `FlowDecoder::with_alias_search`, `recon_p2np --vdecode
   auto|hier|ml[:MARGIN]` (auto = ml:1.0 for coprime / dual-VENC designs); tests in flow.rs.
 - `recon_p2np --init-truth` (diagnostic), `pyramid.sh {prev_air}`.
+
+## Merged 2026-11-11/12 (girfqa.patch + recon2.patch, after commit ce550d3)
+
+- WP2 GIRF QA (agent, interrupted): hasty-seq `pulseq.rs` (Pulseq 1.4/1.5 writer + reader, pypulseq round trip),
+  `pnsge.rs` (TOPPE GE PNS model), `girfqa.rs` + bin `girfqa` (pass 1 ≈ 96 min / core 54 min, pass 2 from a
+  resonance list), `girfmeas.rs` (MeasuredGirf loader). Python QA sim/estimators single-draw only:
+  research/girf_qa_sequence.md (resume §5).
+- Recon physics (agent, interrupted): v2 recon window (`sequence.recon_adc`), `PlayedStream` + `HASTY_TRAJ=girf:` +
+  `Girf::from_measurement` (hasty-girf-1), simphantom `--girf-hist N` / `--girf <file>`, per-frame fat union basis
+  (`--seg-basis svdn-union`, test seg_fat_union_gpu), `--rate z.npy`, `girf_refit.rs` (GPU experiments not run:
+  research/experiments/recon_physics/run_refit.sh), `opval_v2`. Operator validation: own model 0.0375, all-on 0.425,
+  estimated GIRF 6.55 (per-encode k offset). research/recon_physics_wiring.md.
+- recon_p2np `--seg-fit-stride N` / `--seg-table-stride S` (defaults 3 / 1; 9 / 4 ≈ same error, ~10× less setup).
+- Tests after the merge: hasty-seq 53, hasty-recon 49, hasty-bench 8, nufft segment/fat/warp suites pass; release built.
+- 2 mm queue failed 2026-11-11 (host OOM at the solver start: 56/60 GB caps too low, solver state ≈ 4 × 8.7 GiB +
+  26.5 GiB); rerun 2026-11-12 with 84 GB, svdn-union, fast segment build.

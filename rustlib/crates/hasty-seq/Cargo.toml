@@ -8,3 +8,4 @@ description = "Sequence designer: gradient moments, velocity encoding, time-opti
 [dependencies]
 num-complex.workspace = true
 rustfft.workspace = true
+serde_json = "1"

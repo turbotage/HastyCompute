@@ -406,6 +406,28 @@ pub fn build_segments_svd_fat_union(
     psi: &(dyn Fn(usize, f64) -> f64 + Sync),
     c: &(dyn Fn(f64) -> Complex64 + Sync),
 ) -> (Vec<C32>, Vec<C32>, Vec<C32>, f64, f64, Vec<usize>, f64) {
+    build_segments_svd_fat_union_g(nv, nseg, t_min, t_max, ntab, fit_voxels, w_water, w_fat, ts, tw, &|v, t| Complex64::from_polar(1.0, -psi(v, t)), c)
+}
+
+/// [`build_segments_svd_fat_union`] with a general complex water function g(v, t) per voxel (e.g. with a per-voxel
+/// complex rate: e^{−R2*_v (t − t0)} e^{−iψ(v, t)}); the fat function is g(v, t) c(t). With
+/// g = e^{−iψ} it is that function exactly. The cardinal-form diagonals are then ≈ g(·, τ_l) at the node times
+/// (decay included), so the per-node fat factor of `SegNufft::segments_fat` still applies.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn build_segments_svd_fat_union_g(
+    nv: usize,
+    nseg: usize,
+    t_min: f64,
+    t_max: f64,
+    ntab: usize,
+    fit_voxels: &[usize],
+    w_water: &[f64],
+    w_fat: &[f64],
+    ts: &[f64],
+    tw: &[f64],
+    g: &(dyn Fn(usize, f64) -> Complex64 + Sync),
+    c: &(dyn Fn(f64) -> Complex64 + Sync),
+) -> (Vec<C32>, Vec<C32>, Vec<C32>, f64, f64, Vec<usize>, f64) {
     let ns = ts.len();
     let nf = fit_voxels.len();
     assert!(nseg >= 1 && nseg <= ns);
@@ -413,7 +435,6 @@ pub fn build_segments_svd_fat_union(
     assert_eq!(w_fat.len(), nf);
     let st: Vec<f64> = tw.iter().map(|&x| x.max(0.0).sqrt()).collect();
     let cts: Vec<Complex64> = ts.iter().map(|&t| c(t)).collect();
-    let g = |v: usize, t: f64| Complex64::from_polar(1.0, -psi(v, t));
     // union Gram (upper triangle, chunked over the fit voxels)
     let zero = || vec![Complex64::new(0.0, 0.0); ns * ns];
     let idx: Vec<usize> = (0..nf).collect();
@@ -491,6 +512,11 @@ pub fn build_segments_svd_fat_union(
 /// Weighted squared error of the union rows' tail: the rank-L error of the union Gram (the rule for
 /// [`build_segments_svd_fat_union`]): eigenvalues, descending.
 pub fn fat_union_spectrum(fit_voxels: &[usize], w_water: &[f64], w_fat: &[f64], ts: &[f64], tw: &[f64], psi: &(dyn Fn(usize, f64) -> f64 + Sync), c: &(dyn Fn(f64) -> Complex64 + Sync)) -> Vec<f64> {
+    fat_union_spectrum_g(fit_voxels, w_water, w_fat, ts, tw, &|v, t| Complex64::from_polar(1.0, -psi(v, t)), c)
+}
+
+/// [`fat_union_spectrum`] with a general complex water function g(v, t) (as [`build_segments_svd_fat_union_g`])
+pub fn fat_union_spectrum_g(fit_voxels: &[usize], w_water: &[f64], w_fat: &[f64], ts: &[f64], tw: &[f64], g: &(dyn Fn(usize, f64) -> Complex64 + Sync), c: &(dyn Fn(f64) -> Complex64 + Sync)) -> Vec<f64> {
     // the union Gram = water Gram (weights w_water) + fat Gram (weights w_fat, time function times c)
     let nf = fit_voxels.len();
     let mut both: Vec<usize> = fit_voxels.to_vec();
@@ -498,7 +524,7 @@ pub fn fat_union_spectrum(fit_voxels: &[usize], w_water: &[f64], w_fat: &[f64], 
     let w: Vec<f64> = w_water.iter().chain(w_fat.iter()).copied().collect();
     let fv = both.clone();
     let g2 = move |r: usize, t: f64| -> Complex64 {
-        let z = Complex64::from_polar(1.0, -psi(fv[r], t));
+        let z = g(fv[r], t);
         if r < nf { z } else { z * c(t) }
     };
     let pseudo: Vec<usize> = (0..2 * nf).collect();

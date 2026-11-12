@@ -109,6 +109,15 @@ pub struct SimData {
     pub n_frames: usize,
     /// data and per-sample records read on demand ([`SimData::load_lazy`], `kload`); None: in memory (`data`)
     pub lazy: Option<std::sync::Arc<crate::kload::LazySource>>,
+    /// ADC samples per readout in the sim's files (`n_adc`); `na` ≤ this when a reconstruction window is active
+    pub na_file: usize,
+    /// file ADC indices of the reconstruction samples (ascending; `meta.sequence.recon_adc`, e.g. v2 without its
+    /// rewinder navigator); None: every ADC sample (na == na_file). Every accessor (sample sets, raw data, energies)
+    /// presents readouts of `na` samples; the others are reachable through [`SimData::adc_navigator`] and the `_full`
+    /// accessors. `HASTY_RECON_WINDOW=all` disables the window.
+    pub adc_keep: Option<Vec<usize>>,
+    /// per-sample records recomputed through a model chain (`HASTY_TRAJ=girf:<file|variant>`, [`crate::played`])
+    pub model_traj: Option<std::sync::Arc<crate::played::ModelTraj>>,
 }
 
 /// Per-encode (or per-frame) sample set ready for an operator.
@@ -140,7 +149,9 @@ pub struct PhysicsGrid {
 
 impl SimData {
     /// load a sim; schedule-based sims use the nominal trajectory unless `HASTY_TRAJ=played` (the GIRF-played one,
-    /// i.e. a reconstruction that models the chain exactly)
+    /// i.e. a reconstruction that models the chain exactly) or `HASTY_TRAJ=girf:<girf.json|variant>` (the records
+    /// recomputed through a model chain, e.g. an estimated GIRF, with `HASTY_GIRF_HIST` previous TRs, default 10;
+    /// [`crate::played`])
     pub fn load(dir: &Path) -> Result<Self, Error> {
         let traj = std::env::var("HASTY_TRAJ").unwrap_or_else(|_| "nominal".into());
         Self::load_traj(dir, &traj)
@@ -189,8 +200,10 @@ impl SimData {
         };
         let nc = u("n_coils");
         let na = u("n_adc");
+        let na_file = na;
         let n_ro = u("n_readouts");
         let mut lazy_sched: Option<crate::kload::NpyFile> = None;
+        let mut model_traj: Option<std::sync::Arc<crate::played::ModelTraj>> = None;
         let (acq, ro, sched, encode_m1, venc) = match kind.as_str() {
             "spiral" => {
                 let acq = Acquisition::new(p.clone());
@@ -219,9 +232,21 @@ impl SimData {
                 let name = match traj {
                     "nominal" => "sched_nominal.npy",
                     "played" => "sched_played.npy",
-                    other => return Err(Error::Format(format!("trajectory {other}: nominal | played"))),
+                    g if g.starts_with("girf:") => "",
+                    other => return Err(Error::Format(format!("trajectory {other}: nominal | played | girf:<girf.json|variant>"))),
                 };
-                let (rec, sched_file) = if lazy {
+                if let Some(spec) = traj.strip_prefix("girf:") {
+                    let hist: usize = std::env::var("HASTY_GIRF_HIST").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+                    let girf = crate::played::ModelTraj::girf_of(spec)?;
+                    let mt = crate::played::ModelTraj::new(&meta, &tab, &girf, spec, hist)?;
+                    if mt.times.len() != na {
+                        return Err(Error::Format(format!("model trajectory: {} ADC samples for the sim's {na}", mt.times.len())));
+                    }
+                    model_traj = Some(std::sync::Arc::new(mt));
+                }
+                let (rec, sched_file) = if model_traj.is_some() {
+                    (vec![], None)
+                } else if lazy {
                     let f = crate::kload::NpyFile::open(&dir.join(name))?;
                     assert_eq!(f.numel(), n_ro * na * SAMPLE_FLOATS, "{name}");
                     (vec![], Some(f))
@@ -232,6 +257,16 @@ impl SimData {
                 };
                 // first ADC sample of every readout (k, M1)
                 let first: Vec<[f32; 6]> = match &sched_file {
+                    None if model_traj.is_some() => {
+                        use rayon::prelude::*;
+                        let mt = model_traj.as_ref().unwrap();
+                        (0..n_ro).into_par_iter().map(|i| {
+                            let seq: Vec<(usize, hasty_seq::Mat3)> = (i.saturating_sub(mt.hist)..=i).map(|j| (mt.enc[j], mt.rot[j])).collect();
+                            let m = mt.stream.moments(&seq, mt.design.t_rf, &mt.times[..1])[0];
+                            let r = hasty_mrsim::sequence::sample_record(&m.m0, &m.m1, &m.m2, &m.p, mt.b0, mt.times[0] - mt.design.t_rf);
+                            std::array::from_fn(|j| r[j])
+                        }).collect()
+                    }
                     None => (0..n_ro).map(|i| std::array::from_fn(|j| rec[i * na * SAMPLE_FLOATS + j])).collect(),
                     Some(f) => {
                         use rayon::prelude::*;
@@ -313,6 +348,13 @@ impl SimData {
             }
             _ => read_npy(&dir.join("data.npy"))?.c32s(),
         };
+        // reconstruction window of the design (simphantom meta.sequence.recon_adc, half-open ADC-index ranges); the
+        // remaining ADC samples (e.g. the v2 rewinder) are navigator data
+        let adc_keep: Option<Vec<usize>> = match std::env::var("HASTY_RECON_WINDOW").as_deref() {
+            Ok("all") => None,
+            _ => recon_window(&meta, na_file)?,
+        };
+        let na = adc_keep.as_ref().map_or(na_file, |k| k.len());
         let smaps_true = read_npy(&dir.join("smaps_true.npy"))?.c32s();
         let field_ppm = read_npy(&dir.join("field_ppm_recon.npy"))?.f32s();
         let truth_vel = read_npy(&dir.join("truth_vel_logical.npy"))?.f32s();
@@ -343,7 +385,46 @@ impl SimData {
             n_frames: p.n_frames,
             meta,
             lazy: lazy_src,
+            na_file,
+            adc_keep,
+            model_traj,
         })
+    }
+
+    /// file ADC index of reconstruction sample n
+    #[inline]
+    pub fn adc_file_index(&self, n: usize) -> usize {
+        self.adc_keep.as_ref().map_or(n, |k| k[n])
+    }
+
+    /// file ADC indices outside the reconstruction window (navigator samples; empty without a window)
+    pub fn adc_navigator(&self) -> Vec<usize> {
+        match &self.adc_keep {
+            None => vec![],
+            Some(k) => {
+                let mut keep = vec![false; self.na_file];
+                k.iter().for_each(|&i| keep[i] = true);
+                (0..self.na_file).filter(|&i| !keep[i]).collect()
+            }
+        }
+    }
+
+    /// the SAMPLE_FLOATS records of readout `ro` at every ADC sample of the file (window ignored), physical axes
+    pub fn readout_records_full(&self, ro: usize) -> Vec<f32> {
+        let (na, nf) = (self.na_file, SAMPLE_FLOATS);
+        if let Some(mt) = &self.model_traj {
+            return mt.records(ro);
+        }
+        match &self.sched {
+            None => self.spiral().sample_params(ro..ro + 1),
+            Some(sc) if sc.rec.is_empty() => {
+                let f = self.lazy.as_ref().and_then(|l| l.sched.as_ref()).expect("lazy sim without its sample records");
+                let mut r = vec![0f32; na * nf];
+                f.read_f32(ro * na * nf, &mut r).expect("sample records");
+                r
+            }
+            Some(sc) => sc.rec[ro * na * nf..(ro + 1) * na * nf].to_vec(),
+        }
     }
 
     /// voxels of the reconstruction grid
@@ -395,6 +476,18 @@ impl SimData {
 
     /// k (rad/m, logical frame) and the SAMPLE_FLOATS record of readout `ro`
     pub(crate) fn readout_samples(&self, ro: usize) -> (Vec<Vec3>, Vec<f32>) {
+        if self.adc_keep.is_some() || self.model_traj.is_some() {
+            // reconstruction window / model chain: the records of the kept samples
+            let full = self.readout_records_full(ro);
+            let nf = SAMPLE_FLOATS;
+            let rec: Vec<f32> = match &self.adc_keep {
+                Some(k) => k.iter().flat_map(|&i| full[i * nf..(i + 1) * nf].iter().copied()).collect(),
+                None => full,
+            };
+            let rt = transpose(&self.rot);
+            let k = (0..self.na).map(|n| mat_vec(&rt, &[rec[n * nf] as f64, rec[n * nf + 1] as f64, rec[n * nf + 2] as f64])).collect();
+            return (k, rec);
+        }
         match &self.sched {
             None => {
                 let a = self.spiral();
@@ -434,7 +527,8 @@ impl SimData {
                 let s = &sp[n * SAMPLE_FLOATS..(n + 1) * SAMPLE_FLOATS];
                 wq.push([s[9] as f64, s[10] as f64, s[11] as f64, s[12] as f64]);
                 tau.push(s[13] as f64);
-                let src = &self.data[(ro * na + n) * nc..(ro * na + n + 1) * nc];
+                let nfile = self.adc_file_index(n);
+                let src = &self.data[(ro * self.na_file + nfile) * nc..(ro * self.na_file + nfile + 1) * nc];
                 // a known spatially constant phase of the sample (the GIRF's B0 terms on the played trajectory; 0
                 // otherwise): the signal carries e^{−iφ0}, removed here
                 let (ps, pc) = (s[15] as f64).sin_cos();
@@ -551,6 +645,21 @@ impl SimData {
     }
 }
 
+/// the reconstruction window of a sim (`meta.sequence.recon_adc`: half-open ADC-index ranges, simphantom) as the
+/// kept file ADC indices; None when absent or covering every sample
+pub fn recon_window(meta: &Value, na_file: usize) -> Result<Option<Vec<usize>>, Error> {
+    let Some(r) = meta["sequence"]["recon_adc"].as_array() else { return Ok(None) };
+    let mut keep = vec![];
+    for q in r {
+        let (lo, hi) = (q[0].as_u64().unwrap_or(0) as usize, q[1].as_u64().unwrap_or(0) as usize);
+        if lo > hi || hi > na_file || keep.last().is_some_and(|&l| lo <= l) {
+            return Err(Error::Format(format!("meta.sequence.recon_adc {r:?}: ranges must be ascending, disjoint and inside the {na_file} ADC samples")));
+        }
+        keep.extend(lo..hi);
+    }
+    Ok((keep.len() < na_file).then_some(keep))
+}
+
 /// only prime factors 2, 3, 5, 7
 pub fn smooth7(mut n: usize) -> bool {
     for p in [2, 3, 5, 7] {
@@ -659,5 +768,85 @@ mod tests {
         }
         assert!((set.tau[1] - (1e-3 + 1e-5)).abs() < 1e-9);
         assert!(SimData::load_traj(&dir, "played").is_err());
+        assert_eq!((sd.na, sd.na_file), (na, na));
+        assert!(sd.adc_keep.is_none() && sd.adc_navigator().is_empty());
+
+        // a reconstruction window (simphantom meta.sequence.recon_adc): ADC samples 0 and 1 kept, 2 = navigator
+        let mut meta_w = meta.clone();
+        meta_w["sequence"]["recon_adc"] = serde_json::json!([[0, 2]]);
+        std::fs::write(dir.join("meta.json"), serde_json::to_string(&meta_w).unwrap()).unwrap();
+        // data: sample n carries the value n + 1 (navigator sample = 3)
+        let data: Vec<f32> = (0..n_ro * na * nc).flat_map(|i| { let n = (i / nc) % na; let z = num_complex::Complex32::from_polar(1.0 + n as f32, -phi); [z.re, z.im] }).collect();
+        npy(&dir.join("data.npy"), "<c8", &[n_ro, na, nc], &f4(&data));
+        let sw = SimData::load_traj(&dir, "nominal").unwrap();
+        assert_eq!((sw.na, sw.na_file), (2, na));
+        assert_eq!(sw.adc_keep.as_deref(), Some(&[0usize, 1][..]));
+        assert_eq!(sw.adc_navigator(), vec![2]);
+        let set = sw.sample_set(&[1, 3], &w);
+        assert_eq!(set.tau.len(), 4);
+        for (j, n) in [0usize, 1, 0, 1].into_iter().enumerate() {
+            assert!((set.tau[j] - (1e-3 + n as f64 * 1e-5)).abs() < 1e-9, "tau {j}");
+            assert!((set.coords[2][j] as f64 - 30.0 * (n + 1) as f64 * 0.05).abs() < 1e-5);
+            for c in 0..nc {
+                let y = set.y[c * 4 + j];
+                assert!((y.re - (1.0 + n as f32)).abs() < 1e-5 && y.im.abs() < 1e-5, "sample {j}: {y:?}");
+            }
+        }
+        // raw data of the window and of the whole ADC (the navigator stays reachable)
+        let mut raw = vec![C32::new(0.0, 0.0); 2 * nc];
+        sw.readout_raw(0, &mut raw).unwrap();
+        assert!(((raw[nc].re.powi(2) + raw[nc].im.powi(2)).sqrt() - 2.0).abs() < 1e-5);
+        let mut full = vec![C32::new(0.0, 0.0); na * nc];
+        sw.readout_raw_full(0, &mut full).unwrap();
+        assert!(((full[2 * nc].re.powi(2) + full[2 * nc].im.powi(2)).sqrt() - 3.0).abs() < 1e-5);
+        assert_eq!(sw.readout_records_full(0).len(), na * SAMPLE_FLOATS);
+        // the streamed loader (kload) sees the same window, noise counters by file index
+        let sl = SimData::load_traj_opts(&dir, "nominal", true).unwrap();
+        assert_eq!(sl.na, 2);
+        let ls = sl.load_set(&[1, 3], &crate::kload::LoadOpts { w: &w, cc: None, keep: None, data: true }).unwrap();
+        assert_eq!(ls.tau.len(), 4);
+        for j in 0..4 {
+            for c in 0..nc {
+                assert!((ls.y[c * 4 + j].re - set.y[c * 4 + j].re).abs() + (ls.y[c * 4 + j].im - set.y[c * 4 + j].im).abs() < 1e-5, "kload vs sample_set {j}");
+            }
+        }
+        // HASTY_RECON_WINDOW=all is read by the loader: the window can be disabled (checked through recon_window)
+        assert_eq!(recon_window(&meta_w, na).unwrap(), Some(vec![0, 1]));
+        let mut meta_all = meta.clone();
+        meta_all["sequence"]["recon_adc"] = serde_json::json!([[0, na]]);
+        assert_eq!(recon_window(&meta_all, na).unwrap(), None);
+        meta_all["sequence"]["recon_adc"] = serde_json::json!([[0, na + 1]]);
+        assert!(recon_window(&meta_all, na).is_err());
+        std::fs::write(dir.join("meta.json"), serde_json::to_string(&meta).unwrap()).unwrap();
+    }
+
+    /// end-to-end on a real simulator output (`HASTY_TEST_SIM=<scan dir>` of `simphantom --seq flow --flow-run
+    /// flow_thorax_v2 --girf <chain> --girf-hist N`): the reconstruction window from the meta, the navigator reachable,
+    /// and `girf:<chain>` with the same history reproducing the simulator's sched_played.npy; `cargo test -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_sim_window_and_model_trajectory() {
+        let Ok(dir) = std::env::var("HASTY_TEST_SIM") else { return };
+        let dir = Path::new(&dir);
+        let meta: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("meta.json")).unwrap()).unwrap();
+        let chain = meta["sequence"]["girf"].as_str().unwrap().to_string();
+        let hist = meta["sequence"]["girf_history"].as_u64().unwrap_or(1);
+        std::env::set_var("HASTY_GIRF_HIST", hist.to_string());
+        let pl = SimData::load_traj_opts(dir, "played", true).unwrap();
+        let md = SimData::load_traj_opts(dir, &format!("girf:{chain}"), true).unwrap();
+        eprintln!("{}: n_adc {} → window {} samples, navigator {}", dir.display(), pl.na_file, pl.na, pl.adc_navigator().len());
+        assert!(pl.na < pl.na_file && pl.na + pl.adc_navigator().len() == pl.na_file);
+        assert_eq!((md.na, md.na_file), (pl.na, pl.na_file));
+        let mut worst = 0.0f32;
+        for ro in [0usize, 1, pl.n_readouts() / 2, pl.n_readouts() - 1] {
+            let (a, b) = (pl.readout_records_full(ro), md.readout_records_full(ro));
+            worst = worst.max(a.iter().zip(&b).map(|(p, q)| (p - q).abs()).fold(0.0f32, f32::max));
+        }
+        eprintln!("model trajectory girf:{chain} (history {hist}) vs sched_played.npy: max |Δ| {worst:.2e}");
+        assert!(worst == 0.0, "the reconstruction's model records differ from the simulator's: {worst}");
+        let w: Vec<Vec<f64>> = pl.whitener();
+        let set = pl.load_set(&[0, 1], &crate::kload::LoadOpts { w: &w, cc: None, keep: None, data: true }).unwrap();
+        assert_eq!(set.tau.len(), 2 * pl.na);
+        assert!(set.tau[pl.na - 1] < set.tau[pl.na - 2] + 1e-5 + 3.0 * (set.tau[1] - set.tau[0]));
     }
 }

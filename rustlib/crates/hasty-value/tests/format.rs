@@ -39,7 +39,7 @@ fn round_trip_all_codecs_and_filters() {
     for codec in [Codec::None, Codec::Lz4, Codec::Zstd(3)] {
         for (shuffle, delta, checksum) in [(false, false, false), (true, false, true), (true, true, false)] {
             for block_size in [64, 1000, 1 << 20] {
-                let o = Options { codec, block_size, shuffle, delta, checksum, parallel: block_size < 1000 };
+                let o = Options { codec, block_size, shuffle, delta, checksum, parallel: block_size < 1000, ..Options::default() };
                 let bytes = encode_to_vec(&v, &o).unwrap();
                 assert_eq!(decode(&bytes).unwrap(), v, "{codec:?} shuffle {shuffle} delta {delta} block {block_size}");
             }

@@ -253,6 +253,9 @@ fn problem(spec: &Spec) -> Prob {
         truth_frac: vec![],
         n_frames: spec.frames,
         lazy: None,
+        na_file: na,
+        adc_keep: None,
+        model_traj: None,
     };
     let sets: Vec<SampleSet> = (0..set_enc.len()).map(|s| {
         let lr: Vec<usize> = (0..n_lr).filter(|&r| ros[r].1 == s).collect();

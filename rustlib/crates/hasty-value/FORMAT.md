@@ -18,9 +18,11 @@ The format carries one value tree per stream, used both on the wire (hasty serve
 ```
 magic   "HSTV"            4 bytes
 version u8 = 1
-flags   u8 = 0            (reserved)
+flags   u8                integrity algorithm: 0 none, 1 XXH3-128 (16-byte digest), 2 BLAKE3-256 (32 bytes)
 pad     u16 = 0
-value                     (exactly one, see below; nothing may follow)
+value                     (exactly one, see below)
+digest                    only if flags ≠ 0: the digest of every preceding byte of the stream (header included)
+                          nothing may follow
 ```
 
 ## Values
@@ -39,6 +41,7 @@ The first byte is a tag.
 | 7 | Dict | u64 n, then n × (u32 key length, UTF-8 key, value); insertion order is preserved |
 | 8 | Tensor | header, then data blocks |
 | 9 | Chunked tensor | header, chunk index, chunk data (random access; files) |
+| 10 | Quantised chunked tensor | as 9; every chunk starts with a 20-byte quantiser prefix (lossy, float dtypes only) |
 
 ### Tensor
 
@@ -111,3 +114,22 @@ chunk data               chunks in C-order of the chunk grid
 - **Chunk data:** each chunk holds the C-order bytes of its own (clipped) box, stored as the blocks of a plain tensor (same block header, filters and codecs; `block_size` raw bytes per block).
 - **Writing:** writers compress all chunks first, so the index can precede the data.
 - **Reading:** stream decoders assemble the full tensor once all chunk data has arrived. Random-access readers (`LazyFile` in Rust, `open_lazy` in Python) read the header and the index, then only the chunks they need.
+
+### Quantised chunked tensor (tag 10)
+
+Same header, index and chunk layout as tag 9 (float32 / float64 / complex dtypes only). Each chunk's data starts with a
+20-byte prefix, followed by blocks of the quantised words:
+
+```
+u8  qw         word size of the quantised values: 1, 2 or 4; 0 = the chunk is stored losslessly (blocks of raw dtype bytes follow)
+u8  transfer   0 linear, 1 asinh
+u16 reserved = 0
+f64 step       quantiser step in transfer space
+f64 knee       k of the asinh transfer (0 if linear)
+blocks         one qw-byte little-endian word per scalar (complex: re, im), block word = qw
+```
+
+Per scalar x: u = x (linear) or k·asinh(x/k); q = round(u / step); the word is zigzag(q) = (q << 1) ^ (q >> 63).
+Decoding: q = unzigzag(word), x = q·step (linear) or k·sinh(q·step / k), cast to the dtype. Chunks of one tensor may use
+different `step` and `qw` (scale scope = chunk) or share the step (scope = tensor). Quantisation specs and their
+guarantees: `hasty_value::lossy`. Mantissa rounding produces ordinary tag 8 / 9 tensors and needs no format support.

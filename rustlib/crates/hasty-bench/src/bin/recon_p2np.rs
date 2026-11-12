@@ -7,10 +7,10 @@
 //!              [--learned <export_dir> [--tile n] [--keep-frames n] [--learned-prec bf16|fp16|fp32] [--learned-cpu]]
 //!              [--fresh] [--ckpt-every n] [--fat-fraction <npy|truth> [--fat-model shared|separate|joint]]
 //!              [--conc-fit quad|deg4] [--table-prefetch]
-//!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--smaps truth|espirit[:eig_min]] [--coil-mask auto|none|support]
+//!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--rate <z.npy>] [--smaps truth|espirit[:eig_min]] [--coil-mask auto|none|support]
 //!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
 //!              [--table-store auto|pinned|lz4|zstd|zstdN]   (env HASTY_KSTORE_DIR: k-space store directory, default <sim>/kstore)
-//!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]]
+//!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]] [--seg-fit-stride N] [--seg-table-stride S]
 //! Coarse-to-fine pyramid (hasty_recon::pyramid, driver rustlib/tools/recon/pyramid.sh):
 //!   --kcrop [FRAC][:prefix]: keep only the samples a (coarse, --grid-scale) grid represents, the ball
 //!     Σ_a (k_a Δ_a)² ≤ (π·FRAC)² (default FRAC 1; ∩ the Nyquist box for FRAC > 1), applied to the sample records,
@@ -28,6 +28,12 @@
 //!     true positions (point, default) or averaged over the reconstruction voxel (box; differs only on grids coarser
 //!     than the native one). Native-grid maps given to --fat-fraction are resampled to the reconstruction grid.
 //!              [--warm-full n | --tpyramid RxC:n[,RxC:n..]] [--pooled-grad auto|grouped|replicate]
+//! --rate <z.npy>: per-voxel complex rate z = R2* + iΔω (complex64 [X, Y, Z], x fastest; s⁻¹ and rad/s) on the native or
+//!   the reconstruction grid: R2* folded into the segment functions (as --r2s) and Δω added to the field (--field): the
+//!   voxel's signal after the echo e^{−z (τ − τ0)} on top of the map's e^{−iω τ} (research/readout_physics_budget.md T4:
+//!   the signal-weighted effective frequency + R2* is the lever; research/recon_physics_wiring.md item 4). Excludes
+//!   --r2s. With per-frame fat maps and --seg-basis svdn-union the union basis then carries the decay too
+//!   (build_segments_svd_fat_union_g). Run directory suffix `_rate`.
 //! --tpyramid: temporal pyramid of pooled PCG warm starts through the full model, coarse to fine (e.g.
 //!   "1x1:4,2x1:3,2x5:3"): per level R respiratory-bin groups × C cardiac-phase groups, n iterations; every
 //!   (encode, resp group, cardiac group) shares one image; the last level initialises every set of the solver.
@@ -187,6 +193,11 @@ fn main() {
     // advantage > MARGIN (default 1.0); auto = ml:1.0 when the design declares a range beyond the first stage's
     // (coprime / dual-VENC), else hier. The log also prints the hierarchical decoder's RMSE when ml is active.
     let vdecode: String = take("--vdecode").unwrap_or("auto".into());
+    // --seg-fit-stride N (default 3): every N-th fit voxel enters the segment-basis fit; --seg-table-stride S (default 1):
+    // one interpolator table entry every S ADC samples (≥ 256 entries). Every 9th voxel and S = 4 gave the same operator
+    // error as the defaults at ~10× less setup CPU on ph0001 v2 (research/recon_physics_wiring.md).
+    let seg_fit_stride: usize = take("--seg-fit-stride").map(|s| s.parse().expect("--seg-fit-stride N")).unwrap_or(3).max(1);
+    let seg_tab_stride: usize = take("--seg-table-stride").map(|s| s.parse().expect("--seg-table-stride S")).unwrap_or(1).max(1);
     let iters: usize = take("--iters").map(|s| s.parse().unwrap()).unwrap_or(40);
     let kappas: Vec<f64> = take("--kappa").unwrap_or("1.0".into()).split(',').map(|s| s.parse().unwrap()).collect();
     let block: usize = take("--block").map(|s| s.parse().unwrap()).unwrap_or(8);
@@ -281,6 +292,8 @@ fn main() {
     // encode 0 (hasty_recon::espirit); --fat-fraction est:<run>[:bin] takes the fat fraction of the B0 scan
     let field_spec = take("--field").unwrap_or("truth".into());
     let r2s_spec = take("--r2s").unwrap_or("off".into());
+    let rate_spec: Option<String> = take("--rate");
+    assert!(rate_spec.is_none() || r2s_spec == "off", "--rate carries R2*: use it without --r2s");
     let smaps_spec = take("--smaps").unwrap_or("truth".into());
     // --coil-sampling keep:draw[:hold[:last[:seed]]]: stochastic coil sampling of the data term (hasty_recon::p2np::
     // CoilSampling, random reshuffling; defaults hold 2, last 12, seed 1); off by default
@@ -496,7 +509,7 @@ fn main() {
     let out = out_arg.map(PathBuf::from).unwrap_or_else(|| {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
         let tag = format!("{name}_{model}{}_{phys}{}{}", temporal.map_or(String::new(), |b| format!("_t{b}")), if gnl { "_gnl" } else { "" }, if conc_hi { "_deg4" } else { "" }) + if fat_fraction.is_some() { "_fat" } else { "" } + if fat_fraction.is_some() && fat_model != "shared" { fat_model.as_str() } else { "" }
-            + if field_spec != "truth" { "_fest" } else { "" } + if r2s_spec != "off" { "_r2s" } else { "" } + if smaps_spec != "truth" { "_espirit" } else { "" }
+            + if field_spec != "truth" { "_fest" } else { "" } + if r2s_spec != "off" { "_r2s" } else { "" } + if rate_spec.is_some() { "_rate" } else { "" } + if smaps_spec != "truth" { "_espirit" } else { "" }
             + &coil_sampling.as_ref().map_or(String::new(), |c| format!("_cs{}-{}", c.keep, c.draw))
             + &if kcrop.is_some() || init_from.is_some() { format!("_g{}", grid_scale.map_or("1".into(), |g| g.map(|v| v.to_string()).join("-"))) } else { String::new() }
             + &kcrop.map_or(String::new(), |k| format!("_kc{}{}", k.frac, if k.prefix { "p" } else { "" }))
@@ -834,6 +847,34 @@ fn main() {
             Some(r)
         }
     };
+    // --rate: per-voxel complex rate z = R2* + iΔω (R2* into the segment decay, Δω onto the field)
+    let rate_on = rate_spec.is_some();
+    // Δω of --rate: added to the field, with the static phase Δω τ0 taken out again in the segment phase (below), so
+    // the rate term is e^{−z (τ − τ0)} (τ0 = the first ADC sample) and the image keeps its meaning at the echo
+    let mut rate_dw: Option<Vec<f64>> = None;
+    let r2v: Option<Vec<f64>> = match &rate_spec {
+        None => r2v,
+        Some(path) => {
+            let z = hasty_recon::data::read_npy(std::path::Path::new(path)).unwrap_or_else(|e| panic!("--rate {path}: {e:?}")).c32s();
+            let ntv = sd.tdims.iter().product::<usize>();
+            let (re, im): (Vec<f32>, Vec<f32>) = z.iter().map(|c| (if c.re.is_finite() { c.re } else { 0.0 }, if c.im.is_finite() { c.im } else { 0.0 })).unzip();
+            let (r, dw): (Vec<f64>, Vec<f64>) = if z.len() == nv && !(nv == ntv && sd.native_grid()) {
+                (re.iter().map(|&v| v as f64).collect(), im.iter().map(|&v| v as f64).collect())
+            } else {
+                assert_eq!(z.len(), ntv, "--rate {path}: {} values, the native grid has {ntv} and the reconstruction grid {nv}", z.len());
+                ((0..nv).map(|q| sample_truth(&re, 0, &grid.x_log[q])).collect(), (0..nv).map(|q| sample_truth(&im, 0, &grid.x_log[q])).collect())
+            };
+            for q in 0..nv {
+                grid.omega[q] += dw[q];
+            }
+            rate_dw = Some(dw.clone());
+            let med = |v: Vec<f64>| { let mut v = v; v.sort_by(|a, b| a.partial_cmp(b).unwrap()); v.get(v.len() / 2).copied().unwrap_or(0.0) };
+            let (mr, md) = (med((0..nv).filter(|&q| sig[q]).map(|q| r[q]).collect()), med((0..nv).filter(|&q| sig[q]).map(|q| dw[q].abs() / (2.0 * std::f64::consts::PI)).collect()));
+            println!("complex rate (--rate {path}): R2* median {mr:.1} 1/s, |Δf| median {md:.1} Hz over the signal voxels (R2* in the segment decay, Δω added to the field)");
+            diag.insert("rate".into(), serde_json::json!({"file": path, "r2s_median": mr, "df_abs_median_hz": md}));
+            Some(r)
+        }
+    };
     let ff_est: Option<Vec<f32>> = fat_fraction.as_deref().and_then(|s| s.strip_prefix("est:")).map(|spec| {
         let fm = est_maps(spec);
         xs.iter().map(|x| fm.sample(x).2.clamp(0.0, 1.0) as f32).collect()
@@ -1001,7 +1042,7 @@ fn main() {
         }
         (host, staged)
     };
-    assert!(!(staged && synthetic), "--synthetic writes the data on the device: not with staged data");
+    // --synthetic with staged data: model-consistent residuals computed on the fly (hasty_recon::synth, below)
     let set_data = |t: usize| -> Vec<C32> {
         match &kstore {
             Some(k) => k.read_vec(t).unwrap(),
@@ -1425,7 +1466,7 @@ fn main() {
             hasty_recon::segphys::FieldPoly::none()
         };
         // voxel weights of the segment basis over the fit voxels (seg_fit below): energy (--seg-weight energy)
-        let seg_fit_e: Vec<usize> = fit_vox.iter().copied().step_by(3).collect();
+        let seg_fit_e: Vec<usize> = fit_vox.iter().copied().step_by(seg_fit_stride).collect();
         let seg_ew: Option<Vec<f64>> = seg_energy.then(|| {
             let e: Vec<f64> = seg_fit_e.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
             let mut srt = e.clone();
@@ -1475,7 +1516,8 @@ fn main() {
             });
             let seg_vw_rule: Option<Vec<f64>> = seg_ew.clone();
             for e in 0..ne {
-                let psi_raw = segment_phase(&grid, &wbar[e], &tau_a, with_b0);
+                let psi_raw0 = segment_phase(&grid, &wbar[e], &tau_a, with_b0);
+                let psi_raw = |v: usize, t: f64| psi_raw0(v, t) - rate_dw.as_ref().map_or(0.0, |d| d[v] * tau_a[0]);
                 let psi = field_poly.residual(&sd, &psi_raw);
                 let dec = |v: usize, t: f64| -> f64 { r2v.as_ref().map_or(1.0, |r| (-r[v] * (t - tau_a[0])).exp()) };
                 let g = |v: usize, t: f64| -> Complex64 {
@@ -1487,7 +1529,8 @@ fn main() {
                 let per_frame_fat = ff_joint.as_ref().is_some_and(|ff| ff.len() > nv);
                 let l_e = if seg_union && per_frame_fat {
                     let (ww, wf) = union_weights(&seg_fit_e, seg_ew_rule.as_deref(), ff_joint.as_ref().unwrap(), nv);
-                    let ev = hasty_nufft::fat_union_spectrum(&seg_fit_e, &ww, &wf, ts_n, tw_n, &psi, &cfat);
+                    let gw = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t));
+                    let ev = if rate_on { hasty_nufft::fat_union_spectrum_g(&seg_fit_e, &ww, &wf, ts_n, tw_n, &gw, &cfat) } else { hasty_nufft::fat_union_spectrum(&seg_fit_e, &ww, &wf, ts_n, tw_n, &psi, &cfat) };
                     hasty_nufft::seg_count_for(&ev, tol, 2, 64)
                 } else if seg_svd && !per_frame_fat {
                     // the optimal rank-L error in the energy-weighted metric (exact for --seg-weight energy, a lower
@@ -1535,10 +1578,10 @@ fn main() {
         eng.set_maps(&st, &smaps).unwrap();
         // segments per encode from the encode-wide mean coefficients (all frames)
         let tau_adc: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
-        let (tw0, tw1, ntab) = (tau_adc[wa], tau_adc[wb], (wb - wa + 1).max(256));
+        let (tw0, tw1, ntab) = (tau_adc[wa], tau_adc[wb], ((wb - wa) / seg_tab_stride + 1).max(256));
         // svdw with --kcrop: the time weights count the kept samples only
         let keep_w: Option<Vec<f64>> = crop_adc.as_ref().map(|s| s.keep_fraction());
-        let seg_fit: Vec<usize> = fit_vox.iter().copied().step_by(3).collect();
+        let seg_fit: Vec<usize> = fit_vox.iter().copied().step_by(seg_fit_stride).collect();
         // data energy per ADC time for --seg-basis svdw (every 7th readout, at most 512)
         let adc_w: Option<Vec<f64>> = seg_svdw.then(|| {
             let ros: Vec<usize> = (0..sd.n_readouts()).step_by(7).take(512).collect();
@@ -1579,7 +1622,8 @@ fn main() {
         let make_segs = |eng: &SegNufft, nseg: usize| -> Vec<hasty_nufft::SegSegments> {
         (0..ne)
             .map(|e| {
-                let psi_raw = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi_raw0 = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
+                let psi_raw = |v: usize, t: f64| psi_raw0(v, t) - rate_dw.as_ref().map_or(0.0, |d| d[v] * tau_adc[0]);
                 let psi = field_poly.residual(&sd, &psi_raw);
                 // one interpolator table entry per ADC sample (256 left a 3–7e-4 floor with fat at 8–12 ms readouts)
                 // T2* decay relative to the readout start (--r2s; 1 without)
@@ -1598,7 +1642,13 @@ fn main() {
                     // in the noise-referenced error, research/segment_basis.md)
                     if let (true, Some((ts_n, tw_n))) = (seg_union, snr_grid.as_ref()) {
                         let (ww, wf) = union_weights(&seg_fit, seg_vw.as_deref(), ff, nv);
-                        let (sp, at, cl, ta, dt, nodes, cond) = hasty_nufft::build_segments_svd_fat_union(nv, nseg, tw0, tw1, ntab, &seg_fit, &ww, &wf, ts_n, tw_n, &psi, &cfat);
+                        // --rate: the union basis carries the decay as well (the plain call keeps the phase-only basis)
+                        let gw = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t));
+                        let (sp, at, cl, ta, dt, nodes, cond) = if rate_on {
+                            hasty_nufft::build_segments_svd_fat_union_g(nv, nseg, tw0, tw1, ntab, &seg_fit, &ww, &wf, ts_n, tw_n, &gw, &cfat)
+                        } else {
+                            hasty_nufft::build_segments_svd_fat_union(nv, nseg, tw0, tw1, ntab, &seg_fit, &ww, &wf, ts_n, tw_n, &psi, &cfat)
+                        };
                         if e == 0 {
                             println!("segments (svdn-union, per-frame fat maps): L = {nseg}, cardinal nodes (ms) {:?}, condition {cond:.1}", nodes.iter().map(|&q| ((ta + q as f64 * dt - tw0) * 1e4).round() / 10.0).collect::<Vec<_>>());
                         }
@@ -1868,9 +1918,71 @@ fn main() {
     let lens: Vec<usize> = (0..ns).map(|t| sop.len_x(t)).collect();
     // image (frame f, encode e) inside the stack: (set, offset)
     let at = |f: usize, e: usize| -> (usize, usize) { if temporal.is_some() { (e, f * nv) } else { (f * ne + e, 0) } };
+    // --synthetic with data staged from the store (they do not fit on the device): the residuals of model-consistent
+    // data y_t = E_t x★_t − n_t, formed on the fly as E_t (x − x★_t) + n_t (hasty_recon::synth; no second store; the
+    // staged measured data are not read). x★ is the --init-truth image (warm images per encode, the true velocity
+    // phases on warm[0] in voxels of lumen fraction > 0.5), so --synthetic --init-truth starts at the exact solution of
+    // the noise-free data term: a drift away from it is noise + prior (exact model), against model error on the
+    // measured data. Noise: complex Gaussian, σ / √2 per component (σ: HASTY_NOISE_SIGMA, else the sim's noise_sigma;
+    // × NOISE_SCALE), counter-based per (seed, set, coil, sample): the same in every pass and coil subset.
+    let mut synth_sets;
+    let sop: &mut dyn SetOp = if synthetic && staged {
+        assert!(vmodel.is_none(), "--synthetic with staged data: image-space P²nP only (not --vmodel)");
+        assert!(warm_full == 0, "--synthetic with staged data: no --warm-full (the reference uses the warm images)");
+        let t_s = Instant::now();
+        let sigma = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0).or_else(|| sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0)).unwrap_or(1.0)
+            / 2f64.sqrt()
+            * std::env::var("NOISE_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
+        let seed = std::env::var("HASTY_SYNTH_SEED").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(0x51);
+        let mut lumen: Vec<(usize, C32)> = vec![];
+        for q in 0..nv {
+            if sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.5 {
+                lumen.push((q, warm[0][q]));
+            }
+        }
+        let nl = lumen.len();
+        let mut lvel: Vec<[f64; 3]> = Vec::with_capacity(nl * nf_card);
+        for c in 0..nf_card {
+            for &(q, _) in &lumen {
+                lvel.push([0, 1, 2].map(|a| sample_truth(&sd.truth_vel, a + 3 * c, &grid.x_log[q])));
+            }
+        }
+        let mut members: Vec<Vec<(usize, usize, usize)>> = vec![vec![]; ns];
+        for fr in 0..nf {
+            for e in 0..ne {
+                let (t, o) = at(fr, e);
+                members[t].push((fr, e, o));
+            }
+        }
+        for t in 0..ns {
+            assert_eq!(members[t].len() * nv, lens[t], "--synthetic: set {t} is not a whole number of (frame, encode) images");
+        }
+        let floor: f64 = sigma * sigma * (0..ns).map(|t| sop.len_y(t) as f64).sum::<f64>();
+        // own copy of the warm images (the solver start consumes `warm` later)
+        let (warm_r, dec_r) = (warm.clone(), &dec);
+        let truth: hasty_recon::synth::TruthFn = Box::new(move |t: usize, out: &mut [C32]| {
+            for &(fr, e, o) in &members[t] {
+                out[o..o + nv].copy_from_slice(&warm_r[e]);
+                let c = fr % nf_card;
+                for (l, &(q, r0)) in lumen.iter().enumerate() {
+                    let v = lvel[c * nl + l];
+                    let z = Complex64::new(r0.re as f64, r0.im as f64) * Complex64::from_polar(1.0, dec_r.phase(e, &v) - dec_r.phase(0, &v));
+                    out[o + q] = C32::new(z.re as f32, z.im as f32);
+                }
+            }
+        });
+        synth_sets = hasty_recon::synth::SynthSets::new(&dev, sop, nvc, sigma, seed, truth).unwrap();
+        println!(
+            "synthetic model-consistent residuals E(x − x★) + n (staged data unused): x★ = warm images with the true velocity phases in {nl} lumen voxels (lumen fraction > 0.5); noise σ {sigma:.3} per component, seed {seed}; data-term floor ½ E‖n‖² = {floor:.4e} ({:.1}s)",
+            t_s.elapsed().as_secs_f64()
+        );
+        &mut synth_sets
+    } else {
+        sop
+    };
     // model-consistent test data: y_t = E_t x_true,t + noise (solver + prior test without simulator physics)
     let mut ys = ys;
-    if synthetic {
+    if synthetic && !staged {
         assert!(!warm.is_empty(), "--synthetic needs --warm");
         assert!(sd.native_grid(), "--synthetic indexes the truth by voxel: native grid only");
         let sigma = sd.meta["noise_sigma"].as_f64().unwrap() / 2f64.sqrt() * std::env::var("NOISE_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
