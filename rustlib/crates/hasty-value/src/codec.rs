@@ -121,7 +121,8 @@ impl BlockHeader {
 }
 
 /// byte shuffle: word i, byte b -> position b·n + i (n = number of whole words; a ragged tail is copied as is)
-pub(crate) fn shuffle(src: &[u8], word: usize, dst: &mut [u8]) {
+#[doc(hidden)]
+pub fn shuffle(src: &[u8], word: usize, dst: &mut [u8]) {
     let n = src.len() / word;
     match word {
         2 => shuffle_w::<2>(&src[..2 * n], &mut dst[..2 * n]),
@@ -139,7 +140,8 @@ pub(crate) fn shuffle(src: &[u8], word: usize, dst: &mut [u8]) {
     dst[n * word..].copy_from_slice(&src[n * word..]);
 }
 
-pub(crate) fn unshuffle(src: &[u8], word: usize, dst: &mut [u8]) {
+#[doc(hidden)]
+pub fn unshuffle(src: &[u8], word: usize, dst: &mut [u8]) {
     let n = src.len() / word;
     match word {
         2 => unshuffle_w::<2>(&src[..2 * n], &mut dst[..2 * n]),
@@ -159,6 +161,7 @@ pub(crate) fn unshuffle(src: &[u8], word: usize, dst: &mut [u8]) {
 
 fn shuffle_w<const W: usize>(src: &[u8], dst: &mut [u8]) {
     let n = src.len() / W;
+    let done = simd::shuffle(W, src, dst, n);
     let planes: [&mut [u8]; W] = {
         let mut rest = dst;
         std::array::from_fn(|_| {
@@ -167,7 +170,7 @@ fn shuffle_w<const W: usize>(src: &[u8], dst: &mut [u8]) {
             a
         })
     };
-    for (i, w) in src.chunks_exact(W).enumerate() {
+    for (i, w) in src.chunks_exact(W).enumerate().skip(done) {
         for b in 0..W {
             planes[b][i] = w[b];
         }
@@ -176,8 +179,9 @@ fn shuffle_w<const W: usize>(src: &[u8], dst: &mut [u8]) {
 
 fn unshuffle_w<const W: usize>(src: &[u8], dst: &mut [u8]) {
     let n = src.len() / W;
+    let done = simd::unshuffle(W, src, dst, n);
     let planes: [&[u8]; W] = std::array::from_fn(|b| &src[b * n..(b + 1) * n]);
-    for (i, w) in dst.chunks_exact_mut(W).enumerate() {
+    for (i, w) in dst.chunks_exact_mut(W).enumerate().skip(done) {
         for b in 0..W {
             w[b] = planes[b][i];
         }
@@ -209,36 +213,52 @@ pub(crate) fn delta(buf: &mut [u8], word: usize, encode: bool) {
     }
 }
 
+thread_local! {
+    /// per-thread scratch (filter output, compressor output / decode staging): reused across blocks, so the memory
+    /// stays warm in cache and no block pays for a fresh allocation and its page faults
+    static SCRATCH: std::cell::RefCell<[Vec<u8>; 3]> = const { std::cell::RefCell::new([Vec::new(), Vec::new(), Vec::new()]) };
+}
+
 /// Encode one block (header + payload appended to `out`). `word` = shuffle word size, `delta` only for integers.
 pub(crate) fn encode_block(raw: &[u8], word: usize, delta_ok: bool, o: &Options, out: &mut Vec<u8>) {
     if o.codec == Codec::None {
-        return finish(raw, raw, 0, word, o, out);
+        return finish(raw, raw, 0, word, o, out, &mut Vec::new());
     }
-    let mut filter = 0u8;
-    let mut work = std::borrow::Cow::Borrowed(raw);
-    if o.delta && delta_ok && matches!(word, 1 | 2 | 4 | 8) {
-        let mut w = raw.to_vec();
-        delta(&mut w, word, true);
-        work = std::borrow::Cow::Owned(w);
-        filter |= FILTER_DELTA;
-    }
-    if o.shuffle && word > 1 {
-        let mut sh = vec![0u8; raw.len()];
-        shuffle(&work, word, &mut sh);
-        work = std::borrow::Cow::Owned(sh);
-        filter |= FILTER_SHUFFLE;
-    }
-    finish(raw, &work, filter, word, o, out)
+    SCRATCH.with(|s| {
+        let [a, b, c] = &mut *s.borrow_mut();
+        let mut filter = 0u8;
+        let mut cur: &[u8] = raw;
+        if o.delta && delta_ok && matches!(word, 1 | 2 | 4 | 8) {
+            a.clear();
+            a.extend_from_slice(raw);
+            delta(a, word, true);
+            cur = &a[..];
+            filter |= FILTER_DELTA;
+        }
+        if o.shuffle && word > 1 {
+            b.resize(raw.len(), 0);
+            shuffle(cur, word, &mut b[..]);
+            cur = &b[..];
+            filter |= FILTER_SHUFFLE;
+        }
+        finish(raw, cur, filter, word, o, out, c)
+    })
 }
 
-fn finish(raw: &[u8], filtered: &[u8], filter: u8, word: usize, o: &Options, out: &mut Vec<u8>) {
-    let comp: Option<(u8, Vec<u8>)> = match o.codec {
+fn finish(raw: &[u8], filtered: &[u8], filter: u8, word: usize, o: &Options, out: &mut Vec<u8>, scratch: &mut Vec<u8>) {
+    let comp: Option<(u8, usize)> = match o.codec {
         Codec::None => None,
-        Codec::Lz4 => Some((CODEC_LZ4, lz4_flex::block::compress(filtered))),
-        Codec::Zstd(level) => zstd::bulk::compress(filtered, level).ok().map(|c| (CODEC_ZSTD, c)),
+        Codec::Lz4 => {
+            scratch.resize(lz4_flex::block::get_maximum_output_size(filtered.len()), 0);
+            lz4_flex::block::compress_into(filtered, scratch).ok().map(|n| (CODEC_LZ4, n))
+        }
+        Codec::Zstd(level) => {
+            scratch.resize(zstd::zstd_safe::compress_bound(filtered.len()), 0);
+            zstd::bulk::compress_to_buffer(filtered, scratch, level).ok().map(|n| (CODEC_ZSTD, n))
+        }
     };
-    let (codec, filter, payload): (u8, u8, &[u8]) = match &comp {
-        Some((c, p)) if p.len() < raw.len() => (*c, filter, &p[..]),
+    let (codec, filter, payload): (u8, u8, &[u8]) = match comp {
+        Some((c, n)) if n < raw.len() => (c, filter, &scratch[..n]),
         _ => (CODEC_NONE, 0, raw), // incompressible (or no codec): store the raw bytes, no filters
     };
     let flags = if o.checksum { FLAG_CRC } else { 0 };
@@ -255,10 +275,28 @@ pub(crate) fn decode_block(h: &BlockHeader, payload: &[u8], out: &mut [u8]) -> R
     if h.flags & FLAG_CRC != 0 && crc32fast::hash(payload) != h.crc {
         return Err(Error::Codec("block checksum mismatch".into()));
     }
-    let filtered = h.filter != 0;
-    let mut tmp = if filtered { vec![0u8; out.len()] } else { Vec::new() };
-    let dst: &mut [u8] = if filtered { &mut tmp[..] } else { &mut *out };
-    match h.codec {
+    if h.filter == 0 {
+        return decompress(h.codec, payload, out);
+    }
+    SCRATCH.with(|s| {
+        let tmp = &mut s.borrow_mut()[0];
+        tmp.resize(out.len(), 0);
+        decompress(h.codec, payload, &mut tmp[..])?;
+        let word = h.word as usize;
+        if h.filter & FILTER_SHUFFLE != 0 {
+            unshuffle(tmp, word, out);
+        } else {
+            out.copy_from_slice(tmp);
+        }
+        if h.filter & FILTER_DELTA != 0 {
+            delta(out, word, false);
+        }
+        Ok(())
+    })
+}
+
+fn decompress(codec: u8, payload: &[u8], dst: &mut [u8]) -> Result<()> {
+    match codec {
         CODEC_NONE => dst.copy_from_slice(payload),
         CODEC_LZ4 => {
             let n = lz4_flex::block::decompress_into(payload, dst).map_err(|e| Error::Codec(format!("lz4: {e}")))?;
@@ -273,18 +311,6 @@ pub(crate) fn decode_block(h: &BlockHeader, payload: &[u8], out: &mut [u8]) -> R
             }
         }
         c => return Err(Error::Format(format!("unknown codec {c}"))),
-    }
-    if filtered {
-        let word = h.word as usize;
-        let work = &tmp;
-        if h.filter & FILTER_SHUFFLE != 0 {
-            unshuffle(work, word, out);
-        } else {
-            out.copy_from_slice(work);
-        }
-        if h.filter & FILTER_DELTA != 0 {
-            delta(out, word, false);
-        }
     }
     Ok(())
 }
@@ -311,4 +337,123 @@ pub fn decompress_block(block: &[u8], out: &mut [u8]) -> Result<()> {
         return Err(Error::Format("truncated block".into()));
     }
     decode_block(&h, &block[n..n + h.comp_len as usize], out)
+}
+
+/// SSE2 (always present on x86_64) byte transposes for 2- and 4-byte words; other targets use the scalar loops.
+/// Each returns the number of leading words handled (a multiple of 16), the caller finishes the rest.
+mod simd {
+    #[cfg(target_arch = "x86_64")]
+    pub fn shuffle(w: usize, src: &[u8], dst: &mut [u8], n: usize) -> usize {
+        use std::arch::x86_64::*;
+        let blocks = n / 16;
+        // SAFETY: SSE2 is baseline on x86_64; every load / store below stays inside src[..w*n] / dst[..w*n]
+        unsafe {
+            match w {
+                4 => {
+                    // 4 sixteen-word blocks per round, so every plane receives one full 64-byte line
+                    let mut i = 0;
+                    while i + 4 <= blocks {
+                        let mut out = [[_mm_setzero_si128(); 4]; 4]; // [plane][block]
+                        for j in 0..4 {
+                            let p = src.as_ptr().add((i + j) * 64) as *const __m128i;
+                            let (a0, a1, a2, a3) = (_mm_loadu_si128(p), _mm_loadu_si128(p.add(1)), _mm_loadu_si128(p.add(2)), _mm_loadu_si128(p.add(3)));
+                            let (l0, h0) = (_mm_unpacklo_epi8(a0, a1), _mm_unpackhi_epi8(a0, a1));
+                            let (l1, h1) = (_mm_unpacklo_epi8(a2, a3), _mm_unpackhi_epi8(a2, a3));
+                            let (m0, m1) = (_mm_unpacklo_epi8(l0, h0), _mm_unpackhi_epi8(l0, h0));
+                            let (n0, n1) = (_mm_unpacklo_epi8(l1, h1), _mm_unpackhi_epi8(l1, h1));
+                            let (p01, p23) = (_mm_unpacklo_epi8(m0, m1), _mm_unpackhi_epi8(m0, m1));
+                            let (q01, q23) = (_mm_unpacklo_epi8(n0, n1), _mm_unpackhi_epi8(n0, n1));
+                            out[0][j] = _mm_unpacklo_epi64(p01, q01);
+                            out[1][j] = _mm_unpackhi_epi64(p01, q01);
+                            out[2][j] = _mm_unpacklo_epi64(p23, q23);
+                            out[3][j] = _mm_unpackhi_epi64(p23, q23);
+                        }
+                        for (b, o) in out.iter().enumerate() {
+                            let d = dst.as_mut_ptr().add(i * 16 + b * n) as *mut __m128i;
+                            for (j, v) in o.iter().enumerate() {
+                                _mm_storeu_si128(d.add(j), *v);
+                            }
+                        }
+                        i += 4;
+                    }
+                    while i < blocks {
+                        let p = src.as_ptr().add(i * 64) as *const __m128i;
+                        let (a0, a1, a2, a3) = (_mm_loadu_si128(p), _mm_loadu_si128(p.add(1)), _mm_loadu_si128(p.add(2)), _mm_loadu_si128(p.add(3)));
+                        let (l0, h0) = (_mm_unpacklo_epi8(a0, a1), _mm_unpackhi_epi8(a0, a1));
+                        let (l1, h1) = (_mm_unpacklo_epi8(a2, a3), _mm_unpackhi_epi8(a2, a3));
+                        let (m0, m1) = (_mm_unpacklo_epi8(l0, h0), _mm_unpackhi_epi8(l0, h0));
+                        let (n0, n1) = (_mm_unpacklo_epi8(l1, h1), _mm_unpackhi_epi8(l1, h1));
+                        let (p01, p23) = (_mm_unpacklo_epi8(m0, m1), _mm_unpackhi_epi8(m0, m1));
+                        let (q01, q23) = (_mm_unpacklo_epi8(n0, n1), _mm_unpackhi_epi8(n0, n1));
+                        let d = dst.as_mut_ptr().add(i * 16);
+                        _mm_storeu_si128(d as *mut __m128i, _mm_unpacklo_epi64(p01, q01));
+                        _mm_storeu_si128(d.add(n) as *mut __m128i, _mm_unpackhi_epi64(p01, q01));
+                        _mm_storeu_si128(d.add(2 * n) as *mut __m128i, _mm_unpacklo_epi64(p23, q23));
+                        _mm_storeu_si128(d.add(3 * n) as *mut __m128i, _mm_unpackhi_epi64(p23, q23));
+                        i += 1;
+                    }
+                }
+                2 => {
+                    let mask = _mm_set1_epi16(0x00ff);
+                    for i in 0..blocks {
+                        let p = src.as_ptr().add(i * 32) as *const __m128i;
+                        let (a0, a1) = (_mm_loadu_si128(p), _mm_loadu_si128(p.add(1)));
+                        let lo = _mm_packus_epi16(_mm_and_si128(a0, mask), _mm_and_si128(a1, mask));
+                        let hi = _mm_packus_epi16(_mm_srli_epi16(a0, 8), _mm_srli_epi16(a1, 8));
+                        let d = dst.as_mut_ptr().add(i * 16);
+                        _mm_storeu_si128(d as *mut __m128i, lo);
+                        _mm_storeu_si128(d.add(n) as *mut __m128i, hi);
+                    }
+                }
+                _ => return 0,
+            }
+        }
+        blocks * 16
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub fn unshuffle(w: usize, src: &[u8], dst: &mut [u8], n: usize) -> usize {
+        use std::arch::x86_64::*;
+        let blocks = n / 16;
+        // SAFETY: as in `shuffle`
+        unsafe {
+            match w {
+                4 => {
+                    for i in 0..blocks {
+                        let s = src.as_ptr().add(i * 16);
+                        let ld = |b: usize| _mm_loadu_si128(s.add(b * n) as *const __m128i);
+                        let (p0, p1, p2, p3) = (ld(0), ld(1), ld(2), ld(3));
+                        let (u01l, u01h) = (_mm_unpacklo_epi8(p0, p1), _mm_unpackhi_epi8(p0, p1));
+                        let (u23l, u23h) = (_mm_unpacklo_epi8(p2, p3), _mm_unpackhi_epi8(p2, p3));
+                        let d = dst.as_mut_ptr().add(i * 64) as *mut __m128i;
+                        _mm_storeu_si128(d, _mm_unpacklo_epi16(u01l, u23l));
+                        _mm_storeu_si128(d.add(1), _mm_unpackhi_epi16(u01l, u23l));
+                        _mm_storeu_si128(d.add(2), _mm_unpacklo_epi16(u01h, u23h));
+                        _mm_storeu_si128(d.add(3), _mm_unpackhi_epi16(u01h, u23h));
+                    }
+                }
+                2 => {
+                    for i in 0..blocks {
+                        let s = src.as_ptr().add(i * 16);
+                        let (p0, p1) = (_mm_loadu_si128(s as *const __m128i), _mm_loadu_si128(s.add(n) as *const __m128i));
+                        let d = dst.as_mut_ptr().add(i * 32) as *mut __m128i;
+                        _mm_storeu_si128(d, _mm_unpacklo_epi8(p0, p1));
+                        _mm_storeu_si128(d.add(1), _mm_unpackhi_epi8(p0, p1));
+                    }
+                }
+                _ => return 0,
+            }
+        }
+        blocks * 16
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn shuffle(_: usize, _: &[u8], _: &mut [u8], _: usize) -> usize {
+        0
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn unshuffle(_: usize, _: &[u8], _: &mut [u8], _: usize) -> usize {
+        0
+    }
 }

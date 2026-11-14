@@ -267,6 +267,14 @@ pub trait Objective {
     fn gradient_groups_host(&mut self, _st: &Arc<CudaStream>, _groups: &[Vec<usize>], _x: &crate::hoststack::HostStack, _g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
         Ok(None)
     }
+    /// Secant groups of the per-set preconditioners ([`Precond::Zmshr1Set`], [`Precond::Zmshr1MSet`]): a group id per
+    /// set. Sets coupled by the Hessian (a temporal prior inside the gradient, a temporal basis) must share one
+    /// secant pair: the per-set pairs assume H = blockdiag H_t, and a coupled set's ⟨s_t, m_t⟩ mixes in the other sets'
+    /// steps (it can be negative or arbitrarily small, and the per-set step diverges). None (default): every set is
+    /// its own group (separable data term).
+    fn secant_groups(&self) -> Option<Vec<usize>> {
+        None
+    }
 }
 
 impl Objective for P2np<'_> {
@@ -969,7 +977,45 @@ pub fn zmshr1_scalars_sets(d: &[[f64; 3]], per_set: bool) -> Vec<(f64, f64)> {
         d.iter().map(|v| zmshr1_scalars_guarded(v[0], v[1], v[2])).collect()
     } else {
         let s = d.iter().fold([0.0; 3], |a, v| [a[0] + v[0], a[1] + v[1], a[2] + v[2]]);
-        vec![zmshr1_scalars(s[0], s[1], s[2]); d.len()]
+        // guarded as the per-set pairs: a vanished secant (the iterate stagnated in f32) takes the plain step, not NaN
+        vec![zmshr1_scalars_guarded(s[0], s[1], s[2]); d.len()]
+    }
+}
+
+/// [`zmshr1_scalars_sets`] with secant groups ([`Objective::secant_groups`]): per set, the products of each group are
+/// summed and its sets share one (a, τ)
+pub fn zmshr1_scalars_grouped(d: &[[f64; 3]], per_set: bool, groups: Option<&[usize]>) -> Vec<(f64, f64)> {
+    match (per_set, groups) {
+        (true, Some(gr)) => {
+            let ng = gr.iter().copied().max().map_or(0, |m| m + 1);
+            let mut s = vec![[0.0f64; 3]; ng];
+            for (v, &g) in d.iter().zip(gr) {
+                for j in 0..3 {
+                    s[g][j] += v[j];
+                }
+            }
+            let at = zmshr1_scalars_sets(&s, true);
+            gr.iter().map(|&g| at[g]).collect()
+        }
+        _ => zmshr1_scalars_sets(d, per_set),
+    }
+}
+
+/// [`zmshr1_rank_one_sets`] with secant groups (one coefficient per group)
+pub fn zmshr1_rank_one_grouped(d: &[[f64; 4]], per_set: bool, groups: Option<&[usize]>) -> Vec<f64> {
+    match (per_set, groups) {
+        (true, Some(gr)) => {
+            let ng = gr.iter().copied().max().map_or(0, |m| m + 1);
+            let mut s = vec![[0.0f64; 4]; ng];
+            for (v, &g) in d.iter().zip(gr) {
+                for j in 0..4 {
+                    s[g][j] += v[j];
+                }
+            }
+            let ct = zmshr1_rank_one_sets(&s, true);
+            gr.iter().map(|&g| ct[g]).collect()
+        }
+        _ => zmshr1_rank_one_sets(d, per_set),
     }
 }
 
@@ -1046,6 +1092,7 @@ pub fn run_objective_with(
     // ZMSHR1 in the circulant metric (the plain circulant step has its own arm)
     let metric = quasi && precond.metric();
     let per_set = precond.per_set();
+    let groups = obj.secant_groups();
     let ctx = || opts.ctx.clone().ok_or_else(|| Error::Format("StateOpts: host placement needs a context".into()));
     let mut g = Stack::zeros_lens(st, &lens)?;
     let mut pg = Stack::zeros_lens(st, &lens)?;
@@ -1132,7 +1179,7 @@ pub fn run_objective_with(
                     d1[t] = [obj.kernels().dot(st, s_, ms)?.re, obj.kernels().dot(st, s_, m_)?.re, obj.kernels().dot(st, m_, mmv)?.re];
                 }
                 // (a, τ) per set, or the global pair from the summed products (identical for every set)
-                let at = zmshr1_scalars_sets(&d1, per_set);
+                let at = zmshr1_scalars_grouped(&d1, per_set, groups.as_deref());
                 // pass 2: w = (1 − τa) s − τ(1−a) mm, z = (1−a) m + a ms; uv, norms, ⟨w, g⟩ per set; step = τ M g
                 let mut d2 = vec![[0.0f64; 4]; nt];
                 for t in 0..nt {
@@ -1162,7 +1209,7 @@ pub fn run_objective_with(
                     obj.kernels().axpby(st, re(0.0), &g.v[t], re(tau), &mut pg.v[t])?;
                 }
                 // rank-one coefficients c_t = ⟨w, g⟩ / ⟨w, z⟩ (0 where the safeguard fires)
-                let ct = zmshr1_rank_one_sets(&d2, per_set);
+                let ct = zmshr1_rank_one_grouped(&d2, per_set, groups.as_deref());
                 let ok = ct.iter().any(|&c| c != 0.0);
                 if ok {
                     // pass 3: step += c_t w

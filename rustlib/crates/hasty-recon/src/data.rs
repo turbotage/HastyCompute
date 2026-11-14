@@ -850,3 +850,56 @@ mod tests {
         assert!(set.tau[pl.na - 1] < set.tau[pl.na - 2] + 1e-5 + 3.0 * (set.tau[1] - set.tau[0]));
     }
 }
+
+/// The time a group of velocity encodes' velocity estimate refers to, relative to the time origin of `t` (s).
+///
+/// Encode e (first moment m1_e) is played at t_e. With u(t) = u0 + u'·t the phase differences to encode 0 are
+/// (m1_e − m1_0)·u0 + (m1_e t_e − m1_0 t_0)·u' (× γ), so the least-squares velocity is u0 + T u' with
+/// T = pinv(ΔM) D, rows ΔM_e = m1_e − m1_0, D_e = m1_e t_e − m1_0 t_0. Returns the mean of T's diagonal over the
+/// encoded axes (the off-diagonal is acceleration cross-talk between axes, a property of the encode order). When encode
+/// 0 carries a first moment (e.g. the referenced scheme with m1_0 = −venc-moment on every axis), this differs from the
+/// group's middle readout: stamping a group of encodes into one cardiac frame by its middle readout shifts the
+/// velocities in time.
+pub fn velocity_time(m1: &[Vec3], t: &[f64]) -> f64 {
+    assert_eq!(m1.len(), t.len());
+    let n = m1.len();
+    if n < 2 {
+        return t.first().copied().unwrap_or(0.0);
+    }
+    let dm = DMatrix::from_fn(n - 1, 3, |e, a| m1[e + 1][a] - m1[0][a]);
+    let d = DMatrix::from_fn(n - 1, 3, |e, a| m1[e + 1][a] * t[e + 1] - m1[0][a] * t[0]);
+    let a = dm.transpose() * &dm;
+    let scale = a.trace().max(f64::MIN_POSITIVE);
+    let axes: Vec<usize> = (0..3).filter(|&i| a[(i, i)] > 1e-9 * scale).collect();
+    if axes.is_empty() {
+        return t.iter().sum::<f64>() / n as f64;
+    }
+    // restricted to the encoded axes (a 1-D or 2-D encoding leaves the others out)
+    let k = axes.len();
+    let dmr = DMatrix::from_fn(n - 1, k, |e, j| dm[(e, axes[j])]);
+    let dr = DMatrix::from_fn(n - 1, k, |e, j| d[(e, axes[j])]);
+    let tm = (dmr.transpose() * &dmr).try_inverse().expect("velocity_time: encodes do not span their axes") * (dmr.transpose() * dr);
+    tm.trace() / k as f64
+}
+
+#[cfg(test)]
+mod velocity_time_tests {
+    use super::velocity_time;
+
+    #[test]
+    fn velocity_time_cases() {
+        let tr = 0.01;
+        // reference without first moment: velocity of each axis at its own encode; mean over the 3 axes
+        let m1 = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let t: Vec<f64> = (0..4).map(|e| e as f64 * tr).collect();
+        assert!((velocity_time(&m1, &t) - 2.0 * tr).abs() < 1e-12);
+        // balanced two-sided pair per axis (one axis): midpoint
+        let m1 = [[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        assert!((velocity_time(&m1, &[0.0, tr]) - 0.5 * tr).abs() < 1e-12);
+        // the 7-point referenced scheme of the flow_thorax sequence (moments in venc units): 1.346 TR after encode 0
+        let (p, q) = (1.0, 1.0 / 3.0);
+        let m1 = [[-p, -p, -p], [p, -p, -p], [q, -p, -p], [-p, p, -p], [-p, q, -p], [-p, -p, p], [-p, -p, q]];
+        let t: Vec<f64> = (0..7).map(|e| e as f64 * tr).collect();
+        assert!((velocity_time(&m1, &t) / tr - 1.346_153_846).abs() < 1e-6, "{}", velocity_time(&m1, &t) / tr);
+    }
+}

@@ -15,12 +15,21 @@ pub struct Llr {
     pub kappa: f64,
     pub dims: [usize; 3],
     pub support: Vec<bool>,
+    /// rank cap R: a block's threshold is raised to its (R+1)-th largest singular value (soft threshold there; κ = 0
+    /// for the cap alone). None (default): κσ̂ only. With T = 280 frames the κσ̂ rule keeps ~200 components (σ̂ lands
+    /// in the per-frame aliasing spectrum, research/recon_diag_2026-11-13.md §1); the truth's 99.9 % rank is ~7 per
+    /// block for 140 frames.
+    pub rank: Option<usize>,
+    /// hard threshold: keep the singular values above the threshold unchanged (weight 1), drop the rest; default soft
+    /// (shrink by the threshold). With a rank cap the soft rule subtracts s_{R+1} from every kept value and shrinks
+    /// the weaker cardiac components most (pf_rank_2mm: dynamics gain falling over the iterations).
+    pub hard: bool,
     seed: u64,
 }
 
 impl Llr {
     pub fn new(dims: [usize; 3], block: usize, kappa: f64, support: Vec<bool>) -> Self {
-        Self { block, kappa, dims, support, seed: 0x1234_5678 }
+        Self { block, kappa, dims, support, rank: None, hard: false, seed: 0x1234_5678 }
     }
 
     /// in-place on `x` laid out [t][v] (t = 0..nt)
@@ -29,13 +38,14 @@ impl Llr {
         self.seed = 0x1234_5678 ^ k.wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
     }
 
-    pub fn apply(&mut self, x: &mut [C32], nt: usize) {
+    /// The blocks of the next [`apply`](Self::apply) (voxel indices, x fastest; shifted grid, partial blocks at the
+    /// borders included, blocks without a support voxel dropped). Advances the shift seed exactly as `apply` does, so
+    /// the GPU path ([`crate::llr_gpu`]) cuts the same blocks.
+    pub fn next_blocks(&mut self) -> Vec<Vec<usize>> {
         let d = self.dims;
-        let nv = d[0] * d[1] * d[2];
         let b = self.block;
         self.seed = self.seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         let sh = [(self.seed >> 20) as usize % b, (self.seed >> 30) as usize % b, (self.seed >> 40) as usize % b];
-        // block origins (shifted grid, partial blocks at the borders included)
         let starts = |n: usize, s: usize| -> Vec<usize> {
             let mut v = vec![0usize];
             let mut o = if s == 0 { b } else { s };
@@ -70,6 +80,53 @@ impl Llr {
                 }
             }
         }
+        blocks
+    }
+
+    /// σ̂ from the singular values of every block (empty = a skipped block): the median over blocks of each block's
+    /// sorted s[len / 4]. None without any decomposed block.
+    pub fn sigma_hat<'a>(svs: impl Iterator<Item = &'a [f32]>) -> Option<f64> {
+        let mut lows: Vec<f32> = svs
+            .filter(|sv| !sv.is_empty())
+            .map(|sv| {
+                let mut s = sv.to_vec();
+                s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                s[s.len() / 4]
+            })
+            .collect();
+        lows.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        (!lows.is_empty()).then(|| lows[lows.len() / 2] as f64)
+    }
+
+    /// a block's threshold: the global `thr`, raised to the block's (rank+1)-th largest singular value with a cap
+    pub fn block_threshold(rank: Option<usize>, sv: &[f32], thr: f32) -> f32 {
+        match rank {
+            Some(r) if r < sv.len() => {
+                let mut s = sv.to_vec();
+                s.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                thr.max(s[r])
+            }
+            _ => thr,
+        }
+    }
+
+    /// the singular-value filter shrink(s) / s at threshold `thr`
+    pub fn weight(s: f32, thr: f32) -> f32 {
+        if s > thr { (s - thr) / s } else { 0.0 }
+    }
+
+    /// the filter weight of this operator's rule (soft: [`Self::weight`]; hard: 1 above the threshold, else 0)
+    pub fn weight_rule(s: f32, thr: f32, hard: bool) -> f32 {
+        if hard {
+            if s > thr { 1.0 } else { 0.0 }
+        } else {
+            Self::weight(s, thr)
+        }
+    }
+
+    pub fn apply(&mut self, x: &mut [C32], nt: usize) {
+        let nv = self.dims[0] * self.dims[1] * self.dims[2];
+        let blocks = self.next_blocks();
         let nthreads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
         let xs: &[C32] = x;
         // pass 1: eigen-decompositions of the Gram matrices, singular values
@@ -103,22 +160,12 @@ impl Llr {
                 .collect();
             hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
         });
-        // σ̂: median over blocks of the median of each block's lower half of singular values
-        let mut lows: Vec<f32> = decomp
-            .iter()
-            .filter(|(sv, _)| !sv.is_empty())
-            .map(|(sv, _)| {
-                let mut s = sv.clone();
-                s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                s[s.len() / 4]
-            })
-            .collect();
-        lows.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        if lows.is_empty() {
+        // σ̂: median over blocks of each block's s[len / 4]
+        let Some(sigma) = Self::sigma_hat(decomp.iter().map(|(sv, _)| sv.as_slice())) else {
             return;
-        }
-        let sigma = lows[lows.len() / 2] as f64;
+        };
         let thr = (self.kappa * sigma) as f32;
+        let (rank, hard) = (self.rank, self.hard);
         // pass 2: A ← A V diag(shrink(s)/s) V^H, written back
         let xp = x.as_mut_ptr() as usize;
         std::thread::scope(|sc| {
@@ -129,7 +176,8 @@ impl Llr {
                         if sv.is_empty() {
                             continue;
                         }
-                        let w: Vec<f32> = sv.iter().map(|&s| if s > thr { (s - thr) / s } else { 0.0 }).collect();
+                        let tb = Self::block_threshold(rank, sv, thr);
+                        let w: Vec<f32> = sv.iter().map(|&s| Self::weight_rule(s, tb, hard)).collect();
                         // filter F = V diag(w) V^H
                         let mut vw = v.clone();
                         for (c, &wc) in w.iter().enumerate() {

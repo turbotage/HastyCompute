@@ -60,7 +60,40 @@ pub(crate) fn strides(shape: &[usize]) -> Vec<usize> {
 
 /// copy the box of extent `ext` at `slo` in `src` (C-order, shape `sshape`) to `dlo` in `dst` (shape `dshape`)
 pub(crate) fn copy_sub(src: &[u8], sshape: &[usize], slo: &[usize], dst: &mut [u8], dshape: &[usize], dlo: &[usize], ext: &[usize], es: usize) {
+    // SAFETY: `dst` is a unique slice of the stated length
+    unsafe { copy_sub_ptr(src, sshape, slo, dst.as_mut_ptr(), dst.len(), dshape, dlo, ext, es) }
+}
+
+/// Destination shared between threads that write disjoint boxes (parallel chunk assembly).
+#[derive(Clone, Copy)]
+pub(crate) struct Shared(*mut u8, usize);
+impl Shared {
+    pub fn new(b: &mut [u8]) -> Self {
+        Self(b.as_mut_ptr(), b.len())
+    }
+    pub fn ptr(&self) -> *mut u8 {
+        self.0
+    }
+    pub fn len(&self) -> usize {
+        self.1
+    }
+}
+// SAFETY: users only write disjoint boxes through it, while the owner keeps the buffer alive and untouched
+unsafe impl Send for Shared {}
+unsafe impl Sync for Shared {}
+
+/// [`copy_sub`] into a raw destination (`dst_len` bytes). Bounds are checked; the caller guarantees that no other
+/// thread touches the bytes of the box being written.
+///
+/// # Safety
+/// `dst` must be valid for writes of `dst_len` bytes.
+pub(crate) unsafe fn copy_sub_ptr(src: &[u8], sshape: &[usize], slo: &[usize], dst: *mut u8, dst_len: usize, dshape: &[usize], dlo: &[usize], ext: &[usize], es: usize) {
     let nd = ext.len();
+    let cp = |dbase: usize, sbase: usize, row: usize| {
+        let (d, s) = (dbase * es, sbase * es);
+        assert!(d + row <= dst_len && s + row <= src.len(), "copy_sub out of range");
+        std::ptr::copy_nonoverlapping(src.as_ptr().add(s), dst.add(d), row);
+    };
     if ext.iter().any(|&e| e == 0) {
         return;
     }
@@ -82,12 +115,12 @@ pub(crate) fn copy_sub(src: &[u8], sshape: &[usize], slo: &[usize], dst: &mut [u
     // remaining outer dimensions (extent-1 ones only shift the base)
     let dims: Vec<usize> = (0..k).filter(|&d| ext[d] > 1).collect();
     if dims.is_empty() {
-        dst[dbase * es..dbase * es + row].copy_from_slice(&src[sbase * es..sbase * es + row]);
+        cp(dbase, sbase, row);
         return;
     }
     let mut idx = vec![0usize; dims.len()];
     loop {
-        dst[dbase * es..dbase * es + row].copy_from_slice(&src[sbase * es..sbase * es + row]);
+        cp(dbase, sbase, row);
         let mut j = dims.len();
         loop {
             if j == 0 {
@@ -445,9 +478,23 @@ impl Decoder {
         if self.done.is_some() && self.hasher.is_none() {
             return if data.is_empty() { Ok(()) } else { Err(Error::Format("data after the end of the value".into())) };
         }
+        if self.buf.len() == self.pos {
+            // nothing pending: decode straight from the caller's bytes and buffer only what is left over
+            self.buf.clear();
+            self.pos = 0;
+            self.hpos = 0;
+            self.advance(data)?;
+            self.verify(data)?;
+            self.buf.extend_from_slice(&data[self.pos..]);
+            self.pos = 0;
+            self.hpos = 0;
+            return Ok(());
+        }
         self.buf.extend_from_slice(data);
-        self.advance()?;
-        self.verify()?;
+        let buf = std::mem::take(&mut self.buf);
+        let r = self.advance(&buf).and_then(|_| self.verify(&buf));
+        self.buf = buf;
+        r?;
         if self.pos == self.buf.len() {
             self.buf.clear();
             self.pos = 0;
@@ -461,14 +508,14 @@ impl Decoder {
     }
 
     /// feed the consumed bytes to the hasher; once the value is complete, check the trailing digest
-    fn verify(&mut self) -> Result<()> {
+    fn verify(&mut self, src: &[u8]) -> Result<()> {
         let Some(h) = &mut self.hasher else { return Ok(()) };
-        h.update(&self.buf[self.hpos..self.pos]);
+        h.update(&src[self.hpos..self.pos]);
         self.hpos = self.pos;
         let n = self.algo.digest_len();
-        if self.done.is_some() && self.buf.len() - self.pos >= n {
+        if self.done.is_some() && src.len() - self.pos >= n {
             let d = self.hasher.take().unwrap().finalize();
-            if d[..] != self.buf[self.pos..self.pos + n] {
+            if d[..] != src[self.pos..self.pos + n] {
                 return Err(Error::Codec("integrity digest mismatch".into()));
             }
             self.pos += n;
@@ -516,9 +563,9 @@ impl Decoder {
         }
     }
 
-    fn advance(&mut self) -> Result<()> {
+    fn advance(&mut self, src: &[u8]) -> Result<()> {
         if !self.header {
-            let a = &self.buf[self.pos..];
+            let a = &src[self.pos..];
             if a.len() < STREAM_HEADER {
                 return Ok(());
             }
@@ -535,19 +582,19 @@ impl Decoder {
         }
         while self.done.is_none() {
             if self.chunked.is_some() {
-                if !self.chunked_data()? {
+                if !self.chunked_data(src)? {
                     break;
                 }
                 continue;
             }
             if self.tensor.is_some() {
-                if !self.tensor_blocks()? {
+                if !self.tensor_blocks(src)? {
                     break;
                 }
                 continue;
             }
             if let Some(Frame::Dict { key: k @ None, .. }) = self.stack.last_mut() {
-                let a = &self.buf[self.pos..];
+                let a = &src[self.pos..];
                 if a.len() < 4 {
                     break;
                 }
@@ -559,7 +606,7 @@ impl Decoder {
                 self.pos += 4 + n;
                 continue;
             }
-            let a = &self.buf[self.pos..];
+            let a = &src[self.pos..];
             if a.is_empty() {
                 break;
             }
@@ -675,10 +722,10 @@ impl Decoder {
     }
 
     /// chunked tensor: once all chunk data is buffered, decode the chunks (in parallel) and assemble the tensor
-    fn chunked_data(&mut self) -> Result<bool> {
+    fn chunked_data(&mut self, src: &[u8]) -> Result<bool> {
         let c = self.chunked.as_ref().unwrap();
         let total: u64 = c.index.iter().map(|x| x.1).sum();
-        let a = &self.buf[self.pos..];
+        let a = &src[self.pos..];
         if (a.len() as u64) < total {
             return Ok(false);
         }
@@ -691,12 +738,20 @@ impl Decoder {
             }
             Ok((ci, decode_chunk_data(c.dtype, c.quant, &ext, &a[off as usize..(off + len) as usize], c.block_size)?))
         };
-        let parts: Vec<(usize, Vec<u8>)> = if self.parallel { (0..c.index.len()).into_par_iter().map(dec).collect::<Result<_>>()? } else { (0..c.index.len()).map(dec).collect::<Result<_>>()? };
         let mut t = Tensor::zeros(c.dtype, c.shape.clone());
         let nd = c.shape.len();
-        for (ci, raw) in parts {
+        let out = Shared::new(t.bytes_mut());
+        let job = |ci: usize| -> Result<()> {
+            let (ci, raw) = dec(ci)?;
             let (lo, ext) = chunk_box(ci, &c.grid, &c.chunk, &c.shape);
-            copy_sub(&raw, &ext, &vec![0; nd], t.bytes_mut(), &c.shape, &lo, &ext, es);
+            // SAFETY: chunks cover disjoint boxes of `t`, which outlives the job
+            unsafe { copy_sub_ptr(&raw, &ext, &vec![0; nd], out.ptr(), out.len(), &c.shape, &lo, &ext, es) };
+            Ok(())
+        };
+        if self.parallel {
+            (0..c.index.len()).into_par_iter().try_for_each(job)?;
+        } else {
+            (0..c.index.len()).try_for_each(job)?;
         }
         self.pos += total as usize;
         self.chunked = None;
@@ -705,9 +760,9 @@ impl Decoder {
     }
 
     /// decode every complete block in the buffer; Ok(true) when the tensor is complete
-    fn tensor_blocks(&mut self) -> Result<bool> {
+    fn tensor_blocks(&mut self, src: &[u8]) -> Result<bool> {
         let t = self.tensor.as_mut().unwrap();
-        let a = &self.buf[self.pos..];
+        let a = &src[self.pos..];
         let total = t.data.len();
         let mut jobs: Vec<(BlockHeader, usize)> = Vec::new(); // header, payload start in `a`
         let (mut p, mut off, mut left) = (0usize, t.off, t.blocks_left);

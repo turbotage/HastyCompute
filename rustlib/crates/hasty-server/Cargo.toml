@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 hasty-site = { path = "../hasty-site" }
 hasty-value = { path = "../hasty-value" }
+hasty-infer = { path = "../hasty-infer" }
 num-complex.workspace = true
 rustfft.workspace = true
 rayon = "1.12"
@@ -32,3 +33,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [build-dependencies]
 tonic-prost-build = "0.14.6"
 protox = "0.10"
+
+[features]
+default = ["onnx"]
+# ONNX Runtime models (libonnxruntime is dlopen'ed at run time)
+onnx = ["hasty-infer/onnx"]

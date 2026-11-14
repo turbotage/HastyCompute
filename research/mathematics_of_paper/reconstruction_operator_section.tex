@@ -515,14 +515,210 @@ $\|\Nop-\Nop^0\|/\|\Nop\|=0.8,\,2.8,\,7.9\,\%$. No expansion has an FFT count in
 \subsection{Preconditioned plug-and-play iteration}
 \label{sec:iteration}
 
+The unknowns are one image per set $t=(f,e)$ (frame $f$ = cardiac $\times$ respiratory bin, encode $e$), and the data term is separable over the sets:
 \begin{equation}
-  x_{k+1}=\mathcal D\bigl(x_k-\alpha\,\mathsf P_kg_k\bigr),\qquad g_k=\nabla f(x_k),\qquad
-  \mathsf P_k=\text{ZMSHR1}\bigl(M;\,s_k=x_k-x_{k-1},\,u_k=g_k-g_{k-1}\bigr)
+  f(x)=\tfrac12\sum_t\|E_tx_t-y_t\|_2^2,\qquad \nabla_tf=\Nop_tx_t-E_t^\herm y_t,\qquad \Nop_t=E_t^\herm E_t,\qquad \nabla^2f=\operatorname{blockdiag}_t\Nop_t .
+  \label{eq:datafit}
+\end{equation}
+With whitened coils, $f$ is the negative Gaussian log-likelihood up to a constant (no density weights).
+The iteration (P$^2$nP~\cite{hong2024}) is
+\begin{equation}
+\begin{gathered}
+  x_{k+1}=\mathcal D\bigl(x_k-\alpha\,\mathsf P_kg_k\bigr),\qquad g_k=\nabla f(x_k),\\
+  \mathsf P_k=\text{ZMSHR1}\bigl(M;\,s_k=x_k-x_{k-1},\,u_k=\alpha(g_k-g_{k-1})\bigr),
+\end{gathered}
   \label{eq:pnp}
 \end{equation}
-(P$^2$nP~\cite{hong2024}): one operator application per iteration and a rank-one update of a base metric $M$.
-With spiral sampling $\Nop$ spans $10^4$--$10^6$; the metric replaces density compensation.
-The base metric for the complex model is circulant, $\langle e_{\kk},\Nop e_{\kk}\rangle=(\rho\circledast P_{\rm coil})(\kk)$, with normalised maps ($\sum_c|S_c|^2=1$) and a floor on unsampled corners: $\lambda_{\max}(M\Nop)$ goes from 38 to 9. The velocity model uses the pointwise Gauss--Newton blocks of \cref{sec:velmodel}.
+with one operator application per iteration and a rank-one update of a base metric $M$.
+The step is $\alpha=1/\lambda_{\max}(M\Nop)$, from a power iteration.
+On our trajectories the Fourier diagonal of $\Nop$ spans $10^3$--$10^6$ from DC to Nyquist. The base metric replaces density compensation without entering the data term.
+The velocity model uses the pointwise Gauss--Newton blocks of \cref{sec:velmodel} instead.
+
+\subsubsection*{The circulant metric}
+Take the plain (physics-free) model of a set with samples $\kk_j$ (radians per voxel) on the grid $N=N_1\times N_2\times N_3$ ($n_v$ voxels), and let $F$ be the unitary $N$-point DFT.
+The coil-free normal operator is Toeplitz,
+\[
+  T_t(\rr,\rr')=h_t(\rr-\rr'),\qquad h_t(\bm n)=\sum_{j\in t}\ee^{\ii\kk_j\cdot\bm n},\qquad \bm n\in\{-N_a{+}1,\dots,N_a{-}1\}^3 .
+\]
+Its optimal circulant approximation in Frobenius norm (T.~Chan) folds the triangle-windowed kernel onto the $N$ grid,
+\[
+  c_t(\bm n\bmod N)=\sum_{\bm n}\prod_a\Bigl(1-\frac{|n_a|}{N_a}\Bigr)h_t(\bm n),\qquad
+  \rho_t=\sqrt{n_v}\,Fc_t=\sum_{j\in t}\prod_a K_{N_a}\bigl(\kappa_a-\tfrac{N_a}{2\pi}k_{j,a}\bigr)\ \ge 0,
+\]
+with $K_{N_a}$ the Fej\'er kernel. So $\rho_t$ is the sample density on the grid frequencies $\bm\kappa$, smoothed over about one bin.
+With coil maps, $\Nop_t=\sum_cS_c^\herm T_tS_c$.
+Replacing $T_t$ by $C_t=F^\herm\diag(\rho_t)F$ and using $\langle e_{\bm\kappa'},S_ce_{\bm\kappa}\rangle=n_v^{-1/2}\hat S_c(\bm\kappa'-\bm\kappa)$, with $\hat S_c=\sqrt{n_v}FS_c$, gives the Fourier diagonal
+\begin{equation}
+  \lambda_t(\bm\kappa)=\langle e_{\bm\kappa},\Nop_te_{\bm\kappa}\rangle\approx\sum_{\bm\kappa'}\rho_t(\bm\kappa')\,P(\bm\kappa'-\bm\kappa),\qquad P(\bm\kappa)=\frac1{n_v}\sum_c|\hat S_c(\bm\kappa)|^2 .
+  \label{eq:circdiag}
+\end{equation}
+This is the density convolved with the coil power spectrum. Inverting $\rho_t$ alone over-amplifies the modes next to the DC spike, which the maps smear onto their neighbours: $\lambda_{\max}(M\Nop)$ went from 38 to 9 on the spiral.
+Two floors complete it:
+\begin{itemize}
+  \item in-plane corners $|\bm\kappa_{xy}|>0.95$ (no samples) are raised to the median of the ring $0.85$--$0.95$;
+  \item $\lambda_\varepsilon=\max(\lambda,\varepsilon\lambda_{\max})$ with $\varepsilon=10^{-3}$.
+\end{itemize}
+With $D=\sum_c|S_c|^2+10^{-3}\max\sum_c|S_c|^2$ and $\bar D$ the mean of $\sum_c|S_c|^2$ (already contained in $\lambda$),
+\begin{equation}
+  M=D^{-1/2}F^\herm\diag\bigl(\bar D/\lambda_\varepsilon\bigr)FD^{-1/2},\qquad
+  M^{-1}=D^{1/2}F^\herm\diag\bigl(\lambda_\varepsilon/\bar D\bigr)FD^{1/2}\approx\Nop_t .
+  \label{eq:circM}
+\end{equation}
+$M$ is Hermitian positive definite. It does not depend on $y$; it depends only on the nominal trajectory and the maps.
+One application costs two $N$-point FFTs and three pointwise products.
+At $254\times144\times114$: 0.77\,ms with the arrays on the device, 4.26\,ms host-resident (two $N$-grid arrays uploaded per application). Building it takes 2.0\,s from the $3.0\cdot10^7$ samples of one encode (Toeplitz kernel on the $2N$ grid, fold, coil spectra) [measured].
+On the ph0001 yarn trajectory (encode 0 pooled), $\lambda/\lambda_{\max}$ has median $4\cdot10^{-2}$ at $0.05$, $5\cdot10^{-3}$ at $0.2$ and $2\cdot10^{-3}$ at Nyquist. The $10^{-3}$ floor clips no mode inside Nyquist [measured].
+
+\subsubsection*{Sharing between encodes and frames}
+The default is one metric per encode, built from the union of the samples of all frames of that encode: $M_t:=M_{e(t)}$.
+A per-set metric costs 133\,MB of host memory at 2\,mm, 37\,GB for 280 sets.
+\begin{itemize}
+  \item \emph{Encodes.} Readout $i$ plays rotation $\lfloor i/7\rfloor$ with encode $i\bmod7$, and pooling keeps every readout. The pooled densities of the seven encodes are therefore identical: their ratio is $1.000$ in every $|\bm\kappa|$ shell [measured]. The seven $M_e$ coincide, and one metric would suffice.
+  \item \emph{Frames.} A set holds $n_t/n_e\approx1/40$ of its encode's samples (20 cardiac $\times$ 2 respiratory bins). The rotations reach a frame through the ECG timing, quasi-uniformly. Hence $\mathbb E\rho_t\approx(n_t/n_e)\rho_e$ and
+  \[
+    M_t^{\rm own}\approx\frac{n_e}{n_t}\,M_e\quad\text{in expectation.}
+  \]
+  The shared metric is therefore right up to a scalar, which $\tau_t$ below absorbs (and $\alpha$ through $\lambda_{\max}$).
+  \item \emph{Per-set deviation.} We measured $\rho_t/((n_t/n_e)\rho_e)$ for one cardiac frame, both respiratory bins pooled (sample histograms on the $N$ grid, $\sigma=0.5$ bin) [measured]:
+  \begin{itemize}
+    \item median 1.00 (p10--p90: 0.76--1.23) below $0.05$ Nyquist;
+    \item 0.96 (0.45--1.6) at $0.05$--$0.1$;
+    \item 0.62--0.68 (0.07--2.4) beyond $0.2$.
+  \end{itemize}
+  The skewed spread is angular undersampling: 380 of 7592 rotations. A reconstruction set is $2\times$ sparser still.
+  \item \emph{What no circulant captures.} Above $\approx0.1$ Nyquist a single set's Fourier diagonal fluctuates by an order of magnitude from bin to bin. Its normal operator also has strong off-diagonal (aliasing) structure, which no circulant can represent. A per-set circulant would track the diagonal but not the coupling. The shared $M_e$ captures what all sets have in common: the radial density, i.e.\ the $10^3$ range from DC to Nyquist. The rest is left to the rank-one term and to the prior.
+  \item \emph{Physics.} $M$ is built for the plain model. The full model's phases (B0, fat, concomitant fields, GNL) are unimodular per sample: they leave $\tr\Nop_t$ unchanged and spread the Fourier diagonal over the chirp bandwidth. For the full model at 2\,mm with joint water--fat, $\lambda_{\max}(M\Nop)=11.2$ [measured].
+\end{itemize}
+
+\subsubsection*{ZMSHR1 in the metric}
+Change variables by $x=M^{1/2}\hat x$. Then $\hat s=M^{-1/2}s$, and the gradient difference transforms covariantly, $\hat u=M^{1/2}u$.
+ZMSHR1~\cite{hong2024} on the pair $(\hat s,\hat u)$ proceeds as follows.
+\begin{itemize}
+  \item \emph{Mixing.} $\hat v=a\hat s+(1-a)\hat u$, where $a$ is the smallest value in $\{0,\tfrac1{2000},\dots,1\}$ with $\langle\hat s,\hat v\rangle\ge\theta_1\|\hat s\|^2$ and $\|\hat v\|^2\le\theta_2\langle\hat s,\hat v\rangle$ ($\theta_1=2\cdot10^{-6}$, $\theta_2=200$).
+  \item \emph{Scale.} $\tau=\beta-\bigl(\beta^2-\|\hat s\|^2/\|\hat v\|^2\bigr)_+^{1/2}$ with $\beta=\|\hat s\|^2/\langle\hat s,\hat v\rangle$.
+  \item \emph{Update.} $\hat B=\tau I+\hat w\hat w^\herm/\langle\hat w,\hat v\rangle$ with $\hat w=\hat s-\tau\hat v$. The rank-one term is dropped if $\langle\hat w,\hat v\rangle\le10^{-8}\|\hat w\|\|\hat v\|$.
+\end{itemize}
+All scalars come from three inner products in the original variables:
+\[
+  \|\hat s\|^2=\langle s,M^{-1}s\rangle,\qquad\langle\hat s,\hat u\rangle=\langle s,u\rangle,\qquad\|\hat u\|^2=\langle u,Mu\rangle .
+\]
+Transforming back gives
+\begin{equation}
+\begin{gathered}
+  \mathsf P=M^{1/2}\hat BM^{1/2}=\tau M+\frac{ww^\herm}{\langle w,z\rangle},\\
+  w=M^{1/2}\hat w=(1-\tau a)s-\tau(1-a)Mu,\qquad z=M^{-1/2}\hat v=aM^{-1}s+(1-a)u ,
+\end{gathered}
+  \label{eq:zmshr1m}
+\end{equation}
+since $\langle\hat w,\hat v\rangle=\langle w,z\rangle$.
+The step $\mathsf Pg=\tau Mg+(\langle w,g\rangle/\langle w,z\rangle)\,w$ needs $M^{-1}s$, $Mu$ and $Mg$: three metric applications. The code recomputes the secant in a second pass and uses five.
+$M=I$ recovers plain ZMSHR1. The first iteration, and any iteration after a change of coil subset, takes the metric step $\mathsf P=M$.
+
+The variants differ in how much structure the quasi-Newton matrix shares:
+\begin{itemize}
+  \item \texttt{zmshr1m}: one triple $(a,\tau,c)$ from inner products summed over all sets, i.e.\ one rank-one term over the whole stack;
+  \item \texttt{zmshr1ms}: one triple per set,
+  \[
+    \mathsf P=\operatorname{blockdiag}_t\Bigl(\tau_tM_{e(t)}+\frac{w_tw_t^\herm}{\langle w_t,z_t\rangle}\Bigr),
+  \]
+  i.e.\ one scalar and one rank-one term per (frame, encode). Since $\nabla^2f$ is block diagonal \eqref{eq:datafit}, this is the matching structure. A set with a vanishing secant falls back to $(a,\tau)=(1,1)$.
+  \item \texttt{zmshr1s}: the same per-set form with $M=I$, i.e.\ \emph{no} Fourier metric.
+\end{itemize}
+For 280 sets at 2\,mm the metric costs $280\times5\times4.26\,\text{ms}\approx6$\,s per iteration (1.1\,s device-resident). Per iteration the gradient takes 430\,s with the whole out-and-back readout and 234\,s with its outgoing half; the LLR prior takes 15\,s on one GPU (f64 Gram matrices and batched eigendecompositions, blocks split over the GPUs; 125\,s on the CPU) [measured], so the metric adds 1.5--3\,\%.
+
+\subsubsection*{What the metric does to the estimator}
+\begin{proposition}\label{prop:metricfp}
+Let $\mathsf P$ be fixed and Hermitian positive definite.
+\begin{enumerate}
+  \item[(i)] Without a prior ($\mathcal D=\mathrm{id}$), convergent iterations reach a minimiser of $f$, i.e.\ a maximum-likelihood estimate. If $E$ has a null space, they reach the minimiser closest to $x_0$ in $\|\cdot\|_{\mathsf P^{-1}}$.
+  \item[(ii)] With a fixed-strength proximal denoiser $\mathcal D=\operatorname{prox}_{\theta R}$ (Euclidean; our LLR singular-value threshold, $\theta=\kappa\hat\sigma$), every fixed point satisfies
+  \begin{equation}
+    0\in\nabla f(x^\star)+\frac\theta\alpha\,\mathsf P^{-1}\partial R(x^\star).
+    \label{eq:metricfp}
+  \end{equation}
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+(i) For constant $\mathsf P$ the iterates satisfy $x_k-x_0\in\mathsf P\operatorname{range}E^\herm$. Among the minimisers, $x_\infty$ is the one with $\mathsf P^{-1}$-orthogonal correction; for PCG this is classical.
+(ii) $x^\star=\operatorname{prox}_{\theta R}(z)$ if and only if $z-x^\star\in\theta\,\partial R(x^\star)$. Put $z=x^\star-\alpha\mathsf P\nabla f(x^\star)$.
+\end{proof}
+Consequences:
+\begin{itemize}
+  \item \emph{No prior.} The warm starts (pooled PCG, $\kappa=0$) are maximum-likelihood with or without the metric; the metric only changes how fast they converge. A Fourier-diagonal $M$ hardly mixes the unsampled modes (the corners of the $\bm\kappa$ cube) into the sampled ones, so in practice the estimate equals that of $\mathsf P=I$.
+  \item \emph{Per-set scalar metric} (\texttt{zmshr1s}, $\mathsf P=\operatorname{blockdiag}(\tau_tI)$): \eqref{eq:metricfp} is the stationarity condition of $f$ plus $R$ with a per-set weight $\theta/(\alpha\tau_t)$. For an LLR block coupling sets of different $\tau_t$, this means a column-weighted nuclear norm.
+  \item \emph{Circulant metric} ($\mathsf P\approx\tau M$, $M^{-1}\approx\Nop$): the prior's subgradient is filtered by the data's curvature. $\Nop\partial R$ is in general not the subdifferential of any function, so the fixed point is a well-defined estimator but not a MAP estimate.
+  \item \emph{Local quadratic picture.} Take $R\approx\frac\gamma2\|x\|^2$ on the tangent space at $x^\star$ and $\Nop\approx\diag(n(\bm\kappa))$ in Fourier. Mode by mode,
+  \[
+    \hat x^\star(\bm\kappa)=\frac{n(\bm\kappa)}{n(\bm\kappa)+\theta\gamma/(\alpha\tau)}\,\hat x_{\rm ML}(\bm\kappa)\quad(\mathsf P=\tau I),\qquad
+    \hat x^\star(\bm\kappa)=\frac1{1+\theta\gamma/(\alpha\tau)}\,\hat x_{\rm ML}(\bm\kappa)\quad(\mathsf P=\tau\Nop^{-1}).
+  \]
+  The Euclidean metric shrinks the low-density, high-$|\bm\kappa|$ modes most. Even when fully converged it low-passes the image, and partial volume with static tissue then shrinks the lumen velocity.
+  The circulant metric shrinks every mode by the same relative factor. It costs no resolution, but it gives no extra noise suppression at high $|\bm\kappa|$, where the noise variance per mode is $\propto1/n$.
+  \item \emph{Two effects in the measured shrink.} The shrink of the $\kappa=1$ runs mixes this estimator effect with non-convergence; separating them needs a $\kappa=0$ run with \texttt{zmshr1ms} [CHECK].
+  \item \emph{Keeping a metric-independent penalised-likelihood estimator} (without ADMM):
+  \begin{itemize}
+    \item[(a)] Take the prox in the metric, $x_{k+1}=\operatorname{prox}^{\mathsf P_k^{-1}}_{(\theta/\alpha)R}(x_k-\alpha\mathsf P_kg_k)$. For $\mathsf P=\tau_tI$ this is exact: threshold $\theta\tau_t$, or a column-weighted SVT when one block mixes $\tau_t$. For the circulant it has no closed form and needs inner iterations of FFTs and SVTs (no NUFFT).
+    \item[(b)] Use a preconditioned primal--dual iteration (Condat--V\~u) with a fixed metric:
+    \[
+      x_{k+1}=x_k-\mathsf P(\nabla f(x_k)+q_k),\qquad q_{k+1}=\operatorname{prox}_{\sigma(\lambda R)^*}\bigl(q_k+\sigma(2x_{k+1}-x_k)\bigr).
+    \]
+    It needs one gradient per iteration. Its fixed points satisfy $q=-\nabla f(x)\in\lambda\partial R(x)$, i.e.\ they minimise $f+\lambda R$ for every admissible $(\mathsf P,\sigma)$; admissibility is a step condition of the form $\mathsf P^{-1}-\sigma I\succ\tfrac12\Nop$ [CHECK constants; designed, not implemented].
+  \end{itemize}
+\end{itemize}
+
+\subsubsection*{Temporal coupling: what a truncated temporal basis does to the conditioning}
+Fix an encode and a respiratory bin, and let $G=\operatorname{blockdiag}_f\Nop_f$ be the normal operator of the $F$ cardiac frames. Write the frames as $x=(B\otimes I)c$ with $B\in\CC^{F\times K}$, $B^\herm B=I_K$ (e.g.\ the cyclic harmonics $|k|\le K_0$, $K=2K_0+1$), and solve for $c$ with the gradient $(B\otimes I)^\herm G\bigl((B\otimes I)c\bigr)-(B\otimes I)^\herm E^\herm y$.
+\begin{itemize}
+  \item \emph{A unitary change of variables does nothing.} For $K=F$, $\hat G=(B\otimes I)^\herm G(B\otimes I)$ is unitarily similar to $G$: same spectrum, same condition number, same iterates up to the transform.
+  \item \emph{Truncation does.} For $K<F$, $\hat G$ is a compression of $G$, so by Cauchy interlacing $\lambda_j(G)\le\lambda_j(\hat G)\le\lambda_{j+(F-K)n_v}(G)$: the spectrum can only move inwards. In the Fourier basis the blocks are
+  \[
+    \hat G_{kk'}=\frac1F\sum_f\ee^{-2\pi\ii(k-k')f/F}\,\Nop_f,\qquad \hat G_{kk}=\bar\Nop:=\frac1F\sum_f\Nop_f ,
+  \]
+  i.e.\ every harmonic sees the pooled normal operator of all frames (about $F$ times the samples of one frame), and the off-diagonal blocks are the Fourier coefficients of the frame-to-frame fluctuation of the sampling. Hence $\lambda_{\min}(\hat G)\ge\lambda_{\min}(\bar\Nop)-\|\hat G-I_K\otimes\bar\Nop\|$. A single frame's null space can only be reached by frame-localised functions, which need all $F$ harmonics; with $K\ll F$ the unknowns per voxel drop from $F$ to $K$ against the same samples, an effective acceleration of $(K/F)R_{\rm frame}$. How fast $\|\hat G-I_K\otimes\bar\Nop\|$ grows with $K$ is not measured [CHECK].
+  \item \emph{The same estimator either way.} Projected gradient steps onto $\operatorname{range}(B\otimes I)$ (P$^2$nP with $\mathcal D=BB^\herm$, \texttt{--prior tlp}) and a Krylov or quasi-Newton solve in $c$ have the same minimiser; the latter is the faster solver of it.
+  \item \emph{Cost.} $A$ is untouched (one gradient per set, split over GPUs as now). $B$ and $B^\herm$ act pointwise in the voxels across all frames, so they run on voxel chunks of the whole stack: the projection $BB^\herm$ over 280 sets of $4.17\cdot10^6$ voxels takes 2.0\,s on the CPU [measured]. With the zeros of a block-diagonal basis skipped and one encode's voxel chunk of all frames in cache, $Bc$ and $B^\herm g$ are memory-bound at 50\,GB/s: 0.27\,s and 0.25\,s per application at 2\,mm for 40 frames and 18 coefficients, against $\approx230$\,s for the gradient [measured, \texttt{hasty\_recon::tsub}]. The state stays on the host, where the gradient streams the sets to the device(s) anyway, so no transposition between devices is needed. With the state sharded over devices by sets, every device would need all frames of its voxel range, i.e.\ a transpose of the (set, voxel) layout.
+  \item \emph{Secant pairs.} $B^\herm\Nop B$ couples the coefficient sets that share a frame, so a per-set quasi-Newton metric (one secant pair per set, which assumes a block-diagonal Hessian) has to pair the coupled sets: one pair per connected component of the coefficient--frame incidence of $B$ (per respiratory bin and encode for the cardiac bases). With one pair per coefficient set, ZMSHR1 diverged on a toy problem; with the groups it converges (\texttt{tests/tsub.rs}). The same holds for a temporal prior inside the gradient (\cref{eq:red}).
+  \item \emph{Relation to \cref{sec:velmodel}.} The periodic B-splines $\beta^z_\kappa,\beta^v_\kappa$ are such a basis (in $z$ linearly, in $\bm v$ through the phase), and the model evaluates $x_e(\cdot,t)$ at each sample's own time inside $A$, so encodes acquired at different times within a frame are not forced to share an image.
+\end{itemize}
+
+\subsubsection*{The prior inside the step: regularisation by denoising}
+In \eqref{eq:pnp} only the data gradient moves the iterate; $\mathcal D$ moves it only towards its own range (for the temporal-mean projection of the static tissue that is a full step, the limit $\lambda\to\infty$ of a Newton step on $\frac\lambda2\|(I-\Pi)x\|^2$). Regularisation by denoising \cite{romano2017red} puts the denoiser residual into the gradient,
+\begin{equation}
+  x_{k+1}=x_k-\alpha\mathsf P_k\bigl(\nabla f(x_k)+\lambda(x_k-\mathcal D(x_k))\bigr),
+  \label{eq:red}
+\end{equation}
+so the secant pairs of ZMSHR1 contain the prior's curvature and the metric acts on both terms. When the residual is a gradient, the fixed points do not depend on $\mathsf P$ (unlike \eqref{eq:metricfp}):
+\begin{itemize}
+  \item \emph{Proximal denoisers.} For $\mathcal D=\operatorname{prox}_{\theta R}$ (e.g.\ unshifted LLR, $R$ the sum of block nuclear norms), $x-\mathcal D(x)=\theta\nabla M_{\theta R}(x)$ with $M_{\theta R}$ the Moreau envelope, convex with a $1/\theta$-Lipschitz gradient. \eqref{eq:red} is then preconditioned gradient descent on $f+\lambda\theta M_{\theta R}$, a smooth convex objective, and quasi-Newton theory applies as for $f$ alone.
+  \item \emph{MMSE denoisers.} A denoiser trained with squared error at noise level $\sigma$ satisfies Tweedie's formula $\mathcal D(x)=x+\sigma^2\nabla\log p_\sigma(x)$ \cite{efron2011tweedie}, so $x-\mathcal D(x)=-\sigma^2\nabla\log p_\sigma(x)$ is the gradient of a potential (symmetric Jacobian), and \eqref{eq:red} descends on $f-\lambda\sigma^2\log p_\sigma$, a MAP objective with the smoothed prior \cite{kadkhodaie2021implicit}.
+  \item \emph{Random block shifts.} Each shift is the prox of its own shifted block nuclear norm, so with a random shift per iteration the expected residual is the gradient of the shift-averaged envelope: a stochastic gradient of a fixed smooth convex objective.
+  \item \emph{Otherwise} (non-MMSE training, normalisation layers) no $R$ with $\nabla R=x-\mathcal D(x)$ exists when the Jacobian is asymmetric \cite{reehorst2019red}, and \eqref{eq:red} is a fixed-point equation without an objective. A gradient-step denoiser $\mathcal D=I-\nabla g_\vartheta$ \cite{hurault2022gs} has an exactly conservative residual by construction.
+\end{itemize}
+Cost: one denoiser call per gradient, as in \eqref{eq:pnp} [designed, not implemented; plan in \texttt{research/red\_prior.md}].
+
+\subsubsection*{Measured on ph0001 (2\,mm, 10-min yarn scan)}
+\begin{itemize}
+  \item \emph{Effective PSF of the pooled plain model} at an aortic point 8 voxels deep, $y=A\delta$, every second readout, the 12 strongest coils. With PCGLS and the circulant: $x(\bm r_0)=0.024$, 0.506, 0.540, 0.561 at iterations 1, 10, 20, 100. The centre voxel then holds 56\,\% of the energy and $r\le1$ holds 84\,\%. The limit $0.56$ is about the ball/cube ratio $\pi/6$ of a k-ball cut at Nyquist. Without a preconditioner: 0.000, 0.001, 0.005, 0.246 [measured].
+  \item \emph{Velocity phase of the time-averaged images} against the ideal frame-mean phase-contrast signal (deep lumen, voxels blood in every frame):
+  \begin{itemize}
+    \item plain PCGLS with circulant on the outgoing half of the out-and-back readout: slope 0.96 (correlation 0.94);
+    \item adding the returning half (low $|\bm\kappa|$ again $\approx9.6$\,ms after excitation): 0.75 (0.57);
+    \item the full model, 10 \emph{unpreconditioned} pooled PCG iterations (\texttt{zmshr1s} run): 0.71 (0.90), and 0.41 at the wall [measured];
+    \item the same with the circulant metric (10 pooled iterations, relative residual $0.096$): slope 0.88 (correlation 0.72) deep, but still 0.41 at the wall. The deep shrink is largely convergence; the wall shrink is not, and is specific to the full model (the plain model gives 0.68, its outgoing half 0.83) [measured; cause open].
+  \end{itemize}
+\end{itemize}
+
+\subsubsection*{Per-frame dynamics on ph0001 [measured]}
+Scored against the ideal per-frame phase-contrast signal (deep lumen, $\ge5$ voxels from the wall, blood in every frame), on the cardiac variation only: each voxel's temporal mean is removed from both sides, since a perfect time-averaged image already scores slope 0.43 and correlation 0.64 on the raw per-frame phases. The cardiac part has rms 0.40\,rad.
+\begin{itemize}
+  \item \emph{Per-frame sampling.} One (frame, encode) set of the outgoing half holds $7.3\cdot10^5$ samples (the outgoing halves of 379 readouts), hitting $19\%$ of the Nyquist cells of the $k$-ball; 31 virtual coils. Plain PCGLS with the circulant converges on it: relative residual $9\cdot10^{-3}$ after 25 iterations, $7\cdot10^{-4}$ after 100 (noise-free data).
+  \item \emph{Not noise.} The plain per-frame reconstruction (encodes of a rotation in one frame, outgoing half, 25 iterations) gives the same dynamics on noise-free and on noisy data: correlation 0.56 vs.\ 0.53, slope 0.68 vs.\ 0.67, 8\,mm-ROI correlation 0.75 vs.\ 0.75. The per-frame error is deterministic.
+  \item \emph{Model mismatch, not undersampling.} On the noise-free data the dynamics are best after 25 iterations and then degrade while the residual keeps falling (slope / correlation / error 0.42 / 0.45 / 0.37\,rad after 10, 0.68 / 0.56 / 0.37 after 25, 0.65 / 0.48 / 0.42 after 50, 0.50 / 0.34 / 0.50 after 100). For consistent data, PCGLS from $x_0=0$ decreases $\|x_k-x_{\rm true}\|_{M^{-1}}$ monotonically (the CG error decrease, plus $M^{-1}$-orthogonality of $\operatorname{range}MA^\herm$ and $\ker A$). A phase score on the lumen voxels is not that norm, but a steady loss from 25 to 100 iterations on noise-free data indicates that the per-frame data are inconsistent with the plain model and least squares fits the inconsistency [CHECK: the same run on data synthesised with the reconstruction's own operator].
+  \item \emph{Readout motion} (the paragraph in \cref{sec:velmodel}). About TE, the reference of the encoding moments, the readout's first moment gives $\gamma|\bm m_1(\tau)|=0.9$, 2.3 and 6.1\,rad per m/s at 2.6, 3.6 and 5.5\,ms ($|\kk|=k_{\max}$ at the end of the outgoing half), and 7.0 on the return, against $\pi/1.5=2.1$\,rad per m/s of velocity encoding. For blood at 1\,m/s that is a 6\,rad phase ramp across $k$-space, a velocity-dependent displacement of $\approx4$\,mm, different in every cardiac frame. Its share is modest: the noise-free per-frame reconstruction on the first 1 / 2 / 4\,ms of each readout ($\gamma|\bm m_1|\le0.9$ / 2.3 / 6.1\,rad per m/s; the shorter windows also lose resolution) gives correlation 0.63 / 0.57 / 0.56 and error 0.32 / 0.36 / 0.37\,rad (8\,mm ROI: 0.77 / 0.76 / 0.75). Readout motion, B0 and fat during the readout are part of the inconsistency, not most of it.
+  \item \emph{LLR.} With $T=280$ columns the $\kappa\hat\sigma$ rule keeps $\approx200$ components per block ($\hat\sigma$ lies inside the per-frame artefact spectrum). One LLR step on a per-frame start, with the rule varied: hard truncation to 8 components leaves most of the error (correlation $0.37\to0.41$); soft thresholding lowers it only by shrinking the dynamics as well (slope $0.46\to0.37$). The per-frame error lies in the leading temporal components of the $8^3$ blocks, together with the dynamics.
+  \item \emph{Temporal.} The same error is incoherent across cardiac frames: projecting each voxel's series onto the cyclic harmonics $|k|\le4$ gives correlation $0.37\to0.57$ at unchanged slope (0.43). P$^2$nP with that projection as $\mathcal D$ reaches slope 0.45, correlation 0.57, error 0.32\,rad after 5 iterations, then fits the per-frame error again (0.53, 0.45, 0.40 after 10).
+  \item \emph{Encodes sharing a frame.} Binning all encodes of a rotation into one frame shares their undersampling, but the velocity then refers to $t_v$ with $(t_v-t_0)\,I\approx\operatorname{diag}(\Delta K^+D)$, $D_e=\bm k_et_e-\bm k_0t_0$: 1.35\,TR after encode 0 for the referenced 7-point order, not the middle readout (a 0.44-frame lag, fixed). The off-diagonal of $\Delta K^+D$ (up to 3.1\,TR) mixes the other axes' acceleration into each component: 0.09\,m/s rms against 0.21\,m/s of cardiac dynamics. Over all $7!$ orders, the reference in the middle with symmetric axes reduces it eightfold (0.011\,m/s).
+\end{itemize}
 
 \paragraph{Lagged correction.} $\tilde g_k=\Nop_{\rm s}(x_k-x_a)+g(x_a)$, refreshing $x_a\leftarrow x_k$ when $\|x_k-x_a\|>\tau\|x_k\|$. This removes the surrogate bias at the fixed point. Cheap-only gradients are unsafe under a quasi-Newton metric: secant pairs from a mismatched operator act where $\Nop$ has small eigenvalues.
 $16^3$ toy, $\Phi_{\max}=3$, 100 iterations, identity denoiser; cost in plain-Toeplitz units, exact $=39$ [measured]:
@@ -574,6 +770,11 @@ velocity model (\cref{sec:velmodel}) vs.\ complex + LLR & 0.138 vs.\ 0.183 m/s\\
 \bibitem{fessler2003} J.~A. Fessler, B.~P. Sutton. Nonuniform fast Fourier transforms using min-max interpolation. \emph{IEEE Trans. Signal Process.} 51(2):560--574, 2003.
 \bibitem{barnett2019} A.~H. Barnett, J.~Magland, L.~af Klinteberg. A parallel nonuniform fast Fourier transform library based on an ``exponential of semicircle'' kernel. \emph{SIAM J. Sci. Comput.} 41(5):C479--C504, 2019.
 \bibitem{folland1989} G.~B. Folland. \emph{Harmonic Analysis in Phase Space.} Princeton University Press, 1989.
+\bibitem{romano2017red} Y.~Romano, M.~Elad, P.~Milanfar. The little engine that could: regularization by denoising (RED). \emph{SIAM J. Imaging Sci.} 10(4):1804--1844, 2017.
+\bibitem{reehorst2019red} E.~T. Reehorst, P.~Schniter. Regularization by denoising: clarifications and new interpretations. \emph{IEEE Trans. Comput. Imaging} 5(1):52--67, 2019.
+\bibitem{hurault2022gs} S.~Hurault, A.~Leclaire, N.~Papadakis. Gradient step denoiser for convergent plug-and-play. \emph{ICLR} 2022.
+\bibitem{efron2011tweedie} B.~Efron. Tweedie's formula and selection bias. \emph{J. Am. Stat. Assoc.} 106(496):1602--1614, 2011.
+\bibitem{kadkhodaie2021implicit} Z.~Kadkhodaie, E.~P. Simoncelli. Stochastic solutions for linear inverse problems using the prior implicit in a denoiser. \emph{NeurIPS} 2021.
 \bibitem{hong2024} T.~Hong, X.~Xu, J.~Hu, J.~A. Fessler. Provable preconditioned plug-and-play approach for compressed sensing MRI reconstruction. \emph{IEEE Trans. Comput. Imaging}, 2024 (arXiv:2405.03854).
 \end{thebibliography}
 

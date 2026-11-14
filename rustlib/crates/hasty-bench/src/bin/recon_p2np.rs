@@ -2,7 +2,7 @@
 //! compensation, whitened + coil-compressed data, LLR prior over all frames × encodes or the learned 7-point prior.
 //! Any encoding of the simulator (referenced / Hadamard 4-point, 7-point dual-VENC): velocities by hasty_recon::flow.
 //!   recon_p2np <sim_dir> [--model sense|seg] [--temporal off|linear|cubic] [--phys none|b0|full] [--gnl]
-//!              [--nseg L|auto|auto:noise[:R]] [--order o] [--precond none,circ,zmshr1,zmshr1m,zmshr1s,zmshr1ms] [--iters n] [--kappa k,k,..] [--block b]
+//!              [--nseg L|auto|auto:noise[:R]] [--order o] [--precond none,circ,zmshr1,zmshr1m,zmshr1s,zmshr1ms] [--iters n] [--kappa k,k,..] [--block b] [--llr-devices 0[,1,..]|cpu]
 //!              [--vcoils auto|n] [--coil-energy 0.999] [--coil-gram calib|data] [--every n] [--warm n] [--eps e] [--conc-dc] [--synthetic] [--out dir]
 //!              [--learned <export_dir> [--tile n] [--keep-frames n] [--learned-prec bf16|fp16|fp32] [--learned-cpu]]
 //!              [--fresh] [--ckpt-every n] [--fat-fraction <npy|truth> [--fat-model shared|separate|joint]]
@@ -186,6 +186,16 @@ fn main() {
     let init_truth = flag("--init-truth");
     let learned_cpu = flag("--learned-cpu");
     let table_prefetch = flag("--table-prefetch");
+    let bin_group = flag("--bin-group");
+    // --bin-group-mid: the group's frame from its middle readout (before 2026-11-13: lags by 0.44 frame with the
+    // referenced 7-point scheme, encode 0 carries a first moment); default the readout nearest the velocity time
+    let bin_group_mid = flag("--bin-group-mid");
+    // --save-smaps: the full coil-map stack in the output directory (1 GB at 2 mm); default: one axial slice for the figures
+    let save_smaps = flag("--save-smaps");
+    // --no-full-save: no final full recon / velocity stacks (8.9 + 1.9 GB at 2 mm), e.g. with --save-lumen diagnostics
+    let no_full_save = flag("--no-full-save");
+    // --llr-hard: hard singular-value threshold of the LLR prior (keep above, drop below; Llr::hard), run tag suffix _h
+    let llr_hard = flag("--llr-hard");
     let mut take = |name: &str| -> Option<String> { args.iter().position(|a| a == name).map(|i| { args.remove(i); args.remove(i) }) };
     // --vdecode auto|hier|ml[:MARGIN]: velocity decoder. hier = hierarchical unwrapping (range of the least sensitive
     // encodes); ml = + search over the first stage's aliases inside the design's unaliased range
@@ -253,7 +263,12 @@ fn main() {
     // --circ-share set|encode: circulant metrics per set, or one per encode shared by its frames (default: encode)
     let circ_share_arg: Option<String> = take("--circ-share");
     let out_arg = take("--out");
-    let ckpt_every: usize = take("--ckpt-every").map(|s| s.parse().unwrap()).unwrap_or(10);
+    // periodic checkpoints (tens of GB per write at 2 mm) only on request; a STOP / Ctrl-C checkpoint is always written
+    let ckpt_every: usize = take("--ckpt-every").map(|s| s.parse().unwrap()).unwrap_or(0);
+    // --save-lumen idx.npy: at every report iteration, the reconstruction at these flat (Fortran) native-grid voxels
+    // only, it<k>_<tag>_lumen.npy = complex64 (n, ne, nf) C-order (research/experiments/recon_diag/frame_fit.py's
+    // *_lumen.npy form): per-frame scoring along the iterations without full stacks on disk
+    let save_lumen: Option<Vec<usize>> = take("--save-lumen").map(|p| hasty_recon::data::read_npy(std::path::Path::new(&p)).expect("--save-lumen idx.npy").f32s().iter().map(|&v| v as usize).collect());
     // velocity-parametrised model (research/velocity_model_sr.md): --vmodel KZ,KV [--vdeg DZ,DV] [--vpoly d] [--vcont n]
     let vmodel: Option<(usize, usize)> = take("--vmodel").map(|s| { let v: Vec<usize> = s.split(',').map(|x| x.parse().unwrap()).collect(); (v[0], v[1]) });
     let vdeg: (u32, u32) = take("--vdeg").map(|s| { let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect(); (v[0], v[1]) }).unwrap_or((1, 1));
@@ -320,7 +335,37 @@ fn main() {
     // 3D Daubechies-4 shrinkage per image, threshold THR × the MAD noise level of each image (scale-equivariant), cycle
     // spinning; --wavelet-mix β: with --learned, x ← x + κ ((1 − β) D(x) + β W(x) − x) (research/wavelet_prior.md)
     let prior_kind = take("--prior").unwrap_or("llr".into());
-    assert!(matches!(prior_kind.as_str(), "llr" | "wavelet"), "--prior llr|wavelet");
+    // --llr-devices 0[,1,..] | cpu: the CUDA devices sharing the LLR prior's blocks (default: the solver's device 0),
+    // or the CPU operator (same result to float rounding: tests/llr_gpu.rs)
+    let llr_devices = take("--llr-devices").unwrap_or_else(|| "0".into());
+    // --llr-rank R: rank cap of the LLR prior, each block's threshold raised to its (R+1)-th singular value (Llr::rank;
+    // the κσ̂ rule alone keeps ~200 of 280 components); run tag suffix _r{R}
+    let llr_rank: Option<usize> = take("--llr-rank").map(|v| v.parse().expect("--llr-rank R"));
+    assert!(matches!(prior_kind.as_str(), "llr" | "wavelet" | "tlp"), "--prior llr|wavelet|tlp");
+    // --prior tlp [--tlp-k K]: cardiac low-pass, every (respiratory bin, encode, voxel) series over the cardiac frames
+    // projected onto the harmonics |k| ≤ K (default 4), x ← x + min(κ, 1) (P x − x) (hasty_recon::tlp; run tag _tlpK)
+    let tlp_k: usize = take("--tlp-k").map_or(4, |v| v.parse().expect("--tlp-k K"));
+    // --prior-mode pnp|red (default pnp): red puts the denoiser residual into the gradient, g = ∇f + λ (x − D(x)), and
+    // drops the denoiser after the step (hasty_recon::red; research/red_prior.md). --red-rho ρ (default 1): λ = ρ / (α μ),
+    // μ the metric's mean gain (1 without a metric), so one step moves x by about τρ (D(x) − x) (ρ = 1: P²nP's full
+    // denoising step). --red-shifts n (LLR only, default 1): the LLR shift is fixed in RED mode (a random shift per
+    // iteration makes the gradient stochastic and breaks the ZMSHR1 secant pairs); n > 1 averages D over n fixed shifts
+    // (n LLR calls per iteration, one extra stack). Run tag suffix _red{ρ}[_sh{n}].
+    let prior_mode = take("--prior-mode").unwrap_or("pnp".into());
+    assert!(matches!(prior_mode.as_str(), "pnp" | "red"), "--prior-mode pnp|red");
+    let red = prior_mode == "red";
+    let red_rho: f64 = take("--red-rho").map_or(1.0, |v| v.parse().expect("--red-rho ρ"));
+    let red_shifts: usize = take("--red-shifts").map_or(1, |v| v.parse().expect("--red-shifts n"));
+    assert!(red_shifts >= 1, "--red-shifts n >= 1");
+    // --tsub fourier:K | bspline:M[:P]: temporal subspace, x = T c with T the same per voxel and encode (hasty_recon::tsub):
+    // the cyclic cardiac Fourier basis |k| ≤ K (orthonormal) or M periodic B-splines of degree P (default 3), each per
+    // respiratory bin; the solver iterates on the coefficients (gradient Tᴴ ∇f(T c), the data term unchanged). Host
+    // state only. Run tag suffix _ts{basis}.
+    let tsub_spec: Option<String> = take("--tsub");
+    let red_tag = if red { format!("_red{red_rho}{}", if red_shifts > 1 { format!("_sh{red_shifts}") } else { String::new() }) } else { String::new() };
+    if red && prior_kind == "llr" && llr_rank.is_none() {
+        eprintln!("warning: --prior-mode red with the κσ̂ LLR rule: σ̂ is re-estimated from every iterate, so the RED objective changes with x (use --llr-rank R [--llr-hard] for a fixed objective)");
+    }
     let (wav_thr, wav_levels): (f64, usize) = take("--wavelet").map_or((1.0, 3), |v| {
         let mut it = v.split(':');
         (it.next().unwrap().parse().expect("--wavelet THR[:LEVELS]"), it.next().map_or(3, |l| l.parse().expect("--wavelet THR[:LEVELS]")))
@@ -352,6 +397,18 @@ fn main() {
     // IT0 (default 5), refreshed every EVERY iterations (default 5), and the temporal lock of the static voxels after
     // the prior: quadratic prox weight MU (default mode), or group soft threshold MU × the local noise level.
     // Complex-image models only (the map and the lock act on the frames × encodes stack).
+    // --mag-couple GAMMA[:DELTA]: after the prior, pull the magnitudes of the encodes of every frame towards their mean
+    // (phases kept): |x_e| ← m̄ + (|x_e| − m̄)/(1 + GAMMA w_e), w_e = |x_e|² / (|x_e|² + (DELTA · m_med)²) with m_med the
+    // median of m̄ over the coil-map support (dark encodes are not pulled up), gain clipped to [0.5, 1.5]. The prox of
+    // (GAMMA/2) Σ_e w_e (|x_e| − m̄)² for fixed weights. Weak coupling only (research/magnitude_coupling.md: the map is
+    // expansive in the phase direction of encodes below the mean; GAMMA ≈ 0.1 helped in the toy, ≥ 1 stalled).
+    let mag_couple: Option<(f32, f32)> = take("--mag-couple").map(|v| {
+        let (g, d) = v.split_once(':').map_or((v.as_str(), "0.1"), |(a, b)| (a, b));
+        (g.parse().expect("--mag-couple GAMMA[:DELTA]"), d.parse().expect("--mag-couple GAMMA[:DELTA]"))
+    });
+    // --bin-group: every group of n_enc consecutive readouts (one rotation, all encodes) goes into the frame of its middle
+    // readout, so all encodes of a frame share the same rotations (the same undersampling and aliasing); costs a
+    // temporal footprint of one group (n_enc TRs) on top of the frame width
     let static_lock: Option<(hasty_recon::tlock::LockOpts, usize, usize)> = take("--static-lock").map(|v| {
         let it: Vec<&str> = v.split(':').collect();
         let mut o = hasty_recon::tlock::LockOpts { mu: it[0].parse().expect("--static-lock MU[:IT0[:EVERY]]"), ..Default::default() };
@@ -406,6 +463,13 @@ fn main() {
     });
     let resp_bins: usize = take("--resp-bins").map_or(1, |v| v.parse().expect("--resp-bins N"));
     let resp_src = take("--resp").unwrap_or("bellows".into());
+    // --resp-accept FRAC: respiratory gating, as navigator / bellows gating in practice: keep the readouts whose
+    // breathing amplitude (--resp source) is in the lowest FRAC of the scan (end-expiration, the quietest state), drop the
+    // rest (their frame becomes usize::MAX: in no set). --resp-bins then bins the accepted readouts. Encode groups stay
+    // whole with --bin-group (a group is kept or dropped by its frame readout). Run tag suffix _ga{FRAC}.
+    let resp_accept: f64 = take("--resp-accept").map_or(1.0, |v| v.parse().expect("--resp-accept FRAC"));
+    assert!(resp_accept > 0.0 && resp_accept <= 1.0, "--resp-accept FRAC in (0, 1]");
+    let ga_tag = if resp_accept < 1.0 { format!("_ga{resp_accept}") } else { String::new() };
     let seg_basis_arg = take("--seg-basis").unwrap_or("fixed".into());
     // --seg-weight count|mass[:lo,hi]: voxel weights of the SVD basis, all data-derived (no labels): count = every voxel
     // of the warm-start support equally (default); mass = the smoothed warm-start magnitude relative to its median over
@@ -526,7 +590,8 @@ fn main() {
         }
     }
     let ctl = RunCtl::new(&out, ckpt_every);
-    println!("output directory {} (checkpoint every {ckpt_every} iterations; Ctrl-C or touch {}/STOP to pause)", out.display(), out.display());
+    let every_s = if ckpt_every > 0 { format!("checkpoint every {ckpt_every} iterations") } else { "no periodic checkpoints (--ckpt-every N)".to_string() };
+    println!("output directory {} ({every_s}; Ctrl-C or touch {}/STOP to pause with a checkpoint)", out.display(), out.display());
     let t0 = Instant::now();
     // k-space data path: legacy in-memory loader, or streamed (kload) — asked for, or the sim would not fit in RAM
     const GIB: f64 = 1073741824.0;
@@ -551,8 +616,8 @@ fn main() {
     // respiratory bins: frame index r · F + f
     let nf_card = sd.n_frames;
     let mut resp_info = serde_json::Value::Null;
-    if resp_bins > 1 {
-        assert!(temporal.is_none() && vmodel.is_none(), "--resp-bins with --temporal / --vmodel: not yet (their time bases are cyclic over the cardiac frames)");
+    if resp_bins > 1 || resp_accept < 1.0 {
+        assert!(temporal.is_none() && vmodel.is_none(), "--resp-bins / --resp-accept with --temporal / --vmodel: not yet (their time bases are cyclic over the cardiac frames)");
         let npy_f64 = |p: &std::path::Path| -> (Vec<usize>, Vec<f64>) {
             let b = std::fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
             let hl = u16::from_le_bytes([b[8], b[9]]) as usize;
@@ -568,17 +633,69 @@ fn main() {
             "truth" => { let (sh, v) = npy_f64(&PathBuf::from(&dir).join("resp.npy")); assert_eq!(sh[0], n_ro); (0..n_ro).map(|i| v[i * sh[1]]).collect() }
             o => panic!("--resp bellows|truth, got {o}"),
         };
-        let bins = hasty_recon::selfgate::amplitude_bins(&amp, resp_bins);
+        // gating: the accepted readouts (lowest FRAC of the amplitude), binned among themselves
+        let acc: Vec<usize> = if resp_accept < 1.0 {
+            let mut o: Vec<usize> = (0..n_ro).collect();
+            o.sort_by(|&a, &b| amp[a].partial_cmp(&amp[b]).unwrap());
+            let mut keep: Vec<usize> = o[..((resp_accept * n_ro as f64).round() as usize).max(1)].to_vec();
+            keep.sort_unstable();
+            keep
+        } else {
+            (0..n_ro).collect()
+        };
+        let amp_acc: Vec<f64> = acc.iter().map(|&i| amp[i]).collect();
+        let bins_acc = hasty_recon::selfgate::amplitude_bins(&amp_acc, resp_bins);
+        let mut bins = vec![usize::MAX; n_ro];
+        for (j, &i) in acc.iter().enumerate() {
+            bins[i] = bins_acc[j];
+        }
         let mut mean = vec![(0.0f64, 0usize); resp_bins];
         for i in 0..n_ro {
+            if bins[i] == usize::MAX {
+                sd.ro.frame[i] = usize::MAX;
+                continue;
+            }
             sd.ro.frame[i] += bins[i] * nf_card;
             mean[bins[i]].0 += amp[i];
             mean[bins[i]].1 += 1;
         }
         sd.n_frames = resp_bins * nf_card;
         let means: Vec<f64> = mean.iter().map(|(a, n)| a / (*n).max(1) as f64).collect();
-        println!("respiratory bins: {resp_bins} by {resp_src} amplitude (mean {:?}) × {nf_card} cardiac frames = {} frames", means.iter().map(|m| (m * 1000.0).round() / 1000.0).collect::<Vec<_>>(), sd.n_frames);
-        resp_info = serde_json::json!({ "bins": resp_bins, "source": resp_src, "mean_amplitude": means, "cardiac_frames": nf_card });
+        // the simulator's true breathing state of each bin (physio.npy column 4, when present): the truth to score against
+        let true_r: Option<Vec<f64>> = {
+            let p = PathBuf::from(&dir).join("physio.npy");
+            p.exists().then(|| npy_f64(&p)).filter(|(sh, _)| sh.len() == 2 && sh[1] >= 5 && sh[0] == n_ro).map(|(sh, v)| {
+                let mut m = vec![(0.0f64, 0usize); resp_bins];
+                for i in 0..n_ro {
+                    if bins[i] != usize::MAX {
+                        m[bins[i]].0 += v[i * sh[1] + 4];
+                        m[bins[i]].1 += 1;
+                    }
+                }
+                m.iter().map(|(a, n)| a / (*n).max(1) as f64).collect()
+            })
+        };
+        let kept = acc.len();
+        if resp_accept < 1.0 {
+            println!("respiratory gating: {kept} of {n_ro} readouts accepted ({:.1} %, {resp_src} amplitude ≤ {:.3})", 100.0 * kept as f64 / n_ro as f64, amp_acc.iter().cloned().fold(f64::MIN, f64::max));
+        }
+        println!("respiratory bins: {resp_bins} by {resp_src} amplitude (mean {:?}{}) × {nf_card} cardiac frames = {} frames", means.iter().map(|m| (m * 1000.0).round() / 1000.0).collect::<Vec<_>>(), true_r.as_ref().map_or(String::new(), |r| format!(", true breathing state {:?}", r.iter().map(|m| (m * 1000.0).round() / 1000.0).collect::<Vec<_>>())), sd.n_frames);
+        resp_info = serde_json::json!({ "bins": resp_bins, "source": resp_src, "mean_amplitude": means, "true_state": true_r, "cardiac_frames": nf_card, "accept": resp_accept, "accepted_readouts": kept });
+    }
+    if bin_group {
+        let ne_g = sd.encode_m1.len();
+        let n_ro = sd.n_readouts();
+        let mut moved = 0usize;
+        for g0 in (0..n_ro).step_by(ne_g) {
+            let g1 = (g0 + ne_g).min(n_ro);
+            assert!((g0..g1).all(|i| sd.ro.enc[i] == i - g0), "--bin-group: readouts are not grouped as encode 0..{ne_g} per rotation");
+            let fm = sd.ro.frame[bin_group_readout(&sd, g0, g1, bin_group_mid)];
+            for i in g0..g1 {
+                moved += (sd.ro.frame[i] != fm) as usize;
+                sd.ro.frame[i] = fm;
+            }
+        }
+        println!("--bin-group: every rotation's {ne_g} encodes in one frame ({}); {moved} of {n_ro} readouts moved ({:.1} %)", if bin_group_mid { "the middle readout's" } else { "the readout nearest the velocity time, hasty_recon::data::velocity_time" }, 100.0 * moved as f64 / n_ro as f64);
     }
     let sd = sd;
     let (nv, nc, nf) = (sd.nv(), sd.nc, sd.n_frames);
@@ -1315,7 +1432,20 @@ fn main() {
     let lumen: Vec<usize> = (0..nv).filter(|&q| sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.9).collect();
     println!("lumen {} voxels: {} in the support, {} in the masked maps", lumen.len(), lumen.iter().filter(|&&q| support[q]).count(), lumen.iter().filter(|&&q| maps_mask[q]).count());
     let dims4 = |n: usize| [sd.dims[0], sd.dims[1], sd.dims[2], n];
-    save(&out.join("smaps.npy"), "<c8", &dims4(nvc), c8(&smaps));
+    if save_smaps {
+        save(&out.join("smaps.npy"), "<c8", &dims4(nvc), c8(&smaps));
+    }
+    {
+        // the axial slice with the most lumen voxels (the figures' slice), all virtual coils: [x, y, coil]
+        let nxy = sd.dims[0] * sd.dims[1];
+        let mut cnt = vec![0usize; sd.dims[2]];
+        for &q in &lumen {
+            cnt[q / nxy] += 1;
+        }
+        let zs = (0..sd.dims[2]).rev().max_by_key(|&z| cnt[z]).unwrap_or(sd.dims[2] / 2);
+        let sl: Vec<C32> = (0..nvc).flat_map(|c| smaps[c * nv + zs * nxy..c * nv + (zs + 1) * nxy].iter().copied()).collect();
+        save(&out.join(format!("smaps_axial_z{zs}.npy")), "<c8", &[sd.dims[0], sd.dims[1], nvc], c8(&sl));
+    }
     save(&out.join("mask_support.npy"), "<f4", &sd.dims, f4(support.iter().map(|&b| b as u8 as f32)));
     save(&out.join("mask_maps.npy"), "<f4", &sd.dims, f4(maps_mask.iter().map(|&b| b as u8 as f32)));
     save(&out.join("mask_fit.npy"), "<f4", &sd.dims, f4(dil.iter().map(|&b| b as u8 as f32)));
@@ -2556,13 +2686,13 @@ fn main() {
         (gof, xg)
     });
     let ttag = temporal.map_or(String::new(), |b| format!("_t{b}"));
-    let runs: Vec<String> = preconds.iter().flat_map(|p| kappas.iter().map(|k| (p.clone(), *k)).collect::<Vec<_>>()).map(|(p, k)| format!("{model}{ttag}_{p}{}_k{k}", if learned.is_some() { "_learned" } else { "" })).collect();
+    let runs: Vec<String> = preconds.iter().flat_map(|p| kappas.iter().map(|k| (p.clone(), *k)).collect::<Vec<_>>()).map(|(p, k)| format!("{model}{ttag}_{p}{}_k{k}{}", if learned.is_some() { "_learned" } else { "" }, llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" } + &red_tag + &ga_tag)).collect();
     let mut info = serde_json::json!({
         "cmdline": cmdline, "sim_dir": dir, "model": model, "temporal": temporal, "phys": phys, "gnl": gnl, "nseg": nseg,
         "order": order, "conc_fit": conc_fit, "fat_model": fat_fraction.as_ref().map(|_| fat_model.clone()), "eps": eps, "iters": iters, "warm_iters": warm_iters, "block": block, "vcoils": nvc, "dims": sd.dims, "vox": sd.vox, "native_dims": sd.tdims,
         "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "lambda_max": lmax, "lambda_max_mn": lmax_c, "setup_s": t0.elapsed().as_secs_f64(),
         "noise_sigma_env": std::env::var("HASTY_NOISE_SIGMA").ok(), "runs": runs,
-        "prior": if learned.is_some() { "learned" } else { "llr" }, "learned_dir": learned_dir, "tile": tile, "keep_frames": keep_frames, "learned_prec": learned_prec,
+        "prior": if learned.is_some() { "learned" } else { "llr" }, "prior_mode": prior_mode, "red_rho": red.then_some(red_rho), "red_shifts": red.then_some(red_shifts), "tsub": tsub_spec, "learned_dir": learned_dir, "tile": tile, "keep_frames": keep_frames, "learned_prec": learned_prec,
         "field": field_spec, "r2s": r2s_spec, "smaps": smaps_spec, "coil_mask": coil_mask_mode, "coils": coil_info, "estimates": diag, "kdata": kstore_info, "lagged": lag_info, "vdecode": vdec_info,
     });
     info["pyramid"] = pyr_info.clone();
@@ -2617,6 +2747,15 @@ fn main() {
             }
         }
         let mut llr = Llr::new(sd.dims, block, kappa, support.clone());
+        llr.rank = llr_rank;
+        llr.hard = llr_hard;
+        let mut llr_gpu = (llr_devices != "cpu" && prior_kind == "llr" && kappa > 0.0 && learned.is_none()).then(|| {
+            let ords: Vec<usize> = llr_devices.split(',').map(|v| v.trim().parse().expect("--llr-devices 0[,1,..] | cpu")).collect();
+            let mut l = Llr::new(sd.dims, block, kappa, support.clone());
+            l.rank = llr_rank;
+            l.hard = llr_hard;
+            hasty_recon::llr_gpu::LlrGpu::new(l, &ords).unwrap()
+        });
         let mut wav = hasty_recon::wavelet::Wavelet::new(sd.dims, wav_levels, wav_thr);
         let nimg = nf * ne;
         let tr = Instant::now();
@@ -2626,6 +2765,15 @@ fn main() {
                 return;
             }
             let Some(prior) = &learned else {
+                if prior_kind == "tlp" {
+                    assert!(temporal.is_none(), "--prior tlp: one image per frame and encode (no --temporal)");
+                    let t = Instant::now();
+                    hasty_recon::tlp::cardiac_lowpass(h, nv, ne, nf_card, resp_bins, tlp_k, kappa.min(1.0) as f32);
+                    if k < 2 || k % 10 == 0 {
+                        eprintln!("    cardiac low-pass |k| ≤ {tlp_k}: {:.1}s", t.elapsed().as_secs_f64());
+                    }
+                    return;
+                }
                 if prior_kind == "wavelet" {
                     // x ← x + κ (W(x) − x)
                     wav.set_iteration(k as u64);
@@ -2634,8 +2782,36 @@ fn main() {
                     let kf = kappa.min(1.0) as f32;
                     { use rayon::prelude::*; h.par_iter_mut().zip(w.par_iter()).for_each(|(x, d)| *x = C32::new(x.re + (d.re - x.re) * kf, x.im + (d.im - x.im) * kf)); }
                 } else {
-                    llr.set_iteration(k as u64);
-                    llr.apply(h, nimg);
+                    // RED: fixed shifts (seeds 0..n, averaged), else the cycle-spinning shift of iteration k
+                    let seeds: Vec<u64> = if red { (0..red_shifts as u64).collect() } else { vec![k as u64] };
+                    let mut one = |seed: u64, v: &mut Vec<C32>| {
+                        if let Some(g) = llr_gpu.as_mut() {
+                            g.set_iteration(seed);
+                            g.apply(v, nimg).unwrap();
+                            if k < 2 || k % 10 == 0 {
+                                eprintln!("    LLR on GPU {:?}: {} blocks ({} left unchanged), k ≤ {}, pass 1 {:.1}s, pass 2 {:.1}s", g.devices(), g.last.blocks, g.last.skipped, g.last.k_max, g.last.secs[0], g.last.secs[1]);
+                            }
+                        } else {
+                            llr.set_iteration(seed);
+                            llr.apply(v, nimg);
+                        }
+                    };
+                    if seeds.len() == 1 {
+                        one(seeds[0], h);
+                    } else {
+                        use rayon::prelude::*;
+                        let wn = 1.0 / seeds.len() as f32;
+                        let mut acc = vec![C32::new(0.0, 0.0); h.len()];
+                        let mut v = h.clone();
+                        for (j, &sd) in seeds.iter().enumerate() {
+                            if j > 0 {
+                                v.par_iter_mut().zip(h.par_iter()).for_each(|(a, b)| *a = *b);
+                            }
+                            one(sd, &mut v);
+                            acc.par_iter_mut().zip(v.par_iter()).for_each(|(a, b)| *a = C32::new(a.re + wn * b.re, a.im + wn * b.im));
+                        }
+                        *h = acc;
+                    }
                 }
                 return;
             };
@@ -2678,9 +2854,20 @@ fn main() {
             (true, _, true) => format!("_learned_wav{wav_mix}"),
             (true, _, false) => "_learned".to_string(),
             (false, "wavelet", _) => format!("_wav{wav_thr}"),
+            (false, "tlp", _) => format!("_tlp{tlp_k}"),
             _ => String::new(),
         };
-        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{dfw_tag}{lock_tag}{air_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")));
+        let tsub_basis = tsub_spec.as_ref().map(|sp| {
+            assert!(temporal.is_none() && nf == nf_card * resp_bins, "--tsub: one frame per set (no --temporal)");
+            let parts: Vec<&str> = sp.split(':').collect();
+            match parts[0] {
+                "fourier" => hasty_recon::tsub::TemporalBasis::cardiac_fourier(nf_card, resp_bins, parts.get(1).expect("--tsub fourier:K").parse().expect("--tsub fourier:K")),
+                "bspline" => hasty_recon::tsub::TemporalBasis::periodic_bspline(nf_card, resp_bins, parts.get(1).expect("--tsub bspline:M[:P]").parse().expect("--tsub bspline:M[:P]"), parts.get(2).map_or(3, |v| v.parse().expect("--tsub bspline:M[:P]"))),
+                o => panic!("--tsub {o}: fourier:K | bspline:M[:P]"),
+            }
+        });
+        let ts_tag = tsub_basis.as_ref().map_or(String::new(), |b| format!("_ts{}", b.name));
+        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{}{dfw_tag}{lock_tag}{air_tag}{red_tag}{ts_tag}{ga_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")), llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" });
         let resuming = out.join(format!("state_{tag}.hv")).exists();
         if !resuming && out.join(format!("recon_{tag}.npy")).exists() {
             println!("  {tag}: finished in an earlier run (recon_{tag}.npy), skipped (--fresh to redo)");
@@ -2869,6 +3056,49 @@ fn main() {
                     }
                 }
             }
+            if let Some((gm, dl)) = mag_couple {
+                use rayon::prelude::*;
+                let t = Instant::now();
+                // reference magnitude level: median of the mean magnitude over the coil-map support (frame 0)
+                let mut mm: Vec<f32> = (0..nv).filter(|&q| dil[q]).map(|q| (0..ne).map(|e| { let z = h[img_of(0, e) * nv + q]; (z.re * z.re + z.im * z.im).sqrt() }).sum::<f32>() / ne as f32).collect();
+                let m_med = if mm.is_empty() { 0.0 } else { let mid = mm.len() / 2; *mm.select_nth_unstable_by(mid, |a, b| a.partial_cmp(b).unwrap()).1 };
+                let d2 = (dl * m_med) * (dl * m_med);
+                let mut fr = vec![C32::new(0.0, 0.0); ne * nv];
+                let mut changed = 0f64;
+                for f in 0..nf {
+                    for e in 0..ne {
+                        let src = &h[img_of(f, e) * nv..][..nv];
+                        for q in 0..nv {
+                            fr[q * ne + e] = src[q];
+                        }
+                    }
+                    changed += fr.par_chunks_mut(ne).map(|z| {
+                        let m: Vec<f32> = z.iter().map(|c| (c.re * c.re + c.im * c.im).sqrt()).collect();
+                        let mb = m.iter().sum::<f32>() / ne as f32;
+                        let mut dc = 0f64;
+                        for (c, &me) in z.iter_mut().zip(&m) {
+                            if me > 0.0 {
+                                let w = me * me / (me * me + d2 + 1e-30);
+                                let mn = mb + (me - mb) / (1.0 + gm * w);
+                                let g = (mn / me).clamp(0.5, 1.5);
+                                dc += ((g - 1.0) * me) as f64 * ((g - 1.0) * me) as f64;
+                                *c = C32::new(c.re * g, c.im * g);
+                            }
+                        }
+                        dc
+                    }).sum::<f64>();
+                    for e in 0..ne {
+                        let dst = &mut h[img_of(f, e) * nv..][..nv];
+                        for q in 0..nv {
+                            dst[q] = fr[q * ne + e];
+                        }
+                    }
+                }
+                let tot: f64 = h.par_iter().map(|c| (c.re as f64).powi(2) + (c.im as f64).powi(2)).sum();
+                if k < 3 || k % 10 == 0 {
+                    println!("    magnitude coupling (γ {gm}, δ {dl} × {m_med:.3e}): relative change {:.2e} ({:.2}s)", (changed / tot.max(1e-300)).sqrt(), t.elapsed().as_secs_f64());
+                }
+            }
             if let Some(m) = &amap {
                 hasty_recon::airmap::apply(h, &lay, m);
             }
@@ -2879,6 +3109,19 @@ fn main() {
             let k = k.wrapping_add(1);
             if k % every != 0 && k != iters && k != 0 {
                 return;
+            }
+            if let Some(li) = &save_lumen {
+                assert!(sd.native_grid(), "--save-lumen indexes native-grid voxels");
+                let mut v = Vec::with_capacity(li.len() * ne * nf);
+                for &q in li {
+                    for e in 0..ne {
+                        for fr in 0..nf {
+                            let (t, o) = at(fr, e);
+                            v.push(imgs[t][o + q]);
+                        }
+                    }
+                }
+                hasty_phantom::volume::write_npy(&out.join(format!("it{k}_{tag}_lumen.npy")), "<c8", &[li.len(), ne, nf], false, &c8(&v)).unwrap();
             }
             let img = |fr: usize, e: usize, q: usize| -> Complex64 {
                 let (t, o) = at(fr, e);
@@ -2931,7 +3174,7 @@ fn main() {
                 use std::io::Write;
                 writeln!(csv, "{k},{f:.6e},{:.5},{:.5},{:.1},{}", (e2 / n as f64).sqrt(), (e2 / t2).sqrt(), tr.elapsed().as_secs_f64(), per_frame.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(",")).unwrap();
             }
-            if k == iters {
+            if k == iters && !no_full_save {
                 let mut vout = vec![0f32; nv * 3 * nf];
                 for fr in 0..nf {
                     for q in 0..nv {
@@ -2960,13 +3203,101 @@ fn main() {
             );
         };
         let lag0 = p.lag_stats;
-        let outcome = if host_state {
-            let mut report = |k: usize, xs: &hasty_recon::hoststack::HostStack, f: f64| {
-                let r: Vec<&[C32]> = (0..xs.nsets()).map(|t| xs.chunk(t)).collect();
-                report_imgs(k, &r, f)
+        // RED: λ = ρ / (α μ), μ the metric's mean gain on a fixed ±1 vector over four sets (deterministic: a resumed
+        // run gets the same λ)
+        let red_lambda = red.then(|| {
+            let mu = if precond.metric() {
+                let nt = lens.len();
+                let mut sets = vec![0, nt / 3, 2 * nt / 3, nt - 1];
+                sets.dedup();
+                hasty_recon::red::metric_gain(&mut p, &st, &sets).unwrap()
+            } else {
+                1.0
             };
-            hasty_recon::hoststack::run_objective_host(&mut p, &st, &mut xh, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap()
+            let l = red_rho / (alpha * mu);
+            println!("  {tag}: RED, g = ∇f + λ (x − D(x)), λ = ρ / (α μ) = {l:.4e} (ρ {red_rho}, α {alpha:.4e}, metric gain μ {mu:.4e}{})", if red_shifts > 1 { format!(", D averaged over {red_shifts} LLR shifts") } else { String::new() });
+            l
+        });
+        // RED: the per-set preconditioners need the sets the denoiser couples in one secant group (Objective::secant_groups)
+        let red_groups: Option<Vec<usize>> = red.then(|| {
+            let nt = lens.len();
+            let per_frame = temporal.is_none();
+            // set → (frame, encode); with --temporal a set holds all frames of one encode
+            let (fr, en) = (|t: usize| if per_frame { t / ne } else { usize::MAX }, |t: usize| if per_frame { t % ne } else { t });
+            let mut keys: Vec<Vec<usize>> = vec![];
+            if kappa > 0.0 {
+                if learned.is_some() {
+                    keys.push((0..nt).map(|t| if per_frame { fr(t) / nf_card } else { 0 }).collect());
+                } else if prior_kind == "tlp" {
+                    keys.push((0..nt).map(|t| (fr(t) / nf_card) * ne + en(t)).collect());
+                } else if prior_kind == "llr" {
+                    keys.push(vec![0; nt]);
+                }
+            }
+            if dfw_rule.is_some() || mag_couple.is_some() {
+                keys.push((0..nt).map(|t| if per_frame { fr(t) } else { 0 }).collect());
+            }
+            if static_lock.is_some() {
+                keys.push((0..nt).map(en).collect());
+            }
+            let g = union_groups(nt, &keys);
+            println!("  {tag}: RED secant groups: {} of {nt} sets", g.iter().copied().max().map_or(0, |m| m + 1));
+            g
+        });
+        let outcome = if host_state {
+            let mut noop = |_: usize, _: &mut Vec<C32>| {};
+            let mut ro_store;
+            let (obj, den): (&mut dyn hasty_recon::p2np::Objective, &mut dyn FnMut(usize, &mut Vec<C32>)) = match red_lambda {
+                Some(l) => {
+                    ro_store = hasty_recon::red::Red::new(&mut p, &mut denoise, l);
+                    ro_store.groups = red_groups.clone();
+                    (&mut ro_store, &mut noop)
+                }
+                None => (&mut p, &mut denoise),
+            };
+            if let Some(basis) = &tsub_basis {
+                use hasty_recon::tsub::apply_sets;
+                let (bb, pinv, nfb, nkb) = (basis.b.clone(), basis.pinv(), basis.nf, basis.nk);
+                let gmax = basis.gram_max_eig();
+                let alpha_c = alpha / gmax;
+                let nvs = lens[0];
+                let mut sub = hasty_recon::tsub::Subspace::new(obj, basis.clone(), ne);
+                let mut ch = hasty_recon::hoststack::HostStack::zeros(&sub.coeff_lens());
+                // start: the least-squares coefficients of the start images (a resumed run loads its own)
+                apply_sets(&pinv, nkb, nfb, ne, nvs, &xh.data, &mut ch.data);
+                let ng = hasty_recon::p2np::Objective::secant_groups(&sub).map_or(0, |g| g.iter().copied().max().map_or(0, |m| m + 1));
+                println!("  {tag}: temporal subspace {}: {nkb} coefficients for {nfb} frames per encode ({:.2} GiB per coefficient stack), λ_max(TᵀT) {gmax:.3}, α {alpha_c:.4e}, {ng} secant groups", basis.name, ch.bytes() as f64 / GIB);
+                // the frame stack: report buffer, and the P²nP denoiser's (T c → D → coefficients)
+                let xbuf = std::cell::RefCell::new(std::mem::take(&mut xh));
+                let prior_on = red_lambda.is_none();
+                let mut den_c = |k: usize, c: &mut Vec<C32>| {
+                    if !prior_on {
+                        return;
+                    }
+                    let mut xb = xbuf.borrow_mut();
+                    apply_sets(&bb, nfb, nkb, ne, nvs, c, &mut xb.data);
+                    den(k, &mut xb.data);
+                    apply_sets(&pinv, nkb, nfb, ne, nvs, &xb.data, c);
+                };
+                let mut rep_c = |k: usize, cs: &hasty_recon::hoststack::HostStack, f: f64| {
+                    if !report_due(k) {
+                        return;
+                    }
+                    let mut xb = xbuf.borrow_mut();
+                    apply_sets(&bb, nfb, nkb, ne, nvs, &cs.data, &mut xb.data);
+                    let r: Vec<&[C32]> = (0..xb.nsets()).map(|t| xb.chunk(t)).collect();
+                    report_imgs(k, &r, f)
+                };
+                hasty_recon::hoststack::run_objective_host(&mut sub, &st, &mut ch, precond, alpha_c, iters, &mut den_c, &mut rep_c, Some((&ctl, &tag))).unwrap()
+            } else {
+                let mut report = |k: usize, xs: &hasty_recon::hoststack::HostStack, f: f64| {
+                    let r: Vec<&[C32]> = (0..xs.nsets()).map(|t| xs.chunk(t)).collect();
+                    report_imgs(k, &r, f)
+                };
+                hasty_recon::hoststack::run_objective_host(obj, &st, &mut xh, precond, alpha, iters, den, &mut report, Some((&ctl, &tag))).unwrap()
+            }
         } else {
+            assert!(tsub_basis.is_none(), "--tsub needs --state host");
             let mut report = |k: usize, xs: &Stack, f: f64| {
                 if !report_due(k) {
                     return;
@@ -2975,7 +3306,14 @@ fn main() {
                 let r: Vec<&[C32]> = h.iter().map(|v| v.as_slice()).collect();
                 report_imgs(k, &r, f)
             };
-            p.run_from(&st, &mut x, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap()
+            if let Some(l) = red_lambda {
+                assert!(lag_tau.is_none(), "--prior-mode red with --lagged: not yet");
+                let mut ro = hasty_recon::red::Red::new(&mut p, &mut denoise, l);
+                ro.groups = red_groups.clone();
+                hasty_recon::p2np::run_objective(&mut ro, &st, &mut x, precond, alpha, iters, &mut |_, _| {}, &mut report, Some((&ctl, &tag))).unwrap()
+            } else {
+                p.run_from(&st, &mut x, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap()
+            }
         };
         if let Some(sr) = p.streamer_stats() {
             println!("  set streaming: {} sets, {:.1} GiB up / {:.1} GiB down", sr.0, sr.1 as f64 / GIB, sr.2 as f64 / GIB);
@@ -2988,6 +3326,11 @@ fn main() {
             println!("  lagged gradient: {} exact, {} surrogate (f is the surrogate estimate on surrogate iterations)", p.lag_stats.0 - lag0.0, p.lag_stats.1 - lag0.1);
         }
     }
+    // all runs finished: the warm-start checkpoints only served resuming
+    for e in 0..ne {
+        ctl.clear(&format!("warm_done_{e}"));
+        ctl.clear(&format!("warm_full_done_{e}"));
+    }
     let tools = hasty_site::tool("figs/run_figs.py");
     let py = hasty_site::python();
     match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
@@ -2999,6 +3342,31 @@ fn main() {
 /// Groups of a temporal-pyramid level with `rg` respiratory × `cg` cardiac groups (clamped to the bins / phases):
 /// set t of (frame f = r · nf_card + c, encode e) → (e · rg + ⌊r · rg / resp_bins⌋) · cg + ⌊c · cg / nf_card⌋
 /// (contiguous bins and phases, group sizes differing by at most one). Returns (groups, group of every set).
+/// Union of set partitions: sets sharing a key in any of `keys` (one key per set each) end in one group; group ids
+/// 0.. in order of first appearance
+fn union_groups(nt: usize, keys: &[Vec<usize>]) -> Vec<usize> {
+    let mut par: Vec<usize> = (0..nt).collect();
+    fn find(p: &mut [usize], mut a: usize) -> usize {
+        while p[a] != a {
+            p[a] = p[p[a]];
+            a = p[a];
+        }
+        a
+    }
+    for key in keys {
+        let mut first = std::collections::HashMap::new();
+        for t in 0..nt {
+            let r = *first.entry(key[t]).or_insert(t);
+            let (a, b) = (find(&mut par, r), find(&mut par, t));
+            if a != b {
+                par[a.max(b)] = a.min(b);
+            }
+        }
+    }
+    let mut id = std::collections::HashMap::new();
+    (0..nt).map(|t| { let r = find(&mut par, t); let n = id.len(); *id.entry(r).or_insert(n) }).collect()
+}
+
 fn tpyr_groups(frame_enc: &[(usize, usize)], ne: usize, nf_card: usize, resp_bins: usize, rg: usize, cg: usize) -> (usize, Vec<usize>) {
     let (rg, cg) = (rg.clamp(1, resp_bins), cg.clamp(1, nf_card));
     let g = frame_enc.iter().map(|&(f, e)| {
@@ -3141,4 +3509,16 @@ fn union_weights(fit: &[usize], w: Option<&[f64]>, ff: &[f32], nv: usize) -> (Ve
         wf.push(b * hi * hi + 1e-12);
     }
     (ww, wf)
+}
+
+/// `--bin-group`: the readout whose frame a group of encodes (readouts g0..g1, encode 0..) gets: the middle one
+/// (`mid`), or the one nearest the time the group's velocity estimate refers to ([`hasty_recon::data::velocity_time`])
+fn bin_group_readout(sd: &hasty_recon::data::SimData, g0: usize, g1: usize, mid: bool) -> usize {
+    if mid || g1 - g0 < 2 {
+        return g0 + (g1 - g0) / 2;
+    }
+    let t: Vec<f64> = (g0..g1).map(|i| sd.ro.t_exc[i] - sd.ro.t_exc[g0]).collect();
+    let m1: Vec<_> = (g0..g1).map(|i| sd.encode_m1[sd.ro.enc[i]]).collect();
+    let tv = hasty_recon::data::velocity_time(&m1, &t);
+    (g0..g1).min_by(|&a, &b| (t[a - g0] - tv).abs().partial_cmp(&(t[b - g0] - tv).abs()).unwrap()).unwrap()
 }

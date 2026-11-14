@@ -10,6 +10,7 @@ pub mod certs;
 pub mod client;
 pub mod commands;
 pub mod flow;
+pub mod models;
 pub mod server;
 mod service;
 pub mod viz;

@@ -1,6 +1,7 @@
 """Three velocity truths of a `simphantom --beats` scan on its reconstruction grid (research/velocity_bias.md §3):
 
-    rustlib/.venv/bin/python -I rustlib/tools/phantom/bias_truth.py <phantom_dir> <sim_dir> [--resp mean|0]
+    rustlib/.venv/bin/python -I rustlib/tools/phantom/bias_truth.py <phantom_dir> <sim_dir> [--resp mean|0|R]
+        [--signal] [--signal-frames [--frames-out NAME.npz]]
 
 - u_vol: volume-mean blood velocity (Σ w u / Σ w over the LBM cells in the voxel, the scan's heartbeats, the frame's
   phase window) — the gated ensemble mean;
@@ -13,6 +14,10 @@ reconstruction voxels are mapped there through the phantom's respiratory field a
 (like sim_truth). Only voxels the LBM covers (coverage ≥ 0.5) are defined (NaN elsewhere).
 Writes <sim_dir>/truth_bias.npz: u_vol, u_sig, u_pc [X, Y, Z, 3, F] (logical axes, m/s), coverage [X, Y, Z, F],
 plus figures in <sim_dir>/figs_bias/.
+`--signal`: also <sim_dir>/truth_pc_signal.npz: c_mean [X, Y, Z, E] complex64, the frame-mean of the ideal signal C_e
+(equal frame weights: what a reconstruction pooling every frame sees, spin history and intravoxel velocity spread
+included; the sim's sign, e^{−i k·u}), and c0_abs [X, Y, Z, F] float32 = |C_0| per frame. Voxel signal = Σ over the
+fine sub-voxels (the 2×2×2 box sum, coverage-weighted); 0 where the LBM does not cover the voxel.
 """
 import json
 import sys
@@ -31,6 +36,14 @@ from lbm_beats import BeatLibrary, cov_mat  # noqa: E402
 A = sys.argv[1:]
 PH, SIM = Path(A[0]), Path(A[1])
 resp = A[A.index("--resp") + 1] if "--resp" in A else "mean"
+want_signal = "--signal" in A
+# --signal-frames: also the per-frame ideal signal C_e of every voxel the LBM covers in some frame (sparse):
+# <sim_dir>/truth_pc_frames.npz with idx (flat F-order indices on the reconstruction grid), c [n, E, F] complex64
+# (the sim's sign e^{-i k.u}; Σ over the 2×2×2 fine sub-voxels, coverage-weighted like c_mean), cov [n, F]
+want_frames = "--signal-frames" in A
+# --resp R (a number): the truth at breathing state R (e.g. a respiratory bin's mean bellows amplitude) instead of the
+# scan mean; --frames-out NAME.npz writes the per-frame signal there instead of truth_pc_frames.npz
+frames_out = A[A.index("--frames-out") + 1] if "--frames-out" in A else "truth_pc_frames.npz"
 meta = json.loads((SIM / "meta.json").read_text())
 assert meta.get("beats"), "not a --beats scan"
 br = Path(meta["beats"]["run"])
@@ -157,6 +170,8 @@ if resp == "mean":
     if r_state is None:
         SI = vf.read(SIM.parent / "sim_input.hv")
         r_state = float(np.asarray(SI["breathing"]["r"])[: int(meta["scan_time"] / 1e-3)].mean())
+elif resp != "0":
+    r_state = float(resp)
 if r_state:
     rm = vf.read(PH / "motion" / "resp_motion.hv")
     Bf = np.asarray(rm["B"]).sum(0)  # [3, Z, Y, X]
@@ -189,6 +204,13 @@ u_vol, u_sig, u_pc = (np.full(shp, np.nan, np.float32) for _ in range(3))
 cov = np.zeros(tuple(dims) + (F,), np.float32)
 sl = tuple(slice(i0[a], i1[a]) for a in range(3))
 Kinv = np.linalg.pinv(dK)
+if want_frames:
+    box = tuple(i1 - i0)
+    c_box = np.zeros(box + (E, F), np.complex64)
+    w_box = np.zeros(box + (F,), np.float32)
+if want_signal:
+    c_mean = np.zeros(tuple(dims) + (E,), np.complex64)
+    c0_abs = np.zeros(tuple(dims) + (F,), np.float32)
 for f in range(F):
     w = sample(acc["w"][f])
     ok = w / 8 >= 0.5
@@ -205,7 +227,28 @@ for f in range(F):
         tgt = np.where(ok[..., None], val, np.nan).transpose(2, 1, 0, 3)  # [x, y, z, 3]
         arr[sl + (slice(None), f)] = tgt
     cov[sl + (f,)] = (w / 8).transpose(2, 1, 0)
-np.savez_compressed(SIM / "truth_bias.npz", u_vol=u_vol, u_sig=u_sig, u_pc=u_pc, coverage=cov, k=K, sequence=np.asarray(seq), resp_state=r_state)
+    if want_frames:
+        c_box[..., f] = np.conj(wc).transpose(2, 1, 0, 3).astype(np.complex64)
+        w_box[..., f] = (w / 8).transpose(2, 1, 0)
+    if want_signal:
+        # the sim's convention e^{−i k·u}: conjugate of C_e here
+        c_mean[sl] += (np.conj(wc) / F).transpose(2, 1, 0, 3).astype(np.complex64)
+        c0_abs[sl + (f,)] = np.abs(wc[..., 0]).transpose(2, 1, 0)
+if not ((want_signal or want_frames) and (SIM / "truth_bias.npz").exists()):  # --signal on a sim that has its truths: keep the file
+    np.savez_compressed(SIM / "truth_bias.npz", u_vol=u_vol, u_sig=u_sig, u_pc=u_pc, coverage=cov, k=K, sequence=np.asarray(seq), resp_state=r_state)
+if want_frames:
+    anyc = w_box.max(-1) > 0
+    loc = np.nonzero(anyc)
+    gidx = [loc[a] + i0[a] for a in range(3)]
+    flat = gidx[0] + dims[0] * (gidx[1] + dims[1] * gidx[2])
+    np.savez_compressed(SIM / frames_out, idx=flat.astype(np.int64), c=c_box[loc], cov=w_box[loc], k=K, dims=dims, resp_state=r_state)
+    print(f"wrote {SIM / frames_out}: {flat.size} voxels x {E} encodes x {F} frames (breathing state {r_state})")
+if want_signal:
+    np.savez_compressed(SIM / "truth_pc_signal.npz", c_mean=c_mean, c0_abs=c0_abs, k=K, resp_state=r_state)
+    print(f"wrote {SIM / 'truth_pc_signal.npz'}")
+
+if frames_out != "truth_pc_frames.npz":  # an extra truth (other breathing state): keep the scan's figures
+    sys.exit(0)
 
 # summary + figure
 m = np.isfinite(u_vol[..., 0, :])

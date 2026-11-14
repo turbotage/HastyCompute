@@ -44,6 +44,7 @@ impl Registry {
         let mut r = Self::new();
         base_commands(&mut r);
         crate::flow::register(&mut r);
+        crate::models::register(&mut r);
         r
     }
 

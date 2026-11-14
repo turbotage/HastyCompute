@@ -16,6 +16,7 @@
 
 import { runGraph }                               from './node_runner.js';
 import { client, fetchMeta, run, isId, DTYPE, SHORT } from './hasty.js';
+import { readGeometry, writeGeometry, geometryMetadata } from './nifti.js';
 import { HTensor }                                from '../../common/value_format.js';
 
 const LG = window.LiteGraph;
@@ -122,7 +123,7 @@ async function decompressGzip(buf) {
  * gives C-order so the raw bytes match a contiguous PyTorch tensor.
  *
  * @param {File} file
- * @returns {Promise<{shape: number[], dtype: string, data: Uint8Array}>}
+ * @returns {Promise<{shape: number[], dtype: string, data: Uint8Array, geometry: {spacing_mm: number[], affine: number[][], source: string}}>}
  */
 async function parseNifti(file) {
     let buf = await file.arrayBuffer();
@@ -177,7 +178,7 @@ async function parseNifti(file) {
         }
     }
 
-    return { shape, dtype: dtInfo.dtype, data };
+    return { shape, dtype: dtInfo.dtype, data, geometry: readGeometry(view, le) };
 }
 
 
@@ -209,7 +210,7 @@ function f16ArrayToF32(u16) {
  * @param {Uint8Array} data
  * @returns {ArrayBuffer}
  */
-function buildNifti1(shape, dtype, data) {
+function buildNifti1(shape, dtype, data, geometry = null) {
     const DTYPE_TO_NIFTI  = { u8:2, i8:256, i16:4, u16:512, i32:8, f32:16, f64:64, c32:32 };
     const DTYPE_TO_BITPIX = { u8:8, i8:8,   i16:16, u16:16, i32:32, f32:32, f64:64, c32:64 };
     const niftiType = DTYPE_TO_NIFTI[dtype];
@@ -237,6 +238,7 @@ function buildNifti1(shape, dtype, data) {
         view.setFloat32(76 + i * 4, 1.0, true);             // pixdim[1..ndim] = 1 mm
     }
     view.setFloat32(108, voxOffset, true);                  // vox_offset
+    if (geometry) writeGeometry(view, geometry);            // pixdim[1..3], sform, qform
     // magic: "n+1\0"
     u8[344] = 110; u8[345] = 43; u8[346] = 49; u8[347] = 0;
     // extension block (4 bytes, all zero = no extensions)
@@ -622,10 +624,10 @@ function registerNodes() {
                 const file = this._pendingFile;
                 this._pendingFile = null;
 
-                const { shape, dtype, data } = await parseNifti(file);
+                const { shape, dtype, data, geometry } = await parseNifti(file);
                 const tensor    = HTensor.fromBytes(DTYPE[dtype], shape, data);
                 const axes      = shape.map((_, i) => ['x', 'y', 'z', 't', 'e'][shape.length - 1 - i] ?? `d${i}`);
-                const uuid      = await client.put(tensor, { name: file.name, metadata: { source: file.name, axes } });
+                const uuid      = await client.put(tensor, { name: file.name, metadata: { source: file.name, axes, ...geometryMetadata(geometry) } });
                 this._uuid      = uuid;
                 this._execMeta  = { dtype, shape, device: 'cpu' };
                 return [uuid];
@@ -689,7 +691,9 @@ function registerNodes() {
                 data      = new Uint8Array(f16ArrayToF32(new Uint16Array(t.data.buffer, t.data.byteOffset, t.numel)).buffer);
                 saveDtype = 'f32';
             }
-            const niftiBytes = buildNifti1(shape, saveDtype, data);
+            const md = (await client.info(this._uuid))?.metadata;
+            const geometry = md?.affine || md?.spacing_mm ? { affine: md.affine, spacing_mm: md.spacing_mm } : null;
+            const niftiBytes = buildNifti1(shape, saveDtype, data, geometry);
             const filename   = (this.properties.filename ?? 'tensor.nii')
                 .replace(/\.gz$/i, '').replace(/\.nii$/i, '') + '.nii';
             const a = document.createElement('a');
@@ -702,6 +706,86 @@ function registerNodes() {
         onDrawForeground(ctx) { drawStatusBar(ctx, this); }
     }
 
+
+    /**
+     * ModelRunNode — run a segmentation model installed on the server (data/hasty/models, see model_list).
+     * Geometry (spacing_mm, affine) is taken from the input entry's metadata (set by NIfTI Load, or by any
+     * producer); the "spacing_mm" widget overrides it for data without a header. The label output carries the
+     * geometry and the label table in its metadata, so NIfTI Save writes an aligned label map.
+     */
+    class ModelRunNode extends LG.LGraphNode {
+        static title    = "Run Model";
+        static category = "Models";
+
+        constructor() {
+            super();
+            this.addInput("image", "tensor_uuid");
+            this.addInput("image 2", "tensor_uuid");   // further channels of multi-contrast models (same grid), in model order
+            this.addInput("image 3", "tensor_uuid");
+            this.addOutput("labels", "tensor_uuid");
+            this.addOutput("probabilities", "tensor_uuid");
+            this._models = [];
+            this._wModel = this.addWidget("combo", "model", "", v => { this.properties.model = v; }, { values: [] });
+            this.addWidget("combo", "device", "cpu", v => { this.properties.device = v; }, { values: ["cuda", "cpu"] });
+            this.addWidget("number", "overlap (0 = model)", 0, v => { this.properties.overlap = v; }, { min: 0, max: 0.9, step: 0.05, precision: 2 });
+            this.addWidget("toggle", "mirror TTA", false, v => { this.properties.tta = v; });
+            this.addWidget("text", "prob classes", "", v => { this.properties.prob_classes = v; });
+            this.addWidget("text", "spacing_mm (x,y,z)", "", v => { this.properties.spacing = v; });
+            this.addWidget("button", "Refresh models", null, () => { this.refreshModels(); });
+            this.size = [260, 210];
+            this.refreshModels();
+        }
+
+        async refreshModels() {
+            try {
+                const { message } = await run("model_list", [], {});
+                const j = JSON.parse(message);
+                this._models = j.models;
+                this._problems = j.problems;
+                const names = j.models.filter(m => m.kind === "segmentation").map(m => m.name);  // flow_sr models need a different node
+                this._wModel.options.values = names;
+                if (!names.includes(this._wModel.value)) this._wModel.value = names[0] ?? "";
+                this.properties.model = this._wModel.value;
+            } catch (e) {
+                this._problems = [String(e.message ?? e)];
+            }
+            this.setDirtyCanvas(true, true);
+        }
+
+        async executeAsync(inputs) {
+            const images = inputs.filter(isId);
+            const image = images[0];
+            if (!image) throw new Error('connect an image tensor');
+            const model = this.properties.model || this._wModel.value;
+            if (!model) throw new Error('no model installed on the server (data/hasty/models)');
+            const md = (await client.info(image))?.metadata ?? {};
+            const options = { model, device: this.properties.device ?? "cpu", tta: !!this.properties.tta };
+            if (this.properties.overlap > 0) options.overlap = this.properties.overlap;
+            const sp = (this.properties.spacing ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+            if (sp.length === 3 && sp.every(v => v > 0)) options.spacing_mm = sp;
+            else { options.spacing_mm = md.spacing_mm; options.affine = md.affine; }
+            if (!options.spacing_mm && !options.affine)
+                throw new Error('image has no spacing metadata: fill the spacing_mm widget');
+            const pc = (this.properties.prob_classes ?? "").split(/[\s,]+/).filter(Boolean).map(Number);
+            if (pc.length) options.prob_classes = pc;
+            const { outputs, message } = await run("model_run", images, options, model);
+            const info = JSON.parse(message);
+            const geom = { spacing_mm: options.spacing_mm, affine: options.affine, axes: md.axes };
+            await client.setMetadata(outputs[0], { ...geom, labels: info.labels, segmentation_of: image, model, counts: info.counts });
+            if (outputs[1]) await client.setMetadata(outputs[1], { ...geom, prob_classes: pc, model });
+            this._info = `${info.backend}${info.cuda ? "/cuda" : "/cpu"} ${info.seconds.toFixed(1)} s`;
+            return outputs;
+        }
+
+        onDrawForeground(ctx) {
+            drawStatusBar(ctx, this);
+            if (this._info) {
+                ctx.fillStyle = '#88aacc'; ctx.font = '10px monospace'; ctx.textBaseline = 'top';
+                ctx.fillText(this._info, 6, this.size[1] - 42);
+            }
+        }
+    }
+
     // Register all -------------------------------------------------------------
 
     for (const cls of [
@@ -710,7 +794,7 @@ function registerNodes() {
         AddNode, SubNode, MultNode, DivNode, NegNode, AbsNode, ScalarNode,
         FFTNode, IFFTNode, NUFFTNode,
         CoilSenseNode, SensitivityMapNode, ToeplitzNode,
-        CompressUi16ConfigNode, OrthoSlicerNode,
+        CompressUi16ConfigNode, OrthoSlicerNode, ModelRunNode,
     ]) {
         LG.registerNodeType(cls.category + '/' + cls.title, cls);
     }

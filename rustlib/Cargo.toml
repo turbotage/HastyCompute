@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/hasty-cuda", "crates/hasty-fft", "crates/hasty-nufft", "crates/hasty-toeplitz", "crates/hasty-testkit", "crates/hasty-bench", "crates/hasty-mrsim", "crates/hasty-phantom", "crates/hasty-recon", "crates/hasty-denoise", "crates/hasty-value", "crates/hasty-server", "crates/hasty-value-capi", "crates/hasty-seq", "crates/hasty-qfit", "crates/hasty-cfd", "crates/hasty-site"]
+members = ["crates/hasty-cuda", "crates/hasty-fft", "crates/hasty-nufft", "crates/hasty-toeplitz", "crates/hasty-testkit", "crates/hasty-bench", "crates/hasty-mrsim", "crates/hasty-phantom", "crates/hasty-recon", "crates/hasty-denoise", "crates/hasty-value", "crates/hasty-server", "crates/hasty-value-capi", "crates/hasty-seq", "crates/hasty-qfit", "crates/hasty-cfd", "crates/hasty-site", "crates/hasty-infer"]
 
 [workspace.package]
 version = "0.1.0"
@@ -8,7 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-cudarc = { version = "0.19", default-features = false, features = ["std", "driver", "nvrtc", "cufft", "cuda-13000", "dynamic-loading"] }
+cudarc = { version = "0.19", default-features = false, features = ["std", "driver", "nvrtc", "cufft", "cublas", "cusolver", "cuda-13000", "dynamic-loading"] }
 num-complex = "0.4"
 rustfft = "6"
 thiserror = "2"

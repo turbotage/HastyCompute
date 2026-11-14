@@ -795,6 +795,272 @@ whether $s_k/\norm{s_k}$ converges, typically to the dominant eigenvector of the
 with a different preconditioner does not affect the limit, which is determined by the final $P$.
 \end{remark}
 
+\subsection{How far a metric moves the fixed point}\label{sec:displacement}
+
+\Cref{prop:estimator} works in a local affine model with a projector denoiser. We now compare the limits of two
+metrics directly, for any denoiser whose secant between the two limits has tangent structure. No proximal
+structure is assumed.
+
+The \emph{reference} is a metric $P_I\succ0$ with step $\alpha_I$, typically $P_I=I$, with fixed point $x_I$. The
+\emph{candidate} is $P\succ0$ with step $\alpha_P$ and fixed point $x_P$. Write $z_\bullet=x_\bullet-\alpha_\bullet P_\bullet\nabla f(x_\bullet)$
+for the denoiser inputs and $g_I=\nabla f(x_I)$.
+
+\begin{assumption}[tangent secant between the limits]\label{ass:fpsecant}
+There is a symmetric $\bar S$ with $D(z_P)-D(z_I)=\bar S(z_P-z_I)$, $0\preceq\bar S\preceq I$ and $\bar S=\Pi\bar S\Pi$,
+where $\Pi$ is the orthogonal projector onto $T:=\range\bar S$ and $\bar S|_T$ is invertible. Set
+$\bar\Lambda:=(\bar S|_T)^{-1}-I_T\succeq0$.
+\end{assumption}
+
+$\bar\Lambda$ is the denoiser's in-tangent shrinkage: $\bar\Lambda=0$ for a projector, as for soft thresholding on its
+active set (\cref{ex:soft}). Joint and group thresholds and singular-value thresholds satisfy
+\cref{ass:fpsecant} with $\bar\Lambda\neq0$. For a $C^1$ denoiser with symmetric Jacobians, the mean-value secant
+is symmetric, and $0\preceq\bar S\preceq I$ is a local firm-nonexpansiveness hypothesis on the segment
+$[z_I,z_P]$.
+
+\begin{theorem}[fixed-point displacement]\label{thm:displacement}
+Under \cref{ass:fpsecant}, $\Delta:=x_P-x_I$ lies in $T$ and satisfies
+\begin{equation}\label{eq:displacement}
+  \big(\bar\Lambda+\alpha_P\,\Pi PH\Pi\big)\Delta=-\Pi\big(\alpha_PP-\alpha_IP_I\big)g_I .
+\end{equation}
+If $K:=\bar\Lambda+\alpha_P\Pi PH\Pi|_T$ is invertible, then $\Delta=-K^{-1}\Pi(\alpha_PP-\alpha_IP_I)g_I$.
+\end{theorem}
+\begin{proof}
+$\Delta=D(z_P)-D(z_I)=\bar S(z_P-z_I)\in T$. Since $\nabla f(x_P)=g_I+H\Delta$,
+\[
+z_P-z_I=\Delta-\alpha_PPH\Delta-(\alpha_PP-\alpha_IP_I)g_I .
+\]
+Hence $(\bar S|_T)^{-1}\Delta=\Pi(z_P-z_I)$, which is \eqref{eq:displacement}.
+\end{proof}
+
+The identity is exact. It needs no fixed point of a linearisation, only the two limits and their secant.
+
+\begin{corollary}[what the displacement is made of]\label{cor:displacement}
+Let $P_I=I$. At the reference limit, $x_I-z_I=\alpha_Ig_I$ is the correction made by the denoiser. Split it into
+its in-tangent part $c_\parallel:=\Pi(x_I-z_I)$ and its rejected part $c_\perp:=\Pi^\perp(x_I-z_I)$. Write
+$Q:=\Pi P\Pi|_T$. Then
+\begin{equation}\label{eq:dispsplit}
+  \alpha_I\,K\Delta=-\big(\alpha_PQ-\alpha_II_T\big)c_\parallel-\alpha_P\,\Pi P\Pi^\perp c_\perp .
+\end{equation}
+\begin{enumerate}
+\item \textbf{Global scalar.} If $\alpha_PP=\alpha_II$ (any scalar metric with the normalised step), then $\Delta=0$.
+\item \textbf{In-tangent reweighting.} The first term vanishes iff the metric equals the reference scalar on the
+  denoiser's in-tangent correction, $\alpha_PQc_\parallel=\alpha_Ic_\parallel$. For a projection onto a subspace
+  containing the limit, $c_\parallel=0$, so this term vanishes for every $P$.
+\item \textbf{Leak.} The second term carries what the denoiser \emph{rejects} (noise and data outside the model)
+  into $T$, through $\Pi P\Pi^\perp$. This map has rank at most $\dim T$, and
+  \[
+  \norm{\Pi P\Pi^\perp}=\norm{\Pi[\Pi,P]}\leq\min\big(\norm{[\Pi,P]},\,\tfrac12(\lmax(P)-\lmin(P))\big).
+  \]
+  It vanishes iff $PT\subseteq T$.
+\item \textbf{Bound.}
+  \[
+  \norm{x_P-x_I}\leq\frac{\norm{\alpha_PQ-\alpha_II_T}\,\norm{c_\parallel}+\alpha_P\norm{\Pi P\Pi^\perp}\,\norm{\Pi_Rc_\perp}}{\alpha_I\,\sigma_{\min}(K)},
+  \]
+  where $\Pi_R$ projects onto the at most $\dim T$-dimensional row space of $\Pi P\Pi^\perp$.
+\end{enumerate}
+\end{corollary}
+\begin{proof}
+Insert $\alpha_Ig_I=c_\parallel+c_\perp$ into \eqref{eq:displacement} and use $\Pi c_\perp=0$. For the norm,
+$\Pi P\Pi^\perp=\Pi(P-cI)\Pi^\perp$ for every $c$; take $c=\tfrac12(\lmax+\lmin)$. Also
+$\Pi P\Pi^\perp=-\Pi[P,\Pi]\Pi^\perp$, and $\Pi P\Pi^\perp=0$ iff $PT\subseteq T$, by symmetry of $P$.
+\end{proof}
+
+\begin{lemma}[invertibility of $K$]\label{lem:Kbound}
+Let $H_T=\Pi H\Pi|_T$, $h_\perp=\norm{\Pi^\perp H\Pi}$ and $\ell_P:=\norm{\Pi P\Pi^\perp}/\lmin(Q)$.
+\begin{enumerate}
+\item \textbf{Hard tangent} ($\bar\Lambda=0$): $\sigma_{\min}(K)\geq\alpha_P\lmin(Q)\big(\lmin(H_T)-\ell_Ph_\perp\big)$.
+\item \textbf{General $\bar\Lambda\succeq0$:} for every $q_0>0$,
+  \[
+  \sigma_{\min}(K)\geq\alpha_P\big(q_0\lmin(H_T)-\norm{Q-q_0I}\norm{H_T}-\norm{\Pi P\Pi^\perp}h_\perp\big),
+  \]
+  whenever the right-hand side is positive.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+\textbf{Decomposition.} $\Pi PH\Pi|_T=QH_T+\Pi P\Pi^\perp\,(\Pi^\perp H\Pi)$.
+\textbf{Item 1.} Use $\sigma_{\min}(QH_T)\geq\lmin(Q)\lmin(H_T)$ and Weyl's inequality for singular values.
+\textbf{Item 2.} $\sigma_{\min}(K)\geq\min_{\norm u=1}\mathrm{Re}\inner u{Ku}$ when the latter is positive. Here
+$\inner u{\bar\Lambda u}\geq0$, and $\mathrm{Re}\inner u{QH_Tu}=q_0\inner u{H_Tu}+\mathrm{Re}\inner u{(Q-q_0I)H_Tu}$.
+\end{proof}
+
+\begin{corollary}[recovery in a metric]\label{cor:metricrecovery}
+Let $P_I=I$, $\alpha_I=1/\norm H$, and suppose $T=T_0$ (the tangent at the truth, the regime of \cref{thm:local}).
+Assume the shot model of \cref{sec:sampling} and $N_b$ as in \eqref{eq:Nb}.
+Let $\Delta_t$ be the deviation of $\Pi_0^\perp H\Pi_0$ from its mean $N_b\Pi_0^\perp\Hb\Pi_0$ given by the matrix Bernstein inequality \cite{tropp2012}, and set $\beta_\perp:=\norm{\Pi_0^\perp\Hb\Pi_0}$.
+Then with probability at least $1-p-e^{-u}$, over the shots and the noise:
+\begin{itemize}
+\item $\lmin(H_T)\geq(1-t)N_b\lambda_-$ and $h_\perp\leq N_b\beta_\perp+\Delta_t$;
+\item the bound of \cref{thm:local} holds for $x_I$;
+\item with $\sigma_{\min}(K)$ bounded by \cref{lem:Kbound},
+\[
+\norm{x_P-\xt}\leq\norm{x_I-\xt}+\frac{\norm{\alpha_PQ-\alpha_II}\norm{c_\parallel}+\alpha_P\norm{\Pi_0P\Pi_0^\perp}\big(\alpha_I\norm{\Pi_0^\perp H(x_I-\xt)}+\alpha_I\sigma\norm H^{1/2}(\sqrt d+\sqrt{2u})\big)}{\alpha_I\sigma_{\min}(K)} .
+\]
+\end{itemize}
+\end{corollary}
+\begin{proof}
+\textbf{Rejected correction.} $c_\perp=-\alpha_I\Pi_0^\perp\big(H(x_I-\xt)-A^*n\big)$.
+\textbf{Noise part.} $\Pi_0P\Pi_0^\perp A^*n$ is Gaussian with covariance $\sigma^2\Pi_0P\Pi_0^\perp H\Pi_0^\perp P\Pi_0$, of rank at most $d$. Its norm is concentrated as in \cref{thm:local}(c).
+\textbf{Remaining events.} The Chernoff and Bernstein events are as in \cref{thm:local} and \cref{app:uniform}.
+\end{proof}
+
+\begin{remark}[reading \cref{thm:displacement}]\label{rem:displacement}
+\begin{itemize}
+\item \textbf{What moves the fixed point.} A metric moves the PnP limit only through what the denoiser does at
+  the reference limit:
+  \begin{itemize}
+  \item its in-tangent correction, reweighted by the metric's deviation from a scalar on $T$;
+  \item its rejected correction, carried into $T$ by the leak $\Pi P\Pi^\perp$.
+  \end{itemize}
+  The displacement is the preconditioned in-tangent resolvent $K^{-1}$ applied to these two forces. A better
+  metric enlarges $\sigma_{\min}(K)$: it moves the limit less per unit of defect, and it also converges faster.
+\item \textbf{Properties a denoiser can be built to have.}
+  \begin{enumerate}
+  \item[(a)] \emph{Hard tangent} ($\bar\Lambda\approx0$, Jacobian eigenvalues clustered at $0$ and $1$, as reported
+    for trained denoisers \cite{mohan2020,kadkhodaie2024}). The in-tangent force is then only the denoiser's
+    offset $c_\parallel$.
+  \item[(b)] \emph{Tangent compatible with the metric}, $PT\subseteq T$ (zero leak). A denoiser that acts
+    separably over sets, or whose Jacobian has a set-separable range, is compatible with per-set scalars. A
+    tangent of tensor form $T_{\rm sp}\otimes\RR^{\rm sets}$, or one closed under the spatial operator, is
+    compatible with a circulant shared by all sets.
+  \end{enumerate}
+  Both are measurable with Jacobian-vector products: $\norm{[J_D,P]}$ by power iteration on
+  $v\mapsto[J_D,P]v$, which costs two JVPs and two metric applications per step.
+\item \textbf{Per-set scalars} ($P=\operatorname{blockdiag}(\tau_tI)$) with a denoiser coupling the sets. If the
+  tangent's range is set-separable (joint thresholds, \cref{sec:numerics}), the leak is zero. The first term then
+  reweights the denoiser's correction per set by $\alpha_P\tau_t/\alpha_I$, i.e.\ per-set regularisation weights.
+  With an LLR tangent, the column scaling also leaks, because it changes the temporal subspace.
+\end{itemize}
+\end{remark}
+
+\begin{proposition}[the scalar part of a metric is a change of strength]\label{prop:strength}
+Let $P_I=I$ and let $D_\lambda$ be a family of denoisers. Compare the candidate's limit $x_P$ at strength $\lambda$
+with the reference's limit $x_I$ at strength $\lambda'$. Let \cref{ass:fpsecant} hold for the secant $\bar S$ of
+$D_\lambda$ on $[z_I,z_P]$. Split the reference's correction $x_I-z_I=\alpha_Ig_I=c_\parallel+c_\perp$ as in
+\cref{cor:displacement}, and let the correction scale with the strength on $T$:
+\begin{equation}\label{eq:strengthhom}
+  D_\lambda(z_I)-D_{\lambda'}(z_I)=\Big(\frac{\lambda}{\lambda'}-1\Big)\,c_\parallel .
+\end{equation}
+Fix $\bar q>0$ and set $\lambda'=\alpha_I\lambda/\bar q$. Then $\Delta:=x_P-x_I\in T$ and
+\begin{equation}\label{eq:strengthdisp}
+  \alpha_I\,K\Delta=-\big(\alpha_PQ-\bar q\,I_T\big)c_\parallel+(\bar q-\alpha_I)\,\bar\Lambda c_\parallel-\alpha_P\,\Pi P\Pi^\perp c_\perp .
+\end{equation}
+\end{proposition}
+\begin{proof}
+Let $\delta:=D_\lambda(z_I)-D_{\lambda'}(z_I)$, which lies in $T$ by \eqref{eq:strengthhom}. Then
+$\Delta=\bar S(z_P-z_I)+\delta\in T$. As in the proof of \cref{thm:displacement},
+$z_P-z_I=\Delta-\alpha_PPH\Delta-(\alpha_PP-\alpha_I)g_I$, so $(I_T+\bar\Lambda)(\Delta-\delta)=\Pi(z_P-z_I)$, i.e.
+\[
+K\Delta=(I_T+\bar\Lambda)\,\delta-\Pi(\alpha_PP-\alpha_I)g_I .
+\]
+Insert $\alpha_Ig_I=c_\parallel+c_\perp$ and $\delta=(\bar q/\alpha_I-1)c_\parallel$:
+$\alpha_IK\Delta=(\bar q-\alpha_I)(I_T+\bar\Lambda)c_\parallel-(\alpha_PQ-\alpha_II_T)c_\parallel-\alpha_P\Pi P\Pi^\perp c_\perp$,
+which is \eqref{eq:strengthdisp}.
+\end{proof}
+
+\begin{remark}[reading \cref{prop:strength}]\label{rem:strength}
+\begin{itemize}
+\item \textbf{Which strength.} The two limits match when the strengths per unit step agree,
+  $\lambda/\bar q=\lambda'/\alpha_I$. A metric that takes larger steps on the correction ($\bar q>\alpha_I$) needs a
+  proportionally larger $\lambda$.
+\item \textbf{The best scalar.} If $\bar\Lambda c_\parallel=0$, the Rayleigh quotient
+  $\bar q=\inner{c_\parallel}{\alpha_PQc_\parallel}/\norm{c_\parallel}^2$ minimises the first term. What remains of it
+  is orthogonal to $c_\parallel$, with norm
+  $\norm{c_\parallel}\big(\inner{\hat c}{(\alpha_PQ)^2\hat c}-\bar q^2\big)^{1/2}$, $\hat c=c_\parallel/\norm{c_\parallel}$:
+  the spread of the metric on the direction of the correction.
+  \begin{itemize}
+  \item Per-set scalars $\tau_t$: the spread of $\alpha_P\tau_t$, weighted by the correction energy
+    $\norm{c_{\parallel,t}}^2$ of each set.
+  \item A circulant metric: the spread of its spectrum, weighted by the $k$-space energy of $c_\parallel$.
+  \end{itemize}
+\item \textbf{When $\bar\Lambda c_\parallel$ vanishes.} Soft, joint and singular-value thresholds have the correction
+  $-\lambda\gamma(z)$, with a direction that does not change along itself on the active set:
+  $\gamma(z+t\gamma(z))=\gamma(z)$. Hence $J_D(z)\gamma(z)=\gamma(z)$, i.e.\ the correction direction has Jacobian
+  eigenvalue~1. With $J_D(z_I)$ in place of the secant, $\bar\Lambda c_\parallel=0$. For the secant,
+  \[
+  \norm{\bar\Lambda c_\parallel}=\norm{(\bar S|_T)^{-1}(I-\bar S)c_\parallel}
+  \leq\tfrac12\norm{(\bar S|_T)^{-1}}\,\mathrm{Lip}(J_D)\,\norm{z_P-z_I}\,\norm{c_\parallel},
+  \]
+  so this term is of second order. An average over shifted block partitions (LLR with random shifts) keeps
+  \eqref{eq:strengthhom}, but has $J_D\gamma=\gamma$ only approximately.
+\item \textbf{When \eqref{eq:strengthhom} holds.} Exactly for these thresholds, when the active set (support,
+  active groups, rank) of $D_\lambda$ and $D_{\lambda'}$ at $z_I$ is the same. Otherwise every coefficient with
+  magnitude between $\lambda$ and $\lambda'$ adds at most $\lvert\lambda-\lambda'\rvert$, outside $T$.
+\item \textbf{Consequence.} Tuning the strength per metric absorbs the scalar part. Three defects remain: the
+  non-scalar part, the leak, and the second-order shrinkage term. Comparing metrics each at its own best strength
+  is therefore the fair comparison, and it is what the toy below does.
+\end{itemize}
+\end{remark}
+
+\paragraph{Numerical check} (\texttt{metric\_fixedpoint\_v2.py}, \texttt{metric\_fixedpoint\_v3.py}).
+\begin{itemize}
+\item \textbf{Setup.} Four sets of a $64\times64$ phantom, with a small blob moving between sets. Shots i.i.d.\ from
+  $\nu\propto1/(1+|k|^2/16)$, so the sampling density has a dynamic range of about 100 and the shot counts differ by $3\times$ between sets. The denoiser is a joint Haar soft threshold across the sets (\cref{ass:fpsecant} with $\bar\Lambda\neq0$, set-separable tangent range). Limits are solved to a relative residual $10^{-10}$.
+\item \textbf{Best-tuned relative errors to the truth.} $P=I$: 0.0198 at $\lambda=1.25\cdot10^{-4}$. Per-set scalars: 0.0191 at $2.5\cdot10^{-4}$. Shared circulant: 0.0201 at $10^{-3}$. Per-set circulants: 0.0208 at $10^{-3}$ [measured].
+\item \textbf{At a common strength the limits do move.} At the reference's $\lambda$ the circulant's limit has error 0.039, and $\norm{x_P-x_I}/\norm{x_I}=3.1\cdot10^{-2}$. Its measured leak is $\ell_P=4.0$, with $\norm{[J_D,P]}=8.8$.
+\item \textbf{The identity holds.} With the secant evaluated by a 64-node quadrature (secant identity error $\le1.4\cdot10^{-3}$), \eqref{eq:displacement} predicts the measured displacement to 11\,\%. The tangent Jacobian at $z_I$ instead of the secant predicts only 50--80\,\% of it.
+\item \textbf{Speed at each method's own best strength} (error to the truth after 200 / 400 / 800 iterations):
+  \begin{itemize}
+  \item $P=I$: 0.22 / 0.17 / 0.11;
+  \item per-set scalars: 0.17 / 0.11 / 0.043;
+  \item shared circulant: 0.048 / 0.021 / 0.020;
+  \item acceleration of \cref{prop:keepfp} with the circulant ($\beta=0.75$): 0.073 / 0.025 / 0.0198, ending $1.9\cdot10^{-4}$ from $x_I$.
+  \end{itemize}
+\item \textbf{The strength rescaling} (\cref{prop:strength}; \texttt{metric\_strength.py}). At the reference limit the correction direction has Jacobian eigenvalue~1 to $3\cdot10^{-14}$, and 90\,\% of the correction lies in $T$.
+  \begin{itemize}
+  \item Per-set scalars: $\bar q/\alpha_I=1.77$ predicts $\lambda=2.2\cdot10^{-4}$ (grid best $2.5\cdot10^{-4}$). Non-scalar defect $0.42\,\bar q\norm{c_\parallel}$, leak $0$ (set-separable tangent). The displacement from $x_I$ drops from $1.0\cdot10^{-2}$ at the common strength to $5.2\cdot10^{-3}$.
+  \item Shared circulant: $\bar q/\alpha_I=5.87$ predicts $\lambda=7.3\cdot10^{-4}$ (grid best $10^{-3}$). Non-scalar defect $0.41\,\bar q\norm{c_\parallel}$, leak $0.10\,\bar q\norm{c_\parallel}$. The displacement drops from $3.1\cdot10^{-2}$ to $5.1\cdot10^{-3}$ [measured].
+  \end{itemize}
+\item \textbf{Reading.} In this regime the circulant metric changes the limit mainly by its scalar part, and re-tuning the strength absorbs that (\cref{prop:strength}). The fixed-point-preserving iteration reaches the reference limit almost as fast.
+\end{itemize}
+
+\subsection{Acceleration that keeps the fixed point}\label{sec:keepfp}
+
+\Cref{thm:displacement} separates two roles that a preconditioner inside the data step plays at once: it speeds the
+iteration up, and it defines the limit. They can be decoupled. Fix the reference map, whose limit the theory of
+\cref{sec:sampling} describes:
+\[
+\Phi(z)=D(z)-\alpha_IP_I\nabla f(D(z)),\qquad F(z)=z-\Phi(z).
+\]
+Then $x=D(z)$ is a reference PnP fixed point iff $F(z)=0$.
+
+\begin{proposition}[fixed-point-preserving acceleration]\label{prop:keepfp}
+For any invertible $B_k$, the fixed points of
+\[
+z_{k+1}=z_k-B_kF(z_k)
+\]
+are exactly the zeros of $F$, whatever $B_k$ is (dynamic, per set, circulant). Take
+\[
+B=(I-J)+\beta PJ,
+\]
+with $J=J_D(z_I)$ the denoiser's Jacobian at the limit and $P\succ0$ a metric. If $J=\Pi_0$ is a projector
+(hard tangent), the linearisation at $z_I$ is block lower triangular with respect to $T_0\oplus T_0^\perp$:
+\[
+I-B\,F'(z_I)=\begin{pmatrix}I-\beta\alpha_I\,QH_{T_0}&0\\ -\alpha_I\Pi_0^\perp(H+\beta P\Pi_0H)\Pi_0&0\end{pmatrix},\qquad Q=\Pi_0P\Pi_0|_{T_0}.
+\]
+Its local rate is therefore $\rho(I-\beta\alpha_IQH_{T_0})$: the rate of the metric's compression $Q$, without
+its leak, and the limit stays $x_I$.
+\end{proposition}
+\begin{proof}
+\textbf{Fixed points.} $z=z-BF(z)$ iff $BF(z)=0$ iff $F(z)=0$, since $B$ is invertible.
+\textbf{Linearisation.} $F'(z_I)=I-(I-\alpha_IH)J=\Pi_0^\perp+\alpha_IH\Pi_0$ for $J=\Pi_0$ and $P_I=I$. Also
+$B=\Pi_0^\perp+\beta P\Pi_0$. Multiplying out and using $P\Pi_0\Pi_0^\perp=0$ gives
+$BF'(z_I)=\Pi_0^\perp+\alpha_I\Pi_0^\perp H\Pi_0+\beta\alpha_IP\Pi_0H\Pi_0$. On $T_0^\perp$ this acts as the
+identity, so $I-BF'(z_I)$ vanishes there. Its $T_0\to T_0$ block is $I-\beta\alpha_I\Pi_0P\Pi_0H\Pi_0$.
+\end{proof}
+
+\begin{remark}[cost and variants]\label{rem:keepfp}
+\begin{itemize}
+\item \textbf{Cost.} Per iteration: one gradient and one denoiser evaluation (as for PnP), one JVP $J_kF(z_k)$ and
+  one metric application. Closed-form JVPs exist for wavelet, joint and singular-value thresholds, and autodiff
+  gives them for learned denoisers.
+\item \textbf{Variants.} $B_k$ can carry all the adaptivity that speeds P$^2$nP up: per-set scalars, the circulant,
+  and quasi-Newton updates from secants $(z_k-z_{k-1},F(z_k)-F(z_{k-1}))$, i.e.\ Broyden or ZMSHR1 on the residual.
+  None of them moves the limit.
+\item \textbf{Soft tangents.} For $\bar\Lambda\neq0$, the matrix is no longer exactly triangular. The fixed points
+  are unchanged, and the rate is perturbed by $\norm{(I-J)\,J}$.
+\end{itemize}
+\end{remark}
+
 \subsection{Restricted secants: why tight coefficient bounds slow ZMSHR1}
 
 \begin{proposition}[restricted spectral bound for ZMSHR1]\label{prop:restrictedzm}

@@ -2,7 +2,7 @@
 
     python -I run_figs.py <run_dir>
 
-Reads run.json, the arrays in <run_dir> (Fortran-ordered .npy: smaps [x,y,z,coil], mask_*, warm [x,y,z,encode],
+Reads run.json, the arrays in <run_dir> (Fortran-ordered .npy: smaps_axial_z<z> [x,y,coil] or smaps [x,y,z,coil], mask_*, warm [x,y,z,encode],
 recon_<tag> [x,y,z,encode,frame], vel_<tag> [x,y,z,component,frame], metrics_<tag>.csv) and the simulator truth from
 run.json["sim_dir"]; writes <run_dir>/figs/*.png and figs/index.md. Velocities are compared on the voxel grid (with
 --gnl the truth at the true positions differs slightly; the driver's RMSE uses the true positions).
@@ -81,11 +81,15 @@ def vimshow(ax, img, title, lim=vlim, cmap="RdBu_r"):
 
 
 # ---------------------------------------------------------------- masks over the warm start
-smaps = np.load(run / "smaps.npy")
+# coil maps: the full stack only with recon_p2np --save-smaps; by default one axial slice [x, y, coil] (smaps_axial_z<z>.npy)
+smaps = np.load(run / "smaps.npy") if (run / "smaps.npy").exists() else None
+sl = sorted(run.glob("smaps_axial_z*.npy"))
+smaps_ax = np.load(sl[0]) if sl else (smaps[:, :, zs, :] if smaps is not None else None)
+smaps_z = int(sl[0].stem.split("_z")[-1]) if sl else zs
 m_sup = np.load(run / "mask_support.npy") > 0.5
 m_map = np.load(run / "mask_maps.npy") > 0.5
 warm = np.load(run / "warm.npy") if (run / "warm.npy").exists() else None
-base = np.abs(warm).sum(axis=3) if warm is not None else np.sqrt((np.abs(smaps) ** 2).sum(axis=3))
+base = np.abs(warm).sum(axis=3) if warm is not None else (np.sqrt((np.abs(smaps) ** 2).sum(axis=3)) if smaps is not None else m_sup.astype(np.float32))
 fig, ax = plt.subplots(2, 2, figsize=(12, 10), gridspec_kw={"width_ratios": [1, 1.4]})
 inner = base * m_map
 for row, log in [(0, False), (1, True)]:
@@ -100,16 +104,18 @@ save(fig, "01_masks.png", "Object support (green) and coil-map mask (cyan) over 
      "The lumen must lie inside the coil-map mask.")
 
 # ---------------------------------------------------------------- coil maps
-nvc = smaps.shape[3]
-fig, ax = plt.subplots(2, nvc, figsize=(1.6 * nvc, 3.6), squeeze=False)
-for c in range(nvc):
-    gshow(ax[0, c], axial(np.abs(smaps[..., c])))
-    ax[1, c].imshow(axial(np.angle(smaps[..., c])), cmap="twilight", vmin=-np.pi, vmax=np.pi, origin="lower")
-    ax[0, c].set_title(f"vc {c}", fontsize=7)
-    for r in range(2):
-        outline(ax[r, c], axial, m_map, "c")
-        ax[r, c].axis("off")
-save(fig, "02_coilmaps.png", "Virtual coil maps (magnitude top, phase bottom), axial slice, after normalisation and masking.")
+if smaps_ax is not None:
+    nvc = smaps_ax.shape[2]
+    ax_z = lambda a: a[:, :, smaps_z].T  # noqa: E731 (the slice the coil maps were saved on)
+    fig, ax = plt.subplots(2, nvc, figsize=(1.6 * nvc, 3.6), squeeze=False)
+    for c in range(nvc):
+        gshow(ax[0, c], np.abs(smaps_ax[..., c]).T)
+        ax[1, c].imshow(np.angle(smaps_ax[..., c]).T, cmap="twilight", vmin=-np.pi, vmax=np.pi, origin="lower")
+        ax[0, c].set_title(f"vc {c}", fontsize=7)
+        for r in range(2):
+            outline(ax[r, c], ax_z, m_map, "c")
+            ax[r, c].axis("off")
+    save(fig, "02_coilmaps.png", f"Virtual coil maps (magnitude top, phase bottom), axial slice z = {smaps_z}, after normalisation and masking.")
 
 # ---------------------------------------------------------------- warm start
 tavg = truth.mean(axis=-1)

@@ -10,7 +10,7 @@ use rayon::prelude::*;
 
 use crate::codec::BlockHeader;
 use crate::integrity::{Hasher, Integrity};
-use crate::format::{chunk_box, copy_sub, decode_blocks, decode_chunk_data, MAGIC, STREAM_HEADER, TAG_BOOL, TAG_CHUNKED, TAG_QCHUNKED, TAG_DICT, TAG_FLOAT, TAG_INT, TAG_LIST, TAG_NONE, TAG_STR, TAG_TENSOR, TAG_TUPLE, VERSION};
+use crate::format::{chunk_box, copy_sub, copy_sub_ptr, Shared, decode_blocks, decode_chunk_data, MAGIC, STREAM_HEADER, TAG_BOOL, TAG_CHUNKED, TAG_QCHUNKED, TAG_DICT, TAG_FLOAT, TAG_INT, TAG_LIST, TAG_NONE, TAG_STR, TAG_TENSOR, TAG_TUPLE, VERSION};
 use crate::{DType, Error, Result, Tensor, Value};
 
 #[derive(Clone, Debug)]
@@ -256,25 +256,22 @@ impl LazyFile {
                         g[d] = ranges[d].0;
                     }
                 }
-                let parts: Vec<(usize, Vec<u8>)> = ids
-                    .par_iter()
-                    .map(|&ci| {
-                        let (off, len) = index[ci];
-                        let mut b = vec![0u8; len as usize];
-                        self.file.read_exact_at(&mut b, data + off)?;
-                        let (_, cext) = chunk_box(ci, grid, chunk, &t.shape);
-                        Ok((ci, decode_chunk_data(t.dtype, *quant, &cext, &b, t.block_size)?))
-                    })
-                    .collect::<Result<_>>()?;
-                for (ci, raw) in parts {
+                let dst = Shared::new(out.bytes_mut());
+                ids.par_iter().try_for_each(|&ci| -> Result<()> {
+                    let (off, len) = index[ci];
+                    let mut b = vec![0u8; len as usize];
+                    self.file.read_exact_at(&mut b, data + off)?;
                     let (clo, cext) = chunk_box(ci, grid, chunk, &t.shape);
+                    let raw = decode_chunk_data(t.dtype, *quant, &cext, &b, t.block_size)?;
                     let a: Vec<usize> = (0..nd).map(|d| clo[d].max(lo[d])).collect();
-                    let b: Vec<usize> = (0..nd).map(|d| (clo[d] + cext[d]).min(hi[d])).collect();
-                    let iext: Vec<usize> = (0..nd).map(|d| b[d] - a[d]).collect();
+                    let e: Vec<usize> = (0..nd).map(|d| (clo[d] + cext[d]).min(hi[d])).collect();
+                    let iext: Vec<usize> = (0..nd).map(|d| e[d] - a[d]).collect();
                     let src_lo: Vec<usize> = (0..nd).map(|d| a[d] - clo[d]).collect();
                     let dst_lo: Vec<usize> = (0..nd).map(|d| a[d] - lo[d]).collect();
-                    copy_sub(&raw, &cext, &src_lo, out.bytes_mut(), &ext, &dst_lo, &iext, es);
-                }
+                    // SAFETY: chunks write disjoint boxes of `out`, which outlives the loop
+                    unsafe { copy_sub_ptr(&raw, &cext, &src_lo, dst.ptr(), dst.len(), &ext, &dst_lo, &iext, es) };
+                    Ok(())
+                })?;
             }
         }
         Ok(out)

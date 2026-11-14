@@ -10,6 +10,7 @@ use hasty_nufft::{build_segments, SegNufft, SegNufftOpts};
 use hasty_recon::checkpoint::{Outcome, RunCtl};
 use hasty_recon::hoststack::{run_objective_host, HostStack};
 use hasty_recon::p2np::{P2np, Precond, Stack};
+use hasty_recon::precond::CirculantPrecond;
 use hasty_recon::setop::{SegSets, SetOp};
 use hasty_testkit::Rng;
 use num_complex::Complex64 as C64;
@@ -62,6 +63,7 @@ fn host_state_matches_device_and_resumes_exactly() {
     let psi = |v: usize, t: f64| om[v] * t;
     let mut pts = vec![];
     let mut taus = vec![];
+    let mut kss: Vec<[Vec<f32>; 3]> = vec![];
     for _ in 0..nsets {
         let mut k: [Vec<f32>; 3] = Default::default();
         let mut tau = vec![];
@@ -80,6 +82,7 @@ fn host_state_matches_device_and_resumes_exactly() {
         let tau32: Vec<f32> = tau.iter().map(|&t| t as f32).collect();
         pts.push(eng.points(&st, [&k[0], &k[1], &k[2]], &tau32, &vec![0f32; m], &[], None).unwrap());
         taus.push(tau);
+        kss.push(k);
     }
     let segs_for = |e: &SegNufft, l: usize| -> Vec<_> {
         taus.iter().map(|tau| {
@@ -108,17 +111,24 @@ fn host_state_matches_device_and_resumes_exactly() {
         st.clone_htod(&h).unwrap()
     }).collect();
     let ysr: Vec<&cudarc::driver::CudaSlice<C32>> = ys.iter().collect();
-    let lam = P2np::new(&mut sets, ysr.clone(), vec![], &st).unwrap().step_norm(&st, false, 30).unwrap();
+    // per-set circulant metrics (the metric preconditioners: chunk-fused host steps against the device solver)
+    let mk_circ = |on: bool| -> Vec<Vec<CirculantPrecond>> {
+        if !on {
+            return vec![];
+        }
+        kss.iter().map(|k| vec![CirculantPrecond::new(&dev, &st, kern.clone(), dims, [&k[0], &k[1], &k[2]], &smaps, nc, 1e-3).unwrap()]).collect()
+    };
     let iters = 14;
-    for pc in [Precond::Zmshr1, Precond::Zmshr1Set, Precond::None] {
+    for pc in [Precond::Zmshr1, Precond::Zmshr1Set, Precond::None, Precond::Circulant, Precond::Zmshr1M, Precond::Zmshr1MSet] {
+        let lam = P2np::new(&mut sets, ysr.clone(), mk_circ(pc.metric()), &st).unwrap().step_norm(&st, pc.metric(), 30).unwrap();
         let xd = {
-            let mut p = P2np::new(&mut sets, ysr.clone(), vec![], &st).unwrap();
+            let mut p = P2np::new(&mut sets, ysr.clone(), mk_circ(pc.metric()), &st).unwrap();
             let mut x = Stack::zeros(&st, nsets, nv).unwrap();
             p.run_from(&st, &mut x, pc, 1.0 / lam, iters, &mut |_, _| {}, &mut |_, _, _| {}, None).unwrap();
             x.v.iter().flat_map(|v| st.clone_dtoh(v).unwrap()).collect::<Vec<C32>>()
         };
         let run_host = |sets: &mut SegSets, ctl: Option<(&RunCtl, &str)>, stop_at: Option<usize>| -> (Vec<C32>, Outcome) {
-            let mut p = P2np::new(sets, ysr.clone(), vec![], &st).unwrap();
+            let mut p = P2np::new(sets, ysr.clone(), mk_circ(pc.metric()), &st).unwrap();
             let mut xh = HostStack::zeros(&vec![nv; nsets]);
             let dir = ctl.map(|(c, _)| c.dir().to_path_buf());
             let mut report = |k: usize, _x: &HostStack, _f: f64| {
@@ -130,9 +140,13 @@ fn host_state_matches_device_and_resumes_exactly() {
             (xh.data.clone(), o)
         };
         let (xh, _) = run_host(&mut sets, None, None);
+        // run-to-run noise of the float atomics (gridding), amplified by the metric's dynamic range (1e3): measured
+        // ≈ 4e-5 (circ) / 1.5e-4 (zmshr1m) host vs device and resumed vs uninterrupted alike, before and after the
+        // chunk-fused metric step (same level: the fusion changes nothing but memory)
+        let tol = if pc.metric() { 1e-3 } else { 1e-4 };
         let e = rel(&xh, &xd);
         println!("{pc:?}: host vs device after {iters} iterations: {e:.2e}");
-        assert!(e < 1e-4, "{pc:?}: host-resident solver differs from the device solver: {e:e}");
+        assert!(e < tol, "{pc:?}: host-resident solver differs from the device solver: {e:e}");
         // stop after iteration 5 (raw checkpoint), resume in a fresh run
         let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("host_state_{pc:?}"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -145,7 +159,7 @@ fn host_state_matches_device_and_resumes_exactly() {
         assert!(!dir.join("state_t.hsk").exists(), "checkpoint not cleared at the end");
         let e = rel(&xr, &xh);
         println!("{pc:?}: stopped at 6 and resumed vs uninterrupted: {e:.2e}");
-        assert!(e < 1e-4, "{pc:?}: resumed run differs: {e:e}");
+        assert!(e < tol, "{pc:?}: resumed run differs: {e:e}");
     }
     // pooled PCG through the objective (the physics-model warm start): both sets measure the same image, so the pooled
     // least-squares solution is ≈ the object (small noise); stop + resume through the raw checkpoint is exact
