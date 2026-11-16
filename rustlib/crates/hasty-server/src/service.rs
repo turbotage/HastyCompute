@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::bank::{Bank, EntryInfo};
 use crate::commands::{Ctx, Registry};
+use crate::jobs::{self, Jobs};
 use crate::pb::hasty_server::Hasty;
 use crate::pb::*;
 use crate::Error;
@@ -20,6 +21,7 @@ use crate::Error;
 pub struct Service {
     pub bank: Arc<Bank>,
     pub registry: Arc<Registry>,
+    pub jobs: Arc<Jobs>,
 }
 
 impl From<Error> for Status {
@@ -169,15 +171,19 @@ impl Hasty for Service {
     }
 
     async fn commands(&self, _: Request<Empty>) -> Result<Response<CommandsResponse>, Status> {
-        Ok(Response::new(CommandsResponse { commands: self.registry.list().into_iter().map(|(name, doc)| CommandInfo { name, doc }).collect() }))
+        let own = jobs::COMMANDS.iter().map(|(n, d)| (n.to_string(), d.to_string()));
+        Ok(Response::new(CommandsResponse { commands: self.registry.list().into_iter().chain(own).map(|(name, doc)| CommandInfo { name, doc }).collect() }))
     }
 
     async fn execute(&self, req: Request<ExecuteRequest>) -> Result<Response<ExecuteResponse>, Status> {
         let r = req.into_inner();
+        if let Some(res) = self.jobs.handle(&r.command, &r.options) {
+            return Ok(Response::new(ExecuteResponse { outputs: vec![], message: res? }));
+        }
         let inputs = r.inputs.iter().map(|i| uuid_of(&Some(i.clone())).and_then(|u| self.bank.value(&u).map_err(Status::from))).collect::<Result<Vec<_>, _>>()?;
         let (bank, reg) = (self.bank.clone(), self.registry.clone());
         let (cmd, opts) = (r.command.clone(), r.options.clone());
-        let (msg, outs) = tokio::task::spawn_blocking(move || reg.run(&cmd, &Ctx { bank }, &opts, &inputs)).await.map_err(|e| Status::internal(e.to_string()))??;
+        let (msg, outs) = tokio::task::spawn_blocking(move || reg.run(&cmd, &Ctx::new(bank), &opts, &inputs)).await.map_err(|e| Status::internal(e.to_string()))??;
         let name = if r.name.is_empty() { r.command.clone() } else { r.name.clone() };
         let n = outs.len();
         let outputs = outs.into_iter().enumerate().map(|(k, v)| Id { value: self.bank.put(&if n > 1 { format!("{name}[{k}]") } else { name.clone() }, v, "{}").as_bytes().to_vec() }).collect();

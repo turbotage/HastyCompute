@@ -22,13 +22,20 @@ label box: heart and great vessels) and one per k³ block outside it — the dir
   T1 / T2* per blood class, field;
 - breathing r(t), ṙ(t) at 1 ms over the scan (motion.Breathing with the phantom's parameters);
 - the body mask (2 mm) for the coil array, prescription (axial: logical = subject axes), isocentre (= FOV centre).
-`--keep-box heart:M | x0,x1,y0,y1,z0,z1 (mm)` (development): tissue and blood sources only inside the box (as if the
+`--keep-box heart:M | great:M | x0,x1,y0,y1,z0,z1 (mm)` (development): tissue and blood sources only inside the box (as if the
 outer volume were suppressed: no arms, small FOV); `heart:M` = the bounding box of the heart and great-vessel labels in
-the slab, dilated by M mm. The FOV becomes the box + 10 mm on every side; the B0 field still comes from the whole body.
+the slab, dilated by M mm; `great:M` adds the vessel graph's great vessels in the slab (radius ≥ 7 mm: the aortic arch, pulmonary
+trunk and cavae, which the atlas labels leave out). The FOV becomes the box + `--keep-box-fov` mm (default 10) on every side: breathing moves the
+box's tissue out of its reference position (≈ 10 mm at the heart, up to 14 mm at the liver dome), and tissue outside the
+reconstruction FOV folds in; the B0 field still comes from the whole body.
 `--src-octree` (multi-resolution sources): label-homogeneous blocks of 8 / 4 / 2 mm outside the heart (and 12 mm around
 it), without vessel lumen, become box elements (edge `size_m`, the block's mean field and its linear gradient
 `field_grad_ppm_m`; simphantom integrates each box analytically: h³ Π sinc(h (k + ∇ω τ) / 2)); every other voxel is a
 1 mm box. Replaces --src-step / --src-step-out.
+`--blood-collapse c`: one blood source per c³ voxels of the blood frames, e.g. 0.5 mm frames (phantom_4d --vox 0.5) → 1 mm
+sources: the children's summed magnetization at their centroid, their weighted mean velocity. phantom_4d's chamber blood
+is binary per voxel; collapsing finer frames integrates the wall partial volume at their resolution, at the 1 mm cost.
+`--blood-frames-keep i,j,…`: only these frames keep their voxels (the others are empty; simphantom asserts if it needs one).
 Writes <out_dir>/sim_input.hv.
 """
 import json
@@ -102,25 +109,45 @@ if opt("--fov", None) == "auto":
 
 # ── development box: tissue / blood only inside it, FOV from it ───────────────────────────────────────────────────
 keep_box = None
+# the full (body) FOV before a keep box replaces it: simphantom --readout-stride auto keeps the per-frame undersampling of
+# the full-FOV protocol (stride = full FOV volume / box FOV volume)
+fov_full = fov.copy()
 if opt("--keep-box", None):
     kb = opt("--keep-box", None)
-    if kb.startswith("heart"):
+    if kb.startswith(("heart", "great")):
         marg = float(kb.split(":")[1]) * 1e-3 if ":" in kb else 0.03
         HID = [ID[n] for n in ("myocardium", "valve", "blood_LA", "blood_LV", "blood_RA", "blood_RV", "blood_artery", "blood_vein", "blood_pulm_artery", "blood_pulm_vein", "vessel_wall")]
         zr_ = slice(None) if slab is None else slice(max(int((slab[0] - o_full[2]) / h), 0), int((slab[1] - o_full[2]) / h) + 1)
         hz_, hy_, hx_ = np.nonzero(np.isin(lab_full[zr_], HID))
         hz_ = hz_ + (zr_.start or 0)
-        lo_ = o_full + np.array([hx_.min(), hy_.min(), hz_.min()]) * h - marg
-        hi_ = o_full + np.array([hx_.max() + 1, hy_.max() + 1, hz_.max() + 1]) * h + marg
+        lo_ = o_full + np.array([hx_.min(), hy_.min(), hz_.min()]) * h
+        hi_ = o_full + np.array([hx_.max() + 1, hy_.max() + 1, hz_.max() + 1]) * h
+        if kb.startswith("great"):
+            # + the great vessels of the vessel graph in the slab (radius ≥ 7 mm: aortic arch, pulmonary trunk, cavae;
+            # the atlas labels stop at the vessel roots), each point with its radius
+            G_ = np.load(PH / "graph.npz")
+            gp_, gr_ = np.asarray(G_["points"], float), np.asarray(G_["radius"], float)
+            sel_ = gr_ >= 7e-3
+            if slab is not None:
+                sel_ &= (gp_[:, 2] >= slab[0]) & (gp_[:, 2] <= slab[1])
+            lo_ = np.minimum(lo_, (gp_[sel_] - gr_[sel_, None]).min(0))
+            hi_ = np.maximum(hi_, (gp_[sel_] + gr_[sel_, None]).max(0))
+        lo_, hi_ = lo_ - marg, hi_ + marg
     else:
         v_ = [float(x) * 1e-3 for x in kb.split(",")]
         lo_, hi_ = np.array(v_[0::2]), np.array(v_[1::2])
     if slab is not None:
         lo_[2], hi_[2] = max(lo_[2], slab[0] - 0.02), min(hi_[2], slab[1] + 0.02)
     keep_box = (lo_, hi_)
-    # no tissue outside the box (outer volume suppressed): the FOV is the box + 10 mm on every side, z included
+    # no tissue outside the box (outer volume suppressed): the FOV is the box + --keep-box-fov mm on every side, z included
+    kb_fov = float(opt("--keep-box-fov", 10)) * 1e-3
+    # never wider than the full protocol's FOV on an axis (z: the slab's 1.3 × already bounds the excited tissue); an axis
+    # clamped to it keeps the full FOV's centre
+    c_full = center.copy()
     center[:] = 0.5 * (lo_ + hi_)
-    fov[:] = hi_ - lo_ + 0.02
+    fov[:] = hi_ - lo_ + 2 * kb_fov
+    cl_ = fov >= fov_full
+    fov[cl_], center[cl_] = fov_full[cl_], c_full[cl_]
     print(f"keep box {np.round(lo_ * 1e3).tolist()}…{np.round(hi_ * 1e3).tolist()} mm (outer volume suppressed): FOV {np.round(fov * 1e3).tolist()} mm at {np.round(center * 1e3, 1).tolist()} mm")
 
 
@@ -325,22 +352,59 @@ def field_at(pos):
     return field[torch.tensor(i[:, 2], device=dev), torch.tensor(i[:, 1], device=dev), torch.tensor(i[:, 0], device=dev)].cpu().numpy()
 
 
+from scipy.spatial import cKDTree  # noqa: E402
+
+BLOOD_IDS = [ID[n] for n in ("blood_LA", "blood_LV", "blood_RA", "blood_RV", "blood_artery", "blood_vein", "blood_pulm_artery", "blood_pulm_vein") if n in ID]
 frames = []
-for fr in B["frames"]:
+# --blood-frames-keep i,j,…: only these frames keep their voxels (the others stay as empty frames, so the frame indexing
+# is unchanged): a windowed simphantom run (--window) prints the frames it uses; e.g. 0.5 mm blood frames, ≈ 0.2 GB each
+keep_fr = {int(x) for x in opt("--blood-frames-keep", "").split(",") if x}
+# --blood-collapse c: one source per c³ voxels of the blood frames (e.g. 0.5 mm frames → 1 mm sources): its
+# magnetization the children's sum, its position their magnetization-weighted centroid, its velocity their weighted
+# mean, its relaxation the largest child's class. The partial volume at the chamber walls (binary per voxel in
+# phantom_4d) is then integrated at the children's resolution, at the 1 mm sources' cost (research/sim_convergence.md)
+collapse = int(opt("--blood-collapse", "1"))
+for fi_, fr in enumerate(B["frames"]):
     idx = np.asarray(fr["idx"]).astype(np.int64)
+    if keep_fr and fi_ not in keep_fr:
+        idx = idx[:0]
+        fr = {**fr, "idx": idx, "label": np.asarray(fr["label"])[:0], "frac": np.asarray(fr["frac"])[:0], "vel": np.asarray(fr["vel"])[:0]}
     pos = np.stack([bo[0] + (idx % bnx + 0.5) * bh, bo[1] + ((idx // bnx) % bny + 0.5) * bh, bo[2] + (idx // (bnx * bny) + 0.5) * bh], 1)
     lb = np.asarray(fr["label"])
     frac = np.asarray(fr["frac"]).astype(np.float32) / 255
     if keep_box is not None:
         ib_ = in_box(pos)
-        pos, lb, frac, fvel_ = pos[ib_], lb[ib_], frac[ib_], np.asarray(fr["vel"])[ib_]
+        idx, pos, lb, frac, fvel_ = idx[ib_], pos[ib_], lb[ib_], frac[ib_], np.asarray(fr["vel"])[ib_]
     else:
         fvel_ = np.asarray(fr["vel"])
-    bl_pd = np.array([tab[n]["pd"] for n in names], np.float32)[lb] * frac * inflow
+    # the blood fraction of a partial-volume voxel is blood: a voxel whose label is a tissue (vessel wall, fat, lung,
+    # myocardium, valve, … at the lumen boundary) takes the blood class of the nearest blood-labelled voxel of the frame
+    # (its PD / T1 / T2*), not the tissue's (lung T2* 0.8 ms, myocardium T1 1.0 s); 14 % of the blood volume at 1 mm
+    lb = np.asarray(lb).copy()
+    isb_ = np.isin(lb, BLOOD_IDS)
+    if (~isb_).any() and isb_.any():
+        _, nn_ = cKDTree(pos[isb_]).query(pos[~isb_], workers=8)
+        lb[~isb_] = lb[isb_][nn_]
+    # magnetization per source in units of a tissue voxel (h³, as the tissue's PD × sstep³): blood voxels of another
+    # size (phantom_4d --vox) carry (bh / h)³
+    bl_pd = np.array([tab[n]["pd"] for n in names], np.float32)[lb] * frac * inflow * np.float32((bh / h) ** 3)
+    if collapse > 1 and len(idx):
+        ix_, iy_, iz_ = idx % bnx, (idx // bnx) % bny, idx // (bnx * bny)
+        cx_, cy_ = (bnx + collapse - 1) // collapse, (bny + collapse - 1) // collapse
+        pk_ = ((iz_ // collapse) * cy_ + iy_ // collapse) * cx_ + ix_ // collapse
+        u_, inv_ = np.unique(pk_, return_inverse=True)
+        w_ = bl_pd.astype(np.float64)
+        W_ = np.bincount(inv_, w_, len(u_))
+        assert (W_ > 0).all(), "blood source without magnetization"
+        pos = (np.stack([np.bincount(inv_, w_ * pos[:, a], len(u_)) for a in range(3)], 1) / W_[:, None])
+        fvel_ = np.stack([np.bincount(inv_, w_ * np.asarray(fvel_[:, a], np.float64), len(u_)) for a in range(3)], 1) / W_[:, None]
+        o_ = np.lexsort((-w_, inv_))
+        lb = lb[o_[np.r_[0, np.flatnonzero(np.diff(inv_[o_])) + 1]]]
+        bl_pd = W_.astype(np.float32)
     frames.append({"tc": float(fr["tc"]), "pos": pos.astype(np.float32), "vel": fvel_.astype(np.float32), "pd": bl_pd,
                    "t1": np.array([tab[n]["t1_s"] for n in names], np.float32)[lb], "t2s": np.array([tab[n]["t2s_s"] for n in names], np.float32)[lb],
                    "field_ppm": field_at(pos).astype(np.float32)})
-print(f"blood frames: {len(frames)}, {np.mean([len(f_['pd']) for f_ in frames]) / 1e6:.2f} M voxels each (voxel {bh * 1e3:.1f} mm) ({time.time() - t0:.0f}s)")
+print(f"blood frames: {len(frames)}, {np.mean([len(f_['pd']) for f_ in frames]) / 1e6:.2f} M voxels each (voxel {bh * collapse * 1e3:.1f} mm{f", collapsed from {bh * 1e3:.1f} mm" if collapse > 1 else ""}) ({time.time() - t0:.0f}s)")
 
 # ── breathing, body mask, prescription ─────────────────────────────────────────────────────────────────────────────
 # field on the reconstruction grid (logical = subject axes, centred, index i ↦ (i − n/2) res)
@@ -356,10 +420,10 @@ r_, rd_ = Breathing(P["seed"], period=bp["period_s"], n=bp["n"], cv_period=bp["c
 body = (lab_full[::2, ::2, ::2] != ID["air"]).astype(np.uint8)
 mo = PH / "motion"
 vf.write(OUT / "sim_input.hv", {
-    "tissue": src, "blood": frames, "blood_voxel_m": bh, "tissue_voxel_m": h,
+    "tissue": src, "blood": frames, "blood_voxel_m": bh * collapse, "tissue_voxel_m": h,
     "breathing": {"dt": 1e-3, "r": r_.astype(np.float32), "rdot": rd_.astype(np.float32)},
     "cardiac_motion": str(mo / "cardiac_motion.hv"), "resp_motion": str(mo / "resp_motion.hv"),
-    "period": float(B["period"]), "presc": {"center": center.tolist(), "fov": fov.tolist(), "res": res, "rot": np.eye(3).tolist(),
+    "period": float(B["period"]), "presc": {"center": center.tolist(), "fov": fov.tolist(), "fov_full": fov_full.tolist(), "res": res, "rot": np.eye(3).tolist(),
               **({"slab": {"center": [float(center[0]), float(center[1]), float(0.5 * (slab[0] + slab[1]))], "thk": float(slab[1] - slab[0]), "normal": [0.0, 0.0, 1.0]}} if slab is not None else {})}, "iso": center.tolist(),
     "body": body, "body_origin_m": (o_full + h / 2).tolist(), "body_voxel_m": 2 * h, "scan_time": scan_time, "phantom": PH.name, "params": json.dumps(P),
     "field_recon": field_recon, "recon_dims_xyz": rd.tolist(),

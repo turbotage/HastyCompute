@@ -22,7 +22,7 @@ from scipy import ndimage
 
 scan = sys.argv[1]
 names = sys.argv[2:]
-z = np.load(os.path.join(scan, "truth_pc_frames.npz"))
+z = np.load(os.path.join(scan, os.environ.get("FRAME_FIT_TRUTH", "truth_pc_frames.npz")))  # FRAME_FIT_TRUTH: a truth of another breathing state
 idx, C, cov = z["idx"], z["c"], z["cov"]
 E, NC = C.shape[1], C.shape[2]
 lum = np.load(os.path.join(scan, "truth_lumen_fraction.npy")) > 0.5
@@ -73,7 +73,7 @@ for nm in names:
         tis = np.random.default_rng(0).choice(tis, min(tis.size, 100000), replace=False)
     for f in range(F):
         if lumen_only:
-            xs = np.asarray(x[:, :, f])
+            xs = np.asarray(x[:idx.size, :, f])  # extended lumen files (extra ROI voxels appended) keep the truth voxels first
         else:
             xs = np.stack([np.asarray(x[..., e, f]).ravel(order="F")[idx] for e in range(E)], 1)
             a = np.stack([np.abs(np.asarray(x[..., e, f]).ravel(order="F")[tis]) for e in range(E)], 0)

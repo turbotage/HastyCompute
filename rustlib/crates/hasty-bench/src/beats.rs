@@ -57,6 +57,8 @@ pub struct BeatLibrary {
     tiles: HashMap<[i64; 3], i64>,
     cache: Mutex<HashMap<(usize, usize), Arc<BinData>>>,
     pub cache_cap: usize,
+    /// per beat file: the blocks (bin, byte offset, cells, samples), from its headers only
+    index: Mutex<HashMap<usize, Arc<Vec<(usize, u64, usize, f32)>>>>,
 }
 
 impl BeatLibrary {
@@ -98,6 +100,7 @@ impl BeatLibrary {
             tiles,
             cache: Mutex::new(HashMap::new()),
             cache_cap: 400,
+            index: Mutex::new(HashMap::new()),
         })
     }
 
@@ -124,25 +127,62 @@ impl BeatLibrary {
         d
     }
 
-    fn load_bin(&self, k: usize, b: usize) -> BinData {
-        // the whole file is small enough to scan (≈ 1 GB per beat at 0.5 mm / 1 mm cells): find the block of bin b
-        let p = self.dir.join(format!("beat_{:04}.bin", self.beats[k]));
-        let raw = std::fs::read(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        let u32at = |o: usize| u32::from_le_bytes([raw[o], raw[o + 1], raw[o + 2], raw[o + 3]]);
-        let mut o = 0;
-        while o + 12 <= raw.len() {
-            let (bb, n) = (u32at(o) as usize, u32at(o + 4) as usize);
-            let samples = f32::from_le_bytes([raw[o + 8], raw[o + 9], raw[o + 10], raw[o + 11]]);
-            let (ci, vi) = (o + 12, o + 12 + 4 * n);
-            let end = vi + 2 * self.nf * n;
-            if bb == b {
-                let cells = (0..n).map(|i| u32at(ci + 4 * i)).collect();
-                let vals = (0..self.nf * n).map(|i| f16(u16::from_le_bytes([raw[vi + 2 * i], raw[vi + 2 * i + 1]]))).collect();
-                return BinData { cells, vals, samples, nf: self.nf };
-            }
-            o = end;
+    /// the blocks of beat file k: (bin, byte offset, cells, samples), read from the 12-byte headers (seeking over the
+    /// blocks), once per beat
+    fn block_index(&self, k: usize) -> Arc<Vec<(usize, u64, usize, f32)>> {
+        use std::io::{Read, Seek, SeekFrom};
+        if let Some(ix) = self.index.lock().unwrap().get(&k) {
+            return ix.clone();
         }
-        BinData { cells: vec![], vals: vec![], samples: 0.0, nf: self.nf }
+        let p = self.dir.join(format!("beat_{:04}.bin", self.beats[k]));
+        let mut f = std::fs::File::open(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+        let len = f.metadata().unwrap().len();
+        let (mut o, mut ix, mut h) = (0u64, vec![], [0u8; 12]);
+        while o + 12 <= len {
+            f.seek(SeekFrom::Start(o)).unwrap();
+            f.read_exact(&mut h).unwrap();
+            let bb = u32::from_le_bytes([h[0], h[1], h[2], h[3]]) as usize;
+            let n = u32::from_le_bytes([h[4], h[5], h[6], h[7]]) as usize;
+            let samples = f32::from_le_bytes([h[8], h[9], h[10], h[11]]);
+            ix.push((bb, o, n, samples));
+            o += 12 + 4 * n as u64 + 2 * (self.nf * n) as u64;
+        }
+        let ix = Arc::new(ix);
+        self.index.lock().unwrap().insert(k, ix.clone());
+        ix
+    }
+
+    fn load_bin(&self, k: usize, b: usize) -> BinData {
+        // only bin b's block (≈ 30 MB) of the beat file (≈ 1.6 GB at 0.5 mm): reading the whole file per bin made a
+        // library beat's moments ≈ 80 s of serial I/O
+        use std::io::{Read, Seek, SeekFrom};
+        let ix = self.block_index(k);
+        let Some(&(_, o, n, samples)) = ix.iter().find(|e| e.0 == b) else {
+            return BinData { cells: vec![], vals: vec![], samples: 0.0, nf: self.nf };
+        };
+        let p = self.dir.join(format!("beat_{:04}.bin", self.beats[k]));
+        let mut f = std::fs::File::open(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+        f.seek(SeekFrom::Start(o + 12)).unwrap();
+        let mut raw = vec![0u8; 4 * n + 2 * self.nf * n];
+        f.read_exact(&mut raw).unwrap();
+        let cells = (0..n).map(|i| u32::from_le_bytes([raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]])).collect();
+        let vi = 4 * n;
+        let vals = (0..self.nf * n).map(|i| f16(u16::from_le_bytes([raw[vi + 2 * i], raw[vi + 2 * i + 1]]))).collect();
+        BinData { cells, vals, samples, nf: self.nf }
+    }
+
+    /// load the given bins of beat k in parallel into the cache (they must fit: cache_cap)
+    pub fn prefetch(&self, k: usize, bins: &[usize]) {
+        use rayon::prelude::*;
+        {
+            let mut c = self.cache.lock().unwrap();
+            if c.len() + bins.len() > self.cache_cap {
+                c.clear();
+            }
+        }
+        bins.par_iter().for_each(|&b| {
+            self.bin(k, b);
+        });
     }
 
     /// moments [NM] at a cell, mixed in time between bins b0 and b1 with weight a (the mixture of the two bins'

@@ -53,6 +53,9 @@ impl Default for SegNufftOpts {
 struct Funcs {
     pad: CudaFunction,
     crop: CudaFunction,
+    /// water + fat images: pad P_l (W + c_l Fa), crop to (W, Fa) ([`SegNufft::forward_wf`])
+    pad_wf: CudaFunction,
+    crop_wf: CudaFunction,
     /// r = −y (residual initialisation of `forward_residual`)
     neg: CudaFunction,
     fwd: CudaFunction,
@@ -69,6 +72,10 @@ pub struct TileCfg {
     pub ppf: usize,
     pub chunk: usize,
     pub max_item: usize,
+    /// register blocking: coils per adjoint thread (divides cpba) and samples per forward lane (divides chunk); 1 =
+    /// one complex MAC per shared-memory load, the original kernels. Single-image and knot kernels only (multi: 1).
+    pub acb: usize,
+    pub fsb: usize,
 }
 
 /// what a shape is fitted for: segments, correction order, frame slots
@@ -77,6 +84,10 @@ struct Shape {
     nseg: usize,
     order: u32,
     nf: usize,
+    /// knot support of the knot-major temporal kernels (segnufft_knot.cu); 0: interval-major / static
+    ks: usize,
+    /// respiratory degree of the 2-D knot kernels (RDEG; −1: 1-D)
+    rdeg: i32,
 }
 
 impl TileCfg {
@@ -91,7 +102,7 @@ impl TileCfg {
         let max_item = env("HASTY_SEG_MAXITEM").unwrap_or(1024);
         // coil groups divide the batch (no idle coil threads); adjoint blocks ≤ 512 threads
         let divisors: Vec<usize> = (1..=cb).filter(|d| cb % d == 0).collect();
-        let cpba = env("HASTY_SEG_CPBA").unwrap_or(*divisors.iter().filter(|&&d| d * sh.nf * tt * tt * tt <= 512).max().unwrap_or(&1)).clamp(1, cb);
+        let cpba = env("HASTY_SEG_CPBA").unwrap_or(*divisors.iter().filter(|&&d| d * sh.nf * tt * tt * tt <= 512 && adj_store_smem(tt.pow(3), d, sh.nseg) <= smax).max().unwrap_or(&1)).clamp(1, cb);
         let fit = |cpbf: usize| Self::fit(sh, tt, cpba, cpbf, ppf, max_item, smax).map_or(0, |t| t.chunk);
         // forward: the divisor with the most (sample, coil) work per staged chunk; ties → more coils per block
         let cpbf = env("HASTY_SEG_CPBF").unwrap_or_else(|| *divisors.iter().filter(|&&d| fit(d) >= 8).max_by_key(|&&d| (d * fit(d), d)).unwrap_or(&1)).clamp(1, cb);
@@ -106,24 +117,44 @@ impl TileCfg {
     /// The shape with the largest chunk that fits `smax` bytes of shared memory (forward blocks whole warps, chunk ≤ 32);
     /// None if nothing fits.
     fn fit(sh: Shape, tt: usize, cpba: usize, cpbf: usize, ppf: usize, max_item: usize, smax: usize) -> Option<Self> {
+        let env = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<usize>().ok());
+        // env-requested blocking, reduced to what the coil group allows
+        let (acb, fsb) = (gcd(cpba, env("HASTY_SEG_ACB").unwrap_or(1).max(1)), env("HASTY_SEG_FSB").unwrap_or(1).max(1));
+        Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, fsb, max_item, smax).or_else(|| Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, 1, max_item, smax))
+    }
+
+    /// [`fit`](Self::fit) with explicit register blocking (acb coils per adjoint thread, fsb samples per forward lane)
+    #[allow(clippy::too_many_arguments)]
+    fn fit_ab(sh: Shape, tt: usize, cpba: usize, cpbf: usize, ppf: usize, acb: usize, fsb: usize, max_item: usize, smax: usize) -> Option<Self> {
         let lanes = ppf * sh.nf;
-        if !ppf.is_power_of_two() || lanes > 32 || tt.pow(3) * sh.nf * cpba > 1024 {
+        if !ppf.is_power_of_two() || lanes > 32 || acb == 0 || fsb == 0 || cpba % acb != 0 || tt.pow(3) * sh.nf * cpba / acb > 1024 {
             return None;
         }
-        let step = 32 / gcd(32, cpbf * lanes);
-        let mut c = 32usize.min(512 / (cpbf * lanes)) / step * step;
+        // largest chunk ≤ 32 (≤ 64 with sample blocking) with whole forward warps and ≤ 512 forward threads
+        let mut c = (if fsb > 1 { 64usize } else { 32 }).min(512 * fsb / (cpbf * lanes));
         while c > 0 {
-            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item };
+            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb, fsb };
             if t.fits(sh, smax) {
                 return Some(t);
             }
-            c -= step;
+            c -= 1;
         }
         None
     }
 
     fn fits(&self, sh: Shape, smax: usize) -> bool {
-        self.smem(sh).iter().all(|&b| b <= smax) && (self.chunk * self.cpbf * self.ppf * sh.nf) % 32 == 0 && self.tt.pow(3) * sh.nf * self.cpba <= 1024
+        let fthreads = self.chunk * self.cpbf * self.ppf * sh.nf;
+        self.smem(sh).iter().all(|&b| b <= smax)
+            && self.chunk % self.fsb == 0
+            && fthreads % self.fsb == 0
+            && (fthreads / self.fsb) % 32 == 0
+            && self.cpba % self.acb == 0
+            && self.tt.pow(3) * sh.nf * self.cpba / self.acb <= 1024
+    }
+
+    /// threads of a (forward, adjoint) tile block
+    fn threads(&self, sh: Shape) -> (usize, usize) {
+        (self.chunk * self.cpbf * self.ppf * sh.nf / self.fsb, self.tt.pow(3) * sh.nf * self.cpba / self.acb)
     }
 
     /// dynamic shared memory (bytes) of the [adjoint, forward] tile kernels (mirrors the kernels' layout)
@@ -137,8 +168,35 @@ impl TileCfg {
         let base = up(st + 4 * self.max_item, 16);
         let gn = sh.nf * self.cpbf * nseg;
         let gts = gn + (2 + 4 - gn % 4) % 4;
-        [base + 8 * c * self.cpba, base + 8 * tt3 * gts]
+        [(base + 8 * c * self.cpba).max(adj_store_smem(tt3, self.cpba, nseg)), base + 8 * tt3 * gts]
     }
+}
+
+/// shared memory of the adjoint's coalesced write-back buffer (`adj_store` in segnufft.cu: [TT3][(cpb · NSEG) | 1] cx)
+fn adj_store_smem(tt3: usize, cpb: usize, nseg: usize) -> usize {
+    8 * tt3 * ((cpb * nseg) | 1)
+}
+
+/// voxels per block of the coalesced pad / crop kernels (PCVB in segnufft.cu): PCVB · (NCH | 1) ≤ 2048, power of two
+fn pcvb(nch: usize) -> usize {
+    let mut v = 32;
+    while v > 4 && v * (nch | 1) > 2048 {
+        v /= 2;
+    }
+    v
+}
+
+/// whether the thread-per-voxel pad / crop kernels are compiled (HASTY_SEG_DEFS contains SEG_PADCROP_DIRECT)
+fn padcrop_direct() -> bool {
+    std::env::var("HASTY_SEG_DEFS").is_ok_and(|d| d.split(',').any(|x| x.trim() == "SEG_PADCROP_DIRECT"))
+}
+
+/// launch shape of the pad / crop kernels for `nv` voxels and `nch` grid channels
+fn lc_padcrop(nv: usize, nch: usize) -> LaunchConfig {
+    if padcrop_direct() {
+        return lc(nv);
+    }
+    LaunchConfig { grid_dim: (nv.div_ceil(pcvb(nch)) as u32, 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 }
 }
 
 /// shared memory a block may use without opting in (every CUDA GPU); `SegNufft` raises it to the device's opt-in limit
@@ -159,7 +217,7 @@ impl TileCfg {
         let sm = up(8 * c * km + if sh.order >= 3 { 4 * NHI * c } else { 0 }, 16);
         let gn = km * sh.nf * self.cpbf * nseg;
         let gts = gn + (2 + 4 - gn % 4) % 4;
-        [base + sm + 8 * c * self.cpba, base + sm + 8 * tt3 * gts]
+        [(base + sm + 8 * c * self.cpba).max(adj_store_smem(tt3, self.cpba, nseg)), base + sm + 8 * tt3 * gts]
     }
 
     fn fits_multi(&self, sh: Shape, km: usize, smax: usize) -> bool {
@@ -176,7 +234,7 @@ impl TileCfg {
         let step = 32 / gcd(32, cpbf * lanes);
         let mut c = 32usize.min(512 / (cpbf * lanes)) / step * step;
         while c > 0 {
-            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item };
+            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb: 1, fsb: 1 };
             if t.fits_multi(sh, km, smax) {
                 return Some(t);
             }
@@ -190,7 +248,7 @@ impl TileCfg {
     fn new_multi(sh: Shape, km: usize, cb: usize, tt: usize, max_item: usize, smax: usize) -> Option<Self> {
         let ppf = (2 / sh.nf).max(1);
         let divisors: Vec<usize> = (1..=cb).filter(|d| cb % d == 0).collect();
-        let cpba = *divisors.iter().filter(|&&d| d * sh.nf * tt.pow(3) * km <= 512).max().unwrap_or(&1);
+        let cpba = *divisors.iter().filter(|&&d| d * sh.nf * tt.pow(3) * km <= 512 && adj_store_smem(tt.pow(3), d, sh.nseg) <= smax).max().unwrap_or(&1);
         let fit = |cpbf: usize| Self::fit_multi(sh, km, tt, cpba, cpbf, ppf, max_item, smax).map_or(0, |t| t.chunk);
         let cpbf = *divisors.iter().filter(|&&d| fit(d) >= 8).max_by_key(|&&d| (d * fit(d), d)).unwrap_or(&1);
         Self::fit_multi(sh, km, tt, cpba, cpbf, ppf, max_item, smax)
@@ -356,6 +414,10 @@ pub struct SegPoints {
     host: Option<Box<PointsHost>>,
     /// identity of the tables (the slot cache key), unique per `points` call
     id: u64,
+    /// knot-major layout (tables of a knot-major engine): the number of frame intervals; 0: interval-major
+    knot: u32,
+    /// 2-D knot tables: respiratory intervals (0: 1-D)
+    nri: u32,
 }
 
 static POINTS_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -587,9 +649,16 @@ pub struct SegNufft {
     pub nseg: usize,
     pub order: u32,
     pub nc: usize,
-    /// frames and frame slots per sample (B-spline degree + 1, 1 for a static image)
+    /// frames and frame slots per sample (B-spline degree + 1, 1 for a static image; 1 for a knot-major engine)
     pub frames: usize,
     pub nf: usize,
+    /// knot-major temporal operator ([`SegNufft::new_temporal`]): knot support (B-spline degree + 1); 0 otherwise
+    pub ks: usize,
+    /// cardiac knots (= frames, except on a 2-D engine where frames = kr × mc), respiratory knots (0: 1-D) and the
+    /// respiratory B-spline degree (−1: 1-D) of [`SegNufft::new_temporal2d`]
+    pub mc: usize,
+    pub kr: usize,
+    pub rdeg: i32,
     /// coils per batch (each grid slot holds nseg × cb channels)
     pub cb: usize,
     /// image voxel size (m), x fastest
@@ -622,6 +691,8 @@ pub struct SegNufft {
     ffts: usize,
     /// in-readout motion warp of the moving voxels, one per frame ([`SegNufft::set_warp`]); None: the plain operator
     warp: Option<(crate::segwarp::WarpFuncs, Vec<crate::segwarp::WarpDev>)>,
+    /// inside forward_wf / adjoint_wf: the image holds [W frames | Fa frames], pad / crop use the water + fat pair
+    wf: bool,
 }
 
 /// Pinned staging buffer of one table slot for packed tables, and the event of its last upload.
@@ -756,7 +827,7 @@ fn lc(n: usize) -> LaunchConfig {
 fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileCfg) -> Result<Arc<CudaModule>, NufftError> {
     let defs = std::env::var("HASTY_SEG_DEFS").unwrap_or_default();
     let src = format!(
-        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n{}",
+        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define PCVB {}\n#define ACB {}\n#define FSB {}\n{}",
         defs.split(',').filter(|d| !d.is_empty()).map(|d| format!("#define {d}\n")).collect::<String>(),
         plan.ker.w,
         plan.ker.beta,
@@ -770,11 +841,15 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
         tc.ppf,
         tc.chunk,
         tc.max_item,
-        include_str!("segnufft.cu")
+        pcvb(cb * sh.nseg),
+        tc.acb,
+        tc.fsb,
+        if sh.ks > 0 { format!("#define KS {}\n#define RDEG {}\n{}\n{}", sh.ks, sh.rdeg, include_str!("segnufft.cu"), include_str!("segnufft_knot.cu")) } else { include_str!("segnufft.cu").to_string() }
     );
     let name = format!(
-        "segnufft{}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}",
+        "segnufft{}{}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}_a{}_s{}",
         defs.replace([',', ' '], "_"),
+        if sh.ks > 0 { format!("_k{}{}", sh.ks, if sh.rdeg >= 0 { format!("r{}", sh.rdeg) } else { String::new() }) } else { String::new() },
         plan.ker.w,
         sh.nseg,
         sh.order,
@@ -785,7 +860,9 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
         tc.cpbf,
         tc.ppf,
         tc.chunk,
-        tc.max_item
+        tc.max_item,
+        tc.acb,
+        tc.fsb
     );
     Ok(dev.load_module(&name, &src, &CompileSettings::default())?)
 }
@@ -794,7 +871,7 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
 fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileCfg) -> (String, String) {
     let defs = std::env::var("HASTY_SEG_DEFS").unwrap_or_default();
     let src = format!(
-        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define KM {}\n{}\n{}",
+        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define KM {}\n#define PCVB {}\n#define ACB 1\n#define FSB 1\n{}\n{}",
         defs.split(',').filter(|d| !d.is_empty()).map(|d| format!("#define {d}\n")).collect::<String>(),
         w,
         beta,
@@ -809,6 +886,7 @@ fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileC
         tc.chunk,
         tc.max_item,
         km,
+        pcvb(cb * sh.nseg),
         include_str!("segnufft.cu"),
         include_str!("segnufft_multi.cu")
     );
@@ -836,30 +914,75 @@ fn compile_multi(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, km: 
     Ok(dev.load_module(&name, &src, &CompileSettings::default())?)
 }
 
+/// names of the (forward, adjoint) tile kernels for a shape: knot-major (segnufft_knot.cu) or interval-major
+fn tile_names(sh: Shape) -> (&'static str, &'static str) {
+    if sh.ks > 0 { ("seg_forward_k", "seg_adjoint_k") } else { ("seg_forward_t", "seg_adjoint_t") }
+}
+
 /// load a tile kernel and allow it `smem` bytes of dynamic shared memory
 fn tile_fn(module: &Arc<CudaModule>, name: &str, smem: usize) -> Result<CudaFunction, NufftError> {
     let f = module.load_function(name)?;
     f.set_attribute(cudarc::driver::sys::CUfunction_attribute_enum::CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, smem as i32)?;
+    kernel_info(&f, name, smem);
     Ok(f)
+}
+
+/// HASTY_SEG_KINFO=1: print a kernel's registers, local memory (spills) and dynamic shared memory
+pub(crate) fn kernel_info(f: &CudaFunction, name: &str, smem: usize) {
+    if std::env::var("HASTY_SEG_KINFO").is_ok_and(|v| v != "0") {
+        eprintln!("    [kinfo] {name}: regs {}, local {} B, static smem {} B, dynamic smem {smem} B", f.num_regs().unwrap_or(-1), f.local_size_bytes().unwrap_or(-1), f.shared_size_bytes().unwrap_or(-1));
+    }
 }
 
 impl SegNufft {
     /// `dims`: image size, x fastest; `res`: voxel size in metres (the quadratic-phase units); `nc`: coils.
     pub fn new(dev: &Device, dims: [usize; 3], res: [f64; 3], nc: usize, opts: SegNufftOpts) -> Result<Self, NufftError> {
-        assert!(opts.frames >= 1 && matches!(opts.bspline, 1 | 3));
+        Self::new_temporal(dev, dims, res, nc, opts, false)
+    }
+
+    /// As [`new`](Self::new); with `knot_major` and `frames > 1` the temporal B-spline operator runs knot-major
+    /// (segnufft_knot.cu): one launch and ONE grid slot per knot (the frames are the knots), instead of one launch per
+    /// frame interval over bspline + 1 resident slots. Same operator up to f32 summation order; the sample tables
+    /// ([`points`](Self::points)) are laid out for it and only valid on knot-major engines. Order ≤ 2, single-image
+    /// path (forward / adjoint / residual); the multi-image, group, fat-map and warp paths return an error.
+    pub fn new_temporal(dev: &Device, dims: [usize; 3], res: [f64; 3], nc: usize, opts: SegNufftOpts, knot_major: bool) -> Result<Self, NufftError> {
+        Self::new_impl(dev, dims, res, nc, opts, knot_major, -1)
+    }
+
+    /// Respiratory × cardiac knots (knot-major, segnufft_knot.cu with RDEG): `opts.frames` = cardiac knots M (periodic
+    /// B-spline of degree `opts.bspline`), `kr` respiratory knots with a non-periodic basis of degree `rdeg` (0: bins,
+    /// one interval per knot; 1: linear hats, kr − 1 intervals). The image holds kr × M knot images, knot (k, b) at
+    /// k · M + b. Sample tables from [`points2d`](Self::points2d). Single-image forward / adjoint / residual (and the
+    /// water + fat pair), order ≤ 2.
+    pub fn new_temporal2d(dev: &Device, dims: [usize; 3], res: [f64; 3], nc: usize, opts: SegNufftOpts, kr: usize, rdeg: u32) -> Result<Self, NufftError> {
+        assert!(opts.frames > 1 && kr >= 1 && rdeg <= 1 && (rdeg == 0 || kr >= 2), "2-D knots: cardiac frames > 1, kr ≥ 1 (≥ 2 for linear), rdeg 0 or 1");
+        let mc = opts.frames;
+        let mut e = Self::new_impl(dev, dims, res, nc, opts, true, rdeg as i32)?;
+        e.mc = mc;
+        e.kr = kr;
+        e.frames = kr * mc;
+        Ok(e)
+    }
+
+    fn new_impl(dev: &Device, dims: [usize; 3], res: [f64; 3], nc: usize, opts: SegNufftOpts, knot_major: bool, rdeg: i32) -> Result<Self, NufftError> {
+        assert!(opts.frames >= 1 && (matches!(opts.bspline, 1 | 3) || (opts.bspline == 0 && knot_major)), "B-spline degree 1 or 3 (0 = bins: knot-major only)");
         assert!(opts.order <= 3, "correction order {} (0, 1, 2 or 3)", opts.order);
-        let nf = if opts.frames > 1 { opts.bspline as usize + 1 } else { 1 };
-        assert!(opts.frames == 1 || opts.frames >= nf, "need at least {nf} frames for B-spline degree {}", opts.bspline);
+        let nfk = if opts.frames > 1 { opts.bspline as usize + 1 } else { 1 };
+        assert!(opts.frames == 1 || opts.frames >= nfk, "need at least {nfk} frames for B-spline degree {}", opts.bspline);
+        let knot = knot_major && opts.frames > 1;
+        assert!(!knot || opts.order <= 2, "knot-major temporal operator: correction order ≤ 2");
+        let (nf, ks) = if knot { (1, nfk) } else { (nfk, 0) };
         let plan = NufftPlan::<f32>::new(dev, &dims, NufftOpts { sigma: opts.sigma, width: Some(opts.width), ntransf: 1, max_grid_bytes: 1, ..Default::default() })?;
         let ge = plan.grid_elems();
         // coil batch: memory budget over all frame slots
         let per_coil = nf * opts.nseg * ge * std::mem::size_of::<C32>();
         let cb = (opts.max_grid_bytes / per_coil).clamp(1, nc.min(16));
-        let sh = Shape { nseg: opts.nseg, order: opts.order, nf };
+        let sh = Shape { nseg: opts.nseg, order: opts.order, nf, ks, rdeg };
         let smax = (dev.ctx.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN)? as usize).max(SMEM_DEFAULT);
         let tc = TileCfg::new(sh, cb, SMEM_DEFAULT);
         let module = compile(dev, &plan, sh, cb, &tc)?;
-        let f = Funcs { pad: module.load_function("seg_pad")?, crop: module.load_function("seg_crop")?, neg: module.load_function("seg_neg")?, fwd: tile_fn(&module, "seg_forward_t", tc.smem(sh)[1])?, adj: tile_fn(&module, "seg_adjoint_t", tc.smem(sh)[0])? };
+        let (fname, aname) = tile_names(sh);
+        let f = Funcs { pad: module.load_function("seg_pad")?, crop: module.load_function("seg_crop")?, pad_wf: module.load_function("seg_pad_wf")?, crop_wf: module.load_function("seg_crop_wf")?, neg: module.load_function("seg_neg")?, fwd: tile_fn(&module, fname, tc.smem(sh)[1])?, adj: tile_fn(&module, aname, tc.smem(sh)[0])? };
         let nch = cb * opts.nseg;
         let gfft = GridFft::new(dev, [plan.nf[0], plan.nf[1], plan.nf[2]], dims, nch)?;
         let stream = dev.default_stream();
@@ -871,6 +994,10 @@ impl SegNufft {
             nc,
             frames: opts.frames,
             nf,
+            ks,
+            mc: opts.frames,
+            kr: 0,
+            rdeg,
             cb,
             res,
             tiles_fwd: tc,
@@ -889,6 +1016,7 @@ impl SegNufft {
             coils_all: None,
             ffts: 0,
             warp: None,
+            wf: false,
         })
     }
 
@@ -902,7 +1030,7 @@ impl SegNufft {
             self.warp = None;
             return Ok(());
         };
-        if ws.len() != self.frames || self.order >= 3 {
+        if ws.len() != self.frames || self.order >= 3 || self.ks > 0 {
             return Err(NufftError::Invalid(format!("set_warp: {} warps for {} frames (order {})", ws.len(), self.frames, self.order)));
         }
         let modes = [self.plan.modes[0], self.plan.modes[1], self.plan.modes[2]];
@@ -926,7 +1054,7 @@ impl SegNufft {
     }
 
     fn shape(&self) -> Shape {
-        Shape { nseg: self.nseg, order: self.order, nf: self.nf }
+        Shape { nseg: self.nseg, order: self.order, nf: self.nf, ks: self.ks, rdeg: self.rdeg }
     }
 
     /// whether the fine-grid transforms are pruned to the image block ([`hasty_fft::PrunedChanFft3`])
@@ -1045,6 +1173,16 @@ impl SegNufft {
                 r[11] = (tt - i as f64) as f32;
             }
         }
+        if self.ks > 0 {
+            // knot-major: one tile list for the set, each tile's entries in interval order, entry = interval << 25 | j
+            assert!(m < 1 << 25 && nfr < 128, "knot-major tables: {m} samples (< 2^25), {nfr} intervals (< 128)");
+            let mut pi = perm.clone();
+            pi.sort_by_key(|&j| ival[j as usize]);   // stable: bin-sorted order within an interval
+            let (mut tl, items, split) = tile_lists(&sc, m, &pi, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, self.tiles_fwd.max_item);
+            tl.iter_mut().for_each(|e| *e |= ival[*e as usize] << 25);
+            let ivals = vec![Interval { first: 0, count: items.len(), split }];
+            return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0 });
+        }
         // tile lists per interval (samples kept in bin-sorted order)
         let mut tl_all: Vec<u32> = Vec::new();
         let mut items_all: Vec<[i32; 4]> = Vec::new();
@@ -1058,7 +1196,7 @@ impl SegNufft {
             tl_all.extend_from_slice(&tl);
             items_all.extend_from_slice(&items);
         }
-        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) })
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: 0, nri: 0 })
     }
 
     fn mdims(&self) -> MDims {
@@ -1077,7 +1215,28 @@ impl SegNufft {
         let nv = self.nv();
         let (md, d, c0_i, ncb_i) = (self.mdims(), self.plan.dims(), c0 as i32, ncb as i32);
         self.gfft.prepare(st, &mut self.slots[slot])?;
-        {
+        if self.wf {
+            let cl = seg.fatc.as_ref().expect("forward_wf needs segments_fat");
+            let (xw, xfat) = (x.slice(f * nv..(f + 1) * nv), x.slice((self.frames + f) * nv..(self.frames + f + 1) * nv));
+            let (gp, _g) = self.slots[slot].device_ptr_mut(st);
+            unsafe {
+                st.launch_builder(&self.f.pad_wf)
+                    .arg(&xw)
+                    .arg(&xfat)
+                    .arg(self.smaps.as_ref().unwrap())
+                    .arg(&seg.segph)
+                    .arg(cl)
+                    .arg(&gp)
+                    .arg(&self.plan.invphi[0])
+                    .arg(&self.plan.invphi[1])
+                    .arg(&self.plan.invphi[2])
+                    .arg(&c0_i)
+                    .arg(&ncb_i)
+                    .arg(&md)
+                    .arg(&d)
+                    .launch(lc_padcrop(nv, self.cb * self.nseg))?;
+            }
+        } else {
             let xf = x.slice(f * nv..(f + 1) * nv);
             let (gp, _g) = self.slots[slot].device_ptr_mut(st);
             unsafe {
@@ -1093,7 +1252,7 @@ impl SegNufft {
                     .arg(&ncb_i)
                     .arg(&md)
                     .arg(&d)
-                    .launch(lc(nv))?;
+                    .launch(lc_padcrop(nv, self.cb * self.nseg))?;
             }
         }
         if let Some(mut wp) = self.warp.take() {
@@ -1133,6 +1292,30 @@ impl SegNufft {
             r?;
         }
         let (gp, _g) = self.slots[slot].device_ptr(st);
+        if self.wf {
+            let cl = seg.fatc.as_ref().expect("adjoint_wf needs segments_fat");
+            let (mut a, mut b) = x.split_at_mut(self.frames * nv);
+            let (mut xw, mut xfat) = (a.slice_mut(f * nv..(f + 1) * nv), b.slice_mut(f * nv..(f + 1) * nv));
+            unsafe {
+                st.launch_builder(&self.f.crop_wf)
+                    .arg(&gp)
+                    .arg(self.smaps.as_ref().unwrap())
+                    .arg(&seg.segph)
+                    .arg(cl)
+                    .arg(&mut xw)
+                    .arg(&mut xfat)
+                    .arg(&self.plan.invphi[0])
+                    .arg(&self.plan.invphi[1])
+                    .arg(&self.plan.invphi[2])
+                    .arg(&c0_i)
+                    .arg(&ncb_i)
+                    .arg(&acc)
+                    .arg(&md)
+                    .arg(&d)
+                    .launch(lc_padcrop(nv, self.cb * self.nseg))?;
+            }
+            return Ok(());
+        }
         let mut xf = x.slice_mut(f * nv..(f + 1) * nv);
         unsafe {
             st.launch_builder(&self.f.crop)
@@ -1148,7 +1331,7 @@ impl SegNufft {
                 .arg(&acc)
                 .arg(&md)
                 .arg(&d)
-                .launch(lc(nv))?;
+                .launch(lc_padcrop(nv, self.cb * self.nseg))?;
         }
         Ok(())
     }
@@ -1224,6 +1407,9 @@ impl SegNufft {
             self.multi.push(ms);
             return r;
         }
+        if self.ks > 0 {
+            return self.forward_knot(st, seg, pts, x, init, y);
+        }
         let (nv, m) = (self.nv(), pts.m);
         assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
         let (fwd, tc) = (self.f.fwd.clone(), self.tiles_fwd);
@@ -1255,9 +1441,13 @@ impl SegNufft {
         if self.order >= 3 {
             return self.adjoint_multi(st, seg, pts, y, &[None], &mut [x]);
         }
+        if self.ks > 0 {
+            return self.adjoint_knot(st, seg, pts, y, x);
+        }
         let (nv, m) = (self.nv(), pts.m);
-        assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
-        st.memset_zeros(&mut x.slice_mut(0..self.frames * nv))?;
+        let nsp = 1 + self.wf as usize;
+        assert!(x.len() >= nsp * self.frames * nv && y.len() >= self.nc * m);
+        st.memset_zeros(&mut x.slice_mut(0..nsp * self.frames * nv))?;
         if let Some((_, wd)) = self.warp.as_mut() {
             for w in wd.iter_mut() {
                 w.zero(st)?;
@@ -1334,7 +1524,7 @@ impl SegNufft {
                 .arg(&c0_i)
                 .arg(&ncb_i)
                 .arg(&d)
-                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpbf) as u32, 1), block_dim: ((tc.chunk * tc.cpbf * tc.ppf * self.nf) as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[1] as u32 })?;
+                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpbf) as u32, 1), block_dim: (tc.threads(self.shape()).0 as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[1] as u32 })?;
         }
         Ok(())
     }
@@ -1361,7 +1551,7 @@ impl SegNufft {
                 .arg(&g)
                 .arg(&addmask)
                 .arg(&d)
-                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpba) as u32, 1), block_dim: ((tc.tt.pow(3) * self.nf * tc.cpba) as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[0] as u32 })?;
+                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpba) as u32, 1), block_dim: (tc.threads(self.shape()).1 as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[0] as u32 })?;
         }
         Ok(())
     }
@@ -1372,8 +1562,9 @@ impl SegNufft {
         assert!(fwd.tt == self.tiles_fwd.tt && adj.tt == fwd.tt && fwd.max_item == self.tiles_fwd.max_item && adj.max_item == fwd.max_item);
         let sh = self.shape();
         assert!(fwd.fits(sh, self.smax) && adj.fits(sh, self.smax), "tile shapes do not fit {sh:?}");
-        self.f.fwd = tile_fn(&compile(&self.dev, &self.plan, sh, self.cb, &fwd)?, "seg_forward_t", fwd.smem(sh)[1])?;
-        self.f.adj = tile_fn(&compile(&self.dev, &self.plan, sh, self.cb, &adj)?, "seg_adjoint_t", adj.smem(sh)[0])?;
+        let (fname, aname) = tile_names(sh);
+        self.f.fwd = tile_fn(&compile(&self.dev, &self.plan, sh, self.cb, &fwd)?, fname, fwd.smem(sh)[1])?;
+        self.f.adj = tile_fn(&compile(&self.dev, &self.plan, sh, self.cb, &adj)?, aname, adj.smem(sh)[0])?;
         self.tiles_fwd = fwd;
         self.tiles_adj = adj;
         Ok(())
@@ -1395,10 +1586,12 @@ impl SegNufft {
         let sh = self.shape();
         let (tt, mi, cb) = (self.tiles_fwd.tt, self.tiles_fwd.max_item, self.cb);
         let ncb = cb.min(self.nc);
+        assert!(self.ks == 0 || pts.knot > 0, "knot-major engine needs tables built by a knot-major engine");
         let busiest = (0..pts.ivals.len()).max_by_key(|&i| pts.ivals[i].count).unwrap();
         let map: Vec<usize> = (0..self.nf).collect();
         let g = self.grids(st, &map);
         let groups = [1usize, 2, 3, 4, 6, 8, 12, 16];
+        let (fname, aname) = tile_names(sh);
         let mut ys = st.alloc_zeros::<C32>(cb * pts.m)?;
         let flags = Some(cudarc::driver::sys::CUevent_flags::CU_EVENT_DEFAULT);
         let ev = (self.dev.ctx.new_event(flags)?, self.dev.ctx.new_event(flags)?);
@@ -1415,24 +1608,27 @@ impl SegNufft {
             Ok(best)
         };
         let mut best_f = (f32::INFINITY, self.tiles_fwd);
+        let env = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<usize>().ok());
+        let fsbs: Vec<usize> = env("HASTY_SEG_FSB").map_or(vec![1, 2, 4], |v| vec![v]);
+        let acbs: Vec<usize> = env("HASTY_SEG_ACB").map_or(vec![1, 2, 4], |v| vec![v]);
         for &cpbf in groups.iter().filter(|&&c| c <= cb) {
-            for ppf in [1usize, 2, 4] {
-                let Some(tc) = TileCfg::fit(sh, tt, self.tiles_adj.cpba, cpbf, ppf, mi, self.smax) else { continue };
+            for (ppf, &fsb) in [1usize, 2, 4].into_iter().flat_map(|p| fsbs.iter().map(move |f| (p, f))) {
+                let Some(tc) = TileCfg::fit_ab(sh, tt, self.tiles_adj.cpba, cpbf, ppf, self.tiles_adj.acb.min(self.tiles_adj.cpba), fsb, mi, self.smax) else { continue };
                 if tc.chunk < 8 {
                     continue;
                 }
-                let f = tile_fn(&compile(&self.dev, &self.plan, sh, cb, &tc)?, "seg_forward_t", tc.smem(sh)[1])?;
-                let t = time(&mut || self.launch_fwd(st, &f, &tc, seg, pts, busiest, g, &mut ys, 0, ncb))?;
+                let f = tile_fn(&compile(&self.dev, &self.plan, sh, cb, &tc)?, fname, tc.smem(sh)[1])?;
+                let t = time(&mut || if self.ks > 0 { self.launch_fwd_k(st, &f, &tc, seg, pts, 0, g, &mut ys, 0, ncb) } else { self.launch_fwd(st, &f, &tc, seg, pts, busiest, g, &mut ys, 0, ncb) })?;
                 if t < best_f.0 {
                     best_f = (t, tc);
                 }
             }
         }
         let mut best_a = (f32::INFINITY, self.tiles_adj);
-        for &cpba in groups.iter().filter(|&&c| c <= cb) {
-            let Some(tc) = TileCfg::fit(sh, tt, cpba, best_f.1.cpbf, best_f.1.ppf, mi, self.smax) else { continue };
-            let f = tile_fn(&compile(&self.dev, &self.plan, sh, cb, &tc)?, "seg_adjoint_t", tc.smem(sh)[0])?;
-            let t = time(&mut || self.launch_adj(st, &f, &tc, seg, pts, busiest, g, 0, &ys, 0, ncb))?;
+        for (cpba, &acb) in groups.iter().filter(|&&c| c <= cb).flat_map(|&c| acbs.iter().map(move |a| (c, a))) {
+            let Some(tc) = TileCfg::fit_ab(sh, tt, cpba, best_f.1.cpbf, best_f.1.ppf, acb, best_f.1.fsb, mi, self.smax) else { continue };
+            let f = tile_fn(&compile(&self.dev, &self.plan, sh, cb, &tc)?, aname, tc.smem(sh)[0])?;
+            let t = time(&mut || if self.ks > 0 { self.launch_adj_k(st, &f, &tc, seg, pts, 0, g, 0, &ys, 0, ncb) } else { self.launch_adj(st, &f, &tc, seg, pts, busiest, g, 0, &ys, 0, ncb) })?;
             if t < best_a.0 {
                 best_a = (t, tc);
             }
@@ -1650,6 +1846,9 @@ impl SegNufft {
 
     /// the multi-image state for `k` images (planned and built on first use)
     fn multi_index(&mut self, st: &Arc<CudaStream>, k: usize) -> Result<usize, NufftError> {
+        if self.ks > 0 {
+            return Err(NufftError::Invalid("knot-major engine: the multi-image / fat / order-3 paths are not available".into()));
+        }
         if let Some(i) = self.multi.iter().position(|m| m.k == k) {
             return Ok(i);
         }
@@ -1744,7 +1943,7 @@ impl SegNufft {
                     .arg(&ncb_i)
                     .arg(&md)
                     .arg(&d)
-                    .launch(lc(nv))?;
+                    .launch(lc_padcrop(nv, ms.cb * self.nseg))?;
             }
         } else {
             let xf = x.slice(f * nv..(f + 1) * nv);
@@ -1762,7 +1961,7 @@ impl SegNufft {
                     .arg(&ncb_i)
                     .arg(&md)
                     .arg(&d)
-                    .launch(lc(nv))?;
+                    .launch(lc_padcrop(nv, ms.cb * self.nseg))?;
             }
         }
         ms.fft.as_ref().unwrap_or(&self.gfft).forward(st, &mut view)?;
@@ -1802,7 +2001,7 @@ impl SegNufft {
                     .arg(&acc)
                     .arg(&md)
                     .arg(&d)
-                    .launch(lc(nv))?;
+                    .launch(lc_padcrop(nv, ms.cb * self.nseg))?;
             }
             return Ok(());
         }
@@ -1820,7 +2019,7 @@ impl SegNufft {
                 .arg(&acc)
                 .arg(&md)
                 .arg(&d)
-                .launch(lc(nv))?;
+                .launch(lc_padcrop(nv, ms.cb * self.nseg))?;
         }
         Ok(())
     }
@@ -2217,7 +2416,7 @@ mod multi_tests {
         for order in 0..=3u32 {
             for nf in [1usize, 2, 4] {
                 for nseg in [1usize, 8, 16, 24] {
-                    let sh = Shape { nseg, order, nf };
+                    let sh = Shape { nseg, order, nf, ks: 0, rdeg: -1 };
                     for km in 1..=MULTI_KMAX {
                         let tc = TileCfg::new_multi(sh, km, 4, 4, 1024, 99 * 1024);
                         if let Some(tc) = tc {
@@ -2249,7 +2448,7 @@ mod multi_tests {
         let dir = std::env::var("HASTY_SEG_MULTI_SRC").ok();
         for order in 0..=3u32 {
             for (nf, km) in [(1usize, 1usize), (1, 2), (2, 3), (4, 4)] {
-                let sh = Shape { nseg: 8, order, nf };
+                let sh = Shape { nseg: 8, order, nf, ks: 0, rdeg: -1 };
                 let tc = TileCfg::new_multi(sh, km, 4, 4, 1024, 99 * 1024).unwrap();
                 let (src, name) = multi_source(10, 23.0, sh, 4, km, &tc);
                 assert!(src.contains("seg_forward_mt") && src.contains("seg_adjoint_mt") && src.contains(&format!("#define KM {km}\n")));
@@ -2397,6 +2596,8 @@ fn fill_slot(on: &Arc<CudaStream>, src: &SegPoints, slot: &mut Option<SegPoints>
             hi,
             host: None,
             id: 0,
+            knot: 0,
+            nri: 0,
         });
     }
     let s = slot.as_mut().unwrap();
@@ -2425,6 +2626,8 @@ fn fill_slot(on: &Arc<CudaStream>, src: &SegPoints, slot: &mut Option<SegPoints>
     assert!(h.hi.is_some() || s.hi.is_none(), "streamed tables: order-3 and plain sample tables mixed on one engine");
     s.ivals = src.ivals.clone();
     s.m = src.m;
+    s.knot = src.knot;
+    s.nri = src.nri;
     Ok(bytes)
 }
 
@@ -2457,6 +2660,8 @@ impl SegNufft {
                 hi: hi.map(|(a, b)| -> Result<_, NufftError> { Ok((st.alloc_zeros::<f32>(a)?, st.alloc_zeros::<f32>(b)?)) }).transpose()?,
                 host: None,
                 id: 0,
+                knot: 0,
+                nri: 0,
             });
             s.owner[i] = None;
             s.ready[i] = None;
@@ -2757,6 +2962,9 @@ impl SegNufft {
     #[allow(clippy::too_many_arguments)]
     fn group_fwd(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], x: &CudaSlice<C32>, init: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
         let n = pts.len();
+        if self.ks > 0 {
+            return Err(NufftError::Invalid("knot-major engine: group calls are not available (merge the members' samples into one set)".into()));
+        }
         assert!(n >= 1 && ys.len() == n && init.is_none_or(|d| d.len() == n), "group of {n} point sets, {} outputs, {:?} data", ys.len(), init.map(|d| d.len()));
         assert!(x.len() >= self.frames * self.nv());
         for j in 0..n {
@@ -2820,6 +3028,9 @@ impl SegNufft {
     #[allow(clippy::too_many_arguments)]
     fn group_adj(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
         let n = pts.len();
+        if self.ks > 0 {
+            return Err(NufftError::Invalid("knot-major engine: group calls are not available (merge the members' samples into one set)".into()));
+        }
         assert!(n >= 1 && ys.len() == n, "group of {n} point sets, {} inputs", ys.len());
         let nv = self.nv();
         assert!(x.len() >= self.frames * nv);
@@ -2904,5 +3115,216 @@ impl SegNufft {
             c0 += ncb;
         }
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------- knot-major temporal operator (segnufft_knot.cu)
+impl SegNufft {
+    /// forward of a knot-major engine: per coil batch, per knot b: pad + FFT of x_b into the one slot, gather of the
+    /// samples of b's support with weights β_b(t)
+    fn forward_knot(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, init: Option<&CudaSlice<C32>>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        let (nv, m) = (self.nv(), pts.m);
+        assert!(pts.knot as usize == self.mc && (self.kr == 0) == (pts.nri == 0), "knot-major engine of {} cardiac knots (2-D: {}), tables of {} intervals ({} respiratory)", self.mc, self.kr, pts.knot, pts.nri);
+        assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
+        let (fwd, tc) = (self.f.fwd.clone(), self.tiles_fwd);
+        let g = self.grids(st, &[0]);
+        let mut c0 = 0;
+        while c0 < self.nc {
+            let ncb = self.cb.min(self.nc - c0);
+            self.init_rows(st, init, y, c0 * m, (c0 + ncb) * m)?;
+            for b in 0..self.frames {
+                self.load_frame(st, seg, 0, x, b, c0, ncb)?;
+                self.launch_fwd_k(st, &fwd, &tc, seg, pts, b, g, y, c0, ncb)?;
+            }
+            c0 += ncb;
+        }
+        Ok(())
+    }
+
+    /// adjoint of a knot-major engine: per coil batch, per knot b: scatter of b's support into the one slot (store;
+    /// split tile lists: zeroed slot, atomics), inverse FFT + crop into x_b
+    fn adjoint_knot(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        let (nv, m) = (self.nv(), pts.m);
+        assert!(pts.knot as usize == self.mc && (self.kr == 0) == (pts.nri == 0), "knot-major engine of {} cardiac knots (2-D: {}), tables of {} intervals ({} respiratory)", self.mc, self.kr, pts.knot, pts.nri);
+        let nsp = 1 + self.wf as usize;
+        assert!(x.len() >= nsp * self.frames * nv && y.len() >= self.nc * m);
+        st.memset_zeros(&mut x.slice_mut(0..nsp * self.frames * nv))?;
+        let (adj, tc) = (self.f.adj.clone(), self.tiles_adj);
+        let split = pts.ivals[0].split;
+        let mut c0 = 0;
+        while c0 < self.nc {
+            let ncb = self.cb.min(self.nc - c0);
+            for b in 0..self.frames {
+                if split {
+                    st.memset_zeros(&mut self.slots[0])?;
+                }
+                let g = self.grids(st, &[0]);
+                self.launch_adj_k(st, &adj, &tc, seg, pts, b, g, split as i32, y, c0, ncb)?;
+                self.flush_frame(st, seg, 0, x, b, c0, ncb)?;
+            }
+            c0 += ncb;
+        }
+        Ok(())
+    }
+
+    /// knot-b gather for coils c0..c0+ncb: y[c0.., :] += β_b A_tiles(slot)
+    #[allow(clippy::too_many_arguments)]
+    fn launch_fwd_k(&self, st: &Arc<CudaStream>, f: &CudaFunction, tc: &TileCfg, seg: &SegSegments, pts: &SegPoints, b: usize, g: Grids, y: &mut CudaSlice<C32>, c0: usize, ncb: usize) -> Result<(), NufftError> {
+        let iv = pts.ivals[0];
+        if iv.count == 0 {
+            return Ok(());
+        }
+        let (t0, dt, ntab, m_i, c0_i, ncb_i, d) = (seg.tab.1, seg.tab.2, seg.tab.0 as i32, pts.m as i32, c0 as i32, ncb as i32, self.plan.dims());
+        let (b_i, nint, nri) = (b as i32, pts.knot as i32, pts.nri as i32);
+        let items = pts.items.slice(0..4 * iv.count);
+        let (yp, _gy) = y.device_ptr_mut(st);
+        unsafe {
+            st.launch_builder(f)
+                .arg(&pts.rec)
+                .arg(&pts.tl)
+                .arg(&items)
+                .arg(&seg.atab)
+                .arg(&ntab)
+                .arg(&t0)
+                .arg(&dt)
+                .arg(&g)
+                .arg(&b_i)
+                .arg(&nint)
+                .arg(&nri)
+                .arg(&yp)
+                .arg(&m_i)
+                .arg(&c0_i)
+                .arg(&ncb_i)
+                .arg(&d)
+                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpbf) as u32, 1), block_dim: (tc.threads(self.shape()).0 as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[1] as u32 })?;
+        }
+        Ok(())
+    }
+
+    /// knot-b scatter for coils c0..c0+ncb into the slot (bit 0 of `addmask`: add instead of store)
+    #[allow(clippy::too_many_arguments)]
+    fn launch_adj_k(&self, st: &Arc<CudaStream>, f: &CudaFunction, tc: &TileCfg, seg: &SegSegments, pts: &SegPoints, b: usize, g: Grids, addmask: i32, y: &CudaSlice<C32>, c0: usize, ncb: usize) -> Result<(), NufftError> {
+        let iv = pts.ivals[0];
+        let (t0, dt, ntab, m_i, c0_i, ncb_i, d) = (seg.tab.1, seg.tab.2, seg.tab.0 as i32, pts.m as i32, c0 as i32, ncb as i32, self.plan.dims());
+        let (b_i, nint, nri) = (b as i32, pts.knot as i32, pts.nri as i32);
+        let items = pts.items.slice(0..4 * iv.count);
+        unsafe {
+            st.launch_builder(f)
+                .arg(&pts.rec)
+                .arg(&pts.tl)
+                .arg(&items)
+                .arg(&seg.atab)
+                .arg(&ntab)
+                .arg(&t0)
+                .arg(&dt)
+                .arg(y)
+                .arg(&m_i)
+                .arg(&c0_i)
+                .arg(&ncb_i)
+                .arg(&g)
+                .arg(&b_i)
+                .arg(&nint)
+                .arg(&nri)
+                .arg(&addmask)
+                .arg(&d)
+                .launch(LaunchConfig { grid_dim: (iv.count as u32, ncb.div_ceil(tc.cpba) as u32, 1), block_dim: (tc.threads(self.shape()).1 as u32, 1, 1), shared_mem_bytes: tc.smem(self.shape())[0] as u32 })?;
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------- water + fat as separate images
+impl SegNufft {
+    fn wf_check(&self, seg: &SegSegments, x_len: usize) -> Result<(), NufftError> {
+        if seg.fatc.is_none() || self.order >= 3 || self.warp.is_some() {
+            return Err(NufftError::Invalid("forward_wf / adjoint_wf: need segments_fat, order ≤ 2, no warp".into()));
+        }
+        if x_len < 2 * self.frames * self.nv() {
+            return Err(NufftError::Invalid(format!("forward_wf / adjoint_wf: image of {x_len} values, need 2 × {} × {}", self.frames, self.nv())));
+        }
+        Ok(())
+    }
+
+    /// Water and fat as separate unknowns on the joint segments ([`segments_fat`](Self::segments_fat)): x holds
+    /// [W frames | Fa frames] (2 × frames × nv) and the pad forms S_c P_l (W + c_l Fa), one transform per channel as
+    /// for one image. Equal to [`forward_fat`](Self::forward_fat) with W = (1 − f) x, Fa = f x, but with nothing
+    /// time-dependent before the transform, so the temporal knots (interval- or knot-major) are shared exactly.
+    /// Single-image path (order ≤ 2).
+    pub fn forward_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.wf_check(seg, x.len())?;
+        self.wf = true;
+        let r = self.forward_in(st, seg, pts, x, None, y);
+        self.wf = false;
+        r
+    }
+
+    /// r = A_wf x − y (fused residual of [`forward_wf`](Self::forward_wf))
+    pub fn forward_residual_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &CudaSlice<C32>, r: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.wf_check(seg, x.len())?;
+        self.wf = true;
+        let res = self.forward_in(st, seg, pts, x, Some(y), r);
+        self.wf = false;
+        res
+    }
+
+    /// (W, Fa) = A_wfᴴ y, the adjoint of [`forward_wf`](Self::forward_wf), into x = [W frames | Fa frames]
+    pub fn adjoint_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.wf_check(seg, x.len())?;
+        self.wf = true;
+        let r = self.adjoint(st, seg, pts, y, x);
+        self.wf = false;
+        r
+    }
+}
+
+// ---------------------------------------------------------------- 2-D knot tables
+impl SegNufft {
+    /// Sample tables of a 2-D knot engine ([`new_temporal2d`](Self::new_temporal2d)): as [`points`](Self::points) with
+    /// `t` the cardiac time in cardiac-knot units (periodic over M), plus per sample the respiratory interval `ri`
+    /// (< kr for bins, < kr − 1 for linear) and the fraction `rv` ∈ [0, 1] within it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn points2d(&mut self, st: &Arc<CudaStream>, coords: [&[f32]; 3], tau: &[f32], phi0: &[f32], dc: &[f32], t: &[f32], ri: &[u32], rv: &[f32]) -> Result<SegPoints, NufftError> {
+        assert!(self.kr > 0, "points2d needs a 2-D knot engine");
+        let m = coords[0].len();
+        assert!(tau.len() == m && phi0.len() == m && t.len() == m && ri.len() == m && rv.len() == m);
+        let nri = if self.rdeg == 0 { self.kr } else { self.kr - 1 };
+        let mc = self.mc;
+        assert!(m < 1 << 25 && nri * mc < 128, "2-D knot tables: {m} samples (< 2^25), {nri} × {mc} interval keys (< 128)");
+        let dcd: Vec<CudaSlice<f32>> = coords.iter().map(|c| st.clone_htod(*c)).collect::<Result<_, _>>()?;
+        self.plan.set_points(st, &[&dcd[0], &dcd[1], &dcd[2]], m)?;
+        let p = self.plan.points().unwrap();
+        let (sc, perm) = (st.clone_dtoh(&p.sc)?, st.clone_dtoh(&p.perm)?);
+        let w = self.plan.ker.w as f64;
+        let g: [f64; 3] = [0, 1, 2].map(|a| self.res[a] * self.plan.nf[a] as f64 / (std::f64::consts::PI * w));
+        let fac = [g[0] * g[0], g[1] * g[1], g[2] * g[2], 2.0 * g[0] * g[1], 2.0 * g[0] * g[2], 2.0 * g[1] * g[2]];
+        if self.order >= 1 {
+            assert_eq!(dc.len(), 6 * m);
+        }
+        let mut key = vec![0u32; m];
+        let mut rec = vec![0f32; 12 * m];
+        for j in 0..m {
+            let r = &mut rec[12 * j..12 * j + 12];
+            r[..3].copy_from_slice(&[sc[j], sc[m + j], sc[2 * m + j]]);
+            r[3] = tau[j];
+            r[4] = phi0[j];
+            if self.order >= 1 {
+                for q in 0..6 {
+                    r[5 + q] = (dc[q * m + j] as f64 * fac[q]) as f32;
+                }
+            }
+            let tt = (t[j] as f64).rem_euclid(mc as f64);
+            let ic = (tt.floor() as usize).min(mc - 1);
+            let u = ((tt - ic as f64) * 65535.0).round().clamp(0.0, 65535.0) as u32;
+            let v = (rv[j].clamp(0.0, 1.0) as f64 * 65535.0).round() as u32;
+            r[11] = f32::from_bits((u << 16) | v);
+            assert!((ri[j] as usize) < nri, "sample {j}: respiratory interval {} of {nri}", ri[j]);
+            key[j] = ri[j] * mc as u32 + ic as u32;
+        }
+        let mut pi = perm.clone();
+        pi.sort_by_key(|&j| key[j as usize]);
+        let (mut tl, items, split) = tile_lists(&sc, m, &pi, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, self.tiles_fwd.max_item);
+        tl.iter_mut().for_each(|e| *e |= key[*e as usize] << 25);
+        let ivals = vec![Interval { first: 0, count: items.len(), split }];
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32 })
     }
 }

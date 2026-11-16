@@ -166,6 +166,13 @@ fn cardinal_bspline(x: f64, p: usize) -> f64 {
 /// skipped). Parallel over (encode, voxel chunk): every task reads its chunk of the nin input sets and writes its chunk
 /// of the nout output sets (disjoint).
 pub fn apply_sets(w: &[f32], nout: usize, nin: usize, ne: usize, nv: usize, src: &[C32], dst: &mut [C32]) {
+    apply_sets_into(w, nout, nin, ne, nv, src, dst, false)
+}
+
+/// [`apply_sets`], or with `add` dst[o · ne + e] += Σ_i w[o, i] src[i · ne + e] (accumulated over calls on blocks of
+/// the input sets)
+#[allow(clippy::too_many_arguments)]
+pub fn apply_sets_into(w: &[f32], nout: usize, nin: usize, ne: usize, nv: usize, src: &[C32], dst: &mut [C32], add: bool) {
     assert_eq!(w.len(), nout * nin);
     assert_eq!(src.len(), nin * ne * nv, "apply_sets: input stack size");
     assert_eq!(dst.len(), nout * ne * nv, "apply_sets: output stack size");
@@ -189,7 +196,14 @@ pub fn apply_sets(w: &[f32], nout: usize, nin: usize, ne: usize, nv: usize, src:
             }
             // SAFETY: (o, e, q0..q1) ranges of different jobs are disjoint
             let d = unsafe { std::slice::from_raw_parts_mut((dp as *mut C32).add((o * ne + e) * nv + q0), len) };
-            d.copy_from_slice(&acc);
+            if add {
+                for (dv, a) in d.iter_mut().zip(&acc) {
+                    dv.re += a.re;
+                    dv.im += a.im;
+                }
+            } else {
+                d.copy_from_slice(&acc);
+            }
         }
     });
 }
@@ -227,6 +241,10 @@ pub struct Subspace<'a> {
     rep: Vec<usize>,
     x: HostStack,
     gx: HostStack,
+    /// frame-block size of the streamed gradient (bytes per block buffer; see [`Objective::gradient_host`] below)
+    pub block_bytes: usize,
+    xb: Vec<C32>,
+    gb: Vec<C32>,
 }
 
 impl<'a> Subspace<'a> {
@@ -238,7 +256,45 @@ impl<'a> Subspace<'a> {
         let bt = basis.transpose();
         let norms2 = basis.col_norms2();
         let rep = (0..basis.nk).map(|k| (0..basis.nf).max_by(|&a, &b| basis.b[a * basis.nk + k].abs().total_cmp(&basis.b[b * basis.nk + k].abs())).unwrap()).collect();
-        Self { inner, basis, ne, nv, bt, norms2, rep, x: HostStack::default(), gx: HostStack::default() }
+        Self { inner, basis, ne, nv, bt, norms2, rep, x: HostStack::default(), gx: HostStack::default(), block_bytes: 2 << 30, xb: Vec::new(), gb: Vec::new() }
+    }
+
+    /// The gradient through frame blocks: frames f0..f1 (sets f · ne + e) synthesised into a block buffer, their
+    /// gradient by the inner objective's subset form, g (+)= B[f0..f1, :]ᵀ g_block. Two block buffers instead of two
+    /// full frame stacks (1 mm box: 2 × 17.8 GiB → 2 × 1.9 GiB). None when the inner objective has no subset form.
+    fn gradient_blocks(&mut self, st: &Arc<CudaStream>, c: &HostStack, g: &mut HostStack, fb: usize) -> Result<Option<f64>, Error> {
+        let (nf, nk, ne, nv) = (self.basis.nf, self.basis.nk, self.ne, self.nv);
+        let nsets = nf * ne;
+        let mut f = 0.0;
+        let mut f0 = 0;
+        while f0 < nf {
+            let f1 = (f0 + fb).min(nf);
+            let nb = f1 - f0;
+            let sets: Vec<usize> = (f0 * ne..f1 * ne).collect();
+            // host stacks over all sets, data only in the block's (contiguous, frame-major: the apply_sets layout)
+            let mut lens = vec![0usize; nsets];
+            sets.iter().for_each(|&t| lens[t] = nv);
+            let off: Vec<usize> = lens.iter().scan(0, |a, &n| { let o = *a; *a += n; Some(o) }).collect();
+            let mut xs = HostStack { data: std::mem::take(&mut self.xb), off: off.clone(), lens: lens.clone() };
+            let mut gs = HostStack { data: std::mem::take(&mut self.gb), off, lens };
+            xs.data.resize(nb * ne * nv, C32::new(0.0, 0.0));
+            gs.data.resize(nb * ne * nv, C32::new(0.0, 0.0));
+            apply_sets(&self.basis.b[f0 * nk..f1 * nk], nb, nk, ne, nv, &c.data, &mut xs.data);
+            let r = self.inner.gradient_host_sets(st, &sets, &xs, &mut gs);
+            let fp = match r {
+                Ok(Some(v)) => v,
+                other => {
+                    (self.xb, self.gb) = (xs.data, gs.data);
+                    return other;
+                }
+            };
+            f += fp;
+            let wt: Vec<f32> = (0..nk).flat_map(|k| (f0..f1).map(move |fr| (k, fr))).map(|(k, fr)| self.bt[k * nf + fr]).collect();
+            apply_sets_into(&wt, nk, nb, ne, nv, &gs.data, &mut g.data, f0 > 0);
+            (self.xb, self.gb) = (xs.data, gs.data);
+            f0 = f1;
+        }
+        Ok(Some(f))
     }
 
     /// coefficient-stack set lengths
@@ -304,9 +360,17 @@ impl Objective for Subspace<'_> {
         let mut id = std::collections::HashMap::new();
         Some((0..nc).map(|t| { let r = uf.find(t); let n = id.len(); *id.entry(r).or_insert(n) }).collect())
     }
+    /// frame blocks of ≤ `block_bytes` when the frame stack is larger than one block and the inner objective streams
+    /// subsets of sets; else (or without the subset form) full frame stacks x = T c and ∇f(x)
     fn gradient_host(&mut self, st: &Arc<CudaStream>, c: &HostStack, g: &mut HostStack) -> Result<f64, Error> {
-        self.scratch();
         let (nf, nk, ne, nv) = (self.basis.nf, self.basis.nk, self.ne, self.nv);
+        let fb = (self.block_bytes / (ne * nv * 8).max(1)).clamp(1, nf);
+        if fb < nf && self.x.lens.is_empty() {
+            if let Some(f) = self.gradient_blocks(st, c, g, fb)? {
+                return Ok(f);
+            }
+        }
+        self.scratch();
         apply_sets(&self.basis.b, nf, nk, ne, nv, &c.data, &mut self.x.data);
         let f = self.inner.gradient_host(st, &self.x, &mut self.gx)?;
         apply_sets(&self.bt, nk, nf, ne, nv, &self.gx.data, &mut g.data);

@@ -139,3 +139,12 @@ main {
 .litegraph.litecontextmenu .litemenu-entry:hover {
     background: #1e2840 !important;
 }
+
+/* ── Graph name, save state, run banner ──────────────────── */
+.graph-name {
+    background: #0e1218; border: 1px solid #1e2330; color: #9ab8d0; font-size: 0.8rem;
+    padding: 2px 8px; border-radius: 4px; width: 14rem; margin-left: 0.6rem;
+}
+.graph-name:focus { outline: none; border-color: #4a78a0; }
+.mono-status { font: 0.68rem monospace; color: #4a6078; }
+.run-banner { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #c8a040; margin-right: 0.8rem; }

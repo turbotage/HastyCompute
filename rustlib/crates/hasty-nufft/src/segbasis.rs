@@ -433,6 +433,9 @@ pub fn build_segments_svd_fat_union_g(
     assert!(nseg >= 1 && nseg <= ns);
     assert_eq!(w_water.len(), nf);
     assert_eq!(w_fat.len(), nf);
+    let timers = std::env::var("HASTY_SEG_TIMERS").is_ok();
+    let t_start = std::time::Instant::now();
+    let lap = |what: &str| if timers { eprintln!("    [seg timer] {what}: {:.1}s", t_start.elapsed().as_secs_f64()) };
     let st: Vec<f64> = tw.iter().map(|&x| x.max(0.0).sqrt()).collect();
     let cts: Vec<Complex64> = ts.iter().map(|&t| c(t)).collect();
     // union Gram (upper triangle, chunked over the fit voxels)
@@ -478,6 +481,7 @@ pub fn build_segments_svd_fat_union_g(
     let mut order: Vec<usize> = (0..ns).collect();
     order.sort_by(|&a, &b| eig.eigenvalues[b].partial_cmp(&eig.eigenvalues[a]).unwrap());
     let vl = DMatrix::<Complex64>::from_fn(ns, nseg, |i, l| eig.eigenvectors[(i, order[l])]);
+    lap("union Gram + eigen");
     // water coefficients of every voxel; water and fat coefficients of the fit voxels
     let coef = |v: usize, fat: bool| -> Vec<Complex64> {
         let gv: Vec<Complex64> = ts.iter().enumerate().map(|(i, &t)| g(v, t) * st[i] * if fat { cts[i] } else { Complex64::new(1.0, 0.0) }).collect();
@@ -491,6 +495,7 @@ pub fn build_segments_svd_fat_union_g(
         }
     }
     let fat_rows: Vec<Vec<Complex64>> = fit_voxels.par_iter().map(|&v| coef(v, true)).collect();
+    lap("projection of all voxels (diagonals)");
     let sw = |r: usize| if r < nf { w_water[r].max(0.0).sqrt() } else { w_fat[r - nf].max(0.0).sqrt() };
     let b = DMatrix::<Complex64>::from_fn(2 * nf, nseg, |r, l| (if r < nf { rows[fit_voxels[r]][l] } else { fat_rows[r - nf][l] }) * sw(r));
     let atab = crate::segnufft::ls_interpolators_pub(&b, nseg, t_min, t_max, ntab, &|t| {
@@ -500,7 +505,9 @@ pub fn build_segments_svd_fat_union_g(
             if r < nf { z } else { z * ct }
         }))
     });
+    lap("least-squares interpolator table");
     let (segph, atab, nodes, cond) = crate::cardinal_form(&segph, &atab, nseg, nv);
+    lap("cardinal form");
     let dt = (t_max - t_min) / (ntab - 1) as f64;
     let cl: Vec<C32> = nodes.iter().map(|&e| {
         let z = c(t_min + e as f64 * dt);

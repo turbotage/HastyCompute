@@ -252,6 +252,13 @@ pub trait Objective {
         }
         Ok(f)
     }
+    /// [`gradient_host`](Self::gradient_host) over the sets `sets` only: `x` and `g` are host stacks over all sets in
+    /// which only those chunks hold data (the others have length 0); returns their part of f. Lets a wrapper stream
+    /// blocks of sets it synthesises itself (the temporal subspace: no full frame stacks). None (default): no subset
+    /// form; callers fall back to full stacks.
+    fn gradient_host_sets(&mut self, _st: &Arc<CudaStream>, _sets: &[usize], _x: &crate::hoststack::HostStack, _g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
+        Ok(None)
+    }
     /// [`metric`](Self::metric) of chunk t on host slices (uploaded, applied, downloaded)
     fn metric_host(&mut self, st: &Arc<CudaStream>, t: usize, r: &[C32], z: &mut [C32], inverse: bool) -> Result<(), Error> {
         let rd = st.clone_htod(r)?;
@@ -309,35 +316,20 @@ impl Objective for P2np<'_> {
             }
             return Ok(f);
         }
-        let mut sr = match self.streamer.take() {
-            Some(s) => s,
-            None => crate::hoststack::SetStreamer::new(&st.context().clone(), st, x.lens[0])?,
-        };
-        let mut stage = self.stage.take();
         let order: Vec<usize> = (0..self.op.nsets()).collect();
-        let mut f = 0.0;
-        let op = &mut *self.op;
-        let ys = &self.ys;
-        let r = sr.for_each(st, x, g, &order, &mut |t, xd, gd| {
-            let staged;
-            let y: &CudaSlice<C32> = match stage.as_mut() {
-                Some(sg) => {
-                    staged = sg.upload(st, t, None)?;
-                    &staged
-                }
-                None => ys[t],
-            };
-            let mut r = unsafe { st.alloc::<C32>(op.len_y(t))? };
-            op.forward_residual(st, t, xd, y, &mut r)?;
-            f += 0.5 * op.kernels().dot(st, &r, &r)?.re;
-            op.adjoint(st, t, &r, gd)?;
-            hasty_cuda::pace::pace(st);
-            Ok(())
-        });
-        self.stage = stage;
-        self.streamer = Some(sr);
-        r?;
-        Ok(f)
+        self.stream_sets(st, x, g, &order)
+    }
+    /// streamed like [`gradient_host`](Objective::gradient_host), over the given sets only (data resident or staged
+    /// per set from the store, any order); None with coil sampling or lagged gradients
+    fn gradient_host_sets(&mut self, st: &Arc<CudaStream>, sets: &[usize], x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
+        if self.cur.is_some() || self.lagged.is_some() || sets.is_empty() {
+            return Ok(None);
+        }
+        let n = x.lens[sets[0]];
+        if !sets.iter().all(|&t| x.lens[t] == n && g.lens[t] == n) {
+            return Ok(None);
+        }
+        self.stream_sets(st, x, g, sets).map(Some)
     }
     /// streamed per group (`SetStreamer` over the group images), data resident or staged per member from the store:
     /// g_g = Σ_{t∈g} E_tᴴ(E_t x_g − y_t) through `SetOp::forward_group` / `adjoint_group` (`SegSets`: one grid FFT per
@@ -591,6 +583,40 @@ impl<'a> P2np<'a> {
         op.use_surrogate(false);
         self.lag_stats.1 += 1;
         r
+    }
+
+    /// The exact per-set gradient (all coils) of the sets `order` on host stacks, streamed through two device slots
+    /// (`SetStreamer`: each set's image up and its gradient down while the GPU works on the neighbouring set), data
+    /// resident or staged per set from the store; returns ½ Σ_{t ∈ order} ‖E_t x_t − y_t‖².
+    fn stream_sets(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack, order: &[usize]) -> Result<f64, Error> {
+        let mut sr = match self.streamer.take() {
+            Some(s) => s,
+            None => crate::hoststack::SetStreamer::new(&st.context().clone(), st, x.lens[order[0]])?,
+        };
+        let mut stage = self.stage.take();
+        let mut f = 0.0;
+        let op = &mut *self.op;
+        let ys = &self.ys;
+        let r = sr.for_each(st, x, g, order, &mut |t, xd, gd| {
+            let staged;
+            let y: &CudaSlice<C32> = match stage.as_mut() {
+                Some(sg) => {
+                    staged = sg.upload(st, t, None)?;
+                    &staged
+                }
+                None => ys[t],
+            };
+            let mut r = unsafe { st.alloc::<C32>(op.len_y(t))? };
+            op.forward_residual(st, t, xd, y, &mut r)?;
+            f += 0.5 * op.kernels().dot(st, &r, &r)?.re;
+            op.adjoint(st, t, &r, gd)?;
+            hasty_cuda::pace::pace(st);
+            Ok(())
+        });
+        self.stage = stage;
+        self.streamer = Some(sr);
+        r?;
+        Ok(f)
     }
 
     /// The exact grouped gradient (all coils) on host stacks: chunk g of `x` / `g` is the image of group `groups[g]`

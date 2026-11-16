@@ -103,7 +103,8 @@ pub fn spawn(cfg: Config, bank: Arc<Bank>, registry: Arc<Registry>) -> Result<Ha
     }
     let ca_pem = tls.as_ref().map(|t| t.ca_pem.clone()).unwrap_or_default();
     let ca_path = tls.as_ref().map(|t| t.ca_path.clone());
-    let svc = Service { bank: bank.clone(), registry };
+    let jobs = crate::jobs::Jobs::new(bank.clone(), registry.clone());
+    let svc = Service { bank: bank.clone(), registry, jobs };
     let grpc = HastyServer::new(svc).max_decoding_message_size(1 << 30).max_encoding_message_size(1 << 30);
     let web_dir = cfg.web_dir.clone();
     let shutdown = axum_server::Handle::new();
@@ -125,7 +126,15 @@ pub fn spawn(cfg: Config, bank: Arc<Bank>, registry: Arc<Registry>) -> Result<Ha
                     .into_axum_router()
                     .layer(tonic_web::GrpcWebLayer::new())
                     .route("/hasty-ca.pem", get(move || async move { ([("content-type", "application/x-pem-file")], ca_pem.clone()) }))
-                    .fallback_service(ServeDir::new(web_dir));
+                    .fallback_service(ServeDir::new(web_dir))
+                    // static files: always revalidate (Last-Modified → 304), otherwise browsers keep serving an old editor for hours after an update
+                    .layer(axum::middleware::map_response(|mut r: axum::response::Response| async move {
+                        let grpc = r.headers().get("content-type").and_then(|v| v.to_str().ok()).is_some_and(|s| s.starts_with("application/grpc"));
+                        if !grpc {
+                            r.headers_mut().entry("cache-control").or_insert(axum::http::HeaderValue::from_static("no-cache"));
+                        }
+                        r
+                    }));
                 let served = match tls {
                     Some(t) => {
                         let rc = match axum_server::tls_rustls::RustlsConfig::from_pem(t.cert_chain_pem.into_bytes(), t.key_pem.into_bytes()).await {

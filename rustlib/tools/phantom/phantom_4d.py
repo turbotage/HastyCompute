@@ -156,7 +156,23 @@ class LbmFlow:
         self.nb, self.T, self.fct, self.dx = int(m["bins"]), float(m["period"]), int(m["out_factor"]), float(m["dx"])
         self.c1 = 8 // self.fct
         nt, cells = int(m["tiles"]), int(m["cells_per_tile"])
-        self.acc = np.memmap(run / "flow_bins.f32", np.float32, "r", shape=(self.nb, nt, cells, int(m.get("acc_stride", 10))))
+        if (run / "flow_bins.f32").exists():
+            self.acc = np.memmap(run / "flow_bins.f32", np.float32, "r", shape=(self.nb, nt, cells, int(m.get("acc_stride", 10))))
+        else:
+            # a beat-library run whose accumulator was deleted (box_scan.sh): the phase-binned mean is the beats'
+            # sample-weighted mean over the library cycles (lbm_beats.py check: equal to f16 rounding); Σw, Σw u only
+            from lbm_beats import BeatLibrary
+            t_ = time.time()
+            lib = BeatLibrary(run)
+            acc = np.zeros((self.nb, nt * cells, 4), np.float32)
+            f3 = lib.fct**3
+            for cyc in lib.beats:
+                for b_, (idx, v, s) in lib.read(cyc).items():
+                    ww = v[:, 0] * s * f3
+                    acc[b_, idx, 0] += ww
+                    acc[b_, idx, 1:4] += ww[:, None] * v[:, 1:4]
+            self.acc = acc.reshape(self.nb, nt, cells, 4)
+            print(f"LBM flow {run}: no flow_bins.f32, mean of {len(lib.beats)} library beats ({time.time() - t_:.0f} s)")
         txyz = np.asarray(m["tile_xyz"], np.int64).reshape(-1, 3)
         c = np.arange(cells)
         cz, cy, cx = c // (self.c1 * self.c1), (c // self.c1) % self.c1, c % self.c1
@@ -179,7 +195,8 @@ class LbmFlow:
             ok = w > 0
             F[:3, self.flat[ok]] = (a[ok, 1:4] / w[ok, None]).T
             F[3, self.flat[ok]] = 1.0
-            if len(self.cache) > 3:
+            # two bins (sample() interpolates b0, b0 + 1): a 0.3 mm coronary grid is ≈ 0.75 GB per bin on the GPU
+            if len(self.cache) > 1:
                 self.cache.pop(next(iter(self.cache)))
             self.cache[b] = F.view(4, *self.dims)
         return self.cache[b]

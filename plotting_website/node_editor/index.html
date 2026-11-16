@@ -13,12 +13,20 @@
             <a class="home-link" href="../">HastyEdit</a>
             <span class="sep">/</span>
             <span class="title">Node Editor</span>
+            <input id="graph-name" class="graph-name" type="text" value="untitled" spellcheck="false" title="graph name (saved on the server)">
+            <span id="save-status" class="mono-status"></span>
             <div class="header-spacer"></div>
+            <span id="run-banner" class="run-banner" hidden>
+                <span id="run-text"></span>
+                <button id="btn-continue" class="hdr-btn" hidden>Continue (run browser steps)</button>
+                <button id="btn-cancel" class="hdr-btn danger" hidden>Cancel run</button>
+            </span>
             <div class="header-actions">
                 <button id="btn-run"          class="hdr-btn run">&#9654; Run</button>
                 <button id="btn-clear"        class="hdr-btn">Clear</button>
-                <button id="btn-save"         class="hdr-btn">Save</button>
-                <button id="btn-load"         class="hdr-btn">Load</button>
+                <button id="btn-save"         class="hdr-btn" title="save the graph on the server (also autosaved)">Save</button>
+                <button id="btn-export"       class="hdr-btn" title="download the graph as JSON">Export</button>
+                <button id="btn-load"         class="hdr-btn" title="import a graph JSON file">Import</button>
                 <button id="btn-bank-meta"    class="hdr-btn">Bank Meta</button>
                 <button id="btn-bank-clear"   class="hdr-btn danger">Clear Bank</button>
             </div>

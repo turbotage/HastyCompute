@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry viewer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        { "imports": { "three": "../vendor/three-0.186.1/three.module.js", "three/addons/": "../vendor/three-0.186.1/addons/" } }
+    </script>
+</head>
+<body>
+    <header>
+        <a class="home-link" href="../">HastyEdit</a>
+        <span class="sep">/</span>
+        <span class="title">Geometry</span>
+        <span id="name" class="name"></span>
+        <span id="status" class="status"></span>
+    </header>
+    <main>
+        <div id="view">
+            <canvas id="canvas"></canvas>
+            <div id="legend" hidden><div id="legend-bar"></div><span id="legend-lo">0</span><span id="legend-title"></span><span id="legend-hi">1</span></div>
+            <div id="readout" class="mono" hidden></div>
+            <div id="picker" hidden></div>
+        </div>
+        <aside id="side">
+            <section>
+                <h3>Scene</h3>
+                <div id="parts"></div>
+                <p class="hint">Open several values at once: <code>?id=a&amp;id=b</code>. Meshes (kind "mesh") and line sets (kind "lines", or a flow value with centerlines).</p>
+            </section>
+            <section>
+                <h3>Display</h3>
+                <label>background <select id="bg"><option value="#101214">dark</option><option value="#ffffff">white</option><option value="#6b7480">grey</option></select></label>
+                <label><input id="box-on" type="checkbox" checked> bounding box + axes</label>
+                <label>colormap <select id="cmap"></select></label>
+                <label><input id="two-sided" type="checkbox" checked> show back faces</label>
+            </section>
+            <section id="anim" hidden>
+                <h3>Frames</h3>
+                <div class="btn-row"><button id="play">▶</button><input id="frame" type="range" min="0" max="0" value="0" step="1" style="flex:1"><span id="frame-label" class="mono">0 / 0</span></div>
+                <label class="sub">speed <select id="rate"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+            </section>
+            <section>
+                <h3>Clip</h3>
+                <label><input id="clip-on" type="checkbox"> clip plane</label>
+                <label class="sub">axis <select id="clip-axis"><option value="0">x</option><option value="1">y</option><option value="2" selected>z</option></select>
+                    <label><input id="clip-flip" type="checkbox"> flip</label></label>
+                <label class="sub">position <input id="clip-pos" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+                <span id="clip-val" class="hint"></span>
+            </section>
+            <section>
+                <h3>Measure</h3>
+                <p class="hint">Click the surface to pick points; the last two give a distance.</p>
+                <div class="btn-row"><button id="pick-clear">clear picks</button></div>
+                <div id="pick-out" class="mono"></div>
+            </section>
+            <section id="profile-sec" hidden>
+                <h3>Profile</h3>
+                <canvas id="profile" width="296" height="150"></canvas>
+                <p class="hint">Diameter (2 × radius) along the tree, one curve per branch; pick a point on a line to mark it.</p>
+            </section>
+            <section id="pwv-sec" hidden>
+                <h3>Pulse waves</h3>
+                <canvas id="pwv" width="296" height="340"></canvas>
+                <p class="hint" id="pwv-hint">Waveforms at the cross-sections (normalised, one colour per position along the vessel) and their delay against arc length.</p>
+            </section>
+            <section>
+                <h3>Edit</h3>
+                <label>mesh <select id="edit-part"></select></label>
+                <label class="sub">radius (mm) <input id="edit-r" type="number" value="5" min="0.1" step="0.5"></label>
+                <label class="sub"><input id="edit-grab" type="checkbox"> grab tool: drag the surface with the mouse</label>
+                <div class="btn-row"><button id="edit-push" title="displace the surface around the last pick outwards">push out</button><button id="edit-pull">pull in</button><button id="edit-smooth">smooth here</button></div>
+                <div class="btn-row"><button id="edit-erase" title="remove the triangles within the radius of the last picked point">erase around pick</button>
+                    <button id="edit-keep" title="keep only the connected piece that contains the last pick">keep picked piece</button>
+                    <button id="edit-undo">undo</button><button id="edit-save" title="store the edited mesh as a new value in the bank">save copy</button></div>
+                <p class="hint">Pick a point on the surface first. Edits are local until you save a copy.</p>
+                <div id="edit-out" class="mono"></div>
+            </section>
+            <section>
+                <h3>View</h3>
+                <div class="btn-row"><button id="view-reset">reset</button><button id="view-shot">save PNG</button>
+                    <button id="view-x">along x</button><button id="view-y">along y</button><button id="view-z">along z</button></div>
+            </section>
+        </aside>
+    </main>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

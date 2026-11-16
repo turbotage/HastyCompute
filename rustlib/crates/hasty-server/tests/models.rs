@@ -15,7 +15,7 @@ fn list_and_run() {
         return eprintln!("skipped (no pointwise model in HASTY_MODELS)");
     }
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let (msg, _) = reg.run("model_list", &ctx, "", &[]).unwrap();
     let j: serde_json::Value = serde_json::from_str(&msg).unwrap();
     assert!(j["models"].as_array().unwrap().iter().any(|m| m["name"] == "pointwise"), "{msg}");
@@ -53,7 +53,7 @@ fn pvs_t1_native_grid() {
     let sh: Vec<usize> = hdr.split("'shape': (").nth(1).unwrap().split(')').next().unwrap().split(',').filter(|t| !t.trim().is_empty()).map(|t| t.trim().parse().unwrap()).collect();
     let d: Vec<f32> = b[10 + hl..].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let (msg, _) = reg.run("model_list", &ctx, "", &[]).unwrap();
     assert!(msg.contains("pvs_t1_wmbg"), "{msg}");
     let img = Arc::new(Value::Tensor(Tensor::from_slice(&sh, &d).unwrap()));
@@ -78,7 +78,7 @@ fn totalseg_mr_brain_smoke() {
     let sh: Vec<usize> = hdr.split("'shape': (").nth(1).unwrap().split(')').next().unwrap().split(',').filter(|t| !t.trim().is_empty()).map(|t| t.trim().parse().unwrap()).collect();
     let d: Vec<f32> = b[10 + hl..].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let img = Arc::new(Value::Tensor(Tensor::from_slice(&sh, &d).unwrap()));
     let (m, outs) = reg.run("model_run", &ctx, r#"{"model":"totalseg_mr_3mm","spacing_mm":[2,2,2]}"#, &[img]).unwrap();
     let j: serde_json::Value = serde_json::from_str(&m).unwrap();
@@ -104,7 +104,7 @@ fn fastsurfer_brain_smoke() {
     let sh: Vec<usize> = hdr.split("'shape': (").nth(1).unwrap().split(')').next().unwrap().split(',').filter(|t| !t.trim().is_empty()).map(|t| t.trim().parse().unwrap()).collect();
     let d: Vec<f32> = b[10 + hl..].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let img = Arc::new(Value::Tensor(Tensor::from_slice(&sh, &d).unwrap()));
     let (msg, outs) = reg.run("model_run", &ctx, r#"{"model":"fastsurfer_vinn_1mm","spacing_mm":[2,2,2]}"#, &[img]).unwrap();
     let j: serde_json::Value = serde_json::from_str(&msg).unwrap();
@@ -134,7 +134,7 @@ fn pvs_t2_hcp_dice() {
         return eprintln!("skipped (model not installed)");
     }
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let subs = std::env::var("HASTY_HCP_SUBS").unwrap_or("001".into());
     for s in subs.split(',') {
         let (sh, d) = read_npy(&std::path::Path::new(&r).join(format!("img{s}.npy")), |c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]), 4);
@@ -167,7 +167,7 @@ fn case_models() {
     let (sh, d) = read_npy(&dir.join("img.npy"), |c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]), 4);
     let geom = std::fs::read_to_string(dir.join("geom.json")).unwrap();
     let reg = Registry::base();
-    let ctx = Ctx { bank: Arc::new(Bank::new()) };
+    let ctx = Ctx::new(Arc::new(Bank::new()));
     let img = Arc::new(Value::Tensor(Tensor::from_slice(&sh, &d).unwrap()));
     for m in ms.split(',') {
         let mut o: serde_json::Value = serde_json::from_str(&geom).unwrap();

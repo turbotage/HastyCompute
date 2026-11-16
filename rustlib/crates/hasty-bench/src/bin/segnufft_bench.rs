@@ -1,6 +1,8 @@
 //! Segmented physics NUFFT vs plain NUFFT: forward + adjoint time (ms) per call for all coils.
 //!   segnufft_bench [nx ny nz M nc] ...
 //! HASTY_BENCH_FRAMES="F,deg": time-resolved operator over F frames (M samples per frame, random times), B-spline deg.
+//! HASTY_BENCH_GRID_GB: fine-grid budget (GiB, default 6; sets the coil batch).
+//! HASTY_BENCH_KNOT=1: knot-major temporal operator (`SegNufft::new_temporal(.., true)`).
 use cudarc::driver::sys::CUevent_flags;
 use hasty_cuda::{Device, C32};
 use hasty_nufft::{build_segments, NufftOpts, NufftPlan, SegNufft, SegNufftOpts};
@@ -57,7 +59,8 @@ fn main() {
             Err(_) => vec![(1, 0), (8, 0), (8, 1), (8, 2), (10, 2), (12, 2)],
         };
         for (nseg, order) in cfgs {
-            let mut op = SegNufft::new(&dev, dims, [0.002; 3], nc, SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline, max_grid_bytes: 6 << 30 }).unwrap();
+            let knot = std::env::var("HASTY_BENCH_KNOT").is_ok_and(|v| v != "0");
+            let mut op = SegNufft::new_temporal(&dev, dims, [0.002; 3], nc, SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline, max_grid_bytes: std::env::var("HASTY_BENCH_GRID_GB").ok().map_or(6 << 30, |v| (v.parse::<f64>().unwrap() * (1u64 << 30) as f64) as usize) }, knot).unwrap();
             op.set_maps(&st, &smaps).unwrap();
             let fit: Vec<usize> = (0..nv).step_by(97).collect();
             let psi = |v: usize, t: f64| 2000.0 * ((v % 113) as f64 / 113.0 - 0.5) * t;

@@ -23,6 +23,9 @@ struct Frames {
     a2: Vec<f32>,
     ay: Vec<C32>,
     yy: f64,
+    /// ‖y_t‖² per set, and whether the subset form (`gradient_host_sets`) is offered
+    yy_t: Vec<f64>,
+    subsets: bool,
 }
 
 impl Objective for Frames {
@@ -43,6 +46,24 @@ impl Objective for Frames {
             f += (a2 * (v.re * v.re + v.im * v.im) - 2.0 * (c.re * v.re + c.im * v.im)) as f64;
         }
         Ok(0.5 * f)
+    }
+    fn gradient_host_sets(&mut self, _st: &Arc<CudaStream>, sets: &[usize], x: &HostStack, g: &mut HostStack) -> Result<Option<f64>, Error> {
+        if !self.subsets {
+            return Ok(None);
+        }
+        let nv = self.lens[0];
+        let mut f = 0.0;
+        for &t in sets {
+            f += self.yy_t[t];
+            let xc = x.chunk(t).to_vec();
+            let gc = g.chunk_mut(t);
+            for i in 0..nv {
+                let (a2, c, v) = (self.a2[t * nv + i], self.ay[t * nv + i], xc[i]);
+                gc[i] = C32::new(a2 * v.re - c.re, a2 * v.im - c.im);
+                f += (a2 * (v.re * v.re + v.im * v.im) - 2.0 * (c.re * v.re + c.im * v.im)) as f64;
+            }
+        }
+        Ok(Some(0.5 * f))
     }
     fn metric(&mut self, _st: &Arc<CudaStream>, _t: usize, _r: &CudaSlice<C32>, _z: &mut CudaSlice<C32>, _inverse: bool) -> Result<(), Error> {
         unimplemented!("no metric")
@@ -80,7 +101,7 @@ fn subspace_recovers_what_single_frames_cannot() {
         let ay: Vec<C32> = a.iter().zip(&y).map(|(&w, v)| C32::new(w * v.re, w * v.im)).collect();
         let yy: f64 = y.iter().map(|v| (v.re * v.re + v.im * v.im) as f64).sum();
         let lmax = a2.iter().fold(0f32, |m, &v| m.max(v)) as f64;
-        let mut fr = Frames { kern: kern.clone(), lens: vec![nv; nf * ne], a2, ay, yy };
+        let mut fr = Frames { kern: kern.clone(), lens: vec![nv; nf * ne], a2, ay, yy, yy_t: vec![], subsets: false };
         // per frame: the holes stay at the start value 0
         let mut x = HostStack::zeros(&vec![nv; nf * ne]);
         run_objective_host(&mut fr, &st, &mut x, Precond::Zmshr1Set, 1.0 / lmax, 100, &mut |_, _| {}, &mut |_, _, _| {}, None).unwrap();
@@ -104,6 +125,46 @@ fn subspace_recovers_what_single_frames_cannot() {
             assert!(ex < tol, "{} {pc:?}: frame error {ex:.3e}", basis.name);
         }
         assert!(e_frame > 0.3, "the per-frame problem should not recover the holes: {e_frame}");
+    }
+}
+
+#[test]
+fn blocked_gradient_matches_full_stacks() {
+    // Subspace::gradient_host through frame blocks (the inner objective's subset form, g accumulated block by block)
+    // against the full frame stacks x = T c, ∇f(x): 40 frames in blocks of 3 (the last block shorter)
+    let dev = Device::new(0).expect("CUDA device");
+    let st = dev.default_stream();
+    let kern = Arc::new(Kernels::new(&dev).unwrap());
+    let (n, nr, ne, nv) = (20usize, 2usize, 3usize, 1000usize);
+    let nf = n * nr;
+    let mut rng = Rng::new(5);
+    for basis in [TemporalBasis::cardiac_fourier(n, nr, 3), TemporalBasis::periodic_bspline(n, nr, 6, 3)] {
+        let a2: Vec<f32> = (0..nf * ne * nv).map(|_| (0.5 + 0.5 * rng.uniform()) as f32).collect();
+        let y: Vec<C32> = rng.complex_vec(nf * ne * nv).iter().map(|z| C32::new(z.re as f32, z.im as f32)).collect();
+        let ay: Vec<C32> = a2.iter().zip(&y).map(|(&w, v)| C32::new(w.sqrt() * v.re, w.sqrt() * v.im)).collect();
+        let yy_t: Vec<f64> = (0..nf * ne).map(|t| y[t * nv..(t + 1) * nv].iter().map(|v| (v.re * v.re + v.im * v.im) as f64).sum()).collect();
+        let yy = yy_t.iter().sum();
+        let mut fr = Frames { kern: kern.clone(), lens: vec![nv; nf * ne], a2, ay, yy, yy_t, subsets: false };
+        let c = HostStack { data: rng.complex_vec(basis.nk * ne * nv).iter().map(|z| C32::new(z.re as f32, z.im as f32)).collect(), ..HostStack::zeros(&vec![nv; basis.nk * ne]) };
+        let lc = vec![nv; basis.nk * ne];
+        let (mut g_full, mut g_blk) = (HostStack::zeros(&lc), HostStack::zeros(&lc));
+        let f_full = {
+            let mut sub = Subspace::new(&mut fr, basis.clone(), ne);
+            sub.block_bytes = 3 * ne * nv * 8;
+            sub.gradient_host(&st, &c, &mut g_full).unwrap()
+        };
+        fr.subsets = true;
+        let f_blk = {
+            let mut sub = Subspace::new(&mut fr, basis.clone(), ne);
+            sub.block_bytes = 3 * ne * nv * 8;
+            // twice: the block buffers are reused, g overwritten (not accumulated across calls)
+            sub.gradient_host(&st, &c, &mut g_blk).unwrap();
+            sub.gradient_host(&st, &c, &mut g_blk).unwrap()
+        };
+        let (eg, ef) = (rel(&g_blk.data, &g_full.data), ((f_blk - f_full) / f_full).abs());
+        let nrm = |v: &[C32]| v.iter().map(|z| (z.re * z.re + z.im * z.im) as f64).sum::<f64>().sqrt();
+        println!("{}: blocked vs full gradient rel {eg:.2e}, f rel {ef:.2e} (f {f_full:.4e} / {f_blk:.4e}, |g| {:.3e} / {:.3e}, |c| {:.3e})", basis.name, nrm(&g_full.data), nrm(&g_blk.data), nrm(&c.data));
+        assert!(eg < 1e-5 && ef < 1e-9, "{}: gradient {eg:.2e}, f {ef:.2e}", basis.name);
     }
 }
 

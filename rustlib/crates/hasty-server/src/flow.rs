@@ -577,7 +577,7 @@ pub fn register(r: &mut Registry) {
         "flow value from tensors: inputs [vel f32 hasty [X,Y,Z,3,F] (C [F,3,Z,Y,X]) or [X,Y,Z,3], optional mag [X,Y,Z,F], optional mask [X,Y,Z]]; options {spacing: [dx,dy,dz] m (default 2 mm), dt: s per frame (default 0.04), venc}",
         |_, o, inp| {
             let vel = inp.first().and_then(|v| v.as_tensor()).ok_or_else(|| Error::Invalid("flow_make: input 0 = vel tensor".into()))?;
-            let sp = arr3(o, "spacing").unwrap_or([2e-3; 3]);
+            let sp = arr3(o, "spacing").or_else(|| arr3(o, "spacing_mm").map(|m| m.map(|v| v * 1e-3))).unwrap_or([2e-3; 3]);
             let mut f = Flow::new(vel, inp.get(1).and_then(|v| v.as_tensor()), sp, o["dt"].as_f64().unwrap_or(0.04))?;
             f.venc = o["venc"].as_f64();
             if let Some(m) = inp.get(2).and_then(|v| v.as_tensor()) {
@@ -603,7 +603,7 @@ pub fn register(r: &mut Registry) {
         let f = flow_in("flow_pcmra", inp)?;
         let [x, y, z] = f.dims;
         let p = f.pcmra(o["method"].as_str().unwrap_or("mag_speed"));
-        Ok((String::new(), vec![Value::Tensor(Tensor::from_slice(&[z, y, x], &p)?)]))
+        Ok((json!({"spacing_mm": f.spacing.map(|s| s * 1e3)}).to_string(), vec![Value::Tensor(Tensor::from_slice(&[z, y, x], &p)?)]))
     });
     r.register(
         "flow_streamlines",
@@ -643,7 +643,7 @@ pub fn register(r: &mut Registry) {
         "flow through an analysis disc: options {center [x,y,z] voxel coords, normal [3] (physical, +flow direction), radius_mm (15), grid (64), quantile (segment the lumen by the PC-MRA region; omit for the whole disc)}; message JSON (flow_ml_s per frame, mean / peak velocity, forward / backward / net ml, regurgitant fraction, area), outputs [through-plane velocity f32 [F, n, n], region u8 [n, n]]",
         |_, o, inp| {
             let f = flow_in("flow_plane", inp)?;
-            let c = arr3(o, "center").ok_or_else(|| Error::Invalid("flow_plane: options.center".into()))?;
+            let c = arr3(o, "center").unwrap_or_else(|| f.dims.map(|d| (d as f64 - 1.0) / 2.0));
             let nr = arr3(o, "normal").ok_or_else(|| Error::Invalid("flow_plane: options.normal".into()))?;
             let n = o["grid"].as_u64().unwrap_or(64) as usize;
             let (j, img, reg) = f.plane(c, nr, o["radius_mm"].as_f64().unwrap_or(15.0) * 1e-3, n, o["quantile"].as_f64())?;

@@ -422,6 +422,58 @@ Runs (2026-11-14):
 - Resume the gated run: `gate30_2mm/run2.sh`. Score: dyn_fit.py with `--truth truth_pc_frames_r0.07.npz` on
   `gate30_2mm/it*_lumen.npy` and `night_1114/fr_*_lumen.npy`.
 
+### Results (scored 2026-11-14 morning; truth at r 0.07 built 01:13–02:17)
+
+The 07:00 stop worked: the queue was killed, gate30_2mm stopped at it 163 with a checkpoint, and the GPU was idle at
+07:00:53.
+
+Per-frame, one bellows bin of 4 (25 % of the readouts, r ≈ 0.06), noise-free, plain operator, 12 coils. Deep-lumen
+dynamics, slope / corr / err rad (8 mm ROI corr):
+
+| PCGLS it | measured (truth r 0.07) | inverse crime (own truth) |
+|---|---|---|
+| 50 | 0.66 / 0.66 / 0.302 (0.76) | 0.43 / 0.40 / 0.399 (0.75) |
+| 100 | 0.69 / 0.63 / 0.326 (0.77) | 0.55 / 0.49 / 0.371 (0.84) |
+| 150 | 0.67 / 0.55 / 0.380 (0.74) | 0.60 / 0.53 / 0.359 (0.86) |
+
+- Measured: peak at 50–100 it, then degrading. That is later and higher than with all breathing states, which peaked
+  at 25 it with 0.68 / 0.56 and fell to 0.34 corr by 100 it.
+- Inverse crime: still rising at 150 it. A quarter of the readouts per frame is badly conditioned for plain PCGLS.
+
+gate30_2mm: 30 % gate (r 0.08 ± 0.08), full physics model, data at the simulated noise level, temporal subspace
+|k| ≤ 4, zmshr1s, no spatial prior. Scored against truth r 0.07:
+
+| it | f | slope / corr / err (ROI corr) |
+|---|---|---|
+| 0 (pyramid start, projected) | — | 0.43 / 0.53 / 0.341 (0.63) |
+| 5 | 8.5e13 | 0.47 / **0.54 / 0.337** (0.68) |
+| 10 | 6.7e13 | 0.55 / 0.49 / 0.383 (0.66) |
+| 20 | 3.8e13 | 0.63 / 0.41 / 0.499 (0.63) |
+| 50 | 1.8e13 | 0.66 / 0.39 / 0.548 (0.65) |
+| 80 | 1.0e13 | 0.62 / 0.30 / 0.687 (0.58) |
+| 160 | 4.7e12 | 0.65 / 0.33 / 0.650 (0.64) |
+
+- Peak at it 5, then the error grows to 0.65 rad, above the truth's own 0.40 rad rms of dynamics: worse than
+  reporting no dynamics at all.
+- f falls 18× to 4.7e12. The expected noise floor is ½ · 9.6e8 samples · σ² (σ 40) ≈ 7.6e11, so the residual is still
+  6× noise.
+- **Gating did not help the full, noisy reconstruction.** The ungated 2-bin subspace run peaked at 0.59 / 0.31 (it 5).
+  The gate cuts the breathing spread from 1.7–2 mm to 0.8 mm but keeps 30 % of the data, so the noise per image is
+  ≈ 3.3× larger. The per-frame tests above are noise-free, and there gating clearly helps.
+- [CHECK] Reading: without a spatial prior, the iteration fits noise plus the remaining mismatch after a few steps,
+  and gating trades motion error for noise. Decisive test: gate30 noise-free (HASTY_NOISE_SIGMA=0), 30 it.
+  - Consequence if confirmed: use all the data with motion compensation (MoCo), plus a prior that actually denoises.
+    The subspace limits only the temporal bandwidth.
+
+### Caveat on §12–14: no circulant preconditioner in any of these 2 mm runs
+
+pf_rank / pf_tlp / red_tlp / tsub / gate30 all ran `--precond zmshr1s`. That is per-set ZMSHR1 with the identity metric:
+step α(τ g + c w), α = 1/λ_max(N). `need_circ` is false without a metric preconditioner, so the temporal pyramid's
+pooled CG (the per-frame start) is unpreconditioned too (gate30: ‖r‖/‖r₀‖ only 0.5 after 10 it). The per-frame
+framerecon tests use circulant PCGLS (2e-3 after 50 it). The 2 mm conclusions (semi-convergence, gating, RED against
+P²nP) hold for an essentially unpreconditioned solver only. Next runs: `zmshr1ms`, ZMSHR1 in the circulant metric,
+one circulant per encode (`--circ-share encode`, 7 × 133 MB).
+
 ## 15. Open
 
 - The P²nP frame_fit trajectory at 2 mm (`traj_2mm`, running) and the plain reconstruction beyond 25 it.

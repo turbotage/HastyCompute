@@ -252,3 +252,6 @@ not compared against FastSurfer's own output (no reference run available).
 - `pvs_t2_wmbg_5fold`: published 5-fold ensemble (2 GB ONNX). Results below.
 - Weight zips deleted for T2 and T1+FLAIR (T1 zip kept for a T1 5-fold export).
 - 4D-flow pretrained model survey: `research/fourdflow_models_survey.md`.
+
+### 5-fold T2 PVS ensemble, CPU (2026-11-13)
+HCP-Aging sub-002: 5-fold ensemble WM Dice 0.517 (WM+BG 0.480), 2605 predicted vs 7101 reference voxels; single model was 0.504. Ensemble adds almost nothing here, so sub-002's under-segmentation is not fold variance. 5553 s on CPU, ~17 GB RSS.

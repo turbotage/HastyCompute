@@ -161,7 +161,8 @@ pub fn register(r: &mut Registry) {
                         last = pct;
                         bank.notify("log", None, &label, &format!("{d}/{n} patches"));
                     }
-                    true
+                    ctx.progress(d as f64 / n.max(1) as f64, &format!("{d}/{n} patches"));
+                    !ctx.cancelled()
                 })
                 .map_err(ie)?;
                 Ok((seg, on_cuda))

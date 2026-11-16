@@ -28,7 +28,26 @@
                     <span class="tool-name">Flow</span>
                     <span class="tool-desc">4D flow: PC-MRA, streamlines, pathlines, flow curves</span>
                 </a>
+                <a class="tool-card" href="mesh/">
+                    <span class="tool-icon">◭</span>
+                    <span class="tool-name">Geometry</span>
+                    <span class="tool-desc">Meshes and line sets: vessel trees, surfaces, scalars</span>
+                </a>
             </nav>
+            <section id="graphs">
+                <div class="bank-head">
+                    <span class="bank-title">Graphs</span>
+                    <span id="graphs-status" class="bank-status"></span>
+                    <a class="bank-ca" href="node_editor/">New graph</a>
+                </div>
+                <div class="bank-scroll">
+                    <table id="graphs-table">
+                        <thead><tr><th>name</th><th>nodes</th><th>status</th><th>last run</th><th>saved</th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <p id="graphs-empty" class="bank-empty" hidden>No saved graphs yet: build one in the node editor and press Save or Run.</p>
+                </div>
+            </section>
             <section id="bank">
                 <div class="bank-head">
                     <span class="bank-title">Values</span>
@@ -77,6 +96,31 @@
             empty.hidden = list.length > 0;
             status.textContent = `${list.length} on ${location.host}`;
         }
+        // saved graphs with the state of their latest run (runs live in server memory: after a restart everything is idle)
+        const gBody = document.querySelector('#graphs-table tbody');
+        const gEmpty = document.getElementById('graphs-empty');
+        const STATUS_COLOR = { running: '#cc8800', waiting_client: '#e0b020', done: '#44cc88', error: '#ee4444', cancelled: '#888', idle: '#5a6a7a' };
+        async function refreshGraphs() {
+            const { graphs } = JSON.parse((await c.execute('graph_list', {}, [], 'graph_list')).message);
+            gBody.replaceChildren(...graphs.map((g) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="n"><a></a></td><td>${g.nodes}</td><td class="st"></td><td>${g.run_started_ms ? ago(g.run_started_ms) + ' ago' : ''}</td><td>${ago(g.updated_ms)} ago</td><td class="a"><button title="delete graph">×</button></td>`;
+                const a = tr.querySelector('a');
+                a.textContent = g.name;
+                a.href = `node_editor/?graph=${encodeURIComponent(g.id)}`;
+                const st = tr.querySelector('.st');
+                st.textContent = g.status === 'waiting_client' ? 'waiting for browser' : g.status;
+                st.style.color = STATUS_COLOR[g.status] ?? '#9ab';
+                tr.querySelector('button').onclick = async () => {
+                    if (confirm(`Delete graph "${g.name}"?`)) { await c.execute('graph_delete', { id: g.id }, [], 'graph_delete'); refreshGraphs(); }
+                };
+                return tr;
+            }));
+            gEmpty.hidden = graphs.length > 0;
+            document.getElementById('graphs-status').textContent = `${graphs.length} saved`;
+        }
+        refreshGraphs().catch((e) => { document.getElementById('graphs-status').textContent = String(e.message ?? e); });
+        setInterval(() => refreshGraphs().catch(() => {}), 3000);
         let t = null;
         const soon = () => { clearTimeout(t); t = setTimeout(() => refresh().catch((e) => { status.textContent = e.message; }), 150); };
         c.watch(soon, (e) => { status.textContent = `disconnected (${e.message}), retrying…`; });

@@ -16,6 +16,9 @@
 #ifndef KM
 #define KM 1
 #endif
+#if ACB != 1 || FSB != 1
+#error "multi-image kernels: ACB = FSB = 1"
+#endif
 #define NH 25
 struct GridsM { cx* p[16]; };          // [k * NF + o]
 struct WPtrs { const cx* p[4]; };      // per image, null = weight 1
@@ -253,6 +256,9 @@ extern "C" __global__ void __launch_bounds__(NT_AM) seg_adjoint_mt(const float4*
       }
     }
   }
+#ifndef SEG_STORE_DIRECT
+  adj_store<KM * NF, CPBA, 1>(smem, reinterpret_cast<const cx (&)[1][NSEG]>(acc), p, km * NF + fo, cl, NT_AM, it, cg, ncb, g.p, addmask, o0, o1, o2, d);
+#else
   const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
   // an empty tile adds nothing to a slot holding partial sums
   const bool noop = it.count == 0 && ((addmask >> fo) & 1);
@@ -269,12 +275,26 @@ extern "C" __global__ void __launch_bounds__(NT_AM) seg_adjoint_mt(const float4*
       for (int l = 0; l < NSEG; ++l) gp[l] = acc[l];
     }
   }
+#endif
 }
 
 // ---------------------------------------------------------------- joint water + fat diagonals with a separate fat map
 // P_l(v) (1 + ff_v (c_l − 1)): the water diagonal times the voxel's water / fat mix at node l (c_l = fat spectrum at
 // τ_l), ff = the frame's fat-fraction map (`SegNufft::forward_fat`). Otherwise seg_pad / seg_crop.
-__device__ __forceinline__ cx fatmix(float f, cx c) { return cx{1.f + f * (c.x - 1.f), f * c.y}; }
+#ifndef SEG_PADCROP_DIRECT
+extern "C" __global__ void __launch_bounds__(PCT) seg_pad_ff(const cx* __restrict__ x, const cx* __restrict__ smaps, const cx* __restrict__ segph, const float* __restrict__ ff,
+                                                             const cx* __restrict__ cl, cx* __restrict__ grid,
+                                                             const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                             int c0, int ncb, MDims m, Dims d) {
+  pad_core<1>(x, smaps, segph, ff, cl, grid, i0v, i1v, i2v, c0, ncb, m, d);
+}
+extern "C" __global__ void __launch_bounds__(PCT) seg_crop_ff(const cx* __restrict__ grid, const cx* __restrict__ smaps, const cx* __restrict__ segph, const float* __restrict__ ff,
+                                                              const cx* __restrict__ cl, cx* __restrict__ x,
+                                                              const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                              int c0, int ncb, int accumulate, MDims m, Dims d) {
+  crop_core<1>(grid, smaps, segph, ff, cl, x, i0v, i1v, i2v, c0, ncb, accumulate, m, d);
+}
+#else
 extern "C" __global__ void seg_pad_ff(const cx* __restrict__ x, const cx* __restrict__ smaps, const cx* __restrict__ segph, const float* __restrict__ ff,
                                       const cx* __restrict__ cl, cx* __restrict__ grid,
                                       const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
@@ -327,3 +347,4 @@ extern "C" __global__ void seg_crop_ff(const cx* __restrict__ grid, const cx* __
   if (accumulate) { const cx o = x[t]; acc.x += o.x; acc.y += o.y; }
   x[t] = acc;
 }
+#endif

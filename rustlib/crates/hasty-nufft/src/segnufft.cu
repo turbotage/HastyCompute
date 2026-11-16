@@ -151,6 +151,137 @@ __device__ __forceinline__ void weight(const SampleKernel& k, const RowFactors& 
 }
 
 #define NCH (NCB * NSEG)
+// ---------------------------------------------------------------- coalesced pad / crop (default)
+// A block of 128 threads handles PCVB consecutive voxels (host define, PCVB · (NCH | 1) ≤ 2048): the per-voxel inputs
+// (image, deapodisation, segment diagonals, coil maps) are staged in shared memory with coalesced loads, and the
+// channel-interleaved grid is written / read as contiguous runs of ncb · NSEG channels per voxel (the thread-per-voxel
+// kernels, SEG_PADCROP_DIRECT, wrote 8 B per thread at a 8 · NCH-byte stride: ≈ 190 GB/s on the RTX 4090).
+// FF: joint water + fat diagonals P_l (1 + ff (c_l − 1)) with the fat-fraction map ff and node values cl.
+#ifndef PCVB
+#define PCVB 32
+#endif
+#define PCT 128
+#define PCTPV (PCT / PCVB)
+__device__ __forceinline__ size_t pad_index(size_t t, const MDims& m, const Dims& d, float& fac, const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v) {
+  const int a0 = t % m.N0, a1 = (t / m.N0) % m.N1, a2 = t / ((size_t)m.N0 * m.N1);
+  fac = i0v[a0] * i1v[a1] * i2v[a2];
+  return ((size_t)wrap(a2 - m.N2 / 2, d.nf2) * d.nf1 + wrap(a1 - m.N1 / 2, d.nf1)) * d.nf0 + wrap(a0 - m.N0 / 2, d.nf0);
+}
+__device__ __forceinline__ cx fatmix(float f, cx c) { return cx{1.f + f * (c.x - 1.f), f * c.y}; }
+// MODE 0: plain; 1 (FF): fat-fraction map ff; 2: water + fat images, x = W, xf = Fa: P_l (W + c_l Fa)
+template <int MODE>
+__device__ __forceinline__ void pad_core(const cx* __restrict__ x, const cx* __restrict__ smaps, const cx* __restrict__ segph, const float* __restrict__ ff,
+                                         const cx* __restrict__ cl, cx* __restrict__ grid, const float* __restrict__ i0v, const float* __restrict__ i1v,
+                                         const float* __restrict__ i2v, int c0, int ncb, const MDims& m, const Dims& d, const cx* __restrict__ xf = nullptr) {
+  constexpr bool FF = MODE == 1;
+  __shared__ cx ph[NSEG][PCVB + 1];
+  __shared__ cx sm[NCB][PCVB + 1];
+  __shared__ cx xs[PCVB];
+  __shared__ cx xfs[MODE == 2 ? PCVB : 1];
+  __shared__ size_t gi[PCVB];
+  const size_t nv = (size_t)m.N0 * m.N1 * m.N2, v0 = (size_t)blockIdx.x * PCVB;
+  const int nvb = (int)min((size_t)PCVB, nv - v0);
+  for (int q = threadIdx.x; q < nvb; q += PCT) {
+    float fac;
+    gi[q] = pad_index(v0 + q, m, d, fac, i0v, i1v, i2v);
+    const cx v = x[v0 + q];
+    xs[q] = cx{v.x * fac, v.y * fac};
+    if (MODE == 2) { const cx f = xf[v0 + q]; xfs[q] = cx{f.x * fac, f.y * fac}; }
+  }
+  __syncthreads();
+  for (int q = threadIdx.x; q < NSEG * PCVB; q += PCT) {
+    const int l = q / PCVB, v = q % PCVB;
+    if (v < nvb) {
+      cx p = segph[(size_t)l * nv + v0 + v];
+      if (FF) p = cmul(p, fatmix(ff[v0 + v], cl[l]));
+      if (MODE == 2) { const cx f = cmul(cl[l], xfs[v]); ph[l][v] = cmul(p, cx{xs[v].x + f.x, xs[v].y + f.y}); }
+      else ph[l][v] = cmul(p, xs[v]);
+    }
+  }
+  for (int q = threadIdx.x; q < ncb * PCVB; q += PCT) {
+    const int c = q / PCVB, v = q % PCVB;
+    if (v < nvb) sm[c][v] = smaps[(size_t)(c0 + c) * nv + v0 + v];
+  }
+  __syncthreads();
+  const int run = ncb * NSEG;
+  for (int q = threadIdx.x; q < nvb * run; q += PCT) {
+    const int v = q / run, ch = q % run, c = ch / NSEG, l = ch % NSEG;
+    grid[gi[v] * NCH + ch] = cmul(sm[c][v], ph[l][v]);
+  }
+}
+// MODE as pad_core; MODE 2 writes the water part to x and the fat part (conj(c_l) weighted) to xf
+template <int MODE>
+__device__ __forceinline__ void crop_core(const cx* __restrict__ grid, const cx* __restrict__ smaps, const cx* __restrict__ segph, const float* __restrict__ ff,
+                                          const cx* __restrict__ cl, cx* __restrict__ x, const float* __restrict__ i0v, const float* __restrict__ i1v,
+                                          const float* __restrict__ i2v, int c0, int ncb, int accumulate, const MDims& m, const Dims& d, cx* __restrict__ xf = nullptr) {
+  constexpr bool FF = MODE == 1;
+  constexpr int GS = NCH | 1;   // odd stride: conflict-free per-voxel reads
+  __shared__ cx gv[PCVB * GS];
+  __shared__ size_t gi[PCVB];
+  __shared__ float fs[PCVB];
+  const size_t nv = (size_t)m.N0 * m.N1 * m.N2, v0 = (size_t)blockIdx.x * PCVB;
+  const int nvb = (int)min((size_t)PCVB, nv - v0);
+  for (int q = threadIdx.x; q < nvb; q += PCT) gi[q] = pad_index(v0 + q, m, d, fs[q], i0v, i1v, i2v);
+  __syncthreads();
+  const int run = ncb * NSEG;
+  for (int q = threadIdx.x; q < nvb * run; q += PCT) {
+    const int v = q / run, ch = q % run;
+    gv[v * GS + ch] = grid[gi[v] * NCH + ch];
+  }
+  __syncthreads();
+  // PCTPV threads per voxel, coils split round-robin, reduced with shuffles
+  const int v = threadIdx.x / PCTPV, j = threadIdx.x % PCTPV;
+  cx acc = cx{0.f, 0.f}, accf = cx{0.f, 0.f};
+  if (v < nvb) {
+    const size_t t = v0 + v;
+    cx p[NSEG];
+    #pragma unroll
+    for (int l = 0; l < NSEG; ++l) {
+      p[l] = segph[(size_t)l * nv + t];
+      if (FF) p[l] = cmul(p[l], fatmix(ff[t], cl[l]));
+    }
+    for (int c = j; c < ncb; c += PCTPV) {
+      cx s = cx{0.f, 0.f}, sf = cx{0.f, 0.f};
+      #pragma unroll
+      for (int l = 0; l < NSEG; ++l) {
+        const cx w = cmulc(p[l], gv[v * GS + c * NSEG + l]); s.x += w.x; s.y += w.y;
+        if (MODE == 2) { const cx u = cmulc(cl[l], w); sf.x += u.x; sf.y += u.y; }
+      }
+      const cx sc = smaps[(size_t)(c0 + c) * nv + t];
+      const cx w = cmulc(sc, s);
+      acc.x += w.x; acc.y += w.y;
+      if (MODE == 2) { const cx u = cmulc(sc, sf); accf.x += u.x; accf.y += u.y; }
+    }
+  }
+  #pragma unroll
+  for (int k = PCTPV / 2; k > 0; k >>= 1) {
+    acc.x += __shfl_xor_sync(0xffffffffu, acc.x, k); acc.y += __shfl_xor_sync(0xffffffffu, acc.y, k);
+    if (MODE == 2) { accf.x += __shfl_xor_sync(0xffffffffu, accf.x, k); accf.y += __shfl_xor_sync(0xffffffffu, accf.y, k); }
+  }
+  if (v < nvb && j == 0) {
+    const size_t t = v0 + v;
+    acc.x *= fs[v]; acc.y *= fs[v];
+    if (accumulate) { const cx o = x[t]; acc.x += o.x; acc.y += o.y; }
+    x[t] = acc;
+    if (MODE == 2) {
+      accf.x *= fs[v]; accf.y *= fs[v];
+      if (accumulate) { const cx o = xf[t]; accf.x += o.x; accf.y += o.y; }
+      xf[t] = accf;
+    }
+  }
+}
+#ifndef SEG_PADCROP_DIRECT
+extern "C" __global__ void __launch_bounds__(PCT) seg_pad(const cx* __restrict__ x, const cx* __restrict__ smaps, const cx* __restrict__ segph, cx* __restrict__ grid,
+                                                          const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                          int c0, int ncb, MDims m, Dims d) {
+  pad_core<0>(x, smaps, segph, nullptr, nullptr, grid, i0v, i1v, i2v, c0, ncb, m, d);
+}
+extern "C" __global__ void __launch_bounds__(PCT) seg_crop(const cx* __restrict__ grid, const cx* __restrict__ smaps, const cx* __restrict__ segph, cx* __restrict__ x,
+                                                           const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                           int c0, int ncb, int accumulate, MDims m, Dims d) {
+  crop_core<0>(grid, smaps, segph, nullptr, nullptr, x, i0v, i1v, i2v, c0, ncb, accumulate, m, d);
+}
+#else
 // ---------------------------------------------------------------- fused multi-output pad: one image -> NCH channels (grid zeroed by the host)
 extern "C" __global__ void seg_pad(const cx* __restrict__ x, const cx* __restrict__ smaps, const cx* __restrict__ segph, cx* __restrict__ grid,
                                    const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
@@ -171,12 +302,6 @@ extern "C" __global__ void seg_pad(const cx* __restrict__ x, const cx* __restric
     #pragma unroll
     for (int l = 0; l < NSEG; ++l) g[c * NSEG + l] = cmul(s, ph[l]);
   }
-}
-
-// ---------------------------------------------------------------- residual init: r = −y (the gather then accumulates A x)
-extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r, unsigned long long n) {
-  const size_t t = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
-  if (t < n) { const cx v = y[t]; r[t] = cx{-v.x, -v.y}; }
 }
 
 // ---------------------------------------------------------------- fused multi-input crop: NCH channels -> image (accumulate)
@@ -206,6 +331,28 @@ extern "C" __global__ void seg_crop(const cx* __restrict__ grid, const cx* __res
   x[t] = acc;
 }
 
+#endif
+
+// water + fat as separate images (`SegNufft::forward_wf`): pad P_l (W + c_l Fa), crop to (W, Fa)
+extern "C" __global__ void __launch_bounds__(PCT) seg_pad_wf(const cx* __restrict__ x, const cx* __restrict__ xf, const cx* __restrict__ smaps, const cx* __restrict__ segph,
+                                                             const cx* __restrict__ cl, cx* __restrict__ grid,
+                                                             const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                             int c0, int ncb, MDims m, Dims d) {
+  pad_core<2>(x, smaps, segph, nullptr, cl, grid, i0v, i1v, i2v, c0, ncb, m, d, xf);
+}
+extern "C" __global__ void __launch_bounds__(PCT) seg_crop_wf(const cx* __restrict__ grid, const cx* __restrict__ smaps, const cx* __restrict__ segph, const cx* __restrict__ cl,
+                                                              cx* __restrict__ x, cx* __restrict__ xf,
+                                                              const float* __restrict__ i0v, const float* __restrict__ i1v, const float* __restrict__ i2v,
+                                                              int c0, int ncb, int accumulate, MDims m, Dims d) {
+  crop_core<2>(grid, smaps, segph, nullptr, cl, x, i0v, i1v, i2v, c0, ncb, accumulate, m, d, xf);
+}
+
+// ---------------------------------------------------------------- residual init: r = −y (the gather then accumulates A x)
+extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r, unsigned long long n) {
+  const size_t t = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+  if (t < n) { const cx v = y[t]; r[t] = cx{-v.x, -v.y}; }
+}
+
 // ---------------------------------------------------------------- tiled gather / scatter on exact tile -> sample lists
 // Fine grid split into TT^3 tiles (shared memory is dynamic, sized per launch shape up to the device's opt-in limit).
 // The host lists, per tile, every sample whose W^3 support meets it (CSR `tl`, original
@@ -233,6 +380,12 @@ extern "C" __global__ void seg_crop(const cx* __restrict__ grid, const cx* __res
 #endif
 #ifndef NF
 #define NF 1
+#endif
+#ifndef ACB
+#define ACB 1   // adjoint: coils per thread (register blocking: one shared-memory coefficient load serves ACB coils)
+#endif
+#ifndef FSB
+#define FSB 1   // forward: samples per lane (one shared-memory tile-value load serves FSB samples)
 #endif
 #define TT3 (TT * TT * TT)
 #define WTS (TT3 + PPF * NF)             // weight row stride (cx): conflict-free for both MAC layouts
@@ -379,8 +532,86 @@ __device__ __forceinline__ void stage_weights(Stage& S, int nload) {
     }
   }
 }
-#define NT_A (TT3 * NF * CPBA)
-#define NT_F (CHUNK * CPBF * PPF * NF)
+// Coalesced write-back of the adjoint tile accumulators (default; SEG_STORE_DIRECT: each thread stores its NSEG
+// channels directly, 8 B per thread at a 8 · NCH-byte stride, which measured ≈ 200 GB/s and dominated the scatter).
+// Thread (tile point p, slot f, coil cl of the group) holds acc[NSEG]. Slot by slot, the block parks the accumulators
+// in shared memory (the stage area is free after the sample loop; [TT3][OBS] cx, odd stride) and writes contiguous
+// runs of ncb_group · NSEG channels per tile point. Slot fs: pointer gps[fs] (null: nothing to write), add-mode bit
+// (addmask >> (fs % NF)), split items atomically.
+template <int NSLOT, int CPB, int AC>
+__device__ __forceinline__ void adj_store(unsigned char* smem, const cx (&acc)[AC][NSEG], int p, int f, int cl, int nthr, const Item& it, int cg, int ncb,
+                                          cx* const* gps, int addmask, int o0, int o1, int o2, const Dims& d) {
+  constexpr int OBS = (CPB * NSEG) | 1;
+  cx* ob = reinterpret_cast<cx*>(smem);
+  const int run = min(CPB, ncb - cg) * NSEG;
+  for (int fs = 0; fs < NSLOT; ++fs) {
+    cx* base = gps[fs];
+    const bool add = (addmask >> (fs % NF)) & 1;
+    if (base == nullptr || run <= 0 || (it.count == 0 && add)) continue;   // block-uniform
+    __syncthreads();
+    if (f == fs) {   // cl: the thread's first coil (AC consecutive coils)
+      #pragma unroll
+      for (int a = 0; a < AC; ++a) {
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) ob[p * OBS + (cl + a) * NSEG + l] = acc[a][l];
+      }
+    }
+    __syncthreads();
+    for (int q = threadIdx.x; q < TT3 * run; q += nthr) {
+      const int k = q % run, pq = q / run;
+      const int gx = o0 + pq % TT, gy = o1 + (pq / TT) % TT, gz = o2 + pq / (TT * TT);
+      if (gx >= d.nf0 || gy >= d.nf1 || gz >= d.nf2) continue;
+      cx* gp = base + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + cg * NSEG + k;
+      const cx v = ob[pq * OBS + k];
+      if (it.split) { atomicAdd(&gp->x, v.x); atomicAdd(&gp->y, v.y); }
+      else if (add) { const cx o = *gp; *gp = cx{o.x + v.x, o.y + v.y}; }
+      else *gp = v;
+    }
+  }
+}
+#define NT_A (TT3 * NF * CPBA / ACB)
+#define NT_F (CHUNK * CPBF * PPF * NF / FSB)
+#define SGF (CHUNK / FSB)   // forward sample groups: lane group ss handles samples ss + k · SGF, k < FSB
+// forward MAC block of a staged chunk: lane (pp, fo, ss, cl) → o[k] = Σ_l aa · Σ_p wt · G for its FSB samples, reduced
+// over the PPF · NF lanes of a (sample, coil); tile values gt [p][(fo · CPBF + c) · NSEG + l] (stride GTS), slot fo.
+// Lanes whose samples are past nload compute on stale rows and discard. LIVE_OFF: sample offset of the record arrays.
+#ifdef PROF_NOMAC
+#define FWD_LIVE false
+#else
+#define FWD_LIVE (ss < nload && cg + cl < ncb)
+#endif
+#define FWD_MAC(FO, GOFF)                                                                                              \
+    cx o[FSB];                                                                                                          \
+    _Pragma("unroll") for (int k = 0; k < FSB; ++k) o[k] = cx{0.f, 0.f};                                              \
+    if (FWD_LIVE) {                                                                                                     \
+      cx acc[FSB][NSEG];                                                                                                \
+      _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                 \
+        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) acc[k][l] = cx{0.f, 0.f};                                      \
+      }                                                                                                                 \
+      for (int p = pp; p < TT3; p += PPF) {   /* lanes of one (sample group, coil, offset) read the same tile values */ \
+        cx w[FSB];                                                                                                      \
+        _Pragma("unroll") for (int k = 0; k < FSB; ++k) w[k] = S.wt[ss + k * SGF][p];                                  \
+        const cx* gv = gt + p * GTS + ((FO) * CPBF + cl) * NSEG + (GOFF);                                              \
+        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) {                                                              \
+          const cx v = gv[l];                                                                                           \
+          _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                             \
+            acc[k][l].x = fmaf(w[k].x, v.x, acc[k][l].x); acc[k][l].x = fmaf(-w[k].y, v.y, acc[k][l].x);               \
+            acc[k][l].y = fmaf(w[k].x, v.y, acc[k][l].y); acc[k][l].y = fmaf(w[k].y, v.x, acc[k][l].y);                \
+          }                                                                                                             \
+        }                                                                                                               \
+      }                                                                                                                 \
+      _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                 \
+        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) {                                                              \
+          const cx v = cmul(S.aa[ss + k * SGF][FO][l], acc[k][l]); o[k].x += v.x; o[k].y += v.y;                        \
+        }                                                                                                               \
+      }                                                                                                                 \
+    }                                                                                                                   \
+    _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                   \
+      _Pragma("unroll") for (int sh = PPF * NF / 2; sh > 0; sh >>= 1) {                                                 \
+        o[k].x += __shfl_xor_sync(0xffffffffu, o[k].x, sh); o[k].y += __shfl_xor_sync(0xffffffffu, o[k].y, sh);       \
+      }                                                                                                                 \
+    }
+
 
 // adjoint: grid slots (NCH channels of the batch each) <- samples of one frame interval
 extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* __restrict__ rec, const unsigned int* __restrict__ tl, const Item* __restrict__ items,
@@ -392,7 +623,7 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* _
   cx (*yv)[CPBA] = reinterpret_cast<cx (*)[CPBA]>(smem + ((sizeof(Stage) + 4 * LISTMAX + 15) & ~(size_t)15));
   const Item it = items[blockIdx.x];
   const int cg = blockIdx.y * CPBA;
-  const int p = threadIdx.x % TT3, fo = (threadIdx.x / TT3) % NF, cl = threadIdx.x / (TT3 * NF);
+  const int p = threadIdx.x % TT3, fo = (threadIdx.x / TT3) % NF, cl = (threadIdx.x / (TT3 * NF)) * ACB;   // first of ACB coils
   int o0, o1, o2; tile_origin(it.tile, d, o0, o1, o2);
   for (int q = threadIdx.x; q < it.count; q += NT_A) sl[q] = tl[it.first + q];
   constexpr int NR = (3 * CHUNK + NT_A - 1) / NT_A, NY = (CHUNK * CPBA + NT_A - 1) / NT_A;
@@ -413,9 +644,12 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* _
   };
   __syncthreads();
   if (it.count > 0) prefetch(0);
-  cx acc[NSEG];
+  cx acc[ACB][NSEG];
   #pragma unroll
-  for (int l = 0; l < NSEG; ++l) acc[l] = cx{0.f, 0.f};
+  for (int a = 0; a < ACB; ++a) {
+    #pragma unroll
+    for (int l = 0; l < NSEG; ++l) acc[a][l] = cx{0.f, 0.f};
+  }
   for (int base = 0; base < it.count; base += CHUNK) {
     const int nload = min(CHUNK, it.count - base);
     __syncthreads();
@@ -425,10 +659,13 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* _
     for (int r = 0; r < NY; ++r) { const int q = threadIdx.x + r * NT_A; if (q < CHUNK * CPBA) yv[q / CPBA][q % CPBA] = py[r]; }
     __syncthreads();
     if (base + CHUNK < it.count) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
     stage_samples<-1>(S, nload, o0, o1, o2, d, atab, ntab, t0, dt);
     __syncthreads();
     stage_weights(S, nload);
+#endif
     __syncthreads();
+#ifndef PROF_NOMAC
     for (int s = 0; s < nload; ++s) {
 #if TT3 % 32 == 0
       {   // skip samples whose support box misses this warp's 32 tile points (warp-uniform)
@@ -436,32 +673,50 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* _
         if ((bz & 15) > zhi || ((bz >> 4) & 15) < zlo) continue;
       }
 #endif
-      const cx w = S.wt[s][p], yc = yv[s][cl];
-      const cx u = cx{fmaf(w.x, yc.x, w.y * yc.y), fmaf(w.x, yc.y, -w.y * yc.x)};   // conj(w) y
+      const cx w = S.wt[s][p];
+      cx u[ACB];
+      #pragma unroll
+      for (int a = 0; a < ACB; ++a) { const cx yc = yv[s][cl + a]; u[a] = cx{fmaf(w.x, yc.x, w.y * yc.y), fmaf(w.x, yc.y, -w.y * yc.x)}; }   // conj(w) y
       #pragma unroll
       for (int l = 0; l < NSEG; ++l) {   // explicit FMA chains (no fast-math reassociation): 4 FFMA per complex MAC
-        const cx a = S.aa[s][fo][l];
-        acc[l].x = fmaf(u.x, a.x, acc[l].x); acc[l].x = fmaf(-u.y, a.y, acc[l].x);
-        acc[l].y = fmaf(u.x, a.y, acc[l].y); acc[l].y = fmaf(u.y, a.x, acc[l].y);
+        const cx c = S.aa[s][fo][l];
+        #pragma unroll
+        for (int a = 0; a < ACB; ++a) {
+          acc[a][l].x = fmaf(u[a].x, c.x, acc[a][l].x); acc[a][l].x = fmaf(-u[a].y, c.y, acc[a][l].x);
+          acc[a][l].y = fmaf(u[a].x, c.y, acc[a][l].y); acc[a][l].y = fmaf(u[a].y, c.x, acc[a][l].y);
+        }
       }
     }
+#endif
   }
   const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
   // an empty tile adds nothing to a slot holding partial sums (grouped sets: every member after the first)
   const bool noop = it.count == 0 && ((addmask >> fo) & 1);
+#ifdef PROF_NOSTORE
+  if (acc[0][0].x != 1.2345e-30f) return;   // keeps the accumulators live, stores (almost) nothing
+#endif
+#ifndef SEG_STORE_DIRECT
+  adj_store<NF, CPBA, ACB>(smem, acc, p, fo, cl, NT_A, it, cg, ncb, g.p, addmask, o0, o1, o2, d);
+  (void)noop;
+#else
+#if ACB != 1
+#error "SEG_STORE_DIRECT needs ACB 1"
+#endif
+  cx (&acc1)[NSEG] = acc[0];
   if (!noop && cg + cl < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) {
     cx* gp = g.p[fo] + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + cl) * NSEG;
     if (it.split) {
       #pragma unroll
-      for (int l = 0; l < NSEG; ++l) { atomicAdd(&gp[l].x, acc[l].x); atomicAdd(&gp[l].y, acc[l].y); }
+      for (int l = 0; l < NSEG; ++l) { atomicAdd(&gp[l].x, acc1[l].x); atomicAdd(&gp[l].y, acc1[l].y); }
     } else if ((addmask >> fo) & 1) {
       #pragma unroll
-      for (int l = 0; l < NSEG; ++l) { const cx v = gp[l]; gp[l] = cx{v.x + acc[l].x, v.y + acc[l].y}; }
+      for (int l = 0; l < NSEG; ++l) { const cx v = gp[l]; gp[l] = cx{v.x + acc1[l].x, v.y + acc1[l].y}; }
     } else {
       #pragma unroll
-      for (int l = 0; l < NSEG; ++l) gp[l] = acc[l];
+      for (int l = 0; l < NSEG; ++l) gp[l] = acc1[l];
     }
   }
+#endif
 }
 
 // forward: samples of one frame interval (+=, y zeroed by the host) <- grid slots
@@ -496,8 +751,8 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
   };
   __syncthreads();
   prefetch(0);
-  // lanes: pp (tile-point stripe) fastest, then frame offset, then sample, then coil
-  const int pp = threadIdx.x % PPF, fo = (threadIdx.x / PPF) % NF, ss = (threadIdx.x / (PPF * NF)) % CHUNK, cl = threadIdx.x / (PPF * NF * CHUNK);
+  // lanes: pp (tile-point stripe) fastest, then frame offset, then sample group, then coil; FSB samples per lane
+  const int pp = threadIdx.x % PPF, fo = (threadIdx.x / PPF) % NF, ss = (threadIdx.x / (PPF * NF)) % SGF, cl = threadIdx.x / (PPF * NF * SGF);
   for (int base = 0; base < it.count; base += CHUNK) {
     const int nload = min(CHUNK, it.count - base);
     __syncthreads();
@@ -505,35 +760,22 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
     for (int r = 0; r < NR; ++r) { const int q = threadIdx.x + r * NT_F; if (q < 3 * nload) S.rec[q / 3][q % 3] = pr[r]; }
     __syncthreads();
     if (base + CHUNK < it.count) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
     stage_samples<1>(S, nload, o0, o1, o2, d, atab, ntab, t0, dt);
     __syncthreads();
     stage_weights(S, nload);
+#endif
     __syncthreads();
-    const bool live = ss < nload && cg + cl < ncb;
-    cx o = cx{0.f, 0.f};
-    if (live) {
-      cx acc[NSEG];
+    FWD_MAC(fo, 0)
+    if (cg + cl < ncb && pp == 0 && fo == 0) {
       #pragma unroll
-      for (int l = 0; l < NSEG; ++l) acc[l] = cx{0.f, 0.f};
-      for (int p = pp; p < TT3; p += PPF) {   // lanes of one (sample, coil, offset) read the same tile values (broadcast)
-        const cx w = S.wt[ss][p];
-        const cx* gv = gt + p * GTS + (fo * CPBF + cl) * NSEG;
-        #pragma unroll
-        for (int l = 0; l < NSEG; ++l) {
-          const cx v = gv[l];
-          acc[l].x = fmaf(w.x, v.x, acc[l].x); acc[l].x = fmaf(-w.y, v.y, acc[l].x);
-          acc[l].y = fmaf(w.x, v.y, acc[l].y); acc[l].y = fmaf(w.y, v.x, acc[l].y);
+      for (int k = 0; k < FSB; ++k) {
+        if (ss + k * SGF < nload) {
+          cx* dst = y + (size_t)(c0 + cg + cl) * M + sl[base + ss + k * SGF];
+          atomicAdd(&dst->x, o[k].x);
+          atomicAdd(&dst->y, o[k].y);
         }
       }
-      #pragma unroll
-      for (int l = 0; l < NSEG; ++l) { const cx v = cmul(S.aa[ss][fo][l], acc[l]); o.x += v.x; o.y += v.y; }
-    }
-    #pragma unroll
-    for (int k = PPF * NF / 2; k > 0; k >>= 1) { o.x += __shfl_xor_sync(0xffffffffu, o.x, k); o.y += __shfl_xor_sync(0xffffffffu, o.y, k); }
-    if (live && pp == 0 && fo == 0) {
-      cx* dst = y + (size_t)(c0 + cg + cl) * M + sl[base + ss];
-      atomicAdd(&dst->x, o.x);
-      atomicAdd(&dst->y, o.y);
     }
   }
 }

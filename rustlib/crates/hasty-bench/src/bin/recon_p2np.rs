@@ -1550,6 +1550,7 @@ fn main() {
         let fit_vox: Vec<usize> = (0..nv).filter(|&q| dil[q]).collect();
         let fit = fit_monomials(&sd, &grid, &fit_vox);
         println!("monomial quadratic fit over {} voxels: rms {:.1e} / max {:.1e} m² (z², x²+y², xz, yz: {:?})", fit_vox.len(), fit.rms.iter().cloned().fold(0.0, f64::max), fit.max.iter().cloned().fold(0.0, f64::max), fit.max.map(|v| format!("{v:.1e}")));
+        println!("  [build timer] monomial fit done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
         let fit4 = conc_hi.then(|| fit_monomials_hi(&sd, &grid, &fit_vox));
         if let Some(f4) = &fit4 {
             println!("monomial degree-4 fit (--conc-fit deg4): rms {:.1e} / max {:.1e} m² ({:?}); degree 3/4 part to first order in the kernel (order 3)", f4.quad.rms.iter().cloned().fold(0.0, f64::max), f4.quad.max.iter().cloned().fold(0.0, f64::max), f4.quad.max.map(|v| format!("{v:.1e}")));
@@ -1679,6 +1680,7 @@ fn main() {
                 lsel = lsel.max(l_e);
             }
             println!("segments (auto:noise): predicted data error × {margin} ≤ {r_noise} noise rms (relative weighted error ≤ {tol:.2e}, ×{gain:.1}) → L = {lsel} ({} basis)", seg_basis_arg);
+            println!("  [build timer] auto:noise segment rule done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
             nseg = lsel;
         }
         if nseg == 0 {
@@ -1809,6 +1811,7 @@ fn main() {
             .collect()
         };
         let segs = make_segs(&eng, nseg);
+        println!("  [build timer] segment bases of all encodes done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
         let mut resid = 0.0f64;
         // --b0-absorb 2: largest per-sample quadratic B0 phase handed to the ΔC Taylor correction
         let mut absorb_q = 0.0f64;
@@ -1884,6 +1887,7 @@ fn main() {
                 p
             })
             .collect();
+        println!("  [build timer] sample tables (280 sets) done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
         if tables_host == Some(true) {
             eng.stream_reserve(&st, &pts.iter().collect::<Vec<_>>()).unwrap();
             eng.stream_prefetch = table_prefetch;
@@ -1894,6 +1898,7 @@ fn main() {
             println!("--b0-absorb 2: largest per-sample quadratic B0 phase in the ΔC Taylor correction {absorb_q:.3} rad (Taylor-2 truncation ≈ {:.1e})", absorb_q.powi(3) / 6.0);
         }
         let (kf, ka) = eng.autotune(&st, &segs[0], &pts[0]).unwrap();
+        println!("  [build timer] autotune done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
         println!(
             "SegNufft: L = {nseg}, order {}, frames/set {}, coil batch {}, kernels {kf:.1}/{ka:.1} ms (set 0), max phase left out by the {} fit {resid:.2e} rad, built in {:.1}s",
             eng.order,

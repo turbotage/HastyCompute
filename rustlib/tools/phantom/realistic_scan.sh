@@ -7,12 +7,17 @@
 #
 #   rustlib/tools/phantom/realistic_scan.sh <phantom_dir> [--beats 15] [--flow-min 10] [--b0-min 2.5] [--atlas]
 #        [--res 0.002] [--keep-box heart:40] [--octree] [--tag NAME] [--flow-run data/hasty/seq/flow_thorax]
+#        [--keep-box-fov 10] [--readout-stride n|auto] [--sim-coils auto[:EPS]|V] [--noise-sigma S] [--flow-only]
 #
 # --res: prescribed resolution (m) = reconstruction grid; --keep-box: tissue and blood only inside the box, FOV from it
 # (development: no arms, small FOV; prep_sim --keep-box); --octree: multi-resolution box sources (prep_sim
 # --src-octree) instead of 1 mm in the heart box / 2 mm points outside; --tag: suffix of the scan directories
 # (sim_flow_<min>min<tag>, sim_b0_<min>min<tag>) so variants do not overwrite each other; --flow-run: the flow
 # sequence design (seqdesign run; its resolution must match --res).
+# Small-FOV benchmark (2026-11-14): --keep-box-fov: FOV margin around the box (mm, prep_sim); --readout-stride: simulate
+# every n-th encode group (auto: full FOV volume / box FOV volume, the full protocol's per-frame undersampling);
+# --sim-coils: virtual coils in the direct sum; --noise-sigma: absolute σ (the full scan's receiver noise);
+# --flow-only: skip the B0 / R2* / fat scan (simphantom documents all three).
 #
 # --atlas: first rebuild the p0 atlas with the arms (run_p0.sh --labels, 520 × 320 × 360 mm) — then make a new
 #          factory phantom from it (make_phantom.py) and pass that phantom here; existing phantoms keep their atlas.
@@ -23,6 +28,7 @@ R=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$R"
 PH=$(realpath "$1"); shift
 NB=15; FLOW_MIN=10; B0_MIN=2.5; ATLAS=0; RES=0.002; KEEPBOX=""; OCTREE=0; TAG=""; FLOWRUN=data/hasty/seq/flow_thorax
+KBFOV=""; STRIDE=""; SIMCOILS=""; NOISESIG=""; FLOWONLY=0
 while [[ $# -gt 0 ]]; do
   case $1 in
     --beats) NB=$2; shift 2 ;;
@@ -34,6 +40,11 @@ while [[ $# -gt 0 ]]; do
     --octree) OCTREE=1; shift ;;
     --tag) TAG=$2; shift 2 ;;
     --flow-run) FLOWRUN=$2; shift 2 ;;
+    --keep-box-fov) KBFOV=$2; shift 2 ;;
+    --readout-stride) STRIDE=$2; shift 2 ;;
+    --sim-coils) SIMCOILS=$2; shift 2 ;;
+    --noise-sigma) NOISESIG=$2; shift 2 ;;
+    --flow-only) FLOWONLY=1; shift ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
 done
@@ -96,12 +107,18 @@ FS=$(python3 -c "print(int(round($FLOW_MIN*60)))"); SF="$PH/sim_flow_${FLOW_MIN}
 PREP=(--slab auto --fov auto --res "$RES")
 if [[ $OCTREE == 1 ]]; then PREP+=(--src-octree); else PREP+=(--src-roi heart --src-step-out 2); fi
 [[ -n $KEEPBOX ]] && PREP+=(--keep-box "$KEEPBOX")
+[[ -n $KBFOV ]] && PREP+=(--keep-box-fov "$KBFOV")
+SIMX=()
+[[ -n $STRIDE ]] && SIMX+=(--readout-stride "$STRIDE")
+[[ -n $SIMCOILS ]] && SIMX+=(--sim-coils "$SIMCOILS")
+[[ -n $NOISESIG ]] && SIMX+=(--noise-sigma "$NOISESIG")
 step flow_prep "$SF/sim_input.hv" cap 48 $PY $T/prep_sim.py "$PH" "$PH/simblood_lib/blood_frames.hv" "$SF" "${PREP[@]}" --scan-time $FS
 # every library beat cached (≈ 2.5 GB each at 0.5 M covered sources × 100 frames; base ≈ 38 GB → cap 84 G): ≈ 700 heartbeats drawn from NB beats would recompute ≈ 27 s per miss
-step flow_sim "$SF/scan/data_clean.npy" cap 84 $B/simphantom "$SF/sim_input.hv" "$SF/scan" --seq flow --flow-run "$FLOWRUN" --flip $FLIP --beats "$PH/lbm/run_lib" --beats-ref "$PH/lbm/run_cor" --beat-cache $NB
+step flow_sim "$SF/scan/data_clean.npy" cap 84 $B/simphantom "$SF/sim_input.hv" "$SF/scan" --seq flow --flow-run "$FLOWRUN" --flip $FLIP --beats "$PH/lbm/run_lib" --beats-ref "$PH/lbm/run_cor" --beat-cache $NB "${SIMX[@]}"
 step flow_truth "$SF/scan/truth_fat_fraction.npy" cap 48 $PY $T/sim_truth.py "$PH" "$SF/scan"
 step flow_bias "$SF/scan/truth_bias.npz" cap 64 $PY $T/bias_truth.py "$PH" "$SF/scan"
 
+if [[ $FLOWONLY == 1 ]]; then echo "== flow only: done ($SF/scan)"; exit 0; fi
 # B0 / R2* / fat multi-echo: same prescription; the flow library's velocities with the steady-state blood signal
 BS=$(python3 -c "print(int(round($B0_MIN*60)))"); SB="$PH/sim_b0_${B0_MIN}min${TAG}"
 step b0_prep "$SB/sim_input.hv" cap 48 $PY $T/prep_sim.py "$PH" "$PH/simblood_lib/blood_frames.hv" "$SB" "${PREP[@]}" --scan-time $BS

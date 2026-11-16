@@ -3,6 +3,7 @@
 //! through per-device workers. Base set: host-side helpers the viewer and the node editor need.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use hasty_value::quant::{auto_config, decode_u16, encode_u16, Comprep};
@@ -13,8 +14,28 @@ use serde_json::Value as Json;
 use crate::bank::Bank;
 use crate::Error;
 
+/// What a running command can see: the bank, the metadata of its input values, a progress sink (runs report it per node) and a
+/// cancel flag it should poll in long loops.
 pub struct Ctx {
     pub bank: Arc<Bank>,
+    /// metadata JSON of each input value (Null when unknown)
+    pub input_meta: Vec<Json>,
+    pub progress: Arc<dyn Fn(f64, &str) + Send + Sync>,
+    pub cancel: Arc<AtomicBool>,
+}
+
+impl Ctx {
+    pub fn new(bank: Arc<Bank>) -> Self {
+        Self { bank, input_meta: Vec::new(), progress: Arc::new(|_, _| {}), cancel: Arc::new(AtomicBool::new(false)) }
+    }
+
+    pub fn progress(&self, fraction: f64, note: &str) {
+        (self.progress)(fraction, note);
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
 }
 
 pub type Output = (String, Vec<Value>);
@@ -44,6 +65,10 @@ impl Registry {
         let mut r = Self::new();
         base_commands(&mut r);
         crate::flow::register(&mut r);
+        crate::mesh::register(&mut r);
+        crate::mesh_ops::register(&mut r);
+        crate::mesh_flow::register(&mut r);
+        crate::mesh_csg::register(&mut r);
         crate::models::register(&mut r);
         r
     }
@@ -274,7 +299,7 @@ fn base_commands(r: &mut Registry) {
         Ok((String::new(), vec![Value::Tensor(t)]))
     });
     for (name, inverse) in [("fft", false), ("ifft", true)] {
-        r.register(name, "N-D DFT over options.axes (default: all; negative axes allowed), unnormalised forward / 1/N inverse, CPU (rustfft)", move |_, o, inp| {
+        r.register(name, "N-D DFT over options.axes (default: all; negative axes allowed), CPU (rustfft); options.norm: backward (default: unnormalised forward, 1/N inverse) | ortho | forward (numpy conventions)", move |_, o, inp| {
             let t = tensor(name, inp, 0)?;
             let nd = t.shape().len() as i64;
             let axes: Vec<usize> = match o["axes"].as_array() {
@@ -289,6 +314,19 @@ fn base_commands(r: &mut Registry) {
                 Num::C(v) => v,
             };
             fft_nd(&mut c, t.shape(), &axes, inverse);
+            let n: f64 = axes.iter().map(|&a| t.shape()[a] as f64).product();
+            // fft is unnormalised and ifft already divides by n: rescale to the requested convention
+            let scale = match (o["norm"].as_str().unwrap_or("backward"), inverse) {
+                ("backward", _) => 1.0,
+                ("ortho", false) => 1.0 / n.sqrt(),
+                ("ortho", true) => n.sqrt(),
+                ("forward", false) => 1.0 / n,
+                ("forward", true) => n,
+                (other, _) => return inv(format!("{name}: norm must be backward | ortho | forward, got {other:?}")),
+            };
+            if scale != 1.0 {
+                c.iter_mut().for_each(|z| *z *= scale);
+            }
             Ok((String::new(), vec![Value::Tensor(to_tensor(t.shape(), Num::C(c), out_dtype(t.dtype(), true))?)]))
         });
     }

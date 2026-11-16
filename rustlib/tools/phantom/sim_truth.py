@@ -1,6 +1,6 @@
 """Truth of a `simphantom` scan on its reconstruction grid (what `recon_p2np` / `show_run.py` compare against).
 
-    python -I sim_truth.py <phantom_dir> <sim_dir> [--resp mean|0]
+    python -I sim_truth.py <phantom_dir> <sim_dir> [--resp mean|0] [--reuse-fine]
 
 A scan from an LBM beat library (`simphantom --beats`, meta.json "beats") takes its chamber truth from that run's
 phase-binned mean (phantom_4d --chamber-flow lbm:<run> --lbm-vessels).
@@ -56,27 +56,45 @@ if (meta.get("beats") or {}).get("run"):
     if rr:  # the reference-frame library (coronaries)
         rr = Path(rr)
         extra += ["--ref-flow", str(rr if rr.is_absolute() else REPO / rr)]
-subprocess.run([str(REPO / "rustlib/.venv/bin/python"), "-I", str(HERE / "phantom_4d.py"), str(PH), str(PH / "motion"), str(out), "--labels-src",
-                str(PH / "atlas" / "tissue_1mm.hv" if (PH / "atlas" / "tissue_1mm.hv").exists() else REPO / "data/hasty/phantom/p0/tissue_1mm.hv"), "--vox", f"{fine * 1e3}", "--frames", str(nf), "--resp-state", f"{r_state}", "--crop", crop, *extra],
-               check=True, stdout=subprocess.DEVNULL)
-T = vf.read(out / "truth4d.hv")
-vel = np.asarray(T["vel"]).astype(np.float32)  # [F, 3, Z, Y, X] voxel-mean (blood + tissue)
-bl = np.asarray(T["blood"]).astype(np.float32) / 255
-F_, _, Z, Y, X = vel.shape
-assert (Z, Y, X) == (2 * dims[2], 2 * dims[1], 2 * dims[0]), (vel.shape, dims)
+cmd = [str(REPO / "rustlib/.venv/bin/python"), "-I", str(HERE / "phantom_4d.py"), str(PH), str(PH / "motion"), str(out), "--labels-src",
+       str(PH / "atlas" / "tissue_1mm.hv" if (PH / "atlas" / "tissue_1mm.hv").exists() else REPO / "data/hasty/phantom/p0/tissue_1mm.hv"), "--vox", f"{fine * 1e3}", "--frames", str(nf), "--resp-state", f"{r_state}", "--crop", crop, *extra]
+# the fine 4D phantom is reused when it was built with the same arguments (args.json stamp); --reuse-fine accepts an
+# existing truth4d.hv without a stamp (a run killed after phantom_4d) and writes the stamp
+stamp = out / "args.json"
+same = stamp.exists() and json.loads(stamp.read_text()) == cmd
+if (out / "truth4d.hv").exists() and (same or "--reuse-fine" in A):
+    print(f"reusing {out / 'truth4d.hv'}")
+else:
+    import os
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, env={**os.environ, "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"})
+stamp.write_text(json.dumps(cmd))
+# frame by frame from the memory-mapped file: at 0.5 mm over a box the fine phantom is ≈ 70 M voxels × 20 frames
+# (the eager version needed > 48 GB)
+T = vf.open_lazy(out / "truth4d.hv")
+F_, _, Z, Y, X = T["vel"].shape
+assert (Z, Y, X) == (2 * dims[2], 2 * dims[1], 2 * dims[0]), (T["vel"].shape, dims)
+z_, y_, x_ = Z // 2, Y // 2, X // 2
 
 
 def box(a):
-    return a.reshape(a.shape[:-3] + (Z // 2, 2, Y // 2, 2, X // 2, 2)).mean(axis=(-5, -3, -1))
+    return a.reshape(a.shape[:-3] + (z_, 2, y_, 2, x_, 2)).mean(axis=(-5, -3, -1))
 
 
-isb = (bl >= 0.5).astype(np.float32)
-bfrac = box(isb)  # [F, z, y, x]
-vb = box(vel * isb[:, None]) / np.maximum(bfrac, 1e-6)[:, None]
-vb = np.where(bfrac[:, None] >= 0.25, vb, 0).astype(np.float32)
-v_xyz = np.ascontiguousarray(np.transpose(vb, (4, 3, 2, 1, 0)))  # [X, Y, Z, 3, F]
-np.save(SIM / "truth_vel_logical.npy", np.asfortranarray(v_xyz))
-np.save(SIM / "truth_lumen_fraction.npy", np.asfortranarray(np.transpose(bfrac.mean(0), (2, 1, 0)).astype(np.float32)))
+v_xyz = np.zeros((x_, y_, z_, 3, F_), np.float32, order="F")  # [X, Y, Z, 3, F]
+bsum = np.zeros((z_, y_, x_), np.float64)
+for f in range(F_):
+    isb = (np.asarray(T["blood"][f]) >= 128).astype(np.float32)  # blood / 255 ≥ 0.5
+    bf = box(isb)  # [z, y, x]
+    vel = np.asarray(T["vel"][f]).astype(np.float32)  # [3, Z, Y, X] voxel-mean (blood + tissue)
+    vb = box(vel * isb[None]) / np.maximum(bf, 1e-6)[None]
+    del vel
+    vb = np.where(bf[None] >= 0.25, vb, 0).astype(np.float32)
+    v_xyz[..., f] = np.transpose(vb, (3, 2, 1, 0))
+    bsum += bf
+np.save(SIM / "truth_vel_logical.npy", v_xyz)
+np.save(SIM / "truth_lumen_fraction.npy", np.asfortranarray(np.transpose(bsum / F_, (2, 1, 0)).astype(np.float32)))
+bfrac_mean = bsum / F_
+del v_xyz
 # signal fat fraction per reconstruction voxel (recon_p2np --fat-fraction truth): PD × ff of the phantom's tissue
 # table, each species weighted by its spoiled-GRE steady state at the scan's flip angle and TR (T2* left out),
 # frame-averaged; blood carries no fat
@@ -96,12 +114,14 @@ t1w = np.array([TPj[n]["t1_s"] if n in TPj else 1.0 for n in tn])
 t1f = float(TPj["fat"]["t1_s"]) if "fat" in TPj else 0.3
 sw = pd_ * (1 - ffv) * ss(t1w)
 sf = pd_ * ffv * ss(t1f)
-lab_ = np.asarray(T["labels"])  # [F, Z, Y, X] fine
-fat_s = box(sf[lab_].astype(np.float32))  # [F, z, y, x]: per frame (the fat moves with the heart and the breathing)
-tot_s = box((sf + sw)[lab_].astype(np.float32))
-ffr = np.where(tot_s > 1e-6, fat_s / np.maximum(tot_s, 1e-12), 0.0).astype(np.float32)
 # [X, Y, Z, F] Fortran order: nv values per frame, frame-major (recon_p2np --fat-fraction truth, per frame)
-np.save(SIM / "truth_fat_fraction.npy", np.asfortranarray(np.transpose(ffr, (3, 2, 1, 0))))
+ffr = np.zeros((x_, y_, z_, F_), np.float32, order="F")
+sf32, st32 = sf.astype(np.float32), (sf + sw).astype(np.float32)
+for f in range(F_):
+    lab_ = np.asarray(T["labels"][f])  # [Z, Y, X] fine: per frame (the fat moves with the heart and the breathing)
+    fat_s, tot_s = box(sf32[lab_]), box(st32[lab_])
+    ffr[..., f] = np.transpose(np.where(tot_s > 1e-6, fat_s / np.maximum(tot_s, 1e-12), 0.0), (2, 1, 0))
+np.save(SIM / "truth_fat_fraction.npy", ffr)
 meta["truth"] = {"resp_state": r_state, "fine_voxel_m": fine, "source": "phantom_4d gated" + (f" + LBM chamber flow {extra[1][4:]}" if extra else "")}
 (SIM / "meta.json").write_text(json.dumps(meta, indent=1))
-print(f"truth on {dims.tolist()} at {res * 1e3:.2f} mm, {nf} frames, r = {r_state:.2f}; blood voxels {int((bfrac.mean(0) >= 0.5).sum())}")
+print(f"truth on {dims.tolist()} at {res * 1e3:.2f} mm, {nf} frames, r = {r_state:.2f}; blood voxels {int((bfrac_mean >= 0.5).sum())}")

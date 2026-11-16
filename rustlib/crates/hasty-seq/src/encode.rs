@@ -241,6 +241,15 @@ fn design_uncached(spec: &EncodeSpec, sys: &System) -> EncodeDesign {
             }
         }
     }
+    // feasibility of a fixed-length two-lobe design is not monotone in n on the raster (the ramp / flat-top split): the
+    // shared length is the smallest n ≥ the slowest axis's minimum at which every encode and axis has a design
+    let feasible = |n: usize| {
+        enc.iter().all(|e| (0..3).all(|a| (spec.m0[a] == 0.0 && local(e, a) == 0.0) || two_lobe_fixed(spec.m0[a], local(e, a), n, sys).is_some()))
+    };
+    while !feasible(n) {
+        n += 1;
+        assert!(n < 100_000, "no shared encode block length");
+    }
     let dt = sys.grad_raster;
     let mut out = EncodeDesign { waves: vec![], m0: vec![], m1: vec![], m2: vec![], duration: n as f64 * dt, shapes: vec![] };
     for e in &enc {
