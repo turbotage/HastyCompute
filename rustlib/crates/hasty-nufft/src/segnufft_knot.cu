@@ -142,14 +142,30 @@ __device__ __forceinline__ void stage_knot2d(Stage& S, const int* sl, int base, 
     S.aa[sm][0][l] = cx{beta * S.aa[sm][0][l].x, beta * S.aa[sm][0][l].y};
   }
 }
+__device__ __forceinline__ float knot_beta(const Stage& S, const int* sl, int base, int sm, int b, int nint) {
+  const int k = b / nint, bc = b % nint;
+  const int key = (int)((unsigned int)sl[base + sm] >> KEY_SHIFT), ri = key / nint, ic = key % nint;
+  float u, v; unpack_uv(S.rec[sm][2].w, u, v);
+  const int o = ((bc - KOFF - ic) % nint + nint) % nint;
+  return (RDEG == 0 ? 1.f : (ri == k ? 1.f - v : v)) * bspline_k(o, u);
+}
 #define KNOT_WINDOW(tl, first, count, b, nint, sl, nthr) knot_window2d(tl, first, count, b, nint, nri, sl, nthr)
 #define STAGE_KNOT(S, sl, base, nload, b, nint) stage_knot2d(S, sl, base, nload, b, nint)
 #else
+__device__ __forceinline__ float knot_beta(const Stage& S, const int* sl, int base, int sm, int b, int nint) {
+  const int key = (int)((unsigned int)sl[base + sm] >> KEY_SHIFT);
+  return bspline_k(((b - KOFF - key) % nint + nint) % nint, S.rec[sm][2].w);
+}
 #define KNOT_WINDOW(tl, first, count, b, nint, sl, nthr) knot_window(tl, first, count, b, nint, sl, nthr)
 #define STAGE_KNOT(S, sl, base, nload, b, nint) stage_knot(S, sl, base, nload, b, nint)
 #endif
 
 
+#ifndef KV
+#define KV 0
+#endif
+#if KV == 0
+// ---------------------------------------------------------------- variant 0: the original kernels (dense tile loops)
 // forward: samples of knot b's support (+=, y initialised by the host) <- knot b's grid slot
 extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_k(const float4* __restrict__ rec, const unsigned int* __restrict__ tl, const Item* __restrict__ items,
                                              const cx* __restrict__ atab, int ntab, float t0, float dt,
@@ -192,10 +208,12 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_k(const float4* _
     for (int r = 0; r < NR; ++r) { const int q = threadIdx.x + r * NT_F; if (q < 3 * nload) S.rec[q / 3][q % 3] = pr[r]; }
     __syncthreads();
     if (base + CHUNK < nwin) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
     stage_samples<1>(S, nload, o0, o1, o2, d, atab, ntab, t0, dt);
     STAGE_KNOT(S, sl, base, nload, b, nint);
     __syncthreads();
     stage_weights(S, nload);
+#endif
     __syncthreads();
     FWD_MAC(0, 0)
     (void)fo;
@@ -258,12 +276,18 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_k(const float4* _
     for (int r = 0; r < NY; ++r) { const int q = threadIdx.x + r * NT_A; if (q < CHUNK * CPBA) yv[q / CPBA][q % CPBA] = py[r]; }
     __syncthreads();
     if (base + CHUNK < nwin) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
     stage_samples<-1>(S, nload, o0, o1, o2, d, atab, ntab, t0, dt);
     STAGE_KNOT(S, sl, base, nload, b, nint);
     __syncthreads();
     stage_weights(S, nload);
+#endif
     __syncthreads();
+#ifdef PROF_NOMAC
+    for (int s = 0; s < 0; ++s) {
+#else
     for (int s = 0; s < nload; ++s) {
+#endif
 #if TT3 % 32 == 0
       {   // skip samples whose support box misses this warp's 32 tile points (warp-uniform)
         const int bz = S.box[s] >> 16, zlo = (p & ~31) / (TT * TT), zhi = (p | 31) / (TT * TT);
@@ -288,3 +312,375 @@ extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_k(const float4* _
   it.count = nwin;   // an item with nothing in the window adds nothing to a slot in add mode
   adj_store<1, CPBA, ACB>(smem, acc, p, 0, cl, NT_A, it, cg, ncb, g.p, addmask, o0, o1, o2, d);
 }
+#endif   // KV == 0
+
+#if KV >= 1
+// ---------------------------------------------------------------- variants ≥ 1 (dense regime, 2026-11-16)
+// Forward, variant 1: the original sample-lane layout (lanes = (sample group, coil, point stripe), tile values broadcast
+// from shared memory), with the tile values read as float4 pairs (NSEG even) and, at order 0, real weights: the weight
+// of an order-0 kernel has no imaginary part, so 2 of the 4 FFMA of each complex MAC multiply an exact zero (same sums,
+// bit for bit). Variant 2: point-lane layout, see seg_forward_k below.
+// Adjoint (all variants ≥ 1): warps cover a spatial sub-box of the tile (2×2×2 points × 4 coils when the coil group
+// allows, else 4×2×2 × 2 or 4×4×2 × 1) instead of 32 consecutive points, so a sample whose support box misses the
+// sub-box is skipped by the whole warp (§17 of research/temporal_operator.md: 64 → ≈ 36 points per (sample, tile) at
+// W = 8 vs ≈ 53 for the z-slab skip of variant 0). The coil values are folded into the coefficients once per staged
+// (sample, coil, segment), z = y a_l, so the inner MAC is conj(w) z (order 0: real w, 2 FFMA).
+#if TT != 4
+#error "kernel variants >= 1 need TT = 4"
+#endif
+#if ACB != 1
+#error "kernel variants >= 1 need ACB = 1"
+#endif
+#define CWA (CPBA % 4 == 0 ? 4 : (CPBA % 2 == 0 ? 2 : 1))   // coils per warp
+#define PGA (32 / CWA)                                       // points per warp: 8, 16, 32
+#define SXA (PGA == 8 ? 2 : 4)
+#define SYA (PGA == 32 ? 4 : 2)
+#define SZA 2
+// zc: [CHUNK][CPBA][NSEG] cx (16-aligned) after the list and the coil values
+#define ZC_OFF ((((sizeof(Stage) + 4 * LISTMAX + 15) & ~(size_t)15) + 8 * CHUNK * CPBA + 15) & ~(size_t)15)
+
+// stage A of variants ≥ 1: stage_samples with the knot weight β_b(t) folded into the one pass over (sample, segment)
+// (no separate STAGE_KNOT pass); the adjoint (ZC) writes z = y a β for the CPBA coils directly instead of aa
+template <int DIR, bool ZC>
+__device__ __forceinline__ void stage_kv(Stage& S, const int* sl, int base, int nload, int b, int nint, int o0, int o1, int o2, const Dims& d,
+                                         const cx* __restrict__ atab, int ntab, float t0, float dt, cx* zc, const cx (*yv)[CPBA]) {
+  for (int q = threadIdx.x; q < nload * 3 * TT; q += blockDim.x) {
+    const int s = q / (3 * TT), a = (q / TT) % 3, cell = q % TT;
+    const float4 r = S.rec[s][0];
+    const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+    const int og = a == 0 ? o0 : (a == 1 ? o1 : o2), n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2);
+    const float z = wrapdiff((float)(og + cell) - sc, n) * (2.f / (float)W);
+    float o[5];
+    kern_derivs(z, o);
+    #pragma unroll
+    for (int k = 0; k < NK; ++k) S.ax[s][a][k][cell] = o[k];
+  }
+  for (int q = threadIdx.x; q < nload * NSEG; q += blockDim.x) {
+    const int sm = q / NSEG, l = q % NSEG;
+    float u = (S.rec[sm][0].w - t0) / dt;
+    u = fminf(fmaxf(u, 0.f), (float)(ntab - 1) - 1e-3f);
+    const int i = (int)u;
+    const float fr = u - (float)i;
+    const cx pa = atab[i * NSEG + l], pb = atab[(i + 1) * NSEG + l];
+    const cx a = cx{fmaf(fr, pb.x - pa.x, pa.x), fmaf(fr, pb.y - pa.y, pa.y)};
+    float s0, c1; sincosf(S.rec[sm][1].x, &s0, &c1);
+    const cx v = DIR > 0 ? cmul(a, cx{c1, -s0}) : cmulc(a, cx{c1, s0});
+    const float beta = knot_beta(S, sl, base, sm, b, nint);
+    const cx w = cx{beta * v.x, beta * v.y};
+    if (ZC) {
+      #pragma unroll
+      for (int c = 0; c < CPBA; ++c) zc[(sm * CPBA + c) * NSEG + l] = cmul(yv[sm][c], w);
+    } else {
+      S.aa[sm][0][l] = w;
+    }
+  }
+  for (int q = threadIdx.x; q < nload; q += blockDim.x) {
+    const float4 r = S.rec[q][0];
+    int bx = 0;
+    #pragma unroll
+    for (int a = 0; a < 3; ++a) {
+      const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+      const int og = a == 0 ? o0 : (a == 1 ? o1 : o2), n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2);
+      const float dd = wrapdiff((float)og - sc, n);
+      const int lo = max(0, (int)floorf(-0.5f * W - dd) + 1), hi = min(TT - 1, (int)ceilf(0.5f * W - dd) - 1);
+      bx |= (lo | (hi << 4)) << (8 * a);
+    }
+    S.box[q] = bx;
+#if CORR >= 2
+    const float4 r1 = S.rec[q][1], r2 = S.rec[q][2];
+    const float dd[6] = {r1.y, r1.z, r1.w, r2.x, r2.y, r2.z};
+    const int mx[6] = {2, 0, 0, 1, 1, 0}, my[6] = {0, 2, 0, 1, 0, 1};
+    float e[NE];
+    #pragma unroll
+    for (int k = 0; k < NE; ++k) e[k] = 0.f;
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) {
+      #pragma unroll
+      for (int pq = 0; pq < 6; ++pq) {
+        const int ea = mx[p] + mx[pq], eb = my[p] + my[pq];
+        e[ea * (11 - ea) / 2 + eb] = fmaf(-0.5f * dd[p], dd[pq], e[ea * (11 - ea) / 2 + eb]);
+      }
+    }
+    #pragma unroll
+    for (int k = 0; k < NE; ++k) S.ee[q][k] = e[k];
+#endif
+  }
+}
+
+// forward, variants 1 and 2: sample lanes. Variant 2 (opt-in, HASTY_SEG_KV=2 with HASTY_SEG_BOXSORT=1): lanes ordered
+// point stripe, coil, sample group (a warp holds few, box-sorted samples) and the p loop runs over the union of the
+// warp's support boxes only; measured slower than the dense unrolled loop of variant 1 (§17).
+#if KV == 1 || KV == 2
+extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_k(const float4* __restrict__ rec, const unsigned int* __restrict__ tl, const Item* __restrict__ items,
+                                             const cx* __restrict__ atab, int ntab, float t0, float dt,
+                                             Grids g, int b, int nint, int nri, cx* __restrict__ y, int M, int c0, int ncb, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];   // dynamic: Stage | list | tile values (host: TileCfg::smem)
+  Stage& S = *reinterpret_cast<Stage*>(smem);
+  int* sl = reinterpret_cast<int*>(smem + sizeof(Stage));
+  cx* gt = reinterpret_cast<cx*>(smem + ((sizeof(Stage) + 4 * LISTMAX + 15) & ~(size_t)15));
+  const Item it = items[blockIdx.x];
+  if (it.count == 0) return;
+  const int nwin = KNOT_WINDOW(tl, it.first, it.count, b, nint, sl, NT_F);
+  (void)nri;
+  if (nwin == 0) return;
+  const int cg = blockIdx.y * CPBF;
+  int o0, o1, o2; tile_origin(it.tile, d, o0, o1, o2);
+  for (int q = threadIdx.x; q < TT3 * GN; q += NT_F) {
+    const int p = q / GN, c = (q / NSEG) % CPBF, l = q % NSEG;
+    const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
+    cx v = cx{0.f, 0.f};
+    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = g.p[0][(((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l];
+    gt[p * GTS + c * NSEG + l] = v;
+  }
+  constexpr int NR = (3 * CHUNK + NT_F - 1) / NT_F;
+  float4 pr[NR];
+  auto prefetch = [&](int base) {
+    const int nl = min(CHUNK, nwin - base);
+    #pragma unroll
+    for (int r = 0; r < NR; ++r) {
+      const int q = threadIdx.x + r * NT_F;
+      if (q < 3 * nl) pr[r] = rec[(size_t)((unsigned int)sl[base + q / 3] & KEY_MASK) * 3 + q % 3];
+    }
+  };
+  __syncthreads();
+  prefetch(0);
+#if KV == 2
+  // lanes: point stripe fastest, then coil, then sample group (a warp holds few samples: its union box stays small);
+  // lane group ss handles the FSB adjacent samples ss · FSB + k
+  const int pp = threadIdx.x % PPF, cl = (threadIdx.x / PPF) % CPBF, ss = threadIdx.x / (PPF * CPBF);
+#define SIDX(k) (ss * FSB + (k))
+#else
+  // lanes as variant 0: point stripe, sample group, coil; lane group ss handles samples ss + k · SGF
+  const int pp = threadIdx.x % PPF, ss = (threadIdx.x / PPF) % SGF, cl = threadIdx.x / (PPF * SGF);
+#define SIDX(k) (ss + (k) * SGF)
+#endif
+  for (int base = 0; base < nwin; base += CHUNK) {
+    const int nload = min(CHUNK, nwin - base);
+    __syncthreads();
+    #pragma unroll
+    for (int r = 0; r < NR; ++r) { const int q = threadIdx.x + r * NT_F; if (q < 3 * nload) S.rec[q / 3][q % 3] = pr[r]; }
+    __syncthreads();
+    if (base + CHUNK < nwin) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
+    stage_kv<1, false>(S, sl, base, nload, b, nint, o0, o1, o2, d, atab, ntab, t0, dt, nullptr, nullptr);
+    __syncthreads();
+    stage_weights(S, nload);
+#endif
+    __syncthreads();
+    cx o[FSB];
+    #pragma unroll
+    for (int k = 0; k < FSB; ++k) o[k] = cx{0.f, 0.f};
+#if KV == 2
+    // union of the warp's support boxes (lists are box-sorted within a key, `box_sort`): loop only over its points
+    unsigned int ulo[3] = {15u, 15u, 15u}, uhi[3] = {0u, 0u, 0u};
+    #pragma unroll
+    for (int k = 0; k < FSB; ++k) {
+      if (SIDX(k) < nload) {
+        const unsigned int bx = (unsigned int)S.box[SIDX(k)];
+        #pragma unroll
+        for (int a = 0; a < 3; ++a) { ulo[a] = min(ulo[a], (bx >> (8 * a)) & 15u); uhi[a] = max(uhi[a], (bx >> (8 * a + 4)) & 15u); }
+      }
+    }
+    #pragma unroll
+    for (int a = 0; a < 3; ++a) { ulo[a] = __reduce_min_sync(0xffffffffu, ulo[a]); uhi[a] = __reduce_max_sync(0xffffffffu, uhi[a]); }
+#endif
+#ifdef PROF_NOMAC
+    if (false) {
+#else
+    if (SIDX(0) < nload && cg + cl < ncb) {
+#endif
+      cx acc[FSB][NSEG];
+      #pragma unroll
+      for (int k = 0; k < FSB; ++k) {
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) acc[k][l] = cx{0.f, 0.f};
+      }
+#if KV == 2
+      for (int pz = (int)ulo[2]; pz <= (int)uhi[2]; ++pz)
+      for (int py = (int)ulo[1]; py <= (int)uhi[1]; ++py)
+      for (int px = (int)ulo[0] + pp; px <= (int)uhi[0]; px += PPF) {
+        const int p = (pz * TT + py) * TT + px;
+#else
+      for (int p = pp; p < TT3; p += PPF) {
+#endif
+        const cx* gv = gt + p * GTS + cl * NSEG;
+#if CORR == 0
+        float w[FSB];   // order 0: real weights
+        #pragma unroll
+        for (int k = 0; k < FSB; ++k) w[k] = S.wt[SIDX(k)][p];
+#if NSEG % 2 == 0
+        #pragma unroll
+        for (int l2 = 0; l2 < NSEG / 2; ++l2) {
+          const float4 v = reinterpret_cast<const float4*>(gv)[l2];
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) {
+            acc[k][2 * l2].x = fmaf(w[k], v.x, acc[k][2 * l2].x); acc[k][2 * l2].y = fmaf(w[k], v.y, acc[k][2 * l2].y);
+            acc[k][2 * l2 + 1].x = fmaf(w[k], v.z, acc[k][2 * l2 + 1].x); acc[k][2 * l2 + 1].y = fmaf(w[k], v.w, acc[k][2 * l2 + 1].y);
+          }
+        }
+#else
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) {
+          const cx v = gv[l];
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) { acc[k][l].x = fmaf(w[k], v.x, acc[k][l].x); acc[k][l].y = fmaf(w[k], v.y, acc[k][l].y); }
+        }
+#endif
+#else
+        cx w[FSB];
+        #pragma unroll
+        for (int k = 0; k < FSB; ++k) w[k] = S.wt[SIDX(k)][p];
+#if NSEG % 2 == 0
+        #pragma unroll
+        for (int l2 = 0; l2 < NSEG / 2; ++l2) {
+          const float4 v4 = reinterpret_cast<const float4*>(gv)[l2];
+          #pragma unroll
+          for (int h = 0; h < 2; ++h) {
+            const cx v = h == 0 ? cx{v4.x, v4.y} : cx{v4.z, v4.w};
+            const int l = 2 * l2 + h;
+            #pragma unroll
+            for (int k = 0; k < FSB; ++k) {
+              acc[k][l].x = fmaf(w[k].x, v.x, acc[k][l].x); acc[k][l].x = fmaf(-w[k].y, v.y, acc[k][l].x);
+              acc[k][l].y = fmaf(w[k].x, v.y, acc[k][l].y); acc[k][l].y = fmaf(w[k].y, v.x, acc[k][l].y);
+            }
+          }
+        }
+#else
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) {
+          const cx v = gv[l];
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) {
+            acc[k][l].x = fmaf(w[k].x, v.x, acc[k][l].x); acc[k][l].x = fmaf(-w[k].y, v.y, acc[k][l].x);
+            acc[k][l].y = fmaf(w[k].x, v.y, acc[k][l].y); acc[k][l].y = fmaf(w[k].y, v.x, acc[k][l].y);
+          }
+        }
+#endif
+#endif
+      }
+      #pragma unroll
+      for (int k = 0; k < FSB; ++k) {
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) { const cx v = cmul(S.aa[SIDX(k)][0][l], acc[k][l]); o[k].x += v.x; o[k].y += v.y; }
+      }
+    }
+    #pragma unroll
+    for (int k = 0; k < FSB; ++k) {
+      #pragma unroll
+      for (int sh = PPF / 2; sh > 0; sh >>= 1) { o[k].x += __shfl_xor_sync(0xffffffffu, o[k].x, sh); o[k].y += __shfl_xor_sync(0xffffffffu, o[k].y, sh); }
+    }
+    if (cg + cl < ncb && pp == 0) {
+      #pragma unroll
+      for (int k = 0; k < FSB; ++k) {
+        if (SIDX(k) < nload) {
+          cx* dst = y + (size_t)(c0 + cg + cl) * M + ((unsigned int)sl[base + SIDX(k)] & KEY_MASK);
+          atomicAdd(&dst->x, o[k].x);
+          atomicAdd(&dst->y, o[k].y);
+        }
+      }
+    }
+  }
+}
+#undef SIDX
+#endif   // KV == 1 || KV == 2 (forward)
+
+// adjoint, variants ≥ 1: sub-box warps, z = y a_l
+extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_k(const float4* __restrict__ rec, const unsigned int* __restrict__ tl, const Item* __restrict__ items,
+                                             const cx* __restrict__ atab, int ntab, float t0, float dt,
+                                             const cx* __restrict__ y, int M, int c0, int ncb, Grids g, int b, int nint, int nri, int addmask, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];   // dynamic: Stage | list | coil values | z (host: TileCfg::smem)
+  Stage& S = *reinterpret_cast<Stage*>(smem);
+  int* sl = reinterpret_cast<int*>(smem + sizeof(Stage));
+  cx (*yv)[CPBA] = reinterpret_cast<cx (*)[CPBA]>(smem + ((sizeof(Stage) + 4 * LISTMAX + 15) & ~(size_t)15));
+  cx* zc = reinterpret_cast<cx*>(smem + ZC_OFF);
+  Item it = items[blockIdx.x];
+  const int cg = blockIdx.y * CPBA;
+  // warp → (point group, coil group); lane → (point in group, coil in group)
+  const int lane = threadIdx.x & 31, wp = threadIdx.x >> 5;
+  constexpr int NGX = 4 / SXA, NGY = 4 / SYA, NPG = 64 / PGA;
+  const int gi = wp % NPG, pi = lane % PGA;
+  const int cl = (wp / NPG) * CWA + lane / PGA;
+  const int gx = gi % NGX, gy = (gi / NGX) % NGY, gz = gi / (NGX * NGY);
+  const int p = ((gz * SZA + pi / (SXA * SYA)) * TT + gy * SYA + (pi / SXA) % SYA) * TT + gx * SXA + pi % SXA;
+  // the group's box, packed as the support boxes: lo | hi << 4 per axis
+  const int x0 = gx * SXA, x1 = x0 + SXA - 1, y0 = gy * SYA, y1 = y0 + SYA - 1, z0 = gz * SZA, z1 = z0 + SZA - 1;
+  int o0, o1, o2; tile_origin(it.tile, d, o0, o1, o2);
+  const int nwin = it.count > 0 ? KNOT_WINDOW(tl, it.first, it.count, b, nint, sl, NT_A) : 0;
+  (void)nri;
+  constexpr int NR = (3 * CHUNK + NT_A - 1) / NT_A, NY = (CHUNK * CPBA + NT_A - 1) / NT_A;
+  float4 pr[NR]; cx py[NY];
+  auto prefetch = [&](int base) {
+    const int nl = min(CHUNK, nwin - base);
+    #pragma unroll
+    for (int r = 0; r < NR; ++r) {
+      const int q = threadIdx.x + r * NT_A;
+      if (q < 3 * nl) pr[r] = rec[(size_t)((unsigned int)sl[base + q / 3] & KEY_MASK) * 3 + q % 3];
+    }
+    #pragma unroll
+    for (int r = 0; r < NY; ++r) {
+      const int q = threadIdx.x + r * NT_A, coil = cg + q % CPBA;
+      py[r] = cx{0.f, 0.f};
+      if (q < nl * CPBA && coil < ncb) py[r] = y[(size_t)(c0 + coil) * M + ((unsigned int)sl[base + q / CPBA] & KEY_MASK)];
+    }
+  };
+  if (nwin > 0) prefetch(0);
+  cx acc[1][NSEG];
+  #pragma unroll
+  for (int l = 0; l < NSEG; ++l) acc[0][l] = cx{0.f, 0.f};
+  for (int base = 0; base < nwin; base += CHUNK) {
+    const int nload = min(CHUNK, nwin - base);
+    __syncthreads();
+    #pragma unroll
+    for (int r = 0; r < NR; ++r) { const int q = threadIdx.x + r * NT_A; if (q < 3 * nload) S.rec[q / 3][q % 3] = pr[r]; }
+    #pragma unroll
+    for (int r = 0; r < NY; ++r) { const int q = threadIdx.x + r * NT_A; if (q < CHUNK * CPBA) yv[q / CPBA][q % CPBA] = py[r]; }
+    __syncthreads();
+    if (base + CHUNK < nwin) prefetch(base + CHUNK);
+#ifndef PROF_NOSTAGE
+    stage_kv<-1, true>(S, sl, base, nload, b, nint, o0, o1, o2, d, atab, ntab, t0, dt, zc, yv);
+    __syncthreads();
+    stage_weights(S, nload);
+#endif
+    __syncthreads();
+#ifndef PROF_NOMAC
+    for (int s0 = 0; s0 < nload; s0 += 32) {
+      bool hit = false;
+      if (s0 + lane < nload) {
+        const int bx = S.box[s0 + lane];
+        hit = (bx & 15) <= x1 && ((bx >> 4) & 15) >= x0 && ((bx >> 8) & 15) <= y1 && ((bx >> 12) & 15) >= y0 && ((bx >> 16) & 15) <= z1 && ((bx >> 20) & 15) >= z0;
+      }
+      unsigned int msk = __ballot_sync(0xffffffffu, hit);
+      while (msk) {
+        const int s = s0 + __ffs(msk) - 1;
+        msk &= msk - 1;
+        const cx* zp = zc + (s * CPBA + cl) * NSEG;
+#if CORR == 0
+        const float w = S.wt[s][p];
+#if NSEG % 2 == 0
+        #pragma unroll
+        for (int l2 = 0; l2 < NSEG / 2; ++l2) {
+          const float4 z = reinterpret_cast<const float4*>(zp)[l2];
+          acc[0][2 * l2].x = fmaf(w, z.x, acc[0][2 * l2].x); acc[0][2 * l2].y = fmaf(w, z.y, acc[0][2 * l2].y);
+          acc[0][2 * l2 + 1].x = fmaf(w, z.z, acc[0][2 * l2 + 1].x); acc[0][2 * l2 + 1].y = fmaf(w, z.w, acc[0][2 * l2 + 1].y);
+        }
+#else
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) { const cx z = zp[l]; acc[0][l].x = fmaf(w, z.x, acc[0][l].x); acc[0][l].y = fmaf(w, z.y, acc[0][l].y); }
+#endif
+#else
+        const cx w = S.wt[s][p];
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) {   // conj(w) z
+          const cx z = zp[l];
+          acc[0][l].x = fmaf(w.x, z.x, acc[0][l].x); acc[0][l].x = fmaf(w.y, z.y, acc[0][l].x);
+          acc[0][l].y = fmaf(w.x, z.y, acc[0][l].y); acc[0][l].y = fmaf(-w.y, z.x, acc[0][l].y);
+        }
+#endif
+      }
+    }
+#endif
+  }
+  it.count = nwin;
+  adj_store<1, CPBA, 1>(smem, acc, p, 0, cl, NT_A, it, cg, ncb, g.p, addmask, o0, o1, o2, d);
+}
+#endif   // KV >= 1

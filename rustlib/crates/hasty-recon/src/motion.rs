@@ -413,3 +413,29 @@ mod tests {
         assert!(rel < 0.15, "relative displacement error {rel}");
     }
 }
+
+/// Per-sample affine object motion in k-space (exact for a global affine map, no FFT cost). The object at surrogate
+/// value s is x_s(p) = x_ref(φ_s⁻¹(p)), φ_s(q) = M_s q + d_s, M_s = I + s A₁, d_s = s t₁ (positions in metres
+/// relative to the image centre, voxel q ↦ (q − N/2) Δ). Then
+///   y(k) = ∫ x_s(p) e^{−i k·p} dp = |det M_s| e^{−i k·d_s} X̂_ref(M_sᵀ k),
+/// so per sample: k ← M_sᵀ k (coords are k·Δ in rad / voxel, per axis), the constant phase φ0 += k·d_s (the operators
+/// apply e^{−iφ0}), and the amplitude |det M_s| (returned; divide the sample's data by it). Coil maps and the field map
+/// stay in the reference frame (an approximation the caller accepts: smooth maps, research/model_robustness.md).
+pub fn affine_samples(coords: &mut [Vec<f32>; 3], phi0: &mut [f32], s: &[f64], a1: &[[f64; 3]; 3], t1: &[f64; 3], vox: [f64; 3]) -> Vec<f64> {
+    let m = phi0.len();
+    assert!(coords.iter().all(|c| c.len() == m) && s.len() == m);
+    let mut det = vec![1.0f64; m];
+    for j in 0..m {
+        let sj = s[j];
+        let k: [f64; 3] = [0, 1, 2].map(|a| coords[a][j] as f64 / vox[a]);
+        let mm: [[f64; 3]; 3] = [0, 1, 2].map(|r| [0, 1, 2].map(|c| (r == c) as u8 as f64 + sj * a1[r][c]));
+        // k' = Mᵀ k
+        for a in 0..3 {
+            let kp = (0..3).map(|r| mm[r][a] * k[r]).sum::<f64>();
+            coords[a][j] = (kp * vox[a]) as f32;
+        }
+        phi0[j] += (0..3).map(|a| k[a] * sj * t1[a]).sum::<f64>() as f32;
+        det[j] = (mm[0][0] * (mm[1][1] * mm[2][2] - mm[1][2] * mm[2][1]) - mm[0][1] * (mm[1][0] * mm[2][2] - mm[1][2] * mm[2][0]) + mm[0][2] * (mm[1][0] * mm[2][1] - mm[1][1] * mm[2][0])).abs();
+    }
+    det
+}

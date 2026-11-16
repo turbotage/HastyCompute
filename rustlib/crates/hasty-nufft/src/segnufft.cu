@@ -426,13 +426,21 @@ __device__ __forceinline__ void tile_origin(int tile, const Dims& d, int& o0, in
   const int ntx = (d.nf0 + TT - 1) / TT, nty = (d.nf1 + TT - 1) / TT;
   o0 = (tile % ntx) * TT; o1 = ((tile / ntx) % nty) * TT; o2 = (tile / (ntx * nty)) * TT;
 }
+// knot-major kernel variants ≥ 1 at order 0 (segnufft_knot.cu): the weights are real, stored as float (half the
+// shared memory of the weight rows; the interval-major tile kernels, which read complex weights, are not compiled)
+#if defined(KV) && KV >= 1 && CORR == 0
+#define WT_REAL 1
+typedef float wt_t;
+#else
+typedef cx wt_t;
+#endif
 struct Stage {   // per-chunk shared state common to both directions
   float4 rec[CHUNK][3];
   float ax[CHUNK][3][NK][TT];
   float ee[CORR >= 2 ? CHUNK : 1][NE];
   int box[CHUNK];        // support box on the tile: lo/hi per axis, 4 bits each (x lo, x hi, y lo, y hi, z lo, z hi)
   cx aa[CHUNK][NF][NSEG];
-  cx wt[CHUNK][WTS];
+  wt_t wt[CHUNK][WTS];
 };
 // stage A: kernel factors on the tile, coefficients aa[o][l] = a_l(tau) b_o(u) (forward: e^{-i phi0}; adjoint: conj,
 // e^{+i phi0}), support box, second-order coefficients
@@ -528,7 +536,12 @@ __device__ __forceinline__ void stage_weights(Stage& S, int nload) {
       float wr = 0.f, wi = 0.f;
       #pragma unroll
       for (int a = 0; a < NK; ++a) { const float xa = S.ax[s][0][a][px]; wr = fmaf(xa, R[a], wr); wi = fmaf(xa, Q[a], wi); }
+#ifdef WT_REAL
+      S.wt[s][row * TT + px] = wr;
+      (void)wi;
+#else
       S.wt[s][row * TT + px] = cx{wr, wi};
+#endif
     }
   }
 }
@@ -613,6 +626,7 @@ __device__ __forceinline__ void adj_store(unsigned char* smem, const cx (&acc)[A
     }
 
 
+#ifndef WT_REAL
 // adjoint: grid slots (NCH channels of the batch each) <- samples of one frame interval
 extern "C" __global__ void __launch_bounds__(NT_A) seg_adjoint_t(const float4* __restrict__ rec, const unsigned int* __restrict__ tl, const Item* __restrict__ items,
                                              const cx* __restrict__ atab, int ntab, float t0, float dt,
@@ -779,3 +793,4 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
     }
   }
 }
+#endif   // WT_REAL

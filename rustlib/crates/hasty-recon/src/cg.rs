@@ -131,7 +131,8 @@ pub fn pcgls_ctl(
     let m_len = y.len();
     let mut q = st.alloc_zeros::<C32>(m_len)?;
     let mut s = st.alloc_zeros::<C32>(nv)?;
-    let mut z = st.alloc_zeros::<C32>(nv)?;
+    // z = M⁻¹ s only with a preconditioner; without one s itself serves (one image vector less)
+    let mut z = st.alloc_zeros::<C32>(if pre.is_some() { nv } else { 1 })?;
     let saved = match ctl {
         Some((c, name)) => c.load(name)?,
         None => None,
@@ -152,12 +153,13 @@ pub fn pcgls_ctl(
         op.kernels().axpby(st, -one, &q, one, &mut r)?;
         op.adjoint(st, &r, &mut s)?;
         op.kernels().axpby(st, Complex64::new(-lambda, 0.0), x, one, &mut s)?;
-        match pre.as_deref_mut() {
-            Some(p) => p.apply(st, &s, &mut z)?,
-            None => st.memcpy_dtod(&s, &mut z)?,
+        let has_pre = pre.is_some();
+        if let Some(p) = pre.as_deref_mut() {
+            p.apply(st, &s, &mut z)?;
         }
-        p = st.clone_dtod(&z)?;
-        gamma = op.kernels().dot(st, &s, &z)?.re;
+        let zr = if has_pre { &z } else { &s };
+        p = st.clone_dtod(zr)?;
+        gamma = op.kernels().dot(st, &s, zr)?.re;
         s0 = op.kernels().dot(st, &s, &s)?.re.sqrt();
         hist = vec![1.0];
         it0 = 0;
@@ -170,15 +172,16 @@ pub fn pcgls_ctl(
         op.kernels().axpby(st, Complex64::new(-alpha, 0.0), &q, one, &mut r)?;
         op.adjoint(st, &r, &mut s)?;
         op.kernels().axpby(st, Complex64::new(-lambda, 0.0), x, one, &mut s)?;
-        match pre.as_deref_mut() {
-            Some(pp) => pp.apply(st, &s, &mut z)?,
-            None => st.memcpy_dtod(&s, &mut z)?,
+        let has_pre = pre.is_some();
+        if let Some(pp) = pre.as_deref_mut() {
+            pp.apply(st, &s, &mut z)?;
         }
-        let g_new = op.kernels().dot(st, &s, &z)?.re;
+        let zr = if has_pre { &z } else { &s };
+        let g_new = op.kernels().dot(st, &s, zr)?.re;
         hist.push(op.kernels().dot(st, &s, &s)?.re.sqrt() / s0);
         let beta = g_new / gamma;
         gamma = g_new;
-        op.kernels().axpby(st, one, &z, Complex64::new(beta, 0.0), &mut p)?;
+        op.kernels().axpby(st, one, zr, Complex64::new(beta, 0.0), &mut p)?;
         cb(it + 1, x);
         if let Some((c, name)) = ctl {
             let next = it + 1;

@@ -3,6 +3,9 @@
 //! HASTY_BENCH_FRAMES="F,deg": time-resolved operator over F frames (M samples per frame, random times), B-spline deg.
 //! HASTY_BENCH_GRID_GB: fine-grid budget (GiB, default 6; sets the coil batch).
 //! HASTY_BENCH_KNOT=1: knot-major temporal operator (`SegNufft::new_temporal(.., true)`).
+//! HASTY_BENCH_2D="kr,rdeg": respiratory × cardiac knots (`SegNufft::new_temporal2d`, kr respiratory knots of degree
+//! rdeg, the FRAMES knots cardiac; M samples per knot image, so kr · F · M samples).
+//! HASTY_BENCH_W: kernel width (default 10); HASTY_BENCH_RES: voxel size in m (default 0.002).
 use cudarc::driver::sys::CUevent_flags;
 use hasty_cuda::{Device, C32};
 use hasty_nufft::{build_segments, NufftOpts, NufftPlan, SegNufft, SegNufftOpts};
@@ -28,17 +31,29 @@ fn main() {
         t[t.len() / 2]
     };
     let (frames, bspline): (usize, u32) = std::env::var("HASTY_BENCH_FRAMES").ok().map(|v| { let mut it = v.split(','); (it.next().unwrap().parse().unwrap(), it.next().map_or(1, |b| b.parse().unwrap())) }).unwrap_or((1, 1));
+    let r2d: Option<(usize, u32)> = std::env::var("HASTY_BENCH_2D").ok().map(|v| { let mut it = v.split(','); (it.next().unwrap().parse().unwrap(), it.next().map_or(1, |b| b.parse().unwrap())) });
+    let width: usize = std::env::var("HASTY_BENCH_W").ok().map_or(10, |v| v.parse().unwrap());
+    let res: f64 = std::env::var("HASTY_BENCH_RES").ok().map_or(0.002, |v| v.parse().unwrap());
     for c in cases {
         let dims = [c[0], c[1], c[2]];
-        let (m, nc) = (c[3] * frames, c[4]);
+        let nimg = frames * r2d.map_or(1, |r| r.0);
+        let (m, nc) = (c[3] * nimg, c[4]);
         let nv = dims.iter().product::<usize>();
         let mut s = 12345u64;
         let mut u = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; (s >> 11) as f64 / (1u64 << 53) as f64 - 0.5 };
         let coords: [Vec<f32>; 3] = [0, 1, 2].map(|_| (0..m).map(|_| (u() * 6.2) as f32).collect());
-        let x: Vec<C32> = (0..nv * frames).map(|_| C32::new(u() as f32, u() as f32)).collect();
+        let x: Vec<C32> = (0..nv * nimg).map(|_| C32::new(u() as f32, u() as f32)).collect();
         let tfr: Vec<f32> = (0..m).map(|_| ((u() + 0.5) * frames as f64) as f32).collect();
+        // 2-D: respiratory interval and fraction (nri = kr for bins, kr − 1 for linear)
+        let (rir, rvr): (Vec<u32>, Vec<f32>) = match r2d {
+            Some((kr, rdeg)) => {
+                let nri = if rdeg == 0 { kr } else { kr - 1 };
+                (0..m).map(|_| { let r = (u() + 0.5) * nri as f64; ((r.floor() as u32).min(nri as u32 - 1), (r - r.floor()) as f32) }).unzip()
+            }
+            None => (vec![], vec![]),
+        };
         let dx = st.clone_htod(&x).unwrap();
-        println!("dims {dims:?}, M = {m}, coils = {nc}, frames = {frames} (B-spline {bspline})");
+        println!("dims {dims:?}, M = {m}, coils = {nc}, frames = {frames} (B-spline {bspline}), 2-D {r2d:?}, W {width}");
         // plain NUFFT reference (σ = 2, tol 1e-5 and σ = 1.25 W = 10)
         let plain: &[(f64, Option<usize>)] = if std::env::var("HASTY_BENCH_PLAIN").as_deref() == Ok("0") { &[] } else { &[(2.0, None), (1.25, Some(10usize))] };
         for &(sig, w) in plain {
@@ -60,7 +75,11 @@ fn main() {
         };
         for (nseg, order) in cfgs {
             let knot = std::env::var("HASTY_BENCH_KNOT").is_ok_and(|v| v != "0");
-            let mut op = SegNufft::new_temporal(&dev, dims, [0.002; 3], nc, SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline, max_grid_bytes: std::env::var("HASTY_BENCH_GRID_GB").ok().map_or(6 << 30, |v| (v.parse::<f64>().unwrap() * (1u64 << 30) as f64) as usize) }, knot).unwrap();
+            let so = SegNufftOpts { sigma: 1.25, width, nseg, order, frames, bspline, max_grid_bytes: std::env::var("HASTY_BENCH_GRID_GB").ok().map_or(6 << 30, |v| (v.parse::<f64>().unwrap() * (1u64 << 30) as f64) as usize) };
+            let mut op = match r2d {
+                Some((kr, rdeg)) => SegNufft::new_temporal2d(&dev, dims, [res; 3], nc, so, kr, rdeg).unwrap(),
+                None => SegNufft::new_temporal(&dev, dims, [res; 3], nc, so, knot).unwrap(),
+            };
             op.set_maps(&st, &smaps).unwrap();
             let fit: Vec<usize> = (0..nv).step_by(97).collect();
             let psi = |v: usize, t: f64| 2000.0 * ((v % 113) as f64 / 113.0 - 0.5) * t;
@@ -69,7 +88,11 @@ fn main() {
             let tau: Vec<f32> = (0..m).map(|_| (5e-3 + u() * 6e-3) as f32).collect();
             let dcv: Vec<f32> = (0..6 * m).map(|_| (u() * 10.0) as f32).collect();
             let tp = std::time::Instant::now();
-            let pts = op.points(&st, [&coords[0], &coords[1], &coords[2]], &tau, &vec![0f32; m], &dcv, (frames > 1).then_some(&tfr[..])).unwrap();
+            let pts = if r2d.is_some() {
+                op.points2d(&st, [&coords[0], &coords[1], &coords[2]], &tau, &vec![0f32; m], &dcv, &tfr, &rir, &rvr).unwrap()
+            } else {
+                op.points(&st, [&coords[0], &coords[1], &coords[2]], &tau, &vec![0f32; m], &dcv, (frames > 1).then_some(&tfr[..])).unwrap()
+            };
             st.synchronize().unwrap();
             let tp = tp.elapsed().as_secs_f64() * 1e3;
             let def = (op.tiles_fwd, op.tiles_adj);
@@ -79,7 +102,7 @@ fn main() {
                 println!("    autotune {:.1} s: kernels fwd {kf:.1} ms {:?}, adj {ka:.1} ms {:?} (default fwd {:?}, adj {:?})", tt.elapsed().as_secs_f64(), op.tiles_fwd, op.tiles_adj, def.0, def.1);
             }
             let mut y = st.alloc_zeros::<C32>(m * nc).unwrap();
-            let mut xo = st.alloc_zeros::<C32>(nv * frames).unwrap();
+            let mut xo = st.alloc_zeros::<C32>(nv * nimg).unwrap();
             let tf = time(&mut || op.forward(&st, &seg, &pts, &dx, &mut y).unwrap());
             let ta = time(&mut || op.adjoint(&st, &seg, &pts, &y, &mut xo).unwrap());
             println!("  SegNufft L={nseg:>2} order {order}: forward {tf:.1} ms, adjoint {ta:.1} ms (coil batch {}, set_points {tp:.0} ms)", op.cb);

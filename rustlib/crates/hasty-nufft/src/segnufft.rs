@@ -76,6 +76,13 @@ pub struct TileCfg {
     /// one complex MAC per shared-memory load, the original kernels. Single-image and knot kernels only (multi: 1).
     pub acb: usize,
     pub fsb: usize,
+    /// kernel variant of the knot-major tile kernels (segnufft_knot.cu `KV`; research/temporal_operator.md §17):
+    /// 0 = the original dense tile loops; 1 = forward with float4 tile-value loads and real order-0 weights, adjoint
+    /// with sub-box warps (support-box skips per 8 points), z = y·a·β folded coefficients and one fused staging pass;
+    /// 2 (opt-in, HASTY_SEG_KV=2, with HASTY_SEG_BOXSORT=1 tables): adjoint as 1, forward looping over the union of a
+    /// warp's support boxes (measured slower than 1 at 2 mm, §17). Variants ≥ 1 need TT = 4, acb = 1 and a knot-major
+    /// engine; other engines: 0. The autotune times 0 and 1.
+    pub kv: usize,
 }
 
 /// what a shape is fitted for: segments, correction order, frame slots
@@ -120,12 +127,13 @@ impl TileCfg {
         let env = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<usize>().ok());
         // env-requested blocking, reduced to what the coil group allows
         let (acb, fsb) = (gcd(cpba, env("HASTY_SEG_ACB").unwrap_or(1).max(1)), env("HASTY_SEG_FSB").unwrap_or(1).max(1));
-        Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, fsb, max_item, smax).or_else(|| Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, 1, max_item, smax))
+        let kv = Self::default_kv(sh, tt, acb);
+        Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, fsb, kv, max_item, smax).or_else(|| Self::fit_ab(sh, tt, cpba, cpbf, ppf, acb, 1, kv, max_item, smax))
     }
 
     /// [`fit`](Self::fit) with explicit register blocking (acb coils per adjoint thread, fsb samples per forward lane)
     #[allow(clippy::too_many_arguments)]
-    fn fit_ab(sh: Shape, tt: usize, cpba: usize, cpbf: usize, ppf: usize, acb: usize, fsb: usize, max_item: usize, smax: usize) -> Option<Self> {
+    fn fit_ab(sh: Shape, tt: usize, cpba: usize, cpbf: usize, ppf: usize, acb: usize, fsb: usize, kv: usize, max_item: usize, smax: usize) -> Option<Self> {
         let lanes = ppf * sh.nf;
         if !ppf.is_power_of_two() || lanes > 32 || acb == 0 || fsb == 0 || cpba % acb != 0 || tt.pow(3) * sh.nf * cpba / acb > 1024 {
             return None;
@@ -133,7 +141,7 @@ impl TileCfg {
         // largest chunk ≤ 32 (≤ 64 with sample blocking) with whole forward warps and ≤ 512 forward threads
         let mut c = (if fsb > 1 { 64usize } else { 32 }).min(512 * fsb / (cpbf * lanes));
         while c > 0 {
-            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb, fsb };
+            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb, fsb, kv };
             if t.fits(sh, smax) {
                 return Some(t);
             }
@@ -142,9 +150,31 @@ impl TileCfg {
         None
     }
 
+    /// kernel variant without an explicit choice: HASTY_SEG_KV if set, else the default for the shape (knot-major
+    /// engines with TT = 4 and acb = 1: variant 1; everything else: 0)
+    fn default_kv(sh: Shape, tt: usize, acb: usize) -> usize {
+        let ok = sh.ks > 0 && tt == 4 && acb == 1;
+        match std::env::var("HASTY_SEG_KV").ok().and_then(|v| v.parse::<usize>().ok()) {
+            Some(v) => if ok { v } else { 0 },
+            None => if ok { 1 } else { 0 },
+        }
+    }
+
+    /// kernel variants worth timing for a shape (autotune): HASTY_SEG_KV restricts to one
+    fn kv_candidates(sh: Shape, tt: usize) -> Vec<usize> {
+        if sh.ks == 0 || tt != 4 {
+            return vec![0];
+        }
+        match std::env::var("HASTY_SEG_KV").ok().and_then(|v| v.parse::<usize>().ok()) {
+            Some(v) => vec![v],
+            None => vec![0, 1],
+        }
+    }
+
     fn fits(&self, sh: Shape, smax: usize) -> bool {
         let fthreads = self.chunk * self.cpbf * self.ppf * sh.nf;
-        self.smem(sh).iter().all(|&b| b <= smax)
+        (self.kv == 0 || (sh.ks > 0 && self.tt == 4 && self.acb == 1 && self.kv <= 2))
+            && self.smem(sh).iter().all(|&b| b <= smax)
             && self.chunk % self.fsb == 0
             && fthreads % self.fsb == 0
             && (fthreads / self.fsb) % 32 == 0
@@ -164,11 +194,15 @@ impl TileCfg {
         let up = |b: usize, a: usize| b.div_ceil(a) * a;
         // Stage: rec, ax, ee, box | aa, wt (8-aligned) | 16-aligned size
         let st = 48 * c + 4 * 3 * nk * self.tt * c + 4 * 15 * if sh.order >= 2 { c } else { 1 } + 4 * c;
-        let st = up(up(st, 8) + 8 * sh.nf * nseg * c + 8 * (tt3 + self.ppf * sh.nf) * c, 16);
+        // weight rows: complex, or real (float) for the knot variants ≥ 1 at order 0 (WT_REAL in segnufft.cu)
+        let wb = if self.kv >= 1 && sh.order == 0 { 4 } else { 8 };
+        let st = up(up(st, 8) + 8 * sh.nf * nseg * c + wb * (tt3 + self.ppf * sh.nf) * c, 16);
         let base = up(st + 4 * self.max_item, 16);
         let gn = sh.nf * self.cpbf * nseg;
         let gts = gn + (2 + 4 - gn % 4) % 4;
-        [(base + 8 * c * self.cpba).max(adj_store_smem(tt3, self.cpba, nseg)), base + 8 * tt3 * gts]
+        // variants ≥ 1: the adjoint adds z = y a_l, [chunk][cpba][nseg] cx (ZC_OFF in segnufft_knot.cu)
+        let adj = if self.kv >= 1 { up(base + 8 * c * self.cpba, 16) + 8 * c * self.cpba * nseg } else { base + 8 * c * self.cpba };
+        [adj.max(adj_store_smem(tt3, self.cpba, nseg)), base + 8 * tt3 * gts]
     }
 }
 
@@ -234,7 +268,7 @@ impl TileCfg {
         let step = 32 / gcd(32, cpbf * lanes);
         let mut c = 32usize.min(512 / (cpbf * lanes)) / step * step;
         while c > 0 {
-            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb: 1, fsb: 1 };
+            let t = Self { tt, cpba, cpbf, ppf, chunk: c, max_item, acb: 1, fsb: 1, kv: 0 };
             if t.fits_multi(sh, km, smax) {
                 return Some(t);
             }
@@ -397,6 +431,55 @@ pub fn tile_lists(sc: &[f32], m: usize, perm: &[u32], nf: [usize; 3], w: usize, 
     }
     items.sort_by_key(|it| std::cmp::Reverse(it[2]));
     (tl, items, split)
+}
+
+/// Order the entries of every work item of a knot-major tile list by (interval key, support-box class on the item's
+/// tile), stable: the key runs (knot windows) stay contiguous, and consecutive samples of a window have equal or
+/// neighbouring support boxes on the tile, so the forward tile kernel's warp-union box loops (kernel variant 1,
+/// segnufft_knot.cu) skip most zero-weight points. The box class per axis is (lo, hi) of the support cells on the tile,
+/// ordered lo then hi (a sliding window: neighbouring classes overlap). Opt-in (HASTY_SEG_BOXSORT=1): only kernel
+/// variant 2 uses the order, and it adds ≈ 10 s of host time per 30 M samples.
+#[allow(clippy::too_many_arguments)]
+pub fn box_sort(tl: &mut [u32], items: &[[i32; 4]], sc: &[f32], m: usize, nf: [usize; 3], w: usize, tt: usize, key_shift: u32) {
+    use rayon::prelude::*;
+    if !std::env::var("HASTY_SEG_BOXSORT").is_ok_and(|v| v == "1") {
+        return;
+    }
+    let nt = nf.map(|n| n.div_ceil(tt));
+    let mut rs: Vec<(usize, usize, usize)> = items.iter().filter(|it| it[2] > 0).map(|it| (it[0] as usize, it[1] as usize, it[2] as usize)).collect();
+    rs.sort_by_key(|r| r.1);
+    // disjoint item ranges of tl, in order
+    let mut parts: Vec<(usize, &mut [u32])> = Vec::with_capacity(rs.len());
+    let mut rest: &mut [u32] = tl;
+    let mut pos = 0;
+    for &(tile, first, count) in &rs {
+        let (_, r) = std::mem::take(&mut rest).split_at_mut(first - pos);
+        let (a, b) = r.split_at_mut(count);
+        parts.push((tile, a));
+        rest = b;
+        pos = first + count;
+    }
+    let mask = (1u32 << key_shift) - 1;
+    parts.into_par_iter().for_each(|(tile, ent)| {
+        let to = [tile % nt[0], (tile / nt[0]) % nt[1], tile / (nt[0] * nt[1])].map(|t| (t * tt) as i64);
+        let class = |e: u32| -> u32 {
+            let j = (e & mask) as usize;
+            let mut c = 0u32;
+            for a in [2usize, 1, 0] {
+                let n = nf[a] as i64;
+                let i0 = (sc[a * m + j] - w as f32 * 0.5).ceil() as i64;
+                let mut dd = (i0 - to[a]).rem_euclid(n);
+                if dd >= n / 2 {
+                    dd -= n;
+                }
+                let lo = dd.max(0).min(tt as i64 - 1) as u32;
+                let hi = (dd + w as i64 - 1).min(tt as i64 - 1).max(0) as u32;
+                c = (c << 8) | (lo << 4) | hi;
+            }
+            c
+        };
+        ent.sort_by_cached_key(|&e| ((e >> key_shift) as u64) << 32 | class(e) as u64);
+    });
 }
 
 /// Per-sample-set data of a [`SegNufft`] (records, tile lists, frame intervals), built once by [`SegNufft::points`].
@@ -827,7 +910,7 @@ fn lc(n: usize) -> LaunchConfig {
 fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileCfg) -> Result<Arc<CudaModule>, NufftError> {
     let defs = std::env::var("HASTY_SEG_DEFS").unwrap_or_default();
     let src = format!(
-        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define PCVB {}\n#define ACB {}\n#define FSB {}\n{}",
+        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define PCVB {}\n#define ACB {}\n#define FSB {}\n#define KV {}\n{}",
         defs.split(',').filter(|d| !d.is_empty()).map(|d| format!("#define {d}\n")).collect::<String>(),
         plan.ker.w,
         plan.ker.beta,
@@ -844,10 +927,11 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
         pcvb(cb * sh.nseg),
         tc.acb,
         tc.fsb,
+        tc.kv,
         if sh.ks > 0 { format!("#define KS {}\n#define RDEG {}\n{}\n{}", sh.ks, sh.rdeg, include_str!("segnufft.cu"), include_str!("segnufft_knot.cu")) } else { include_str!("segnufft.cu").to_string() }
     );
     let name = format!(
-        "segnufft{}{}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}_a{}_s{}",
+        "segnufft{}{}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}_a{}_s{}_v{}",
         defs.replace([',', ' '], "_"),
         if sh.ks > 0 { format!("_k{}{}", sh.ks, if sh.rdeg >= 0 { format!("r{}", sh.rdeg) } else { String::new() }) } else { String::new() },
         plan.ker.w,
@@ -862,7 +946,8 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
         tc.chunk,
         tc.max_item,
         tc.acb,
-        tc.fsb
+        tc.fsb,
+        tc.kv
     );
     Ok(dev.load_module(&name, &src, &CompileSettings::default())?)
 }
@@ -1180,6 +1265,7 @@ impl SegNufft {
             pi.sort_by_key(|&j| ival[j as usize]);   // stable: bin-sorted order within an interval
             let (mut tl, items, split) = tile_lists(&sc, m, &pi, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, self.tiles_fwd.max_item);
             tl.iter_mut().for_each(|e| *e |= ival[*e as usize] << 25);
+            box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
             let ivals = vec![Interval { first: 0, count: items.len(), split }];
             return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0 });
         }
@@ -1556,6 +1642,15 @@ impl SegNufft {
         Ok(())
     }
 
+    /// The launch shape with the largest chunk that fits this engine's shared memory for the given coil groups, lanes,
+    /// register blocking and kernel variant (`TileCfg::kv`), on the engine's tile edge and item length; None if it
+    /// does not fit (or the variant does not apply). For tests and experiments with [`set_tiles`](Self::set_tiles).
+    #[allow(clippy::too_many_arguments)]
+    pub fn tile_shape(&self, cpba: usize, cpbf: usize, ppf: usize, acb: usize, fsb: usize, kv: usize) -> Option<TileCfg> {
+        let t = TileCfg::fit_ab(self.shape(), self.tiles_fwd.tt, cpba, cpbf, ppf, acb, fsb, kv, self.tiles_fwd.max_item, self.smax)?;
+        (t.fits(self.shape(), self.smax) && t.threads(self.shape()).0 <= 512).then_some(t)
+    }
+
     /// Use the given launch shapes (e.g. tuned on another set with the same trajectory type). Tile edge and item length
     /// must match the current tile lists.
     pub fn set_tiles(&mut self, fwd: TileCfg, adj: TileCfg) -> Result<(), NufftError> {
@@ -1611,9 +1706,11 @@ impl SegNufft {
         let env = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<usize>().ok());
         let fsbs: Vec<usize> = env("HASTY_SEG_FSB").map_or(vec![1, 2, 4], |v| vec![v]);
         let acbs: Vec<usize> = env("HASTY_SEG_ACB").map_or(vec![1, 2, 4], |v| vec![v]);
-        for &cpbf in groups.iter().filter(|&&c| c <= cb) {
+        let kvs = TileCfg::kv_candidates(sh, tt);
+        for (&cpbf, &kv) in groups.iter().filter(|&&c| c <= cb).flat_map(|c| kvs.iter().map(move |k| (c, k))) {
             for (ppf, &fsb) in [1usize, 2, 4].into_iter().flat_map(|p| fsbs.iter().map(move |f| (p, f))) {
-                let Some(tc) = TileCfg::fit_ab(sh, tt, self.tiles_adj.cpba, cpbf, ppf, self.tiles_adj.acb.min(self.tiles_adj.cpba), fsb, mi, self.smax) else { continue };
+                let acb = if kv >= 1 { 1 } else { self.tiles_adj.acb.min(self.tiles_adj.cpba) };
+                let Some(tc) = TileCfg::fit_ab(sh, tt, self.tiles_adj.cpba, cpbf, ppf, acb, fsb, kv, mi, self.smax) else { continue };
                 if tc.chunk < 8 {
                     continue;
                 }
@@ -1625,8 +1722,12 @@ impl SegNufft {
             }
         }
         let mut best_a = (f32::INFINITY, self.tiles_adj);
-        for (cpba, &acb) in groups.iter().filter(|&&c| c <= cb).flat_map(|&c| acbs.iter().map(move |a| (c, a))) {
-            let Some(tc) = TileCfg::fit_ab(sh, tt, cpba, best_f.1.cpbf, best_f.1.ppf, acb, best_f.1.fsb, mi, self.smax) else { continue };
+        let combos: Vec<(usize, usize, usize)> = groups.iter().filter(|&&c| c <= cb).flat_map(|&c| acbs.iter().flat_map(|&a| kvs.iter().map(move |&k| (c, a, k))).collect::<Vec<_>>()).collect();
+        for (cpba, acb, kv) in combos {
+            if kv >= 1 && acb != 1 {
+                continue;
+            }
+            let Some(tc) = TileCfg::fit_ab(sh, tt, cpba, best_f.1.cpbf, best_f.1.ppf, acb, best_f.1.fsb, kv, mi, self.smax) else { continue };
             let f = tile_fn(&compile(&self.dev, &self.plan, sh, cb, &tc)?, aname, tc.smem(sh)[0])?;
             let t = time(&mut || if self.ks > 0 { self.launch_adj_k(st, &f, &tc, seg, pts, 0, g, 0, &ys, 0, ncb) } else { self.launch_adj(st, &f, &tc, seg, pts, busiest, g, 0, &ys, 0, ncb) })?;
             if t < best_a.0 {
@@ -3324,6 +3425,7 @@ impl SegNufft {
         pi.sort_by_key(|&j| key[j as usize]);
         let (mut tl, items, split) = tile_lists(&sc, m, &pi, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, self.tiles_fwd.max_item);
         tl.iter_mut().for_each(|e| *e |= key[*e as usize] << 25);
+        box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
         let ivals = vec![Interval { first: 0, count: items.len(), split }];
         Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32 })
     }

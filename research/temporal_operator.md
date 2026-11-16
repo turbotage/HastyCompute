@@ -695,3 +695,228 @@ positions of an edge gives a double edge unless the displacement per knot step i
   - The truth states cover only the lower half of the breathing range (median 0.48, max 1.4).
   - The recon ignores fat / GNL / concomitant terms (common to all arms).
   - Breathing is the true state, not bellows (bellows comes later, as a robustness arm).
+
+### 16.1 Measured on the phantom (2026-11-16): how many knots the motion and the flow need
+
+**Respiratory motion** (motion/resp_motion.hv: u = r · U(X), r ∈ [0, 1.4], 10.3 mm mean at the heart at r = 1):
+- 4 cm sphere around the heart, at r = 1:
+  - raw: |u| mean 10.3 mm, max 13.9 mm;
+  - after a translation fit: 2.0 mm rms, 5.7 mm max;
+  - **after an affine fit: 0.32 mm rms, 3.0 mm max.**
+  - 6 cm sphere (more chest wall): affine leaves 1.8 mm rms.
+- Heart-centre travel per knot step, knots at r quantiles:
+  - 4 linear knots: 2.5 / 4.8 / 7.0 mm;
+  - 6 linear knots: 0.9–5.5 mm;
+  - 12 linear knots: ≤ 1.4 mm, except the last step (4.2 mm);
+  - 8 bins: within-bin travel 0.4–4.6 mm.
+
+  At 2 mm, 4–6 knots are at or past the double-edge limit; for 1 mm coronaries none of these suffice alone.
+- **Consequence: the heart's breathing motion is nearly affine**, and an affine motion is exact per sample in k-space
+  (phase ramp + k-coordinate transform + Jacobian). It costs no FFTs and keeps the knot operator. The design to test:
+  per-sample affine heart motion A(r) = r · A₁ (12 parameters, estimated, shrunk and validated on held-out k-space;
+  research/model_robustness.md), plus a few respiratory knots for the residual (≈ 0.3 mm rms).
+
+**Cardiac content of the flow** (truth_vel_logical, 20 frames, deep lumen):
+- Velocity dynamic energy per harmonic h = 1…10: 0.47 / 0.25 / 0.14 / 0.047 / 0.028 / 0.027 / 0.017 / 0.008 /
+  0.006 / 0.003 (91 % in h ≤ 4).
+  - The PC phase curves look broadband (66 % in h ≤ 4), but that is phase-wrap nonlinearity, not flow.
+  - The truth itself is 20-frame binned, so the content above h ≈ 5 is underestimated.
+- Model error of each basis on these velocity curves:
+
+  | basis | images / cycle | error |
+  |---|---|---|
+  | 20 bins (today) | 20 | 0.234 |
+  | cubic 10 | 10 | 0.276 |
+  | cubic 12 | 12 | 0.220 |
+  | cubic 16 | 16 | 0.121 |
+  | cubic 20 | 20 | 0.054 |
+  | cubic 24 | 24 | 0.018 |
+  | quintic 16 | 16 | 0.116 |
+  | linear 20 | 20 | 0.090 |
+
+- **Correction of §0 / §11.** "Cubic 10 knots = 20–400× less error" holds per harmonic for h ≤ 3 only. For this
+  phantom's spectrum:
+  - cubic 10 is slightly *worse* than 20 bins;
+  - equal error needs ≈ 12 cubic knots;
+  - half the error needs 16;
+  - 4.3× less error needs 20 (the same image count as today).
+
+  With the 8-respiratory-bin density (§16 timings), knot images cost ≈ 0.55× a per-frame image at 1 mm. So:
+  - cubic 16 ≈ 0.9× the time at half the cardiac model error;
+  - cubic 20 ≈ 1.1× the time at a quarter of it.
+
+  Faster *and* more accurate holds at 16 knots; at 20 it buys accuracy at about equal time.
+
+### 16.2 Results (2026-11-16)
+
+**Gradient-pass time** (one forward + adjoint, encode 0 = 30.3 M samples, 2 mm, 8 coils, 10 B0 segments, W 8, order 0,
+`--time-only`, same 2-D engine; slots = respiratory × cardiac support):
+
+| basis (resp × cardiac) | knot images per encode | slots / sample | pass time | vs today |
+|---|---|---|---|---|
+| **8 bins × 20 bins (today's per-frame layout)** | 160 | 1 | **13.8 s** (8 × 1.73 s, one bin timed with `--resp-keep`) | 1 |
+| 8 bins × 10 cubic | 80 | 4 | 14.0 s | 1.01 |
+| 6 linear × 10 cubic | 60 | 8 | 19.0 s | 1.38 |
+| 4 linear × 10 cubic | 40 | 8 | 17.2 s | 1.25 |
+| 4 linear × 20 bins | 80 | 2 | 10.9 s | 0.79 |
+
+At 2 mm with 30 M samples per encode, **the cost is per sample × slots, not per image**, as the 1-D matrix predicted for
+2 mm (§11b). Halving the images while doubling or quadrupling the slots per sample does not pay here. The 1 mm regime,
+sparse per grid point, is where the per-image saving dominates. It is not yet measured in 2-D. The fix for the dense
+regime is the per-sample work: the wasted zero-weight MACs (§15 item 3) and the per-slot re-staging (item 4).
+
+**Accuracy: inconclusive. The test is solver-limited.**
+- Unregularised CGLS from zero, 20 iterations: every arm reaches a pooled velocity-phase slope of only 0.03–0.04, and
+  arms lin6 / lin4 score within ±0.002 of each other everywhere (scores.csv).
+- Checks (encode 1 − 0, depth ≥ 5, 10 iterations):
+  - B0 only: slope 0.045, corr 0.47;
+  - + concomitant: 0.049 / 0.46;
+  - + GNL: 0.049 / 0.46;
+  - + warm start (static image, 10 preconditioned iterations): 0.163 / 0.27.
+- So missing physics is not the cause. The iterate is far from converged (gradient norm 7–17 % of its start), and the
+  arms' differences sit below the solver error.
+- R2 (full driver, preconditioned, warm start) reached a pooled slope of 0.28 on the 1 mm box. This test needs the
+  same:
+  - a preconditioner for knot stacks (per-knot circulant scaled by the knot's sample weight energy);
+  - classical regularisation (spatial wavelet + temporal LLR, as the user proposed);
+  - iterations to convergence.
+
+  Only then are basis differences measurable. Pre-registered decision: **no conclusion on bins vs splines from this
+  run.**
+
+The 8-bin CG arm needed 21.7 GiB against 21.3 GiB free. The new ledger refused it cleanly (no OOM). CGLS without a
+preconditioner now skips its z vector (cg.rs), which saves 2.5 GiB, so it fits.
+
+## 17. Dense-regime kernel work (2026-11-16/17)
+
+**Starting point (§16.2).** 2 mm, 254 × 144 × 114, 2-D lin6 × cubic10 (8 slots per sample), 30.3 M samples per encode,
+8 coils in 2 batches of 4, L = 10, W = 8, order 0: one forward + adjoint = 18.97 s. Ablation (`HASTY_SEG_DEFS`): MACs
+≈ 9.4 s, staging ≈ 4.6 s, FFT + pad + crop ≈ 3.7 s, list / window / prefetch / store the rest.
+
+**Two wastes in the MACs, counted before writing code.**
+1. *Zero imaginary parts.* At order 0 the kernel weight w = φ has no imaginary part (the ΔC term is absent), but both
+   kernels multiplied it as a complex number: 2 of the 4 FFMA of every complex MAC multiplied an exact zero.
+2. *Zero-weight points.* Points per (sample, tile) that a warp multiplies, W = 8, TT = 4, sample centres uniform
+   (box simulation, scratch boxsim.py; a sample's support box on a tile is ≤ 4 cells per axis):
+
+   | loop | points of 64 |
+   |---|---|
+   | exact support box | 25 |
+   | warps of 2 × 2 × 2 points (skip per warp) | 36 |
+   | warps of 4 × 2 × 2 points | 44 |
+   | warps of 4 × 4 × 2 points (the old adjoint's z-slab skip) | 53 |
+   | dense (the old forward) | 64 |
+   | forward: union of the boxes of a warp's 16 samples, lists box-sorted within a key, 4 key runs | 57 |
+   | same, 4 samples per warp | 40 |
+
+**What was built: kernel variants, `TileCfg::kv` (segnufft_knot.cu `KV`).** Variant 0 is the original pair, unchanged.
+- **Variant 1, forward:** the same sample-lane layout and dense unrolled p loop; tile values read as float4 pairs
+  (even L), and at order 0 real weights (2 FFMA per complex MAC, the same sums bit for bit).
+- **Variant 1, adjoint:** each warp covers a spatial sub-box of the tile instead of 32 consecutive points: 2 × 2 × 2
+  points × 4 coils when the coil group is a multiple of 4, else 4 × 2 × 2 × 2 or 4 × 4 × 2 × 1. A ballot over the
+  chunk's samples gives each warp the samples whose support box meets its sub-box. The coil values are folded into the
+  coefficients once per (sample, coil, segment): z = y a_l β, so the inner MAC is conj(w) z (order 0: real w, 2 FFMA).
+- **Variant 1, staging:** the knot weight β and (adjoint) z are computed in the one pass over (sample, segment) that
+  interpolates a_l, instead of two extra passes; at order 0 the weight rows are stored as float (half the shared
+  memory of the largest staged array).
+- **Variant 2 (opt-in, `HASTY_SEG_KV=2` + `HASTY_SEG_BOXSORT=1`):** adjoint as 1; forward loops only over the union of
+  its warp's support boxes, with lanes ordered so that a warp holds few samples, on tables sorted by support-box class
+  within each key (`box_sort`). It measured slower than variant 1 (below) and is kept for other regimes.
+
+The autotune times variants 0 and 1 with every launch shape; `HASTY_SEG_KV=0` restores the old kernels everywhere
+(TileCfg default and autotune). The interval-major and multi-image kernels are unchanged.
+
+**Correctness.** tests/seg_knot_kv.rs: variants 1 and 2 against variant 0 for coil groups 1 / 2 / 4 / 8 (all sub-box
+warp shapes), forward lanes 1 / 2 / 4, sample blocking 1 / 2, orders 0 / 1 / 2, L even and odd, 1-D cubic and 2-D
+linear × cubic knots, split tile lists. Forward ≤ 5e-6, adjoint ≤ 4e-5 relative (z = y a association; the knot- vs
+interval-major bound of seg_knot.rs), normalised adjointness ≤ 1.3e-7. All gate tests pass (list at the end).
+
+**Results, 2 mm 2-D lin6 × cubic10** (`splinerecon --rknots 6 --rdeg 1 --time-only --encodes 0 --phys b0`, autotuned,
+one forward + adjoint of encode 0, 30.3 M samples, 2 coil batches of 4):
+
+| state | forward | adjoint | pass | tile kernels at knot 0, one batch (fwd / adj) |
+|---|---|---|---|---|
+| variant 0 (§16.2) | 9.73 s | 9.24 s | **18.97 s** | 42.1 / 43.7 ms |
+| variant 1, first form (float4 + real weights; sub-box warps + z) | 7.53 s | 7.96 s | 15.49 s | 31.0 / 39.5 ms |
+| union-box forward on box-sorted lists (now variant 2) | 9.61 s | 7.88 s | 17.48 s | 41.8 / 39.1 ms |
+| **variant 1, final (+ fused staging pass, float weight rows)** | **7.23 s** | **6.44 s** | **13.66 s** (1.39×) | 29.5 / 30.6 ms |
+
+The autotune picks variant 1 with the same shape as before (cpba 4, cpbf 4, ppf 2, chunk 32, no register blocking).
+
+What the measurements say:
+- The real-weight MAC is the largest single gain in the forward: the dense loop with half the FFMA beats skipping zero
+  points. The union-box loop (variant 2) is *slower* although it multiplies ≈ 40 % fewer points (simulated): its loop bounds are
+  per warp, so the p loop is no longer unrolled with its tile-value loads pipelined, and the lane order that keeps
+  few samples per warp reads 8 distinct tile-value addresses per load instead of 2 (bank conflicts). The box sort
+  costs ≈ 10 s of host time per 30 M samples. Both are opt-in now.
+- The adjoint's sub-box warps cut its MACs ≈ 3× (53 → 36 points, 4 → 2 FFMA per complex MAC), but the adjoint went
+  only 9.24 → 7.96 s until the staging was fused: the staging, not the MACs, is now the cost per sample. The fused
+  pass and the float weight rows (adjoint shared memory 38 → 30 KB per block, so 3 blocks fit per SM instead of 2)
+  gave the next 1.5 s.
+- The uniform-random dev case (`segnufft_bench` with `HASTY_BENCH_2D=6,1`, half grid, 15 M samples) is not
+  representative: its samples fill every tile, so the per-tile work (window, tile-value loads, stores) dominates and
+  variant 1 gains only 17 % / 13 % there (5.35 / 4.80 → 4.42 / 4.18 s). Real trajectories put the samples in ≈ ¼ of
+  the tiles (the k-space ball inside the σ-oversampled grid), with long lists, so per-sample work dominates.
+
+1MM_RESULTS
+
+**Not done, ranked (measured basis above).**
+1. *Staging overlap.* Each chunk still runs stage → barrier → weights → barrier → MACs, so a block's staging latency
+   (atab loads, sincos, exp) is hidden only by the other 1–2 blocks on the SM. A double-buffered stage (stage A of
+   chunk k + 1 in the same barrier interval as the MACs of chunk k; ≈ 5 KB more shared memory) would overlap it.
+2. *Point-lane forward for order ≥ 1* (lanes = (tile point, coil) with the tile values in registers, sub-box warps as
+   in the adjoint, a shuffle reduction per sample): with complex weights it should cut the forward MACs ≈ 1.6×; at
+   order 0 the dense real-weight loop is as cheap, so this only matters for 1 mm with ΔC.
+3. *Staging once for several knots* needs several slots resident: at 2 mm the 3 GiB slot budget gives one slot of 4
+   coils, and 2 slots of 2 coils stage each sample exactly as often (coil batches × knots is constant). It only pays
+   where memory is free for more slot channels.
+
+**Selecting the paths.** `HASTY_SEG_KV=0` (old kernels, default shape and autotune), `=1` (new), `=2` (union forward,
+use with `HASTY_SEG_BOXSORT=1`); unset: TileCfg default variant 1 on knot-major engines with TT = 4, autotune times
+0 and 1. `SegNufft::tile_shape(cpba, cpbf, ppf, acb, fsb, kv)` + `set_tiles` pick a shape explicitly. Static and
+interval-major engines always use variant 0 (the static image path is unchanged).
+
+
+## 18. Respiratory motion in the knot operator: design rules for real data, first steps (2026-11-16)
+
+**Constraint (user):** nothing may depend on labels, segmentations or phantom truths that a real scan does not have.
+Design rules:
+1. **Motion is estimated from the scan's own data.** Use breathing-binned low-resolution reconstructions with the
+   **bellows** surrogate (not the sim's true state), then the existing label-free smooth-field fit
+   (`hasty_recon::motion::fit_shared`, I_b(x) ≈ I_0(x − r_b S(x)); its mask is the signal support of the data).
+2. **The region is the prescribed reconstruction box** (what a technologist sets on a localizer), not anatomy. A robust
+   (IRLS, Cauchy-weighted) affine fit inside the box takes the dominant coherent motion.
+3. **The affine part is applied exactly per sample in k-space**, M_s = I + s A₁, d_s = s t₁:
+   k ← M_sᵀ k, φ0 += k·d_s, data ÷ |det M_s|. This costs no FFTs, so it is compatible with the knot operator. Coil
+   maps and field map stay in the reference frame, an approximation (research/model_robustness.md).
+   - `hasty_recon::motion::affine_samples`. tests/affine_kspace.rs: a whole-voxel translation and a 90° rotation
+     equal the transformed image to 3e-7 / 4.5e-7.
+4. **The non-affine remainder goes to a few respiratory knots.**
+5. **Acceptance only by held-out k-space validation with shrinkage α ∈ {0, ½, 1}** (model_robustness.md). α = 0 is
+   the plain knot model, so the result is never worse on held-out data than not modelling the motion.
+6. **The phantom's true motion field is used only as an explicitly labelled oracle arm or check**, never inside the
+   method.
+
+**Estimation mode** `splinerecon --estimate-motion NR:SCALE [--roi x0:x1,y0:y1,z0:z1]` (encode 0, NR bellows bins,
+plain-SENSE preconditioned static images on a SCALE grid, the shared field, the robust affine fit; writes
+`<out>_affine.json`).
+
+First run on the 2 mm scan at 4 mm, 8 bins (≈ 30 s):
+- the shared field explains 32 % of the bin-to-bin differences (relative residual 0.68);
+- **min Jacobian −0.85 / −1.08: the fitted field folds**, so its regularisation is too weak for these images;
+- affine residual ≈ 1.1 voxel rms (4 mm);
+- translation at the largest bin, central box: 4.5 mm, against ≈ 10 mm of true heart motion.
+  - The box includes chest wall.
+  - Phantom and recon axes may differ (rot_presc), so this is a rough, not an exact, comparison.
+
+So the estimate is not good enough yet. Next steps, in order:
+1. the real prescription box (map the 1 mm box prescription onto the grid through the scan geometry, as the scanner
+   does);
+2. a field fit with an invertibility guard (stronger smoothness, a Jacobian floor) and finer bin images (2 mm, or
+   more iterations);
+3. the knot reconstruction with affine-corrected samples, α ∈ {0, ½, 1}, scored by held-out k-space and,
+   separately, by frame_fit;
+4. bellows vs true-state surrogate as a robustness arm (the bellows-to-motion relation has hysteresis on real
+   scans).
+
+Item 3 needs the converged, preconditioned, regularised knot solver (§16.2).
