@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -23,7 +27,7 @@ A = sys.argv[1:]
 CASE = Path(A[0])
 case = json.loads((CASE / "case.json").read_text())
 R = case["regions"]
-reg = np.load(CASE / R["file"])
+reg = load_any(CASE / R["file"])
 so = np.asarray(case["sdf"]["origin"], float)
 sh = float(case["sdf"]["h"])
 names = {int(k): v for k, v in R["names"].items()}

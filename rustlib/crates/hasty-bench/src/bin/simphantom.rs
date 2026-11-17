@@ -1313,7 +1313,7 @@ fn main() {
                     }
                 }
             }
-            write_npy(&out.join(name), "<f4", &[n_ro, na, cols.len()], false, &sk).unwrap();
+            hasty_value::store::save_bytes(&out.join(name), hasty_value::DType::F32, &[n_ro, na, cols.len()], hasty_value::Order::C, &sk, &sched_save(na)).unwrap();
         };
         match &nominal {
             Some(nom) => {
@@ -1537,6 +1537,10 @@ fn main() {
     // a run killed after the simulation (in the outputs below) has already renamed the file: resume from it (every
     // chunk is then done, only the outputs are written)
     let k_done = out.join("data_clean.npy");
+    if !k_part.exists() && !k_done.exists() && out.join("data_clean.hv").exists() {
+        println!("{}: the simulation is complete (data_clean.hv); delete it to simulate again", out.display());
+        return;
+    }
     let resumed_outputs = !k_part.exists() && std::fs::metadata(&k_done).map(|m| m.len() == k_need).unwrap_or(false);
     if resumed_outputs {
         std::fs::rename(&k_done, &k_part).unwrap();
@@ -1877,6 +1881,8 @@ fn main() {
     let rms = (ss / (n_ro * na * nc) as f64).sqrt();
     let sigma = noise_sigma_abs.unwrap_or(noise_rel * rms);
     println!("noise σ {sigma:.4e} per complex sample ({}; data rms {rms:.4e})", if noise_sigma_abs.is_some() { "--noise-sigma" } else { "--noise × rms" });
+    // k-space storage step (uniform, ADC-like): min(σ/8 per component, 1e-4 relative rms) (research/io_policy.md)
+    let k_step = hasty_value::store::kspace_step(sigma, rms);
     if write_noisy {
         let l = hasty_phantom::scene::cholesky(&psi);
         let mut s = 0x9E3779B97F4A7C15u64;
@@ -1889,9 +1895,25 @@ fn main() {
             };
             (-2.0 * u().ln()).sqrt() * (2.0 * std::f64::consts::PI * u()).cos()
         };
-        use std::io::Write;
-        let mut fo = std::io::BufWriter::new(std::fs::File::create(out.join("data.npy")).unwrap());
-        fo.write_all(&k_hdr).unwrap();
+        // .hv (quantised at the k-space step, one readout per chunk, research/io_policy.md) or, HASTY_IO=npy, .npy
+        let mut fo: Box<dyn FnMut(&[u8])> = if hasty_value::store::write_hv() {
+            let save = hasty_value::Save::default().policy(hasty_value::Policy::Abs(k_step)).chunk(hasty_value::store::Chunking::Rows(1));
+            let mut w = Some(hasty_value::store::TensorWriter::create(&out.join("data.hv"), hasty_value::DType::C64, &[n_ro, na, nc], hasty_value::Order::C, &save, None).unwrap());
+            let mut done = 0usize;
+            let total = n_ro * na * nc * 8;
+            Box::new(move |b: &[u8]| {
+                w.as_mut().unwrap().push(b).unwrap();
+                done += b.len();
+                if done == total {
+                    w.take().unwrap().finish().unwrap();
+                }
+            })
+        } else {
+            use std::io::Write;
+            let mut f = std::io::BufWriter::new(std::fs::File::create(out.join("data.npy")).unwrap());
+            f.write_all(&k_hdr).unwrap();
+            Box::new(move |b: &[u8]| f.write_all(b).unwrap())
+        };
         for_rows(&mut |v: &[C32]| {
             let mut noisy = v.to_vec();
             for row in noisy.chunks_mut(nc) {
@@ -1904,12 +1926,10 @@ fn main() {
                     row[c] = C32::new(row[c].re + acc.re as f32, row[c].im + acc.im as f32);
                 }
             }
-            for c in &noisy {
-                fo.write_all(&c.re.to_le_bytes()).unwrap();
-                fo.write_all(&c.im.to_le_bytes()).unwrap();
-            }
+            let b: Vec<u8> = noisy.iter().flat_map(|c| [c.re.to_le_bytes(), c.im.to_le_bytes()].concat()).collect();
+            fo(&b);
         });
-        fo.flush().unwrap();
+        drop(fo);
     }
     let ro_tab: Vec<u8> = (0..n_ro).flat_map(|i| acq.readout_row(i).into_iter().flat_map(|x| x.to_le_bytes())).collect();
     write_npy(&out.join("readouts.npy"), "<f8", &[n_ro, 14], false, &ro_tab).unwrap();
@@ -1952,12 +1972,20 @@ fn main() {
             use std::io::Write;
             let hdr = hasty_phantom::volume::npy_header("<f4", &[n_ro, na, cols.len()], false);
             let need = hdr.len() as u64 + (n_ro * na * cols.len() * 4) as u64;
-            if resumed_outputs && std::fs::metadata(out.join(name)).map(|m| m.len() == need).unwrap_or(false) {
+            let hv = hasty_value::store::write_hv();
+            // an .hv exists only once complete (written as .tmp, renamed at the end)
+            let kept = if hv { out.join(name).with_extension("hv").exists() } else { std::fs::metadata(out.join(name)).map(|m| m.len() == need).unwrap_or(false) };
+            if resumed_outputs && kept {
                 println!("{name}: kept (written by the killed run)");
                 return;
             }
-            let mut fo = std::io::BufWriter::with_capacity(16 << 20, std::fs::File::create(out.join(name)).unwrap());
-            fo.write_all(&hdr).unwrap();
+            // .hv: per-field 24-bit scale per readout + delta along the ADC (≈ f32 precision at each field's maximum,
+            // 0.35 of the bytes; research/io_policy.md); HASTY_IO=npy: plain .npy
+            let mut hw = hv.then(|| hasty_value::store::TensorWriter::create(&out.join(name).with_extension("hv"), hasty_value::DType::F32, &[n_ro, na, cols.len()], hasty_value::Order::C, &sched_save(na), None).unwrap());
+            let mut fo = (!hv).then(|| std::io::BufWriter::with_capacity(16 << 20, std::fs::File::create(out.join(name)).unwrap()));
+            if let Some(f) = fo.as_mut() {
+                f.write_all(&hdr).unwrap();
+            }
             let mut sk: Vec<u8> = Vec::with_capacity(256 * na * 4 * cols.len());
             for c0 in (0..n_ro).step_by(256) {
                 sk.clear();
@@ -1967,9 +1995,18 @@ fn main() {
                         sk.extend_from_slice(&r[q].to_le_bytes());
                     }
                 }
-                fo.write_all(&sk).unwrap();
+                match (hw.as_mut(), fo.as_mut()) {
+                    (Some(w), _) => w.push(&sk).unwrap(),
+                    (None, Some(f)) => f.write_all(&sk).unwrap(),
+                    _ => unreachable!(),
+                }
             }
-            fo.flush().unwrap();
+            if let Some(mut f) = fo {
+                f.flush().unwrap();
+            }
+            if let Some(w) = hw {
+                w.finish().unwrap();
+            }
         };
         match &nominal {
             Some(nom) => {
@@ -2006,9 +2043,11 @@ fn main() {
     }
     let c64b = |d: &[Complex64]| -> Vec<u8> { d.iter().flat_map(|c| [(c.re as f32).to_le_bytes(), (c.im as f32).to_le_bytes()].concat()).collect() };
     if !no_maps {
-    write_npy(&out.join("smaps_true.npy"), "<c8", &[dims[0], dims[1], dims[2], nc], true, &c64b(&smaps)).unwrap();
+    // truth maps: hasty_value::store image policy (1e-4 relative rms; NaN chunks lossless) → .hv (HASTY_IO=npy: .npy)
+    let img = hasty_value::Save::image();
+    hasty_value::store::save_bytes(&out.join("smaps_true.npy"), hasty_value::DType::C64, &[dims[0], dims[1], dims[2], nc], hasty_value::Order::F, &c64b(&smaps), &img).unwrap();
     let fr = tf32(&v, "field_recon");
-    write_npy(&out.join("field_ppm_recon.npy"), "<f4", &dims, true, &fr.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    hasty_value::store::save_slice(&out.join("field_ppm_recon.npy"), &dims, hasty_value::Order::F, &fr, &img).unwrap();
     // reference-pose truth maps on the reconstruction grid from the input tissue sources (PD-weighted box sums):
     // water / fat PD, fat fraction, R2* (PD-weighted mean of 1/T2*); blood (Eulerian frames) not included
     {
@@ -2042,7 +2081,9 @@ fn main() {
                 }
             }
         }
-        let wr = |name: &str, x: Vec<f32>| write_npy(&out.join(name), "<f4", &dims, true, &x.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+        let wr = |name: &str, x: Vec<f32>| {
+            hasty_value::store::save_slice(&out.join(name), &dims, hasty_value::Order::F, &x, &img).unwrap();
+        };
         let tot: Vec<f64> = (0..nvox).map(|q| pw[q] + pf[q]).collect();
         wr("truth_r2s.npy", (0..nvox).map(|q| if tot[q] > 0.0 { (r2a[q] / tot[q]) as f32 } else { f32::NAN }).collect());
         wr("truth_ff.npy", (0..nvox).map(|q| if tot[q] > 0.0 { (pf[q] / tot[q]) as f32 } else { f32::NAN }).collect());
@@ -2061,6 +2102,7 @@ fn main() {
         "tr": tr, "te": acq.te(), "n_readouts": n_ro, "n_adc": na, "n_coils": nc, "sequence": seq_meta, "schedule": acq.describe(),
         "fat_model": if !fat_six { "single peak (input shift_ppm)" } else if fat_expand { "six-peak, expanded sub-sources (hasty-qfit FatSpectrum::six_peak)" } else { "six-peak per sample in the kernel (hasty-qfit FatSpectrum::six_peak)" },
         "noise_sigma": sigma, "noise_rel": noise_rel, "noise_sigma_abs": noise_sigma_abs, "psi": psi,
+        "storage": if hasty_value::store::write_hv() { serde_json::json!({"format": "hv", "kspace_step": k_step, "kspace_policy": "uniform step min(sigma/8 per component, 1e-4 rms relative), |err| <= step/2, one readout per chunk", "records": "24-bit per field and readout + delta", "maps": "1e-4 relative rms"}) } else { serde_json::json!({"format": "npy"}) },
         "readout_stride": ro_stride, "sim_coils": ncs,
         "gnl": {"r0": gnl.r0, "transverse": gnl.transverse, "longitudinal": gnl.longitudinal}, "ideal": ideal, "static": stat, "bin_ms": bin_ms,
         "n_tissue_sources": nt, "n_blood_frames": nbf, "res_truth": fp.res,
@@ -2068,8 +2110,38 @@ fn main() {
         "beats": beats_meta,
     });
     std::fs::write(out.join("meta.json"), serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+    if hasty_value::store::write_hv() {
+        // the noise-free k-space, quantised at k_step (uniform, ADC-like; |err| ≤ step/2) with one readout per chunk,
+        // then the raw file is removed (54 GB → ≈ 16 GB for a 10-minute 32-coil scan; research/io_policy.md). Last, so
+        // that a run killed before this point resumes from data_clean.npy as before.
+        use std::io::Read;
+        let t = Instant::now();
+        let save = hasty_value::Save::default().policy(hasty_value::Policy::Abs(k_step)).chunk(hasty_value::store::Chunking::Rows(1));
+        let mut w = hasty_value::store::TensorWriter::create(&out.join("data_clean.hv"), hasty_value::DType::C64, &[n_ro, na, nc], hasty_value::Order::C, &save, None).unwrap();
+        let mut fh = std::fs::File::open(&k_path).unwrap();
+        let mut hdr = vec![0u8; k_hdr.len()];
+        fh.read_exact(&mut hdr).unwrap();
+        let mut buf = vec![0u8; (256usize << 20) / row_bytes.max(1) as usize * row_bytes as usize + row_bytes as usize];
+        let mut left = n_ro * row_bytes as usize;
+        while left > 0 {
+            let n = left.min(buf.len());
+            fh.read_exact(&mut buf[..n]).unwrap();
+            w.push(&buf[..n]).unwrap();
+            left -= n;
+        }
+        let (p, bytes) = w.finish().unwrap();
+        std::fs::remove_file(&k_path).unwrap();
+        println!("k-space → {} ({:.2} GB, {:.3} of raw, step {k_step:.4e}, {:.0} s)", p.display(), bytes as f64 / 1e9, bytes as f64 / (n_ro as f64 * row_bytes as f64), t.elapsed().as_secs_f64());
+    }
     for s in &states {
         ctl.clear(s);
     }
     println!("done in {:.1}s -> {}", t0.elapsed().as_secs_f64(), out.display());
+}
+
+/// storage of per-sample records (samples*.npy, sched_*.npy): one field of one readout per chunk, 24-bit signed
+/// integers over the chunk's max |x| (≈ f32 precision at each field's maximum: k 1.2e-4 rad/m at 1.6e3, τ 1e-9 s),
+/// delta-filtered along the ADC (research/io_policy.md)
+fn sched_save(na: usize) -> hasty_value::Save {
+    hasty_value::Save::default().policy(hasty_value::Policy::Bits(24)).chunk(hasty_value::store::Chunking::Shape(vec![1, na, 1])).delta(true)
 }

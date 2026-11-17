@@ -3,6 +3,10 @@ SAFE example hardware and GE's hrmw PNS model), so the Monte Carlo can build eac
 against the Rust generator by check_vs_rust() (girfqa --targets)."""
 import json, os, subprocess, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 GAMMA = 2.6752218744e8
 DT = 4e-6
@@ -96,7 +100,7 @@ def check_vs_rust(binpath, out, f0=712.3, zeta=0.006):
     json.dump(dict(targets=[dict(axis=1, f0=f0, zeta=zeta, gain=0.04)]), open(tj, 'w'))
     subprocess.run([binpath, '--out', out, '--targets', tj, '--only', 'p2', '--no-seq'], check=True, capture_output=True)
     p = json.load(open(os.path.join(out, 'protocol.json')))
-    X = np.load(os.path.join(out, 'inputs.npy'))
+    X = load_any(os.path.join(out, 'inputs.npy'))
     names = [i['name'] for i in p['inputs']]
     (g1, s1), (g2, s2) = targeted(f0, zeta)
     i1, i2 = names.index(f'nchirp@{f0:.2f}'), names.index(f'tone@{f0:.2f}')

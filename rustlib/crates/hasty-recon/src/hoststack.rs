@@ -224,44 +224,81 @@ fn ck_path(c: &RunCtl, name: &str) -> std::path::PathBuf {
     c.dir().join(format!("state_{name}.hsk"))
 }
 
-/// Raw checkpoint of host stacks, streamed from the stacks themselves (no in-memory copy: the hasty-value form needs a
-/// tensor copy of every set, i.e. one more stack per saved stack): magic, header length, JSON header (`meta`, the set
-/// lengths of every stack), then the stacks' complex64 data in order. Written to a temporary file, synced, renamed.
-pub fn save_raw(c: &RunCtl, name: &str, meta: &serde_json::Value, stacks: &[&HostStack]) -> Result<(), Error> {
-    use std::io::Write;
+/// Checkpoint of host stacks, streamed from the stacks themselves (no stack copy): a `.hv` value tree (`state_<name>.hsk`)
+/// {"meta": json, "lens": json, "secant": json, "s<i>.<t>": stack i, set t, complex64}, each set of each stack quantised
+/// on its own scale at [`hasty_value::store::CHECKPOINT_REL`] (quantisation noise 1e-6 of that vector's rms; zstd-1;
+/// `HASTY_IO_LOSSLESS=1`: bit-exact). With `secant = Some((ix, ip))` stack `ip` (x_prev) is stored as the difference
+/// s = x − x_prev, so the secant step keeps its own 1e-6 precision however small it is relative to x (late
+/// iterations; research/io_policy.md §2); the loader restores x_prev = x̃ − s̃ from the decoded values. Written to a
+/// temporary file, renamed. Raw checkpoints of earlier versions (`HSTKCK01`) still load.
+pub fn save_raw(c: &RunCtl, name: &str, meta: &serde_json::Value, stacks: &[&HostStack], secant: Option<(usize, usize)>) -> Result<(), Error> {
+    use hasty_value::store::{self, Policy, Save, ValueWriter, CHECKPOINT_REL};
     let path = ck_path(c, name);
-    let tmp = c.dir().join(format!("state_{name}.hsk.tmp"));
-    {
-        let mut w = std::io::BufWriter::with_capacity(8 << 20, std::fs::File::create(&tmp)?);
-        let hdr = serde_json::json!({ "meta": meta, "lens": stacks.iter().map(|s| s.lens.clone()).collect::<Vec<_>>() }).to_string();
-        w.write_all(CK_MAGIC)?;
-        w.write_all(&(hdr.len() as u64).to_le_bytes())?;
-        w.write_all(hdr.as_bytes())?;
-        for s in stacks {
-            // SAFETY: C32 is two f32, no padding
-            let b = unsafe { std::slice::from_raw_parts(s.data.as_ptr() as *const u8, s.data.len() * 8) };
-            for part in b.chunks(64 << 20) {
-                w.write_all(part)?;
+    let nsets: usize = stacks.iter().map(|s| s.nsets()).sum();
+    let mut w = ValueWriter::create(&path, 3 + nsets)?;
+    w.put("meta", &Value::Str(meta.to_string()))?;
+    w.put("lens", &Value::Str(serde_json::to_string(&stacks.iter().map(|s| s.lens.clone()).collect::<Vec<_>>()).unwrap()))?;
+    w.put("secant", &Value::Str(serde_json::to_string(&secant).unwrap()))?;
+    let save = Save::default().policy(Policy::Uniform { rel: CHECKPOINT_REL });
+    let bytes = |v: &[C32]| -> &[u8] {
+        // SAFETY: C32 is two f32, no padding
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 8) }
+    };
+    const PIECE: usize = 8 << 20;
+    for (i, stk) in stacks.iter().enumerate() {
+        for t in 0..stk.nsets() {
+            let key = format!("s{i}.{t}");
+            let n = stk.lens[t];
+            match secant {
+                Some((ix, ip)) if ip == i => {
+                    // s = x − x_prev, never materialised: its rms first, then pieces into the writer
+                    let (xv, pv) = (stacks[ix].chunk(t), stk.chunk(t));
+                    let (ss, nn) = xv.par_chunks(PAR).zip(pv.par_chunks(PAR)).map(|(a, b)| (a.iter().zip(b).map(|(p, q)| ((p.re - q.re) as f64).powi(2) + ((p.im - q.im) as f64).powi(2)).sum::<f64>(), 2 * a.len())).reduce(|| (0.0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+                    let rms = (ss / nn.max(1) as f64).sqrt();
+                    let q = if rms > 0.0 && !store::force_lossless() {
+                        Some(hasty_value::Quant::new(hasty_value::Loss::Abs(CHECKPOINT_REL * 12f64.sqrt() * rms)))
+                    } else {
+                        None
+                    };
+                    w.begin_tensor(&key, hasty_value::DType::C64, &[n], &save, q)?;
+                    let mut buf = vec![C32::new(0.0, 0.0); PIECE.min(n)];
+                    for o in (0..n).step_by(PIECE) {
+                        let e = (o + PIECE).min(n);
+                        let b = &mut buf[..e - o];
+                        b.par_chunks_mut(PAR).zip(xv[o..e].par_chunks(PAR).zip(pv[o..e].par_chunks(PAR))).for_each(|(d, (a, c))| d.iter_mut().zip(a.iter().zip(c)).for_each(|(d, (a, c))| *d = C32::new(a.re - c.re, a.im - c.im)));
+                        w.push(bytes(b))?;
+                    }
+                }
+                _ => {
+                    let v = stk.chunk(t);
+                    let (q, _) = store::resolve_policy(save.policy, hasty_value::DType::C64, Some(&[bytes(v)]))?;
+                    w.begin_tensor(&key, hasty_value::DType::C64, &[n], &save, q)?;
+                    w.push(bytes(v))?;
+                }
             }
+            w.end_tensor()?;
         }
-        w.flush()?;
-        w.get_ref().sync_all()?;
     }
-    std::fs::rename(&tmp, &path)?;
+    w.finish()?;
     // a hasty-value checkpoint of the same name is now stale
     c.clear(name);
     Ok(())
 }
 
-/// Load a raw checkpoint into `stacks` (lengths must match); returns its `meta`, None without a checkpoint.
+/// Load a checkpoint of [`save_raw`] (or a raw `HSTKCK01` one) into `stacks` (lengths must match); returns its `meta`,
+/// None without a checkpoint.
 pub fn load_raw(c: &RunCtl, name: &str, stacks: &mut [&mut HostStack]) -> Result<Option<serde_json::Value>, Error> {
     use std::io::Read;
     let path = ck_path(c, name);
     if !path.exists() {
         return Ok(None);
     }
-    let mut r = std::io::BufReader::with_capacity(8 << 20, std::fs::File::open(&path)?);
     let mut magic = [0u8; 8];
+    std::fs::File::open(&path)?.read_exact(&mut magic)?;
+    if &magic[..4] == b"HSTV" {
+        return load_hv(&path, stacks);
+    }
+    let mut r = std::io::BufReader::with_capacity(8 << 20, std::fs::File::open(&path)?);
     r.read_exact(&mut magic)?;
     if &magic != CK_MAGIC {
         return Err(Error::Format(format!("{}: not a host-stack checkpoint", path.display())));
@@ -276,13 +313,54 @@ pub fn load_raw(c: &RunCtl, name: &str, stacks: &mut [&mut HostStack]) -> Result
         return Err(Error::Format(format!("{}: stack layout differs from the run's", path.display())));
     }
     for s in stacks.iter_mut() {
-        // SAFETY: as in save_raw
+        // SAFETY: C32 is two f32, no padding
         let b = unsafe { std::slice::from_raw_parts_mut(s.data.as_mut_ptr() as *mut u8, s.data.len() * 8) };
         for part in b.chunks_mut(64 << 20) {
             r.read_exact(part)?;
         }
     }
     Ok(Some(h["meta"].clone()))
+}
+
+fn load_hv(path: &std::path::Path, stacks: &mut [&mut HostStack]) -> Result<Option<serde_json::Value>, Error> {
+    use hasty_value::lazy::{Lazy, LazyFile};
+    let bad = |m: String| Error::Format(format!("{}: {m}", path.display()));
+    let lf = LazyFile::open(path)?;
+    let s = |k: &str| -> Result<String, Error> {
+        match lf.root.get(k) {
+            Some(Lazy::Value(Value::Str(s))) => Ok(s.clone()),
+            _ => Err(bad(format!("missing {k}"))),
+        }
+    };
+    let meta: serde_json::Value = serde_json::from_str(&s("meta")?).map_err(|e| bad(e.to_string()))?;
+    let lens: Vec<Vec<usize>> = serde_json::from_str(&s("lens")?).map_err(|e| bad(e.to_string()))?;
+    let secant: Option<(usize, usize)> = serde_json::from_str(&s("secant")?).map_err(|e| bad(e.to_string()))?;
+    if lens.len() != stacks.len() || lens.iter().zip(stacks.iter()).any(|(l, s)| *l != s.lens) {
+        return Err(bad("stack layout differs from the run's".into()));
+    }
+    const PIECE: usize = 8 << 20;
+    for (i, stk) in stacks.iter_mut().enumerate() {
+        for t in 0..stk.nsets() {
+            let tr = lf.root.get(&format!("s{i}.{t}")).and_then(|l| l.tensor()).ok_or_else(|| bad(format!("missing s{i}.{t}")))?;
+            let n = stk.lens[t];
+            if tr.shape != [n] || tr.dtype != hasty_value::DType::C64 {
+                return Err(bad(format!("s{i}.{t}: shape / dtype")));
+            }
+            let dst = stk.chunk_mut(t);
+            for o in (0..n).step_by(PIECE) {
+                let e = (o + PIECE).min(n);
+                let part = hasty_value::store::io_pool().install(|| lf.read_box(tr, &[o], &[e]))?;
+                // SAFETY: the tensor holds e − o complex64 = C32 values
+                dst[o..e].copy_from_slice(unsafe { std::slice::from_raw_parts(part.bytes().as_ptr() as *const C32, e - o) });
+            }
+        }
+    }
+    if let Some((ix, ip)) = secant {
+        // x_prev = x̃ − s̃ (decoded values: the restored pair has the stored secant step exactly)
+        let (a, b) = if ix < ip { let (l, r) = stacks.split_at_mut(ip); (&*l[ix], &mut *r[0]) } else { let (l, r) = stacks.split_at_mut(ix); (&*r[0], &mut *l[ip]) };
+        b.data.par_chunks_mut(PAR).zip(a.data.par_chunks(PAR)).for_each(|(p, x)| p.iter_mut().zip(x).for_each(|(p, x)| *p = C32::new(x.re - p.re, x.im - p.im)));
+    }
+    Ok(Some(meta))
 }
 
 /// How [`pooled_pcg_host_with`] evaluates the group gradients Σ_{t∈g} ∇f_t(x_g).
@@ -500,11 +578,11 @@ pub fn pooled_pcg_host_with(
             let next = k + 1;
             let meta = serde_json::json!({ "k": next, "rz": rz, "r0": r0 });
             if c.stop_requested() && next < iters {
-                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0])?;
+                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0], None)?;
                 return Ok(Outcome::Stopped(next));
             }
             if every > 0 && next % every == 0 && next < iters {
-                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0])?;
+                save_raw(c, name, &meta, &[&xs, &rs, &ps, &g0], None)?;
             }
         }
     }
@@ -601,7 +679,10 @@ pub fn run_objective_host(
             alpha = crate::checkpoint::get_f64(&v, "alpha")?;
             x.load_value(get(&v, "x")?)?;
             if quasi {
-                x_prev.load_value(get(&v, "x_prev")?)?;
+                match v.get("s") {
+                    Some(s) => x_prev.load_value(&crate::checkpoint::secant_diff(get(&v, "x")?, s)?)?,
+                    None => x_prev.load_value(get(&v, "x_prev")?)?,
+                }
                 g_prev.load_value(get(&v, "g_prev")?)?;
             }
             eprintln!("  resuming {name} at iteration {k0} / {iters} (host-resident state)");
@@ -614,7 +695,7 @@ pub fn run_objective_host(
     let save = |c: &RunCtl, name: &str, next: usize, x: &HostStack, xp: &HostStack, gp: &HostStack| -> Result<(), Error> {
         let meta = serde_json::json!({ "k": next, "precond": format!("{precond:?}"), "alpha": alpha });
         let stacks: Vec<&HostStack> = if quasi { vec![x, xp, gp] } else { vec![x] };
-        save_raw(c, name, &meta, &stacks)
+        save_raw(c, name, &meta, &stacks, quasi.then_some((0, 1)))
     };
     for k in k0..iters {
         let mut tm = crate::p2np::IterTimer::start();

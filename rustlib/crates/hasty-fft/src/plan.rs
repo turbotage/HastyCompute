@@ -132,6 +132,10 @@ pub struct AxisPlan<R: Real> {
     simple_len: usize,
     /// line-index split ([`LineSplit`]; default none)
     pub split: LineSplit,
+    /// per-row `a` ranges of a k-support-pruned pass ([`AxisPlan::from_spec_ranged`], [`AxisPlan::set_arange`])
+    arange: Option<CudaSlice<i32>>,
+    /// per-line entry ranges ([`AxisCfg::lrange_in`] / `lrange_out`, [`AxisPlan::set_lrange`]): table, div, stride
+    lrange: Option<(CudaSlice<i32>, i64, i64)>,
 }
 
 const DEFAULT_SMEM: usize = 48 * 1024;
@@ -230,6 +234,53 @@ impl<R: Real> AxisPlan<R> {
     }
 
     pub fn from_spec(dev: &Device, spec: &AxisSpec) -> Result<Self, FftError> {
+        Self::from_spec_impl(dev, spec, false, false, false)
+    }
+
+    /// As [`from_spec`](Self::from_spec) for a strided pass whose line groups `lb` each transform only a wrapped range
+    /// of `a` ([`AxisCfg::arange`]): set the ranges with [`set_arange`](Self::set_arange) before the first launch.
+    pub fn from_spec_ranged(dev: &Device, spec: &AxisSpec) -> Result<Self, FftError> {
+        if spec.contiguous {
+            return Err(FftError::Invalid("a-range pruning needs a strided pass".into()));
+        }
+        Self::from_spec_impl(dev, spec, true, false, false)
+    }
+
+    /// As [`from_spec_ranged`](Self::from_spec_ranged), additionally restricting the entries read (`lin`) or written
+    /// (`lout`) per line ([`AxisCfg::lrange_in`]): set the table with [`set_lrange`](Self::set_lrange).
+    pub fn from_spec_ranged_lines(dev: &Device, spec: &AxisSpec, lin: bool, lout: bool) -> Result<Self, FftError> {
+        if spec.contiguous {
+            return Err(FftError::Invalid("a-range pruning needs a strided pass".into()));
+        }
+        Self::from_spec_impl(dev, spec, true, lin, lout)
+    }
+
+    /// Per-line entry ranges `(head, tail)` (≤ n), indexed q = lb · stride + la / div (see [`AxisCfg::lrange_in`]); the
+    /// table must cover every q a launched line can reach.
+    pub fn set_lrange(&mut self, stream: &Arc<CudaStream>, ranges: &[(usize, usize)], div: usize, stride: usize) -> Result<(), FftError> {
+        let need = (self.addr.lb_cnt.max(1) - 1) * stride + (self.addr.la_cnt.max(1) - 1) / div.max(1) + 1;
+        if !(self.cfg.lrange_in || self.cfg.lrange_out) || div == 0 || ranges.len() < need || ranges.iter().any(|&(h, t)| h + t > self.cfg.n) {
+            return Err(FftError::Invalid(format!("set_lrange: {} ranges (need {need}) for lines of {} (line-ranged plan: {})", ranges.len(), self.cfg.n, self.cfg.lrange_in || self.cfg.lrange_out)));
+        }
+        let flat: Vec<i32> = ranges.iter().flat_map(|&(h, t)| [h as i32, t as i32]).collect();
+        self.lrange = Some((stream.clone_htod(&flat)?, div as i64, stride as i64));
+        Ok(())
+    }
+
+    /// Per line group `lb` (`addr.lb_cnt` entries): `(head, tail)` — the group transforms the lines
+    /// `a ∈ [0, head) ∪ [la_cnt − tail, la_cnt)`; the grid is sized for the longest range.
+    pub fn set_arange(&mut self, stream: &Arc<CudaStream>, ranges: &[(usize, usize)]) -> Result<(), FftError> {
+        if !self.cfg.arange || ranges.len() != self.addr.lb_cnt || ranges.iter().any(|&(h, t)| h + t > self.addr.la_cnt) {
+            return Err(FftError::Invalid(format!("set_arange: {} ranges for {} line groups of {} lines (ranged plan: {})", ranges.len(), self.addr.lb_cnt, self.addr.la_cnt, self.cfg.arange)));
+        }
+        let flat: Vec<i32> = ranges.iter().flat_map(|&(h, t)| [h as i32, t as i32]).collect();
+        self.arange = Some(stream.clone_htod(&flat)?);
+        let longest = ranges.iter().map(|&(h, t)| h + t).max().unwrap_or(0);
+        self.grid.0 = (longest.div_ceil(self.cfg.lpb) as u32).max(1);
+        Ok(())
+    }
+
+    fn from_spec_impl(dev: &Device, spec: &AxisSpec, arange: bool, lrange_in: bool, lrange_out: bool) -> Result<Self, FftError> {
         let n = spec.n;
         if spec.n_in + spec.n_in_tail > n || spec.n_out + spec.n_out_tail > n || spec.n_in == 0 || spec.n_out == 0 {
             return Err(FftError::Invalid(format!(
@@ -289,6 +340,9 @@ impl<R: Real> AxisPlan<R> {
             poly_pre: spec.poly_pre,
             poly_post: spec.poly_post,
             vox: spec.vox,
+            arange,
+            lrange_in,
+            lrange_out,
         };
         let smem = if blue { 2 * m * lpb * 2 * R::BYTES } else { cfg.smem_bytes(R::BYTES) };
         if smem > max_smem {
@@ -297,6 +351,9 @@ impl<R: Real> AxisPlan<R> {
                 need: smem,
                 have: max_smem,
             });
+        }
+        if blue && arange {
+            return Err(FftError::Invalid(format!("a-range pruning is not implemented for the Bluestein length {n}")));
         }
         let src = if blue { crate::bluestein::generate(&cfg, m, &cfg.radices) } else { generate(&cfg) };
         // the generated source fully determines the kernel; the name only labels cache files / dumps
@@ -314,7 +371,7 @@ impl<R: Real> AxisPlan<R> {
         ) + &format!(
             "{:?}p{}q{}",
             spec.kfmt, spec.poly_pre as u8, spec.poly_post as u8
-        ) + &if spec.n_in_tail + spec.n_out_tail > 0 { format!("_t{}u{}", spec.n_in_tail, spec.n_out_tail) } else { String::new() } + &if blue { format!("_blu{m}") } else { String::new() };
+        ) + &if spec.n_in_tail + spec.n_out_tail > 0 { format!("_t{}u{}", spec.n_in_tail, spec.n_out_tail) } else { String::new() } + &if blue { format!("_blu{m}") } else { String::new() } + if arange { "_ar" } else { "" } + if lrange_in { "_lri" } else { "" } + if lrange_out { "_lro" } else { "" };
         let func = dev.load_function(
             &name,
             &src,
@@ -366,6 +423,8 @@ impl<R: Real> AxisPlan<R> {
             smem: smem as u32,
             simple_len: 0,
             split: LineSplit::default(),
+            arange: None,
+            lrange: None,
         })
     }
 
@@ -424,6 +483,22 @@ impl<R: Real> AxisPlan<R> {
             };
             for v in &sv {
                 b.arg(v);
+            }
+            let arg = match (&self.arange, self.cfg.arange) {
+                (Some(t), true) => Some(t.device_ptr(stream)),
+                (None, true) => return Err(FftError::Invalid("a-range pass launched before set_arange".into())),
+                _ => None,
+            };
+            if let Some((ap, _)) = &arg {
+                b.arg(ap);
+            }
+            let lr = match (&self.lrange, self.cfg.lrange_in || self.cfg.lrange_out) {
+                (Some((t, d, q)), true) => Some((t.device_ptr(stream), *d, *q)),
+                (None, true) => return Err(FftError::Invalid("line-ranged pass launched before set_lrange".into())),
+                _ => None,
+            };
+            if let Some(((lp, _), d, q)) = &lr {
+                b.arg(lp).arg(d).arg(q);
             }
             let guards = self.blue.as_ref().map(|t| (t.ch.device_ptr(stream), t.bh_f.device_ptr(stream), t.bh_i.device_ptr(stream)));
             if let Some(((ch, _), (bf, _), (bi, _))) = &guards {

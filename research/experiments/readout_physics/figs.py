@@ -2,6 +2,10 @@
 local flow numbers and the warp handling."""
 import json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(__file__))
 import pb
@@ -39,7 +43,7 @@ for ax, d in zip(axs, D):
             continue
         ls = '-' if ('omi' in key or 'omission' in key or key == 'omission') else ':'
         ax.semilogy(t, np.maximum(np.array(e['E_n']), 1e-12) / SIG2C, ls, color=col, lw=1.2, label=f'{lab} (R {e["R"]:.3g})')
-    F = np.load(os.path.join(OUT, f'flow_omission_{d}_cycle.npz')) if os.path.exists(os.path.join(OUT, f'flow_omission_{d}_cycle.npz')) else None
+    F = load_any(os.path.join(OUT, f'flow_omission_{d}_cycle.npz')) if os.path.exists(os.path.join(OUT, f'flow_omission_{d}_cycle.npz')) else None
     if F is not None:
         tf = des.t[F['n']] * 1e3
         J = ld(f'flow_omission_{d}_cycle.json')

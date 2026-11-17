@@ -9,12 +9,16 @@ Frames are resp-major (frame f ↔ cardiac f % 20). Writes <run>/diag_vel_error.
 """
 import json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 run, vname, scan = sys.argv[1:4]
 fr_sel = [int(x) for x in sys.argv[4:]] or None
-v = np.load(os.path.join(run, vname), mmap_mode='r')          # (nx, ny, nz, 3, F)
-vt = np.load(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')  # (nx, ny, nz, 3, 20)
-lf = np.load(os.path.join(scan, 'truth_lumen_fraction.npy'))
+v = load_any(os.path.join(run, vname), mmap_mode='r')          # (nx, ny, nz, 3, F)
+vt = load_any(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')  # (nx, ny, nz, 3, 20)
+lf = load_any(os.path.join(scan, 'truth_lumen_fraction.npy'))
 if v.shape[:3] != lf.shape:
     # coarse grid of the same FOV (grid index i ↦ (i − n/2) h): box-average the native truth into each coarse voxel
     N, n = lf.shape, v.shape[:3]
@@ -32,8 +36,8 @@ if v.shape[:3] != lf.shape:
     print(f'coarse grid {n}: truth box-averaged (lumen-weighted velocity) from {N}')
 lum = lf > 0.9
 F = v.shape[-1]; nc = vt.shape[-1]
-rec = [f for f in os.listdir(run) if f.startswith('recon_') and f.endswith('.npy')]
-X = np.load(os.path.join(run, rec[0]), mmap_mode='r') if rec else None   # (nx, ny, nz, 7, F)
+rec = [f for f in os.listdir(run) if f.startswith('recon_') and f.endswith(('.npy', '.hv'))]
+X = load_any(os.path.join(run, rec[0]), mmap_mode='r') if rec else None   # (nx, ny, nz, 7, F)
 out = {}
 for f in (fr_sel or range(F)):
     c = f % nc

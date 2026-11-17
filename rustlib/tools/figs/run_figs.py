@@ -17,6 +17,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 run = Path(sys.argv[1])
 info = json.loads((run / "run.json").read_text())
@@ -26,8 +30,8 @@ figs.mkdir(exist_ok=True)
 venc = info["venc"]
 # colour range: 0.75 VENC (single VENC); dual-VENC runs resolve up to the high VENC (run.json venc_range)
 vlim = 0.75 * venc if "venc_range" not in info else 0.5 * max(info["venc_range"])
-truth = np.load(sim / "truth_vel_logical.npy")  # [x,y,z,3,nf]
-frac = np.load(sim / "truth_lumen_fraction.npy")
+truth = load_any(sim / "truth_vel_logical.npy")  # [x,y,z,3,nf]
+frac = load_any(sim / "truth_lumen_fraction.npy")
 # reconstruction grid other than the native one (--grid-scale, pyramid levels): the truth at the reconstruction
 # voxels' centres (same FOV; nearest native voxel of u = (i - d//2) * FOV/d, as recon_p2np's sample_log does trilinearly)
 rdims, ndims = tuple(info.get("dims", frac.shape)), tuple(info.get("native_dims", frac.shape))
@@ -82,13 +86,13 @@ def vimshow(ax, img, title, lim=vlim, cmap="RdBu_r"):
 
 # ---------------------------------------------------------------- masks over the warm start
 # coil maps: the full stack only with recon_p2np --save-smaps; by default one axial slice [x, y, coil] (smaps_axial_z<z>.npy)
-smaps = np.load(run / "smaps.npy") if (run / "smaps.npy").exists() else None
-sl = sorted(run.glob("smaps_axial_z*.npy"))
-smaps_ax = np.load(sl[0]) if sl else (smaps[:, :, zs, :] if smaps is not None else None)
+smaps = load_any(run / "smaps.npy") if exists_any(run / "smaps.npy") else None
+sl = sorted(map(Path, glob_any(run / "smaps_axial_z*.npy")))
+smaps_ax = load_any(sl[0]) if sl else (smaps[:, :, zs, :] if smaps is not None else None)
 smaps_z = int(sl[0].stem.split("_z")[-1]) if sl else zs
-m_sup = np.load(run / "mask_support.npy") > 0.5
-m_map = np.load(run / "mask_maps.npy") > 0.5
-warm = np.load(run / "warm.npy") if (run / "warm.npy").exists() else None
+m_sup = load_any(run / "mask_support.npy") > 0.5
+m_map = load_any(run / "mask_maps.npy") > 0.5
+warm = load_any(run / "warm.npy") if exists_any(run / "warm.npy") else None
 base = np.abs(warm).sum(axis=3) if warm is not None else (np.sqrt((np.abs(smaps) ** 2).sum(axis=3)) if smaps is not None else m_sup.astype(np.float32))
 fig, ax = plt.subplots(2, 2, figsize=(12, 10), gridspec_kw={"width_ratios": [1, 1.4]})
 inner = base * m_map
@@ -122,7 +126,7 @@ tavg = truth.mean(axis=-1)
 if warm is not None:
     ne = warm.shape[3]
     # velocity decoded by recon_p2np (any encoding; hasty_recon::flow); referenced 4-point fallback for old runs
-    wv = np.load(run / "warm_vel.npy") if (run / "warm_vel.npy").exists() else np.stack([-np.angle(warm[..., a + 1] * np.conj(warm[..., 0])) * venc / np.pi for a in range(3)], axis=3)
+    wv = load_any(run / "warm_vel.npy") if exists_any(run / "warm_vel.npy") else np.stack([-np.angle(warm[..., a + 1] * np.conj(warm[..., 0])) * venc / np.pi for a in range(3)], axis=3)
     ncol = max(ne, 4)
     fig, ax = plt.subplots(3, ncol, figsize=(3 * ncol, 9))
     for e in range(ne):
@@ -154,10 +158,10 @@ save(fig, "04_truth.png", f"Truth velocity (component {comp_names[dom]}, the dom
 
 # ---------------------------------------------------------------- per run
 for tag in info["runs"]:
-    if not (run / f"vel_{tag}.npy").exists():
+    if not exists_any(run / f"vel_{tag}.npy"):
         continue
-    vel = np.load(run / f"vel_{tag}.npy")
-    rec = np.load(run / f"recon_{tag}.npy")
+    vel = load_any(run / f"vel_{tag}.npy")
+    rec = load_any(run / f"recon_{tag}.npy")
     # velocity per frame: truth / recon / error, all components
     fig, ax = plt.subplots(len(frames), 9, figsize=(18, 2.1 * len(frames)), squeeze=False)
     for r, f in enumerate(frames):
@@ -226,9 +230,9 @@ for tag in info["runs"]:
     save(fig, f"14_{tag}_coronal.png", f"{tag}: coronal slice y={ys} at peak systole.")
 
 # ---------------------------------------------------------------- static / dynamic tissue map (--static-lock)
-for mp in sorted(run.glob("static_map_*.npy")):
+for mp in sorted(map(Path, glob_any(run / "static_map_*.npy"))):
     tag = mp.stem[len("static_map_"):]
-    m = np.load(mp)  # [x,y,z,6]: s_card, s_resp, s_flow, w_card, w_resp, sigma_raw
+    m = load_any(mp)  # [x,y,z,6]: s_card, s_resp, s_flow, w_card, w_resp, sigma_raw
     meta = json.loads((run / f"static_map_{tag}.json").read_text()) if (run / f"static_map_{tag}.json").exists() else {}
     names = ["s_card", "s_resp", "s_flow", "w_card", "w_resp"]
     locked_lumen = [float((m[..., k][lum] > 0.5).mean()) if lum.any() else float("nan") for k in (3, 4)]

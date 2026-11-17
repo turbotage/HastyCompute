@@ -223,6 +223,16 @@ impl CirculantPrecond {
         Ok(Self { parts, ..self })
     }
 
+    /// the metric's factors on the host: (λ_eff, D^{-1/2}) with M⁻¹ = D^{1/2} F⁻¹ diag(λ_eff) F D^{1/2} (λ_eff = the
+    /// floored, coil-normalised spectrum, FFT order, x fastest): what composite metrics (`knotncg::PriorMetric`) build on
+    pub fn factors(&self, st: &Arc<CudaStream>) -> Result<(Vec<f32>, Vec<f32>), Error> {
+        let (lam, dinv) = match &self.parts {
+            Parts::Device { lam_eps, dinv, .. } => (st.clone_dtoh(lam_eps)?, st.clone_dtoh(dinv)?),
+            Parts::Host { lam_eps, dinv, .. } => (lam_eps.clone(), dinv.clone()),
+        };
+        Ok((lam.iter().map(|z| z.re).collect(), dinv.iter().map(|z| z.re).collect()))
+    }
+
     pub fn on_host(&self) -> bool {
         matches!(self.parts, Parts::Host { .. })
     }

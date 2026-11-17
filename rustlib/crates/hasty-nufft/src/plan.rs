@@ -68,6 +68,9 @@ pub struct NufftOpts {
     pub fft_order: bool,
     /// extra footprint (cells) beyond the kernel width of custom spreaders (bin size selection)
     pub footprint_pad: usize,
+    /// explicit fine-grid sizes (x fastest; each ≥ the σ rule's size, even, 7-smooth); None: the smallest even 7-smooth
+    /// n ≥ σ N (`gridsize::grid_for_engine` chooses them by measured FFT time)
+    pub nf: Option<[usize; 3]>,
 }
 
 impl Default for NufftOpts {
@@ -81,6 +84,7 @@ impl Default for NufftOpts {
             max_grid_bytes: 3 << 30,
             fft_order: false,
             footprint_pad: 0,
+            nf: None,
         }
     }
 }
@@ -133,6 +137,9 @@ pub struct NufftPlan<R: Real> {
     pub(crate) pts: Option<SortedPoints<R>>,
     pub(crate) use_sm: bool,
     pub(crate) smem_tile: usize,
+    /// Kaiser–Bessel window of the segmented NUFFT kernels built on this plan (`SegNufft`, env HASTY_SEG_KERNEL=kb);
+    /// None: the ES window `ker`. The plan's own spreaders always use `ker`.
+    pub kb: Option<crate::kernel::KbPoly>,
 }
 
 fn choose_bs(ndim: usize, w: usize, cx_bytes: usize, limit: usize) -> usize {
@@ -169,6 +176,12 @@ impl<R: Real> NufftPlan<R> {
             m3[a] = modes[a];
             nf[a] =
                 next_smooth_even(((opts.sigma * modes[a] as f64).ceil() as usize).max(2 * ker.w));
+            if let Some(o) = opts.nf {
+                if o[a] < nf[a] || o[a] % 2 != 0 || next_smooth_even(o[a]) != o[a] {
+                    return Err(NufftError::Invalid(format!("fine grid {} on axis {a}: needs an even 7-smooth size ≥ {}", o[a], nf[a])));
+                }
+                nf[a] = o[a];
+            }
         }
         let cx_bytes = 2 * R::BYTES;
         let max_smem = dev.ctx.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN)? as usize;
@@ -240,6 +253,7 @@ impl<R: Real> NufftPlan<R> {
             pts: None,
             use_sm: false,
             smem_tile,
+            kb: None,
         })
     }
 

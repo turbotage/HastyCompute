@@ -15,6 +15,10 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -23,12 +27,12 @@ from hastycompute import value_format as vf  # noqa: E402
 
 scan, stack_path, idx_path = sys.argv[1:4]
 E = 7
-z = np.load(os.path.join(scan, "truth_pc_frames.npz"))
+z = load_any(os.path.join(scan, "truth_pc_frames.npz"))
 tidx, C, cov = z["idx"], z["c"], z["cov"]
 NC = C.shape[2]
-dims = tuple(np.load(os.path.join(scan, "truth_lumen_fraction.npy"), mmap_mode="r").shape)
+dims = tuple(load_any(os.path.join(scan, "truth_lumen_fraction.npy"), mmap_mode="r").shape)
 nv = int(np.prod(dims))
-idx_rec = np.load(idx_path).astype(np.int64)
+idx_rec = load_any(idx_path).astype(np.int64)
 
 st = vf.open_lazy(stack_path)
 T = len(st)

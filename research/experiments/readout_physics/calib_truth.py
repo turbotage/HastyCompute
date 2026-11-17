@@ -7,6 +7,10 @@ Writes calib_truth.json, figs/calib_truth.png. The complex scale s (|k| < 30 rad
 the coil maps and the steady-state weights are consistent with the simulator.
 """
 import json, os, sys
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import numpy as np, torch
 import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(__file__))
@@ -58,7 +62,7 @@ if __name__ == '__main__':
     ros = pb.scan_readouts(48, offset=3)
     nsel = des.sample_select(kc=150.0, stride=4)
     n, w = nsel
-    dcl = np.load(os.path.join(pb.SCAN, 'data_clean.npy'), mmap_mode='r')
+    dcl = load_any(os.path.join(pb.SCAN, 'data_clean.npy'), mmap_mode='r')
     Yd = np.array([np.asarray(dcl[i])[n].astype(np.complex128) @ obj.Wh.T for i in ros['idx']])
     half = np.arange(len(n)) < np.argmax(des.kabs[n])
     kq = des.kabs[n] / des.kmax

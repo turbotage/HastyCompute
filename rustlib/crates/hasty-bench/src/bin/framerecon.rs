@@ -32,22 +32,12 @@ use hasty_recon::gpu::Kernels;
 use hasty_recon::op::SenseOp;
 use hasty_recon::precond::CirculantPrecond;
 
+/// complex64 C-order output (lumen values): `hasty_value::store` image policy (1e-4 relative rms,
+/// research/io_policy.md) → `<name>.hv` (`HASTY_IO=npy`: .npy)
 fn write_c8_c(path: &std::path::Path, shape: &[usize], data: &[C32]) {
-    let sh: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
-    let hdr = format!("{{'descr': '<c8', 'fortran_order': False, 'shape': ({}), }}", sh.join(", "));
-    let mut h2 = hdr.into_bytes();
-    while (h2.len() + 11) % 64 != 0 {
-        h2.push(b' ');
-    }
-    h2.push(b'\n');
-    let mut f = vec![0x93u8, b'N', b'U', b'M', b'P', b'Y', 1, 0];
-    f.extend_from_slice(&(h2.len() as u16).to_le_bytes());
-    f.extend_from_slice(&h2);
-    for z in data {
-        f.extend_from_slice(&z.re.to_le_bytes());
-        f.extend_from_slice(&z.im.to_le_bytes());
-    }
-    std::fs::write(path, f).unwrap();
+    // SAFETY: C32 is two f32, repr(C)
+    let b = unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * 8) };
+    hasty_value::store::save_bytes(path, hasty_value::DType::C64, shape, hasty_value::Order::C, b, &hasty_value::Save::image()).unwrap();
 }
 
 fn main() {

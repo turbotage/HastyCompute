@@ -1,0 +1,66 @@
+
+running 1 test
+LS ridge toward Taylor: eps = 1e-6 (rad^2 units)
+
+=== E2 B0 0.55 T, FOV centre (30, -40, 100) mm, oblique, concomitant, GNL, B0 map + fat
+  set 0 (3990 samples)  rows: method | white fwd  adj | object fwd with weight: oracle  box  shifted-24mm  blend(0.7 shift + 0.3 box)
+   degree-2 fit (order 1 / 2 kernel):
+    P1 Taylor                          | 7.91e-2 1.56e-1 | 4.26e-2
+    P1 LS energy (full target)         | 5.01e-2 1.03e-1 | 2.85e-2 3.22e-2 2.92e-2 2.97e-2
+    P2 Taylor (production)             | 3.13e-2 6.97e-2 | 1.82e-2
+    P2 centred Taylor (energy mean)    | 2.81e-2 6.11e-2 | 1.72e-2
+    P2 Chebyshev (range over fitv)     | 4.00e-2 5.55e-2 | 2.52e-2
+    P2 LS uniform fitv (chirp target)  | 2.68e-2 4.67e-2 | 1.33e-2
+    P2 LS energy (chirp target)        | 2.52e-2 4.68e-2 | 1.33e-2
+    P2 LS uniform fitv (full target)   | 2.67e-2 4.48e-2 | 1.32e-2
+    P2 LS energy (full target)         | 2.41e-2 4.57e-2 | 1.32e-2 1.33e-2 1.37e-2 1.35e-2
+    P2 LS energy + weighted fit        | 2.39e-2 4.55e-2 | 1.27e-2
+    P2 LS energy: max |p_n - Taylor_n| n = 0, 1, 2: 1.56e-2 7.33e-2 8.53e-1
+    P2 LS energy coefficients (max over samples): ||p0|-1| 5.65e-3, |arg p0| 1.46e-2 rad, |Re q| 1.34e-2, |Im q - 1| 7.23e-2, |Re r + 1/2| 7.96e-2, |Im r| 8.50e-1  (Taylor: q = i, r = -1/2)
+    P2 LS energy, f16 kernel params    | 2.41e-2 4.57e-2 |
+    P2 LS energy, coeffs every 8th ADC | 2.41e-2 4.57e-2 |
+   degree-4 fit (order 3 kernel):
+    O3 Taylor (production)             | 2.92e-2 7.33e-2 | 1.52e-2
+    O3 Taylor + psi*c34 product        | 2.74e-2 6.93e-2 | 1.35e-2
+    O3 LS energy, c-term fixed -i      | 1.75e-2 4.07e-2 | 9.34e-3
+    O3 LS energy [1,psi,psi^2,c]       | 1.44e-2 3.37e-2 | 7.68e-3 8.17e-3 7.79e-3 7.87e-3
+test e2_weighted_chirp_polynomial_cpu has been running for over 60 seconds
+    O3 LS energy [..,psi*c]            | 9.14e-3 2.18e-2 | 5.04e-3
+    O3 LS energy [1,psi,psi^2,c] + wfit | 1.43e-2 3.36e-2 | 7.66e-3
+    O3 LS uniform [1,psi,psi^2,c]      | 1.76e-2 3.24e-2 | 7.68e-3
+   floors (no stencil truncation):
+    deg-2 fit, exact e^{-i psi}        | 2.39e-2 4.43e-2 | 1.28e-2
+    deg-4 fit, exact e^{-i(psi+c)}     | 3.88e-3 8.32e-3 | 2.12e-3
+    exact deviation (segment floor)    | 2.71e-3 4.11e-3 | 1.54e-3
+  set 1 (3990 samples)  rows: method | white fwd  adj | object fwd with weight: oracle  box  shifted-24mm  blend(0.7 shift + 0.3 box)
+   degree-2 fit (order 1 / 2 kernel):
+    P1 Taylor                          | 7.87e-2 1.46e-1 | 3.64e-2
+    P1 LS energy (full target)         | 5.00e-2 9.69e-2 | 2.55e-2 2.94e-2 2.63e-2 2.69e-2
+    P2 Taylor (production)             | 3.06e-2 6.65e-2 | 1.59e-2
+    P2 centred Taylor (energy mean)    | 2.74e-2 5.82e-2 | 1.50e-2
+    P2 Chebyshev (range over fitv)     | 4.01e-2 5.29e-2 | 2.36e-2
+    P2 LS uniform fitv (chirp target)  | 2.67e-2 4.41e-2 | 1.17e-2
+    P2 LS energy (chirp target)        | 2.51e-2 4.42e-2 | 1.17e-2
+    P2 LS uniform fitv (full target)   | 2.66e-2 4.27e-2 | 1.15e-2
+    P2 LS energy (full target)         | 2.39e-2 4.37e-2 | 1.15e-2 1.16e-2 1.22e-2 1.19e-2
+    P2 LS energy + weighted fit        | 2.37e-2 4.36e-2 | 1.11e-2
+    P2 LS energy: max |p_n - Taylor_n| n = 0, 1, 2: 1.56e-2 7.33e-2 8.53e-1
+    P2 LS energy coefficients (max over samples): ||p0|-1| 5.65e-3, |arg p0| 1.46e-2 rad, |Re q| 1.34e-2, |Im q - 1| 7.23e-2, |Re r + 1/2| 7.96e-2, |Im r| 8.50e-1  (Taylor: q = i, r = -1/2)
+    P2 LS energy, f16 kernel params    | 2.39e-2 4.37e-2 |
+    P2 LS energy, coeffs every 8th ADC | 2.39e-2 4.37e-2 |
+   degree-4 fit (order 3 kernel):
+    O3 Taylor (production)             | 2.89e-2 6.88e-2 | 1.30e-2
+    O3 Taylor + psi*c34 product        | 2.68e-2 6.91e-2 | 1.16e-2
+    O3 LS energy, c-term fixed -i      | 1.77e-2 3.81e-2 | 7.93e-3
+    O3 LS energy [1,psi,psi^2,c]       | 1.43e-2 3.20e-2 | 6.46e-3 6.92e-3 6.62e-3 6.67e-3
+    O3 LS energy [..,psi*c]            | 9.24e-3 2.19e-2 | 4.38e-3
+    O3 LS energy [1,psi,psi^2,c] + wfit | 1.42e-2 3.19e-2 | 6.44e-3
+    O3 LS uniform [1,psi,psi^2,c]      | 1.75e-2 3.08e-2 | 6.46e-3
+   floors (no stencil truncation):
+    deg-2 fit, exact e^{-i psi}        | 2.36e-2 4.18e-2 | 1.12e-2
+    deg-4 fit, exact e^{-i(psi+c)}     | 3.84e-3 7.90e-3 | 1.83e-3
+    exact deviation (segment floor)    | 2.63e-3 4.36e-3 | 1.34e-3
+test e2_weighted_chirp_polynomial_cpu ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 188.94s
+

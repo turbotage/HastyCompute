@@ -28,6 +28,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import _env  # noqa: F401  (caches inside the repo; before torch)
 import torch
 import torch.nn.functional as Fn
@@ -52,7 +56,7 @@ class _Case:
             t = vf.open_lazy(d / "case.hv")
             self.x, self.mask, self.lazy = t["x"], t["mask"], True
         else:
-            self.x, self.mask, self.lazy = np.load(d / "x.npy", mmap_mode="r"), np.load(d / "mask.npy", mmap_mode="r"), False
+            self.x, self.mask, self.lazy = load_any(d / "x.npy", mmap_mode="r"), load_any(d / "mask.npy", mmap_mode="r"), False
 
     @staticmethod
     def _runs(frames):

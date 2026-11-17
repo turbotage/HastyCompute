@@ -7,14 +7,18 @@ SNR-normalised units. Native or coarse grid, lumen > 0.9; frames given or all.
 """
 import json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 run, rname, scan, design = sys.argv[1:5]
 G = 2.6752218744e8
 s = json.load(open(os.path.join(design, 'summary.json'))); b = s['best']
-m1 = np.load(os.path.join(design, 'tr_moments.npy'))[:, b['i_ro'] + b.get('i_echo', 0), 3:]
+m1 = load_any(os.path.join(design, 'tr_moments.npy'))[:, b['i_ro'] + b.get('i_echo', 0), 3:]
 k = G * (m1[1:] - m1[0]); ax = np.argmax(np.abs(k), 1); kk = k[np.arange(len(k)), ax]
-X = np.load(os.path.join(run, rname), mmap_mode='r')
-lf = np.load(os.path.join(scan, 'truth_lumen_fraction.npy')); lum = lf > 0.9
-vt = np.load(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')
+X = load_any(os.path.join(run, rname), mmap_mode='r')
+lf = load_any(os.path.join(scan, 'truth_lumen_fraction.npy')); lum = lf > 0.9
+vt = load_any(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')
 assert X.shape[:3] == lf.shape
 grid = np.linspace(-3, 3, 3001); kmin = np.abs(kk).min(); r1 = np.pi / kmin
 inr = np.abs(grid) <= r1 + 1e-9

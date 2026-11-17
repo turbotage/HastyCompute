@@ -18,6 +18,10 @@ Error images are built per (sample, voxel) by term functions `efun(ctx, sl) -> c
 """
 import json, os, sys, time
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 from scipy.ndimage import binary_dilation, uniform_filter1d
 
@@ -51,7 +55,7 @@ class Design:
         b, pr = s['best'], s['problem']
         self.name, self.b0, self.te = name, b0, b['te']
         dt = pr['dt']
-        g = np.load(run + '/tr_grad.npy')[0]
+        g = load_any(run + '/tr_grad.npy')[0]
         i0 = b['i_ro'] + b.get('i_echo', 0)
         i1 = b['i_ro'] + b.get('recon', [[0, b['i_adc']]])[0][1]
         # piecewise-linear gradient between raster points, exact cumulative moments at the dwell times
@@ -110,8 +114,8 @@ class Design:
 def scan_readouts(nr, offset=0):
     """NR readouts of the simulated scan spread over the 10 min: index, encode, frame, cardiac phase and the rotation R
     with k_phys = R k_base (Procrustes of the scan's nominal k onto the current design's base readout; exact to 1e-7)"""
-    ro = np.load(os.path.join(SCAN, 'readouts.npy'), mmap_mode='r')
-    s = np.load(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
+    ro = load_any(os.path.join(SCAN, 'readouts.npy'), mmap_mode='r')
+    s = load_any(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
     n = ro.shape[0]
     idx = np.linspace(offset, n - 1, nr).round().astype(int)
     tab = np.asarray(ro[idx])
@@ -127,7 +131,7 @@ def scan_readouts(nr, offset=0):
 def check_design(des, ridx=(0, 1000, 30000)):
     """synthesised k / tau / readout M1 / concomitant coefficients vs the simulated scan's sched_nominal records
     (current design only; rotation by Procrustes on k)"""
-    s = np.load(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
+    s = load_any(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
     out = []
     for r in ridx:
         rec = np.asarray(s[r]).astype(np.float64)
@@ -156,7 +160,7 @@ class Obj:
         self.dims = tuple(meta['recon_dims'])
         nx, ny, nz = self.dims
         self.res = 0.002
-        ld = lambda f: np.load(os.path.join(SCAN, f), mmap_mode='r')
+        ld = lambda f: load_any(os.path.join(SCAN, f), mmap_mode='r')
         pdw = np.asarray(ld('truth_pd_water.npy')); pdf = np.asarray(ld('truth_pd_fat.npy'))
         lum = np.asarray(ld('truth_lumen_fraction.npy'))
         sup = binary_dilation((pdw + pdf > 0) | (lum > 0), iterations=dil)
@@ -177,7 +181,7 @@ class Obj:
         ffa = ld('truth_fat_fraction.npy')
         self.ff = np.stack([g(ffa[..., f]) for f in range(ffa.shape[3])], 1).astype(np.float32)  # N x 20
         self.ff = np.clip(np.nan_to_num(self.ff), 0, 1)
-        xw = np.load(os.path.join(ROOT, 'fix_2mm/llr_s/warm_full.npy'), mmap_mode='r')
+        xw = load_any(os.path.join(ROOT, 'fix_2mm/llr_s/warm_full.npy'), mmap_mode='r')
         self.x_raw = g(xw[..., enc]).astype(np.complex64)
         acc = np.zeros(self.dims, np.float32)
         for e in range(xw.shape[3]):
@@ -220,7 +224,7 @@ class Obj:
     def load_vel(self):
         """truth velocity (logical = physical axes here), N x 3 x 20, float32 (voxel-mean incl. tissue)"""
         if self.vel is None:
-            va = np.load(os.path.join(SCAN, 'truth_vel_logical.npy'), mmap_mode='r')
+            va = load_any(os.path.join(SCAN, 'truth_vel_logical.npy'), mmap_mode='r')
             nx, ny, nz = self.dims
             v = np.empty((self.N, 3, va.shape[4]), np.float32)
             for f in range(va.shape[4]):
@@ -349,7 +353,7 @@ OUT = os.path.join(ROOT, 'physics_budget_2026-11-10')
 
 def use_truth(obj, design='current', blood_gain=1.0):
     """truth-based band-limited images (truth_image.py) on the object voxels: water, fat (six-peak), blood"""
-    z = np.load(os.path.join(OUT, f'truth_x_{design}.npz'))
+    z = load_any(os.path.join(OUT, f'truth_x_{design}.npz'))
     g = lambda a: a.ravel(order='F')[obj.idx].astype(np.complex64)
     obj.xw, obj.xf, obj.xb = g(z['water']), g(z['fat']), g(z['blood']) * blood_gain
     obj.t_xw = torch.tensor(obj.xw, device=DEV); obj.t_xf = torch.tensor(obj.xf, device=DEV); obj.t_xb = torch.tensor(obj.xb, device=DEV)

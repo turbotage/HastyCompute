@@ -18,6 +18,10 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 A = sys.argv[1:]
@@ -38,12 +42,12 @@ if bins_sep:
 truths = opt("--truth", "truth_pc_frames.npz").split(",")
 idx_path = opt("--idx")
 scan, names = A[0], A[1:]
-dims = tuple(np.load(os.path.join(scan, "truth_lumen_fraction.npy"), mmap_mode="r").shape)
+dims = tuple(load_any(os.path.join(scan, "truth_lumen_fraction.npy"), mmap_mode="r").shape)
 T = []
 for t in truths:
-    z = np.load(t if os.path.exists(t) else os.path.join(scan, t))
+    z = load_any(t if os.path.exists(t) else os.path.join(scan, t))
     T.append((z["idx"], z["c"], z["cov"], float(z["resp_state"])))
-idx_rec = np.load(idx_path).astype(np.int64) if idx_path else T[0][0]
+idx_rec = load_any(idx_path).astype(np.int64) if idx_path else T[0][0]
 NC = T[0][1].shape[2]
 
 
@@ -93,7 +97,7 @@ def roi(ijk, sel, *arrs):
 P = [prep(b) for b in range(len(T))]
 for nm in names:
     lumen_only = nm.endswith("_lumen.npy")
-    x = np.load(nm, mmap_mode="r")
+    x = load_any(nm, mmap_mode="r")
     F = x.shape[2] if lumen_only else x.shape[4]
     nb = F // NC
     acc = {}

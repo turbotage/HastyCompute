@@ -23,11 +23,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from matplotlib.collections import LineCollection  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
 E = Path(sys.argv[1])
-v = np.load(E / "vessels.npz")
+v = load_any(E / "vessels.npz")
 P, R, V, S = v["points"].astype(np.float64), v["radius"].astype(np.float64), v["vessel"], v["spline"]
 names = [x["name"] for x in json.loads((E / "vessels.json").read_text())["vessels"]]
 # radius corrections: atlas radii (bevel × point radius) that are far below adult values; target = the vessel's maximum
@@ -355,7 +359,7 @@ for n in [n for n in range(len(npos)) if dg[n] == 1 and n not in protected]:
 #    aorta / pulmonary trunk → the valve's leaflet centroid; venae cavae → nearest right-atrial vertex; each pulmonary
 #    vein → nearest left-atrial vertex. The connector's heart end is the flow root of its tree.
 MJ = json.loads((E / "meshes.json").read_text())["5__Cardiovascular_system"]["objects"]
-MD = np.load(E / "meshes_5__Cardiovascular_system.npz")
+MD = load_any(E / "meshes_5__Cardiovascular_system.npz")
 
 
 def mesh_vertices(rx):

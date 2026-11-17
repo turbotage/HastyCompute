@@ -13,6 +13,10 @@ Reported: R of (model - truth) with motion, minus nothing; the static floor R (b
     warp_eval.py [--designs v2,current] [--phase systole|diastole] [--nr 32]
 """
 import json, os, sys, time, argparse
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import numpy as np, torch
 from scipy.ndimage import gaussian_filter
 sys.path.insert(0, os.path.dirname(__file__))
@@ -180,7 +184,7 @@ if __name__ == '__main__':
             t_vh = {k: torch.tensor(v, dtype=torch.float64, device=pb.DEV) for k, v in vhat_variants.items()}
             # T12: field gradient at the model voxels: the 2 mm field map (central differences) or the oracle
             # (amplitude-weighted source-field gradient of the voxel's blood, normalised convolution)
-            hz3 = np.asarray(np.load(os.path.join(pb.SCAN, 'field_ppm_recon.npy'), mmap_mode='r')).astype(np.float64) * 2 * np.pi * pb.GBAR * obj.b0 * 1e-6
+            hz3 = np.asarray(load_any(os.path.join(pb.SCAN, 'field_ppm_recon.npy'), mmap_mode='r')).astype(np.float64) * 2 * np.pi * pb.GBAR * obj.b0 * 1e-6
             gmap = np.stack(np.gradient(hz3, obj.res), -1).reshape(-1, 3, order='F')[obj.idx[sel]]
             gsrc_v = ps.extra['gradw'].cpu().numpy()
             qv = obj.idx[ps.vox]

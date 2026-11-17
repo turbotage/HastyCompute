@@ -14,6 +14,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 INK, GRID = "#1f1f1e", "#e4e3dd"
 
@@ -23,7 +27,7 @@ def main():
     S = json.loads((run / "summary.json").read_text())
     figs = run / "figs"
     figs.mkdir(exist_ok=True)
-    L = lambda n: np.load(run / f"{n}.npy")  # noqa: E731
+    L = lambda n: load_any(run / f"{n}.npy")  # noqa: E731
     om, r2, ff, wm, fm, sup = (L(n) for n in ("maps_omega_hz", "maps_r2", "maps_ff", "maps_water", "maps_fat", "support"))
     tom, tr2, tff = (L(n) for n in ("truth_omega_hz", "truth_r2", "truth_ff"))
     mag = wm + fm

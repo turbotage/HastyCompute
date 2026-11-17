@@ -15,6 +15,13 @@ __device__ __forceinline__ int wrap(int i, int n) { int r = i % n; return r < 0 
 struct Dims { int nf0, nf1, nf2, nb0, nb1, nb2; };
 struct MDims { int N0, N1, N2, fftord; };
 
+#ifdef KER_KB
+// Kaiser-Bessel window and its z-derivatives (host-generated kb_eval: one even / odd polynomial per order, no clamp)
+__device__ __forceinline__ void es3(float z, float& f, float& d1, float& d2) { float o[3]; kb_eval<3>(z, o); f = o[0]; d1 = o[1]; d2 = o[2]; }
+#if CORR >= 2
+__device__ __forceinline__ void es5(float z, float* o) { kb_eval<5>(z, o); }
+#endif
+#else
 // ES kernel and its derivatives with respect to the kernel argument z ∈ (-1, 1)
 __device__ __forceinline__ void es3(float z, float& f, float& d1, float& d2) {
   const float a = 1.f - z * z;
@@ -44,6 +51,7 @@ __device__ __forceinline__ void es5(float z, float* o) {
   o[3] = (u3 + 3.f * u1 * u2 + u1 * u1 * u1) * f;
   o[4] = (u4 + 4.f * u1 * u3 + 3.f * u2 * u2 + 6.f * u1 * u1 * u2 + u1 * u1 * u1 * u1) * f;
 }
+#endif
 #endif
 // weights of the W cells starting at i0 = ceil(sc - W/2); z = (cell - sc) * 2/W; returns i0
 __device__ __forceinline__ int weights3(float sc, float* f, float* d1, float* d2) {

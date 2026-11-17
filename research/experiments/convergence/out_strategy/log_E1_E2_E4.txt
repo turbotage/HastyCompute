@@ -1,0 +1,106 @@
+[E1 s1.6] GD        I            lamMQ      71.6  1e-1:103 1e-2:None 1e-3:None @40 1.36e-01 energy@20 2.61e-02
+[E1 s1.6] Nesterov  I            lamMQ      71.6  1e-1:25 1e-2:164 1e-3:None @40 6.84e-02 energy@20 1.03e-02
+[E1 s1.6] ZMSHR1-M  I            lamMQ      71.6  1e-1:16 1e-2:150 1e-3:None @40 4.90e-02 energy@20 7.38e-03
+[E1 s1.6] PCG       I            lamMQ      71.6  1e-1:15 1e-2:85 1e-3:240 @40 3.33e-02 energy@20 5.09e-03
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:181: RuntimeWarning: overflow encountered in multiply
+  dot = lambda a, b: np.real((np.conj(a) * b).sum(axis=(1, 2)))[:, None, None]
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:49: RuntimeWarning: invalid value encountered in reduce
+  return umr_sum(a, axis, dtype, out, keepdims, initial, where)
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:115: RuntimeWarning: invalid value encountered in multiply
+  return (np.conj(self.S)[None] * ifft2(self.W[:, None] * fft2(self.S[None] * x[:, None]))).sum(1)
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/fft/_pocketfft.py:101: RuntimeWarning: invalid value encountered in fft
+  return ufunc(a, fct, axes=[(axis,), (), (axis,)], out=out)
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:118: RuntimeWarning: invalid value encountered in multiply
+  return 2 * x - np.roll(x, 1, 0) - np.roll(x, -1, 0)
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:121: RuntimeWarning: invalid value encountered in multiply
+  return self.AHA(x, count) + self.mu * self.Lt(x) + self.eps * x
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:186: RuntimeWarning: invalid value encountered in multiply
+  x = x + a * p; r = r - a * q; z = Mf(r); rz2 = dot(r, z)
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:187: RuntimeWarning: invalid value encountered in multiply
+  p = z + (rz2 / np.maximum(rz, 1e-300)) * p; rz = rz2
+[E1 s1.6] PCG per-set I            lamMQ      71.6  1e-1:13 1e-2:None 1e-3:None @40 3.26e-02 energy@20 4.89e-03
+[E1 s1.6] GD        Cshared      lamMQ      20.6  1e-1:67 1e-2:171 1e-3:None @40 2.20e-01 energy@20 3.85e-01
+[E1 s1.6] Nesterov  Cshared      lamMQ      20.6  1e-1:20 1e-2:83 1e-3:189 @40 3.85e-02 energy@20 6.51e-02
+[E1 s1.6] ZMSHR1-M  Cshared      lamMQ      20.6  1e-1:14 1e-2:34 1e-3:70 @40 3.87e-03 energy@20 1.36e-02
+[E1 s1.6] PCG       Cshared      lamMQ      20.6  1e-1:10 1e-2:19 1e-3:44 @40 1.31e-03 energy@20 1.61e-03
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py:2782: RuntimeWarning: overflow encountered in dot
+  sqnorm = x_real.dot(x_real) + x_imag.dot(x_imag)
+[E1 s1.6] PCG per-set Cshared      lamMQ      20.6  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s1.6] GD        Cshared+n_t  lamMQ      22.9  1e-1:72 1e-2:180 1e-3:None @40 2.41e-01 energy@20 4.22e-01
+[E1 s1.6] Nesterov  Cshared+n_t  lamMQ      22.9  1e-1:20 1e-2:86 1e-3:199 @40 4.22e-02 energy@20 6.58e-02
+[E1 s1.6] ZMSHR1-M  Cshared+n_t  lamMQ      22.9  1e-1:13 1e-2:22 1e-3:62 @40 2.34e-03 energy@20 4.00e-03
+[E1 s1.6] PCG       Cshared+n_t  lamMQ      22.9  1e-1:10 1e-2:19 1e-3:45 @40 1.40e-03 energy@20 1.27e-03
+[E1 s1.6] PCG per-set Cshared+n_t  lamMQ      22.9  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s1.6] GD        Cperset      lamMQ      26.3  1e-1:81 1e-2:197 1e-3:None @40 2.81e-01 energy@20 4.69e-01
+[E1 s1.6] Nesterov  Cperset      lamMQ      26.3  1e-1:22 1e-2:96 1e-3:226 @40 4.94e-02 energy@20 6.94e-02
+[E1 s1.6] ZMSHR1-M  Cperset      lamMQ      26.3  1e-1:14 1e-2:31 1e-3:70 @40 4.53e-03 energy@20 1.45e-02
+[E1 s1.6] PCG       Cperset      lamMQ      26.3  1e-1:12 1e-2:21 1e-3:50 @40 1.92e-03 energy@20 1.93e-03
+[E1 s1.6] PCG per-set Cperset      lamMQ      26.3  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s1.6] GD        K(omega,k)   lamMQ      13.3  1e-1:42 1e-2:107 1e-3:283 @40 1.05e-01 energy@20 2.39e-01
+[E1 s1.6] Nesterov  K(omega,k)   lamMQ      13.3  1e-1:15 1e-2:55 1e-3:123 @40 2.00e-02 energy@20 5.21e-02
+[E1 s1.6] ZMSHR1-M  K(omega,k)   lamMQ      13.3  1e-1:10 1e-2:21 1e-3:51 @40 1.53e-03 energy@20 2.37e-03
+[E1 s1.6] PCG       K(omega,k)   lamMQ      13.3  1e-1:7 1e-2:14 1e-3:32 @40 2.89e-04 energy@20 1.95e-04
+[E1 s1.6] PCG per-set K(omega,k)   lamMQ      13.3  1e-1:9 1e-2:None 1e-3:None @40 nan energy@20 1.07e-02
+[E1 s16.0] GD        I            lamMQ       209  1e-1:287 1e-2:None 1e-3:None @40 2.03e-01 energy@20 9.00e-02
+[E1 s16.0] Nesterov  I            lamMQ       209  1e-1:43 1e-2:215 1e-3:None @40 1.05e-01 energy@20 2.52e-02
+[E1 s16.0] ZMSHR1-M  I            lamMQ       209  1e-1:33 1e-2:191 1e-3:None @40 7.05e-02 energy@20 1.43e-02
+[E1 s16.0] PCG       I            lamMQ       209  1e-1:23 1e-2:95 1e-3:241 @40 5.21e-02 energy@20 9.53e-03
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:118: RuntimeWarning: invalid value encountered in subtract
+  return 2 * x - np.roll(x, 1, 0) - np.roll(x, -1, 0)
+[E1 s16.0] PCG per-set I            lamMQ       209  1e-1:None 1e-2:None 1e-3:None @40 3.13e-01 energy@20 6.99e-02
+[E1 s16.0] GD        Cshared      lamMQ      36.7  1e-1:None 1e-2:None 1e-3:None @40 5.55e-01 energy@20 4.91e-01
+[E1 s16.0] Nesterov  Cshared      lamMQ      36.7  1e-1:48 1e-2:238 1e-3:None @40 1.50e-01 energy@20 2.19e-01
+[E1 s16.0] ZMSHR1-M  Cshared      lamMQ      36.7  1e-1:37 1e-2:69 1e-3:127 @40 9.52e-02 energy@20 1.19e-01
+[E1 s16.0] PCG       Cshared      lamMQ      36.7  1e-1:22 1e-2:44 1e-3:66 @40 1.38e-02 energy@20 4.39e-02
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/fft/_pocketfft.py:101: RuntimeWarning: overflow encountered in fft
+  return ufunc(a, fct, axes=[(axis,), (), (axis,)], out=out)
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:146: RuntimeWarning: invalid value encountered in divide
+  shared = lambda g: ifft2(fft2(g) / lam_sh[None])
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/fft/_pocketfft.py:101: RuntimeWarning: invalid value encountered in ifft
+  return ufunc(a, fct, axes=[(axis,), (), (axis,)], out=out)
+/home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/lib/python3.12/site-packages/numpy/fft/_pocketfft.py:101: RuntimeWarning: overflow encountered in ifft
+  return ufunc(a, fct, axes=[(axis,), (), (axis,)], out=out)
+[E1 s16.0] PCG per-set Cshared      lamMQ      36.7  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s16.0] GD        Cshared+n_t  lamMQ      85.1  1e-1:265 1e-2:None 1e-3:None @40 6.54e-01 energy@20 7.86e-01
+[E1 s16.0] Nesterov  Cshared+n_t  lamMQ      85.1  1e-1:54 1e-2:245 1e-3:None @40 1.11e-01 energy@20 4.32e-01
+[E1 s16.0] ZMSHR1-M  Cshared+n_t  lamMQ      85.1  1e-1:19 1e-2:44 1e-3:85 @40 2.46e-02 energy@20 3.62e-02
+[E1 s16.0] PCG       Cshared+n_t  lamMQ      85.1  1e-1:18 1e-2:35 1e-3:66 @40 5.33e-03 energy@20 1.49e-02
+[E1 s16.0] PCG per-set Cshared+n_t  lamMQ      85.1  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s16.0] GD        Cperset      lamMQ      87.1  1e-1:264 1e-2:None 1e-3:None @40 6.59e-01 energy@20 7.91e-01
+[E1 s16.0] Nesterov  Cperset      lamMQ      87.1  1e-1:55 1e-2:246 1e-3:None @40 1.09e-01 energy@20 4.41e-01
+[E1 s16.0] ZMSHR1-M  Cperset      lamMQ      87.1  1e-1:29 1e-2:59 1e-3:103 @40 3.20e-02 energy@20 7.21e-02
+[E1 s16.0] PCG       Cperset      lamMQ      87.1  1e-1:21 1e-2:37 1e-3:71 @40 6.67e-03 energy@20 2.07e-02
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:181: RuntimeWarning: invalid value encountered in multiply
+  dot = lambda a, b: np.real((np.conj(a) * b).sum(axis=(1, 2)))[:, None, None]
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/convergence/strategy_toy.py:148: RuntimeWarning: overflow encountered in divide
+  perset = lambda g: ifft2(fft2(g) / lam_set)
+[E1 s16.0] PCG per-set Cperset      lamMQ      87.1  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 nan
+[E1 s16.0] GD        K(omega,k)   lamMQ      13.5  1e-1:42 1e-2:110 1e-3:None @40 1.05e-01 energy@20 2.41e-01
+[E1 s16.0] Nesterov  K(omega,k)   lamMQ      13.5  1e-1:15 1e-2:54 1e-3:122 @40 1.94e-02 energy@20 5.29e-02
+[E1 s16.0] ZMSHR1-M  K(omega,k)   lamMQ      13.5  1e-1:12 1e-2:22 1e-3:52 @40 1.87e-03 energy@20 3.94e-03
+[E1 s16.0] PCG       K(omega,k)   lamMQ      13.5  1e-1:8 1e-2:16 1e-3:37 @40 7.19e-04 energy@20 2.89e-04
+[E1 s16.0] PCG per-set K(omega,k)   lamMQ      13.5  1e-1:None 1e-2:None 1e-3:None @40 nan energy@20 3.56e-02
+[E2 s16.0] ZMSHR1-M global   |Cshared      {'lam_max(MQ)': np.float64(35.52528930184071), 'to_1e-1': 35, 'to_1e-2': 84, 'to_1e-3': 134, 'at10': 0.48842129685714586, 'at40': 0.06398295524978521, 'final': 3.3870972787092987e-07}
+[E2 s16.0] ZMSHR1-M per-set  |Cshared      {'lam_max(MQ)': np.float64(35.52528930184071), 'to_1e-1': 12, 'to_1e-2': 26, 'to_1e-3': 39, 'at10': 0.12267035496919293, 'at40': 0.0008979911456505303, 'final': 2.433128425918259e-14}
+[E2 s16.0] GD                |Cshared      {'lam_max(MQ)': np.float64(35.52528930184071), 'to_1e-1': None, 'to_1e-2': None, 'to_1e-3': None, 'at10': 0.7977266308654065, 'at40': 0.5409871476194968, 'final': 0.1261769543982994}
+[E2 s16.0] PCG               |Cshared      {'lam_max(MQ)': np.float64(35.52528930184071), 'to_1e-1': 22, 'to_1e-2': 44, 'to_1e-3': 68, 'at10': 0.34654180519133104, 'at40': 0.014936064132233206, 'final': 3.397367462035636e-14}
+[E2 s16.0] PCG per-set       |Cshared      {'lam_max(MQ)': np.float64(35.52528930184071), 'to_1e-1': 9, 'to_1e-2': 17, 'to_1e-3': 26, 'at10': 0.05870728826879561, 'at40': 3.1948751954760136e-05, 'final': 2.5345216332144675e-14}
+[E2 s16.0] ZMSHR1-M global   |Cshared+n_t  {'lam_max(MQ)': np.float64(35.951941784121686), 'to_1e-1': 16, 'to_1e-2': 43, 'to_1e-3': 61, 'at10': 0.5701123134458052, 'at40': 0.015590053077613682, 'final': 2.4451030547348056e-14}
+[E2 s16.0] ZMSHR1-M per-set  |Cshared+n_t  {'lam_max(MQ)': np.float64(35.951941784121686), 'to_1e-1': 12, 'to_1e-2': 26, 'to_1e-3': 44, 'at10': 0.11774787340816636, 'at40': 0.0025145809642955143, 'final': 2.4005234265343895e-14}
+[E2 s16.0] GD                |Cshared+n_t  {'lam_max(MQ)': np.float64(35.951941784121686), 'to_1e-1': 108, 'to_1e-2': 256, 'to_1e-3': None, 'at10': 0.770720076256958, 'at40': 0.3770447545590511, 'final': 0.0054087966492791925}
+[E2 s16.0] PCG               |Cshared+n_t  {'lam_max(MQ)': np.float64(35.951941784121686), 'to_1e-1': 12, 'to_1e-2': 21, 'to_1e-3': 30, 'at10': 0.1669765939720264, 'at40': 0.00012384643739213973, 'final': 2.5248570125733477e-14}
+[E2 s16.0] PCG per-set       |Cshared+n_t  {'lam_max(MQ)': np.float64(35.951941784121686), 'to_1e-1': 9, 'to_1e-2': 17, 'to_1e-3': 26, 'at10': 0.058707288268795614, 'at40': 3.194895427002733e-05, 'final': 2.5279571046810803e-14}
+[E2 s16.0] ZMSHR1-M global   |Cperset      {'lam_max(MQ)': np.float64(44.290286747048945), 'to_1e-1': 21, 'to_1e-2': 48, 'to_1e-3': 64, 'at10': 0.2401949251150713, 'at40': 0.015493835603378078, 'final': 2.589784299389657e-14}
+[E2 s16.0] ZMSHR1-M per-set  |Cperset      {'lam_max(MQ)': np.float64(44.290286747048945), 'to_1e-1': 15, 'to_1e-2': 32, 'to_1e-3': 46, 'at10': 0.22080851597982648, 'at40': 0.001902084419189068, 'final': 2.4620233868511288e-14}
+[E2 s16.0] GD                |Cperset      {'lam_max(MQ)': np.float64(44.290286747048945), 'to_1e-1': 130, 'to_1e-2': None, 'to_1e-3': None, 'at10': 0.810565075557651, 'at40': 0.4441956581655628, 'final': 0.010403490453090514}
+[E2 s16.0] PCG               |Cperset      {'lam_max(MQ)': np.float64(44.290286747048945), 'to_1e-1': 15, 'to_1e-2': 24, 'to_1e-3': 34, 'at10': 0.1966044599307695, 'at40': 0.0002793158003505664, 'final': 0.0}
+[E2 s16.0] PCG per-set       |Cperset      {'lam_max(MQ)': np.float64(44.290286747048945), 'to_1e-1': 11, 'to_1e-2': 20, 'to_1e-3': 29, 'at10': 0.10805888138395985, 'at40': 5.1877820806440006e-05, 'final': 1.4357268544177805e-14}
+[E4] reg mu=0.3: {'truth_err_converged': np.float64(0.11295301642554438), 'it_to_within_1pct_of_final': 11}
+[E4] reg mu=1.0: {'truth_err_converged': np.float64(0.10238768597475327), 'it_to_within_1pct_of_final': 11}
+[E4] reg mu=3.0: {'truth_err_converged': np.float64(0.09960327968904084), 'it_to_within_1pct_of_final': 11}
+[E4] PCG|Cperset        {'best_truth_it': 15, 'best_truth_err': np.float64(0.17932867947221154), 'heldout_min_it': 18, 'truth_err_at_heldout_min': np.float64(0.18243185597519146), 'truth_err_at_200': np.float64(1.2365660240830554), 'truth_curve(1,2,5,10,20,40,80,120,200)': [np.float64(1.6120335023729893), np.float64(0.641980539403437), np.float64(0.46120385459969343), np.float64(0.20345468083891588), np.float64(0.18575993763920848), np.float64(0.30582732487839587), np.float64(0.5536174910623229), np.float64(0.7800947342585776), np.float64(1.2365660240830554)]}
+[E4] ZMSHR1-M|Cperset   {'best_truth_it': 20, 'best_truth_err': np.float64(0.18037122854046864), 'heldout_min_it': 25, 'truth_err_at_heldout_min': np.float64(0.18575915636101445), 'truth_err_at_200': np.float64(0.5212264802093525), 'truth_curve(1,2,5,10,20,40,80,120,200)': [np.float64(0.9615713828093903), np.float64(1.6988354213485863), np.float64(0.5545675040710891), np.float64(0.23306425892345353), np.float64(0.18037122854046864), np.float64(0.21161443421442508), np.float64(0.32042697499089295), np.float64(0.45292230608968004), np.float64(0.5212264802093525)]}
+[E4] GD|Cperset         {'best_truth_it': 108, 'best_truth_err': np.float64(0.17850229193022069), 'heldout_min_it': 182, 'truth_err_at_heldout_min': np.float64(0.18888191194559284), 'truth_err_at_200': np.float64(0.19231595615712643), 'truth_curve(1,2,5,10,20,40,80,120,200)': [np.float64(0.9615713828093903), np.float64(0.9221401438638273), np.float64(0.8097261954791257), np.float64(0.6588043083908792), np.float64(0.45770639503474675), np.float64(0.26946019996773035), np.float64(0.18405814146696137), np.float64(0.17906769130346817), np.float64(0.19231595615712643)]}
+[E4] PCG|I              {'best_truth_it': 22, 'best_truth_err': np.float64(0.12184041459762444), 'heldout_min_it': 26, 'truth_err_at_heldout_min': np.float64(0.12282834400159638), 'truth_err_at_200': np.float64(0.2970698256489092), 'truth_curve(1,2,5,10,20,40,80,120,200)': [np.float64(0.440111805819726), np.float64(0.28504118454737615), np.float64(0.19495350281424204), np.float64(0.14720826217968616), np.float64(0.12225136523244459), np.float64(0.13359542602680427), np.float64(0.17633662455071192), np.float64(0.21695357216348196), np.float64(0.2970698256489092)]}
+[E4] GD|I               {'best_truth_it': 200, 'best_truth_err': np.float64(0.12175487379514303), 'heldout_min_it': 200, 'truth_err_at_heldout_min': np.float64(0.12175487379514303), 'truth_err_at_200': np.float64(0.12175487379514303), 'truth_curve(1,2,5,10,20,40,80,120,200)': [np.float64(0.5230523047901326), np.float64(0.3735306603323528), np.float64(0.25118439877493953), np.float64(0.21044102298926093), np.float64(0.18035681620208166), np.float64(0.15515491678673793), np.float64(0.13564765072068344), np.float64(0.1276494320112542), np.float64(0.12175487379514303)]}
+done in 107 s

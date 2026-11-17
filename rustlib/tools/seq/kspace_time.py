@@ -23,6 +23,10 @@ import sys
 for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "4")
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import readout_metrics as rm  # noqa: E402
@@ -50,7 +54,7 @@ out, prof = args[0], args[1]
 runs = [a.split("=", 1) for a in args[2:]]
 os.makedirs(os.path.join(out, "figs"), exist_ok=True)
 em = rm.energy_model(prof)
-zprof = np.load(prof)
+zprof = load_any(prof)
 
 NB = 40
 res = {}
@@ -60,7 +64,7 @@ for lab, run in runs:
     kmax, fov, tr = f["kmax"], R["s"]["problem"]["fov"], f["tr"]
     tau, r, mask = R["tau"], R["kr"] / kmax, R["mask"]
     # dense raster for curve length (k_adc is the spoke on the raster upsampled by b["upsample"])
-    kd = np.load(os.path.join(run, "k_adc.npy"))
+    kd = load_any(os.path.join(run, "k_adc.npy"))
     up = b["upsample"]
     td = R["te"] - (b.get("i_echo", 0) * R["dt"]) + np.arange(len(kd)) * R["dt"] / up
     seg = np.diff(kd, axis=0)

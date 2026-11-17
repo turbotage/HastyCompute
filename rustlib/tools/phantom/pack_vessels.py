@@ -24,6 +24,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy.special import jv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python/lib"))
@@ -37,9 +41,9 @@ def opt(n, d):
 
 
 RHO, MU = 1060.0, 3.5e-3
-g = np.load(E / "graph.npz")
+g = load_any(E / "graph.npz")
 gj = json.loads((E / "graph.json").read_text())
-fl = np.load(F / "network_flow.npz")
+fl = load_any(F / "network_flow.npz")
 pts, rad, eoff, ecomp = g["points"], g["radius"], g["edge_offsets"], g["edge_comp"]
 comps = {c["id"]: c for c in gj["components"]}
 CODE = {"systemic_arterial": 1, "systemic_venous": 2, "pulmonary_arterial": 3, "pulmonary_venous": 4, "arterial_other": 5, "coronary": 5, "venous_other": 6}

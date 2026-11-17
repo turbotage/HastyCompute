@@ -25,6 +25,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 A = sys.argv[1:]
 OUT = Path(A[0])
@@ -42,10 +46,10 @@ def opt(n, d):
 
 def load(d):
     d = Path(d)
-    f = d / "data_clean.npy" if (d / "data_clean.npy").exists() else d / "data_clean.part.npy"
-    y = np.load(f, mmap_mode="r")
+    f = d / "data_clean.npy" if exists_any(d / "data_clean.npy") else d / "data_clean.part.npy"
+    y = load_any(f, mmap_mode="r")
     meta = json.loads((d / "meta.json").read_text()) if (d / "meta.json").exists() else {}
-    smp = np.load(d / "samples.npy", mmap_mode="r")
+    smp = load_any(d / "samples.npy", mmap_mode="r")
     return np.asarray(y), meta, np.asarray(smp)
 
 

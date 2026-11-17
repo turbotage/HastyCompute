@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use cudarc::driver::{CudaContext, CudaEvent, CudaFunction, CudaModule, CudaSlice, CudaStream, DevicePtr, DevicePtrMut, DeviceRepr, LaunchConfig, PinnedHostSlice, PushKernelArg};
 use hasty_cuda::{CompileSettings, Device, C32};
-use hasty_fft::{Direction, FftPlan, Norm, PrunedChanFft3};
+use hasty_fft::{Direction, FftPlan, KSupport, Norm, PrunedChanFft3};
 
 use crate::plan::{MDims, NufftError, NufftOpts, NufftPlan};
 
@@ -501,6 +501,75 @@ pub struct SegPoints {
     knot: u32,
     /// 2-D knot tables: respiratory intervals (0: 1-D)
     nri: u32,
+    /// fine-grid k-space columns and kz planes the set's nonempty tiles cover (k-support pruning of the grid FFTs)
+    cols: Arc<KCols>,
+}
+
+/// The fine-grid cells a sample set's tile kernels read (forward) or write nonzero (adjoint): the union of its
+/// nonempty tiles, as one bitset of z tiles per (x, y) tile column. Unions over sets give the k-support of the engine's
+/// FFT pruning ([`hasty_fft::KSupport`]: z-pass columns, the ky range of each kx line, the kz range of each column).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub(crate) struct KCols {
+    n: [usize; 3],
+    tt: usize,
+    /// words per tile column
+    wz: usize,
+    /// per tile column ty · ntx + tx: its nonempty z tiles
+    zt: Vec<u64>,
+}
+
+impl KCols {
+    /// from the work items [tile, first, count, split] of tt³ tiles on the fine grid nf
+    fn from_items(items: &[[i32; 4]], nf: [usize; 3], tt: usize) -> Self {
+        let nt = nf.map(|n| n.div_ceil(tt));
+        let wz = nt[2].div_ceil(64);
+        let mut zt = vec![0u64; nt[0] * nt[1] * wz];
+        for it in items.iter().filter(|it| it[2] > 0) {
+            let t = it[0] as usize;
+            let (c, z) = (t % (nt[0] * nt[1]), t / (nt[0] * nt[1]));
+            zt[c * wz + z / 64] |= 1 << (z % 64);
+        }
+        Self { n: nf, tt, wz, zt }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.zt.iter().all(|&w| w == 0)
+    }
+
+    /// self ⊆ o (an empty set is in everything)
+    fn subset_of(&self, o: &Self) -> bool {
+        self.is_empty() || (self.n == o.n && self.tt == o.tt && self.zt.iter().zip(&o.zt).all(|(a, b)| a & !b == 0))
+    }
+
+    fn union_with(&mut self, o: &Self) {
+        if o.is_empty() {
+            return;
+        }
+        if self.is_empty() {
+            *self = o.clone();
+            return;
+        }
+        assert!(self.n == o.n && self.tt == o.tt, "k columns of different grids");
+        self.zt.iter_mut().zip(&o.zt).for_each(|(a, b)| *a |= b);
+    }
+
+    fn support(&self) -> KSupport {
+        let (n, tt, wz) = (self.n, self.tt, self.wz);
+        let ntx = n[0].div_ceil(tt);
+        let ncol = self.zt.len() / wz.max(1);
+        // per tile column: nonempty, and the wrapped kz hull of its z tiles in cells
+        let col: Vec<Option<(usize, usize)>> = (0..ncol)
+            .map(|c| {
+                let w = &self.zt[c * wz..(c + 1) * wz];
+                if w.iter().all(|&x| x == 0) {
+                    return None;
+                }
+                Some(KSupport::hull(n[2], |z| (w[z / tt / 64] >> ((z / tt) % 64)) & 1 == 1))
+            })
+            .collect();
+        let at = |x: usize, y: usize| col[(y / tt) * ntx + x / tt];
+        KSupport::from_columns(n, |x, y| at(x, y).is_some(), |x, y| at(x, y).unwrap_or((0, 0)))
+    }
 }
 
 static POINTS_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -776,6 +845,10 @@ pub struct SegNufft {
     warp: Option<(crate::segwarp::WarpFuncs, Vec<crate::segwarp::WarpDev>)>,
     /// inside forward_wf / adjoint_wf: the image holds [W frames | Fa frames], pad / crop use the water + fat pair
     wf: bool,
+    /// k-support pruning of the grid FFTs (research/temporal_operator.md §20; env HASTY_SEG_KPRUNE=0 turns it off): the
+    /// union of the k columns of every sample set made or used by this engine, and whether pruning is on
+    kcols: KCols,
+    kprune: bool,
 }
 
 /// Pinned staging buffer of one table slot for packed tables, and the event of its last upload.
@@ -856,11 +929,12 @@ struct GridFft {
 }
 
 impl GridFft {
-    fn new(dev: &Device, nf: [usize; 3], dims: [usize; 3], nch: usize) -> Result<Self, NufftError> {
+    /// `ks`: k-support pruning of the pruned transform ([`hasty_fft::KSupport`], x-fastest axes; None: all lines)
+    fn new(dev: &Device, nf: [usize; 3], dims: [usize; 3], nch: usize, ks: Option<&KSupport>) -> Result<Self, NufftError> {
         let off = std::env::var("HASTY_SEG_NOPRUNE").is_ok_and(|v| v != "0");
         // block per axis [z, y, x]: the pad kernels place image index a at (a − N/2) mod nf
         let keep = [2, 1, 0].map(|a| (dims[a] - dims[a] / 2, dims[a] / 2));
-        let pruned = if off || nch < 2 { None } else { PrunedChanFft3::<f32>::new(dev, [nf[2], nf[1], nf[0]], nch, keep, 1.0).ok() };
+        let pruned = if off || nch < 2 { None } else { PrunedChanFft3::<f32>::new_ksupport(dev, [nf[2], nf[1], nf[0]], nch, keep, 1.0, ks).ok() };
         let full = if pruned.is_some() {
             None
         } else {
@@ -903,14 +977,60 @@ impl GridFft {
     }
 }
 
+/// Gridding window of the segmented kernels: the ES window (FINUFFT form, derivative clamp at |z| > 0.98) or the
+/// Kaiser–Bessel window evaluated by polynomials (no clamp; [`crate::KbPoly`]). Same W and σ either way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SegKernel {
+    Es,
+    Kb,
+}
+
+thread_local! {
+    static SEG_KERNEL: std::cell::Cell<Option<SegKernel>> = const { std::cell::Cell::new(None) };
+}
+
+/// Window of the engines built on this thread from now on (None: back to [`seg_kernel_default`]'s env rule). For tests
+/// and comparisons that need both windows in one process.
+pub fn set_thread_seg_kernel(k: Option<SegKernel>) {
+    SEG_KERNEL.with(|c| c.set(k));
+}
+
+/// window of new engines: [`set_thread_seg_kernel`], else env HASTY_SEG_KERNEL = es (default) | kb
+/// (research/temporal_operator.md §20)
+pub fn seg_kernel_default() -> SegKernel {
+    if let Some(k) = SEG_KERNEL.with(|c| c.get()) {
+        return k;
+    }
+    match std::env::var("HASTY_SEG_KERNEL").as_deref() {
+        Ok("kb") | Ok("KB") => SegKernel::Kb,
+        Ok("es") | Ok("ES") | Err(_) => SegKernel::Es,
+        Ok(v) => panic!("HASTY_SEG_KERNEL={v}: es or kb"),
+    }
+}
+
+/// k-support pruning of the grid FFTs by default: env HASTY_SEG_KPRUNE (0 = off, the block-pruned transforms of
+/// before; unset or 1 = on). Exact (research/temporal_operator.md §20).
+pub fn kprune_default() -> bool {
+    std::env::var("HASTY_SEG_KPRUNE").map_or(true, |v| v != "0")
+}
+
 fn lc(n: usize) -> LaunchConfig {
     LaunchConfig { grid_dim: ((n as u32).div_ceil(128).max(1), 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 }
 }
 
+/// kernel-window source prefix of the segmented kernels (KB polynomial evaluator, or nothing for ES) and its name tag
+fn kernel_prefix(plan: &NufftPlan<f32>) -> (String, &'static str) {
+    match &plan.kb {
+        Some(k) => (k.cuda(), "_kb"),
+        None => (String::new(), ""),
+    }
+}
+
 fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileCfg) -> Result<Arc<CudaModule>, NufftError> {
     let defs = std::env::var("HASTY_SEG_DEFS").unwrap_or_default();
+    let (kpre, ktag) = kernel_prefix(plan);
     let src = format!(
-        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define PCVB {}\n#define ACB {}\n#define FSB {}\n#define KV {}\n{}",
+        "{}{kpre}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define PCVB {}\n#define ACB {}\n#define FSB {}\n#define KV {}\n{}",
         defs.split(',').filter(|d| !d.is_empty()).map(|d| format!("#define {d}\n")).collect::<String>(),
         plan.ker.w,
         plan.ker.beta,
@@ -931,7 +1051,7 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
         if sh.ks > 0 { format!("#define KS {}\n#define RDEG {}\n{}\n{}", sh.ks, sh.rdeg, include_str!("segnufft.cu"), include_str!("segnufft_knot.cu")) } else { include_str!("segnufft.cu").to_string() }
     );
     let name = format!(
-        "segnufft{}{}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}_a{}_s{}_v{}",
+        "segnufft{}{}{ktag}_w{}_l{}_o{}_f{}_c{}_t{}_{}_{}_{}_{}_{}_a{}_s{}_v{}",
         defs.replace([',', ' '], "_"),
         if sh.ks > 0 { format!("_k{}{}", sh.ks, if sh.rdeg >= 0 { format!("r{}", sh.rdeg) } else { String::new() }) } else { String::new() },
         plan.ker.w,
@@ -953,10 +1073,11 @@ fn compile(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, tc: &TileC
 }
 
 /// source and module name of the multi-image kernels: segnufft.cu (same defines as [`compile`]) + segnufft_multi.cu
-fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileCfg) -> (String, String) {
+fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileCfg, kpre: &(String, &str)) -> (String, String) {
     let defs = std::env::var("HASTY_SEG_DEFS").unwrap_or_default();
+    let (kpre, ktag) = (&kpre.0, kpre.1);
     let src = format!(
-        "{}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define KM {}\n#define PCVB {}\n#define ACB 1\n#define FSB 1\n{}\n{}",
+        "{}{kpre}#define W {}\n#define BETA {:.17e}\n#define NSEG {}\n#define CORR {}\n#define NF {}\n#define NCB {}\n#define TT {}\n#define CPBA {}\n#define CPBF {}\n#define PPF {}\n#define CHUNK {}\n#define LISTMAX {}\n#define KM {}\n#define PCVB {}\n#define ACB 1\n#define FSB 1\n{}\n{}",
         defs.split(',').filter(|d| !d.is_empty()).map(|d| format!("#define {d}\n")).collect::<String>(),
         w,
         beta,
@@ -976,7 +1097,7 @@ fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileC
         include_str!("segnufft_multi.cu")
     );
     let name = format!(
-        "segnufftm{}_w{}_l{}_o{}_f{}_c{}_k{}_t{}_{}_{}_{}_{}_{}",
+        "segnufftm{}{ktag}_w{}_l{}_o{}_f{}_c{}_k{}_t{}_{}_{}_{}_{}_{}",
         defs.replace([',', ' '], "_"),
         w,
         sh.nseg,
@@ -995,7 +1116,7 @@ fn multi_source(w: usize, beta: f64, sh: Shape, cb: usize, km: usize, tc: &TileC
 }
 
 fn compile_multi(dev: &Device, plan: &NufftPlan<f32>, sh: Shape, cb: usize, km: usize, tc: &TileCfg) -> Result<Arc<CudaModule>, NufftError> {
-    let (src, name) = multi_source(plan.ker.w, plan.ker.beta, sh, cb, km, tc);
+    let (src, name) = multi_source(plan.ker.w, plan.ker.beta, sh, cb, km, tc, &kernel_prefix(plan));
     Ok(dev.load_module(&name, &src, &CompileSettings::default())?)
 }
 
@@ -1057,7 +1178,27 @@ impl SegNufft {
         let knot = knot_major && opts.frames > 1;
         assert!(!knot || opts.order <= 2, "knot-major temporal operator: correction order ≤ 2");
         let (nf, ks) = if knot { (1, nfk) } else { (nfk, 0) };
-        let plan = NufftPlan::<f32>::new(dev, &dims, NufftOpts { sigma: opts.sigma, width: Some(opts.width), ntransf: 1, max_grid_bytes: 1, ..Default::default() })?;
+        // fine-grid sizes: the σ rule, or (HASTY_NUFFT_GRID = auto | sizes) a grid with every σ_a ≥ opts.sigma; then the
+        // window shape β (ES and KB) is set for the effective σ_eff = min_a nf_a / N_a (research/temporal_operator.md §20)
+        let nf_sel = crate::gridsize::grid_for_engine(dev, dims, opts.sigma, opts.width)?;
+        let sig = match nf_sel {
+            Some(n) if n != dims.map(|d| crate::gridsize::default_size(d, opts.sigma, opts.width)) => {
+                // slightly below the exact ratio, so that the plan's ceil(σ N) stays ≤ the chosen size on the min axis
+                (crate::gridsize::sigma_eff(n, dims) * (1.0 - 1e-12)).max(opts.sigma)
+            }
+            _ => opts.sigma,
+        };
+        let mut plan = NufftPlan::<f32>::new(dev, &dims, NufftOpts { sigma: sig, width: Some(opts.width), ntransf: 1, max_grid_bytes: 1, nf: nf_sel, ..Default::default() })?;
+        if seg_kernel_default() == SegKernel::Kb {
+            // Kaiser–Bessel window at the same W and σ: its own deapodisation factors
+            let kb = crate::kernel::KbPoly::new(opts.width, sig);
+            let stream = dev.default_stream();
+            for a in 0..3 {
+                let v: Vec<f32> = kb.deconv_factors(plan.nf[a], plan.modes[a]).iter().map(|&x| x as f32).collect();
+                plan.invphi[a] = stream.clone_htod(&v)?;
+            }
+            plan.kb = Some(kb);
+        }
         let ge = plan.grid_elems();
         // coil batch: memory budget over all frame slots
         let per_coil = nf * opts.nseg * ge * std::mem::size_of::<C32>();
@@ -1069,7 +1210,7 @@ impl SegNufft {
         let (fname, aname) = tile_names(sh);
         let f = Funcs { pad: module.load_function("seg_pad")?, crop: module.load_function("seg_crop")?, pad_wf: module.load_function("seg_pad_wf")?, crop_wf: module.load_function("seg_crop_wf")?, neg: module.load_function("seg_neg")?, fwd: tile_fn(&module, fname, tc.smem(sh)[1])?, adj: tile_fn(&module, aname, tc.smem(sh)[0])? };
         let nch = cb * opts.nseg;
-        let gfft = GridFft::new(dev, [plan.nf[0], plan.nf[1], plan.nf[2]], dims, nch)?;
+        let gfft = GridFft::new(dev, [plan.nf[0], plan.nf[1], plan.nf[2]], dims, nch, None)?;
         let stream = dev.default_stream();
         let slots = (0..nf).map(|_| stream.alloc_zeros::<C32>(nch * ge)).collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
@@ -1102,6 +1243,8 @@ impl SegNufft {
             ffts: 0,
             warp: None,
             wf: false,
+            kcols: KCols::default(),
+            kprune: kprune_default(),
         })
     }
 
@@ -1145,6 +1288,76 @@ impl SegNufft {
     /// whether the fine-grid transforms are pruned to the image block ([`hasty_fft::PrunedChanFft3`])
     pub fn grid_fft_pruned(&self) -> bool {
         self.gfft.is_pruned()
+    }
+
+    /// gridding window of the tile kernels
+    pub fn kernel_kind(&self) -> SegKernel {
+        if self.plan.kb.is_some() { SegKernel::Kb } else { SegKernel::Es }
+    }
+
+    /// k-support pruning of the grid FFTs in use: the support (x-fastest axes), None when off or not yet known
+    pub fn grid_fft_ksupport(&self) -> Option<&KSupport> {
+        self.gfft.pruned.as_ref().and_then(|p| p.ksup.as_ref())
+    }
+
+    /// Turn the k-support pruning of the grid FFTs on or off (default: env HASTY_SEG_KPRUNE, see [`kprune_default`]).
+    /// Exact either way: the support is the union of the nonempty tiles of every sample set made by or used on this
+    /// engine, and grows (re-planning the transforms) when a set extends it.
+    pub fn set_kprune(&mut self, on: bool) -> Result<(), NufftError> {
+        if on != self.kprune {
+            self.kprune = on;
+            self.replan_fft()?;
+        }
+        Ok(())
+    }
+
+    fn kcols_of(&mut self, items: &[[i32; 4]]) -> Arc<KCols> {
+        let c = Arc::new(KCols::from_items(items, self.plan.nf, self.tiles_fwd.tt));
+        // a set made by this engine extends its support at once (re-planned before the next transform)
+        if let Err(e) = self.kcover(&[&*c]) {
+            panic!("k-support re-plan of the grid FFTs failed: {e}");
+        }
+        c
+    }
+
+    /// the k-support the grid FFTs are pruned to (None: pruning off, or no sample set yet)
+    fn ksupport(&self) -> Option<KSupport> {
+        (self.kprune && !self.kcols.is_empty()).then(|| self.kcols.support())
+    }
+
+    /// Make the grid-FFT support cover the given columns (re-plan if it grows).
+    fn kcover(&mut self, cols: &[&KCols]) -> Result<(), NufftError> {
+        if !self.kprune || cols.iter().all(|c| c.subset_of(&self.kcols)) {
+            return Ok(());
+        }
+        for c in cols {
+            self.kcols.union_with(c);
+        }
+        self.replan_fft()
+    }
+
+    /// as [`kcover`](Self::kcover) for sample sets (e.g. made by another engine on the same grid)
+    fn kcover_pts(&mut self, pts: &[&SegPoints]) -> Result<(), NufftError> {
+        self.kcover(&pts.iter().map(|p| &*p.cols).collect::<Vec<_>>())
+    }
+
+    /// rebuild the grid transforms (engine and multi-image passes) for the current support
+    fn replan_fft(&mut self) -> Result<(), NufftError> {
+        let ks = self.ksupport();
+        if let (Some(k), true) = (&ks, std::env::var("HASTY_SEG_KPRUNE_LOG").is_ok_and(|v| v != "0")) {
+            let n = [self.plan.nf[0], self.plan.nf[1], self.plan.nf[2]];
+            let (c, p) = k.fractions(n);
+            eprintln!("    [kprune] grid {n:?}: z-pass columns {c:.3}, kx / ky / kz ranges {p:.3?}, cells {:.3}", k.cell_fraction(n));
+        }
+        let (nf, dims) = ([self.plan.nf[0], self.plan.nf[1], self.plan.nf[2]], [self.plan.modes[0], self.plan.modes[1], self.plan.modes[2]]);
+        self.gfft = GridFft::new(&self.dev, nf, dims, self.cb * self.nseg, ks.as_ref())?;
+        for i in 0..self.multi.len() {
+            if self.multi[i].fft.is_some() {
+                let nch = self.multi[i].cb * self.nseg;
+                self.multi[i].fft = Some(GridFft::new(&self.dev, nf, dims, nch, ks.as_ref())?);
+            }
+        }
+        Ok(())
     }
 
     /// fine-grid transforms executed since construction (forward and inverse, each over one coil batch × NSEG
@@ -1267,7 +1480,8 @@ impl SegNufft {
             tl.iter_mut().for_each(|e| *e |= ival[*e as usize] << 25);
             box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
             let ivals = vec![Interval { first: 0, count: items.len(), split }];
-            return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0 });
+            let cols = self.kcols_of(&items);
+            return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0, cols });
         }
         // tile lists per interval (samples kept in bin-sorted order)
         let mut tl_all: Vec<u32> = Vec::new();
@@ -1282,7 +1496,8 @@ impl SegNufft {
             tl_all.extend_from_slice(&tl);
             items_all.extend_from_slice(&items);
         }
-        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: 0, nri: 0 })
+        let cols = self.kcols_of(&items_all);
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: 0, nri: 0, cols })
     }
 
     fn mdims(&self) -> MDims {
@@ -1456,12 +1671,14 @@ impl SegNufft {
 
     /// y (nc × m) = A x, x = frames × nv (frame-major)
     pub fn forward(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         self.forward_in(st, seg, pts, x, None, y)
     }
 
     /// r (nc × m) = A x − y: the gather accumulates onto −y instead of zero (fused residual: no separate pass over the
     /// data and no second buffer of the data size; equal to `forward` then subtract up to f32 summation order).
     pub fn forward_residual(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &CudaSlice<C32>, r: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         assert!(y.len() >= self.nc * pts.m, "forward_residual: data of {} values, need {} × {}", y.len(), self.nc, pts.m);
         self.forward_in(st, seg, pts, x, Some(y), r)
     }
@@ -1520,6 +1737,7 @@ impl SegNufft {
 
     /// x (frames × nv) = A^H y
     pub fn adjoint(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.adjoint(st, seg, p, y, x));
@@ -1670,6 +1888,7 @@ impl SegNufft {
     /// the operator is applied hundreds of times, so this pays for itself. Returns the chosen (forward, adjoint) kernel
     /// times in ms.
     pub fn autotune(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints) -> Result<(f32, f32), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.autotune(st, seg, p));
@@ -1965,7 +2184,8 @@ impl SegNufft {
         let (pad_ff, crop_ff) = (module.load_function("seg_pad_ff")?, module.load_function("seg_crop_ff")?);
         let (fwd, adj) = (tile_fn(&module, "seg_forward_mt", sf)?, tile_fn(&module, "seg_adjoint_mt", sa)?);
         let nch = cbm * self.nseg;
-        let fft = if cbm == self.cb { None } else { Some(GridFft::new(&self.dev, [self.plan.nf[0], self.plan.nf[1], self.plan.nf[2]], [self.plan.modes[0], self.plan.modes[1], self.plan.modes[2]], nch)?) };
+        let ks = self.ksupport();
+        let fft = if cbm == self.cb { None } else { Some(GridFft::new(&self.dev, [self.plan.nf[0], self.plan.nf[1], self.plan.nf[2]], [self.plan.modes[0], self.plan.modes[1], self.plan.modes[2]], nch, ks.as_ref())?) };
         let ge = self.plan.grid_elems();
         let extra = (0..(g - fit) * self.nf).map(|_| st.alloc_zeros::<C32>(nch * ge)).collect::<Result<Vec<_>, _>>()?;
         self.multi.push(Multi { k, g, cb: cbm, fit, tf: tc, ta: tc, pad, crop, pad_ff, crop_ff, fwd, adj, fft, extra });
@@ -2205,6 +2425,7 @@ impl SegNufft {
     /// images); the FFTs stay one per image. Equals Σ_k w_k ⊙ `forward`(x_k) in exact arithmetic (summation order
     /// differs in f32). With order 3 this is also the path of `forward`.
     pub fn forward_multi(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, xs: &[&CudaSlice<C32>], ws: &[Option<&CudaSlice<C32>>], y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.forward_multi(st, seg, p, xs, ws, y));
@@ -2258,6 +2479,7 @@ impl SegNufft {
     /// scatter pass writing the images' grids. Equals `adjoint`(w̄_k ⊙ y) per image in exact arithmetic. With order 3
     /// this is also the path of `adjoint`.
     pub fn adjoint_multi(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, y: &CudaSlice<C32>, ws: &[Option<&CudaSlice<C32>>], xs: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.adjoint_multi(st, seg, p, y, ws, xs));
@@ -2396,6 +2618,7 @@ impl SegNufft {
     /// multi path, K = 1).
     #[allow(clippy::too_many_arguments)]
     pub fn forward_fat(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, maps: &SegFatMaps, map: Option<usize>, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.forward_fat(st, seg, p, maps, map, x, y));
@@ -2414,6 +2637,7 @@ impl SegNufft {
     /// x = Aᴴ y, the adjoint of [`SegNufft::forward_fat`]
     #[allow(clippy::too_many_arguments)]
     pub fn adjoint_fat(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, maps: &SegFatMaps, map: Option<usize>, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         if pts.is_host() {
             // host-resident tables: run on a device slot holding them
             return self.with_staged(st, pts, |e, p| e.adjoint_fat(st, seg, p, maps, map, y, x));
@@ -2551,7 +2775,7 @@ mod multi_tests {
             for (nf, km) in [(1usize, 1usize), (1, 2), (2, 3), (4, 4)] {
                 let sh = Shape { nseg: 8, order, nf, ks: 0, rdeg: -1 };
                 let tc = TileCfg::new_multi(sh, km, 4, 4, 1024, 99 * 1024).unwrap();
-                let (src, name) = multi_source(10, 23.0, sh, 4, km, &tc);
+                let (src, name) = multi_source(10, 23.0, sh, 4, km, &tc, &(String::new(), ""));
                 assert!(src.contains("seg_forward_mt") && src.contains("seg_adjoint_mt") && src.contains(&format!("#define KM {km}\n")));
                 if let Some(d) = &dir {
                     std::fs::write(std::path::Path::new(d).join(format!("{name}.cu")), &src).unwrap();
@@ -2699,6 +2923,7 @@ fn fill_slot(on: &Arc<CudaStream>, src: &SegPoints, slot: &mut Option<SegPoints>
             id: 0,
             knot: 0,
             nri: 0,
+            cols: Arc::default(),
         });
     }
     let s = slot.as_mut().unwrap();
@@ -2729,6 +2954,7 @@ fn fill_slot(on: &Arc<CudaStream>, src: &SegPoints, slot: &mut Option<SegPoints>
     s.m = src.m;
     s.knot = src.knot;
     s.nri = src.nri;
+    s.cols = src.cols.clone();
     Ok(bytes)
 }
 
@@ -2763,6 +2989,7 @@ impl SegNufft {
                 id: 0,
                 knot: 0,
                 nri: 0,
+                cols: Arc::default(),
             });
             s.owner[i] = None;
             s.ready[i] = None;
@@ -3062,6 +3289,7 @@ impl SegNufft {
 
     #[allow(clippy::too_many_arguments)]
     fn group_fwd(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], x: &CudaSlice<C32>, init: Option<&[&CudaSlice<C32>]>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), NufftError> {
+        self.kcover_pts(pts)?;
         let n = pts.len();
         if self.ks > 0 {
             return Err(NufftError::Invalid("knot-major engine: group calls are not available (merge the members' samples into one set)".into()));
@@ -3128,6 +3356,7 @@ impl SegNufft {
 
     #[allow(clippy::too_many_arguments)]
     fn group_adj(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, fat: Option<FatArg>, pts: &[&SegPoints], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(pts)?;
         let n = pts.len();
         if self.ks > 0 {
             return Err(NufftError::Invalid("knot-major engine: group calls are not available (merge the members' samples into one set)".into()));
@@ -3352,6 +3581,7 @@ impl SegNufft {
     /// time-dependent before the transform, so the temporal knots (interval- or knot-major) are shared exactly.
     /// Single-image path (order ≤ 2).
     pub fn forward_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         self.wf_check(seg, x.len())?;
         self.wf = true;
         let r = self.forward_in(st, seg, pts, x, None, y);
@@ -3361,6 +3591,7 @@ impl SegNufft {
 
     /// r = A_wf x − y (fused residual of [`forward_wf`](Self::forward_wf))
     pub fn forward_residual_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, x: &CudaSlice<C32>, y: &CudaSlice<C32>, r: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         self.wf_check(seg, x.len())?;
         self.wf = true;
         let res = self.forward_in(st, seg, pts, x, Some(y), r);
@@ -3370,6 +3601,7 @@ impl SegNufft {
 
     /// (W, Fa) = A_wfᴴ y, the adjoint of [`forward_wf`](Self::forward_wf), into x = [W frames | Fa frames]
     pub fn adjoint_wf(&mut self, st: &Arc<CudaStream>, seg: &SegSegments, pts: &SegPoints, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), NufftError> {
+        self.kcover_pts(&[pts])?;
         self.wf_check(seg, x.len())?;
         self.wf = true;
         let r = self.adjoint(st, seg, pts, y, x);
@@ -3427,6 +3659,7 @@ impl SegNufft {
         tl.iter_mut().for_each(|e| *e |= key[*e as usize] << 25);
         box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
         let ivals = vec![Interval { first: 0, count: items.len(), split }];
-        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32 })
+        let cols = self.kcols_of(&items);
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32, cols })
     }
 }

@@ -148,15 +148,20 @@ fn apply_cc(x: &[C32], len: usize, nc: usize, t: &[Vec<Complex64>]) -> Vec<C32> 
     out
 }
 
-/// .npy (Fortran order) from byte parts written in sequence, without assembling them in memory
-fn save_parts<'a>(path: &std::path::Path, descr: &str, shape: &[usize], parts: impl Iterator<Item = &'a [u8]>) {
-    use std::io::Write;
-    let mut w = std::io::BufWriter::with_capacity(8 << 20, std::fs::File::create(path).unwrap());
-    w.write_all(&hasty_phantom::volume::npy_header(descr, shape, true)).unwrap();
-    for p in parts {
-        w.write_all(p).unwrap();
+fn dtype_of(descr: &str) -> hasty_value::DType {
+    match descr {
+        "<c8" => hasty_value::DType::C64,
+        "<f4" => hasty_value::DType::F32,
+        "<f8" => hasty_value::DType::F64,
+        d => panic!("dtype {d}"),
     }
-    w.flush().unwrap();
+}
+
+/// an output array (Fortran order) from byte parts written in sequence, without assembling them in memory:
+/// `hasty_value::store` image policy (1e-4 relative rms, research/io_policy.md) → `<name>.hv` (`HASTY_IO=npy`: .npy)
+fn save_parts<'a>(path: &std::path::Path, descr: &str, shape: &[usize], parts: impl Iterator<Item = &'a [u8]>) {
+    let parts: Vec<&[u8]> = parts.collect();
+    hasty_value::store::save_parts(path, dtype_of(descr), shape, hasty_value::Order::F, &parts, &hasty_value::Save::image()).unwrap();
 }
 fn c32_bytes(v: &[C32]) -> &[u8] {
     // SAFETY: C32 is two f32, no padding
@@ -166,8 +171,14 @@ fn f32_bytes(v: &[f32]) -> &[u8] {
     // SAFETY: plain f32 data
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 4) }
 }
+/// an output array (Fortran order): image policy, `<name>.hv` (see `save_parts`)
 fn save(path: &std::path::Path, descr: &str, shape: &[usize], bytes: Vec<u8>) {
-    hasty_phantom::volume::write_npy(path, descr, shape, true, &bytes).unwrap();
+    hasty_value::store::save_bytes(path, dtype_of(descr), shape, hasty_value::Order::F, &bytes, &hasty_value::Save::image()).unwrap();
+}
+
+/// state reloaded on resume (static / air maps): lossless, so a resumed run continues exactly
+fn save_exact(path: &std::path::Path, descr: &str, shape: &[usize], bytes: Vec<u8>) {
+    hasty_value::store::save_bytes(path, dtype_of(descr), shape, hasty_value::Order::F, &bytes, &hasty_value::Save::lossless()).unwrap();
 }
 fn c8(v: &[C32]) -> Vec<u8> {
     v.iter().flat_map(|c| [c.re.to_le_bytes(), c.im.to_le_bytes()].concat()).collect()
@@ -2291,7 +2302,7 @@ fn main() {
             let precond = Precond::parse(pc).unwrap_or(Precond::Zmshr1M);
             let with_metric = precond.metric();
             let resuming = out.join(format!("state_{tag}_s0.hv")).exists() || out.join(format!("state_{tag}_s1.hv")).exists() || out.join(format!("vdone_{tag}_s0")).exists();
-            if !resuming && out.join(format!("recon_{tag}.npy")).exists() {
+            if !resuming && hasty_value::store::exists_any(&out.join(format!("recon_{tag}.npy"))) {
                 println!("  {tag}: finished in an earlier run, skipped (--fresh to redo)");
                 continue;
             }
@@ -2874,8 +2885,8 @@ fn main() {
         let ts_tag = tsub_basis.as_ref().map_or(String::new(), |b| format!("_ts{}", b.name));
         let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{}{dfw_tag}{lock_tag}{air_tag}{red_tag}{ts_tag}{ga_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")), llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" });
         let resuming = out.join(format!("state_{tag}.hv")).exists();
-        if !resuming && out.join(format!("recon_{tag}.npy")).exists() {
-            println!("  {tag}: finished in an earlier run (recon_{tag}.npy), skipped (--fresh to redo)");
+        if !resuming && hasty_value::store::exists_any(&out.join(format!("recon_{tag}.npy"))) {
+            println!("  {tag}: finished in an earlier run (recon_{tag}), skipped (--fresh to redo)");
             continue;
         }
         if let (Some(ini), false, 0) = (&init, resuming, warm_full) {
@@ -2940,7 +2951,7 @@ fn main() {
         let lay = hasty_recon::tlock::FrameLayout::new(sd.dims, sd.vox, nf_card, resp_bins, ne, temporal.is_some());
         let (map_npy, map_json) = (out.join(format!("static_map_{tag}.npy")), out.join(format!("static_map_{tag}.json")));
         let mut lmap: Option<hasty_recon::tlock::StaticMap> = None;
-        if resuming && static_lock.is_some() && map_npy.exists() && map_json.exists() {
+        if resuming && static_lock.is_some() && hasty_value::store::exists_any(&map_npy) && map_json.exists() {
             let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&map_json).unwrap()).unwrap();
             let v = hasty_recon::data::read_npy(&map_npy).unwrap().f32s();
             let m = hasty_recon::tlock::StaticMap::from_stacked(&v, nv, meta["iteration"].as_u64().unwrap() as usize);
@@ -2958,7 +2969,7 @@ fn main() {
         let n_dil = dil.iter().filter(|&&b| b).count().max(1);
         if let Some((ao, it0, ev)) = &air {
             air_next = *it0;
-            if resuming && air_npy.exists() && air_json.exists() {
+            if resuming && hasty_value::store::exists_any(&air_npy) && air_json.exists() {
                 let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&air_json).unwrap()).unwrap();
                 let v = hasty_recon::data::read_npy(&air_npy).unwrap().f32s();
                 let m = hasty_recon::airmap::AirMap::from_stacked(&v, nv, meta["iteration"].as_u64().unwrap() as usize, meta["level"].as_f64().unwrap_or(f64::NAN));
@@ -2970,7 +2981,7 @@ fn main() {
             } else if let Some(p) = &air_init {
                 let (m, desc) = hasty_recon::airmap::load_seed(p, sd.dims, vox_mm, ao).unwrap();
                 println!("  air seed {}: {desc} ({:.1} % of the coil-map support)", p.display(), 100.0 * (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count() as f64 / n_dil as f64);
-                save(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
+                save_exact(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
                 let mut j = hasty_recon::airmap::sidecar(&m, ao, sd.dims, vox_mm);
                 j["seed"] = serde_json::json!(true);
                 j["init"] = serde_json::json!(p);
@@ -2992,7 +3003,7 @@ fn main() {
                     let m = hasty_recon::airmap::estimate(h, &lay, ao, amap.as_ref(), k);
                     let in_dil = (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count();
                     let lz = lumen.iter().filter(|&&q| m.w[q] > 0.0).count();
-                    save(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
+                    save_exact(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
                     let mut j = hasty_recon::airmap::sidecar(&m, ao, sd.dims, vox_mm);
                     j["seed"] = serde_json::json!(false);
                     j["support_zeroed"] = serde_json::json!(in_dil);
@@ -3041,7 +3052,7 @@ fn main() {
                     let t = Instant::now();
                     if lmap.as_ref().map_or(true, |m| k >= m.iteration + ev) {
                         let m = hasty_recon::tlock::estimate(h, &lay, lo, Some(&dec), k);
-                        save(&map_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 6], f4(m.stacked()));
+                        save_exact(&map_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 6], f4(m.stacked()));
                         std::fs::write(&map_json, serde_json::to_string_pretty(&serde_json::json!({
                             "iteration": m.iteration, "sigma2_blur": m.sigma2_blur, "sigma2_raw": m.sigma2_raw, "static_card": m.static_card, "static_resp": m.static_resp, "undetermined": m.undetermined,
                             "truth_lumen_locked": [lumen.iter().filter(|&&q| m.w_card[q] > 0.5).count() as f64 / lumen.len().max(1) as f64, lumen.iter().filter(|&&q| m.w_resp[q] > 0.5).count() as f64 / lumen.len().max(1) as f64],
@@ -3126,7 +3137,7 @@ fn main() {
                         }
                     }
                 }
-                hasty_phantom::volume::write_npy(&out.join(format!("it{k}_{tag}_lumen.npy")), "<c8", &[li.len(), ne, nf], false, &c8(&v)).unwrap();
+                hasty_value::store::save_bytes(&out.join(format!("it{k}_{tag}_lumen.npy")), hasty_value::DType::C64, &[li.len(), ne, nf], hasty_value::Order::C, c32_bytes(&v), &hasty_value::Save::image()).unwrap();
             }
             let img = |fr: usize, e: usize, q: usize| -> Complex64 {
                 let (t, o) = at(fr, e);

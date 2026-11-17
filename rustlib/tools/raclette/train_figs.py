@@ -15,6 +15,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 REPO = Path(__file__).resolve().parents[3]
 import sys  # noqa: E402
@@ -53,7 +57,7 @@ for (v, sub), cases in sorted(groups.items()):
             t = vf.open_lazy(d / "case.hv")
             x, m = t["x"], t["mask"]
         else:
-            x, m = np.load(d / "x.npy", mmap_mode="r"), np.load(d / "mask.npy", mmap_mode="r")
+            x, m = load_any(d / "x.npy", mmap_mode="r"), load_any(d / "mask.npy", mmap_mode="r")
         z = int(np.argmax(np.asarray(m[:, :, :, 0]).sum(axis=(0, 1))))
         sl = np.asarray(x[:, :, z]).astype(np.float32)
         sl = sl[..., 0] + 1j * sl[..., 1]  # [X, Y, F, E]

@@ -1,6 +1,10 @@
 import numpy as np, sys, os, time
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 D = sys.argv[1]; S = os.path.join(D, 'sim_flow_10min/scan'); out = sys.argv[2]
-s = np.load(os.path.join(S,'samples.npy'), mmap_mode='r')
+s = load_any(os.path.join(S,'samples.npy'), mmap_mode='r')
 k0 = np.array(s[0], dtype=np.float64)
 tau = k0[:,3]; kap = np.linalg.norm(k0[:,:3], axis=1)
 gam = 2*np.pi*42.577478e6
@@ -10,7 +14,7 @@ print('tau', tau[0], tau[-1], 'dt', np.diff(tau).mean(), '|G| max mT/m', G.max()
 # check rotation invariance of |k| profile across readouts
 for r in [1, 1000, 30000]:
     kr = np.linalg.norm(np.array(s[r])[:,:3], axis=1); print('ro', r, 'max |kap diff|', np.abs(kr-kap).max())
-d = np.load(os.path.join(S,'data_clean.npy'), mmap_mode='r')
+d = load_any(os.path.join(S,'data_clean.npy'), mmap_mode='r')
 ros = np.linspace(0, d.shape[0]-1, 400).astype(int)
 E = np.zeros(d.shape[1]); ss = 0.0
 t0 = time.time()

@@ -4,10 +4,14 @@
 """
 import os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 run, vname, scan = sys.argv[1:4]
-v = np.load(os.path.join(run, vname), mmap_mode='r'); vt = np.load(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')
-lf = np.load(os.path.join(scan, 'truth_lumen_fraction.npy')); lum = lf > 0.5
+v = load_any(os.path.join(run, vname), mmap_mode='r'); vt = load_any(os.path.join(scan, 'truth_vel_logical.npy'), mmap_mode='r')
+lf = load_any(os.path.join(scan, 'truth_lumen_fraction.npy')); lum = lf > 0.5
 depth = ndimage.distance_transform_edt(lum)  # voxels to the nearest non-lumen voxel
 nc = vt.shape[-1]; F = v.shape[-1]
 Tm = np.mean([np.asarray(vt[..., c]) for c in range(nc)], 0)

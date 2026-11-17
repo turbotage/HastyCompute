@@ -20,6 +20,8 @@ pub mod llr_gpu;
 pub mod tlp;
 pub mod red;
 pub mod tsub;
+pub mod knotsolve;
+pub mod knotncg;
 pub mod moco;
 pub mod motion;
 pub mod multiterm;

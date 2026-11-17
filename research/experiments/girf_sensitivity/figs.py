@@ -4,6 +4,10 @@
 """
 import glob, json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -67,7 +71,7 @@ def fig_h():
     """true vs estimated H for draw 0 of a rand and a resonance MC run"""
     import truths
     for tag in sorted({os.path.basename(p).split('_d0_')[0][3:] for p in glob.glob(os.path.join(OUT, 'mc_*_d0_H.npz'))}):
-        z = np.load(os.path.join(OUT, f'mc_{tag}_d0_H.npz'))
+        z = load_any(os.path.join(OUT, f'mc_{tag}_d0_H.npz'))
         recs = [json.loads(l) for l in open(os.path.join(OUT, f'mc_{tag}.jsonl'))]
         r0 = [r for r in recs if r['draw'] == 0]
         if not r0:

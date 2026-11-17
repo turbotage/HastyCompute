@@ -18,4 +18,4 @@ pub use mixz::{MixEntry, MixZPlan};
 pub use pack::{f32_to_bf16_bits, f32_to_f16_bits, pack_bf16, pack_half};
 pub use padfft::{PadFft3, PadFftOps, PolyTable};
 pub use plan::{AxisPlan, AxisSpec, Direction, FftError, FftPlan, LaunchPtrs, LineAddr, LineSplit, Norm};
-pub use chanfft::PrunedChanFft3;
+pub use chanfft::{KSupport, PrunedChanFft3};

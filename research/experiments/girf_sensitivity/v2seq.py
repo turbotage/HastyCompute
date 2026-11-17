@@ -8,6 +8,10 @@ ADC at 2 us from the echo: reconstruction window 0 .. 9.49 ms (recon_mask), navi
 """
 import json, os
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import gmodel as gm
 
 REPO = os.environ.get('HASTY_REPO', '/home/turbotage/Documents/GitHub/HastyCompute')
@@ -24,7 +28,7 @@ class V2:
         self.te = b['te']
         self.i_ro, self.i_tail, self.i_adc = b['i_ro'], b['i_tail'], b['i_adc']
         self.n_recon = b['recon'][0][1]
-        self.tr_grad = np.load(RUN + '/tr_grad.npy')  # (7, n+1, 3)
+        self.tr_grad = load_any(RUN + '/tr_grad.npy')  # (7, n+1, 3)
         self.n_enc = self.tr_grad.shape[0]
         self.n = self.tr_grad.shape[1] - 1  # TR length in raster steps
         self.tr = self.n * self.dt
@@ -71,13 +75,13 @@ def scan_rotations(nr=48, offset=7, nprev=10):
     readout as in pb (exact to 1e-7). Cached under data/hasty/seq/studies/girf_sensitivity_2026-11-11/."""
     out = os.path.join(REPO, 'data/hasty/seq/studies/girf_sensitivity_2026-11-11', f'scanrot_{nr}_{offset}_{nprev}.npz')
     if os.path.exists(out):
-        z = np.load(out)
+        z = load_any(out)
         return dict(idx=z['idx'], enc=z['enc'], R=z['R'], frame=z['frame'])
     import sys
     sys.path.insert(0, os.path.join(REPO, 'research/experiments/readout_physics'))
     import pb
-    ro = np.load(os.path.join(SCAN, 'readouts.npy'), mmap_mode='r')
-    s = np.load(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
+    ro = load_any(os.path.join(SCAN, 'readouts.npy'), mmap_mode='r')
+    s = load_any(os.path.join(SCAN, 'sched_nominal.npy'), mmap_mode='r')
     n = ro.shape[0]
     idx = np.linspace(offset, n - 1, nr).round().astype(int)
     kb = pb.Design('current').k

@@ -11,6 +11,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 SER = ["#2a78d6", "#eb6834", "#1baf7a"]  # tissues, fixed order
 INK, MUTED, GRID = "#1f1f1e", "#6b6a63", "#e4e3dd"
@@ -55,7 +59,7 @@ def main():
     fig.savefig(run / "spoilcheck.png", dpi=130)
     plt.close(fig)
 
-    tr = np.load(run / "traces.npy")
+    tr = load_any(run / "traces.npy")
     pick = [i for i, r in enumerate(rows) if r["tissue"] == "blood static" and r["rf_inc_deg"] == incs[0]]
     fig, ax = plt.subplots(figsize=(13, 4))
     for j, i in enumerate(pick):

@@ -13,6 +13,10 @@ usage: nav_crlb.py [--run data/hasty/seq/flow_thorax_v2] [--scan <sim scan dir>]
 """
 import json, sys, os
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 GAMMA = 42.577e6  # Hz/T
 args = sys.argv[1:]
@@ -31,10 +35,10 @@ ie, ir, it, n = sm['i_enc'], sm['i_ro'], sm['i_tail'], sm['n_tr']
 TR = n * dt
 KMAX = 250.0
 h = 2e-3
-tr_grad = np.load(f'{RUN}/tr_grad.npy')          # [7][n+1][3] T/m, physical axes
+tr_grad = load_any(f'{RUN}/tr_grad.npy')          # [7][n+1][3] T/m, physical axes
 ne = tr_grad.shape[0]
 
-rho = (np.load(f'{SCAN}/truth_pd_water.npy') + np.load(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
+rho = (load_any(f'{SCAN}/truth_pd_water.npy') + load_any(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
 nx, ny, nz = rho.shape
 com = [(rho.sum(axis=tuple(j for j in range(3) if j != a)) * np.arange(rho.shape[a])).sum() / rho.sum() for a in range(3)]
 ax = [(np.arange(rho.shape[a]) - com[a]) * h for a in range(3)]
@@ -99,7 +103,7 @@ for part, (i0, i1) in {'encode': (ie, ir), 'tail': (it, n)}.items():
         if part == 'encode': print(part, e, 'samples kept', m.sum(), '/', len(m), 'diag', np.round(np.sqrt(np.diag(F)[:3]), 1))
     Fp[part] = Fe
 # readout (rotated base spokes): average over the stored rotations
-ks = np.load(f'{RUN}/k_spokes.npy')
+ks = load_any(f'{RUN}/k_spokes.npy')
 Fr = []
 for r in range(ks.shape[0]):
     kk = ks[r]

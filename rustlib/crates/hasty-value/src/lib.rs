@@ -15,6 +15,7 @@ pub mod lossy;
 pub mod npy;
 pub mod quant;
 pub mod slice;
+pub mod store;
 mod tensor;
 mod value;
 
@@ -26,6 +27,7 @@ pub use lossy::{Loss, LossPlan, Quant, Scope, Transfer};
 pub use lazy::{Lazy, LazyFile, TensorRef};
 pub use tensor::{Buffer, Tensor};
 pub use value::Value;
+pub use store::{Order, Policy, Save};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

@@ -1,0 +1,33 @@
+
+running 1 test
+
+B0 2.89 T, FOV centre (30, -40, 100) mm, oblique, concomitant, GNL, B0 map + fat
+     set  L  ntab | order 2 fwd  adj      | order 3 fwd  adj      | max phase left out: quadratic / degree-4 fit
+      0  10   665 | 9.43e-3  1.24e-2  | 8.26e-3  9.47e-3  | 1.70e-1 / 3.51e-2 rad
+      0  20   665 | 4.79e-3  8.33e-3  | 1.15e-3  2.19e-3  | 1.70e-1 / 3.51e-2 rad
+      0  20   256 | 4.80e-3  8.34e-3  | 1.20e-3  2.20e-3  | 1.70e-1 / 3.51e-2 rad
+      1  10   665 | 9.44e-3  1.16e-2  | 8.25e-3  8.98e-3  | 1.70e-1 / 3.51e-2 rad
+      1  20   665 | 4.79e-3  7.70e-3  | 1.15e-3  2.09e-3  | 1.70e-1 / 3.51e-2 rad
+      1  20   256 | 4.80e-3  7.70e-3  | 1.20e-3  2.11e-3  | 1.70e-1 / 3.51e-2 rad
+
+B0 1.50 T, FOV centre (30, -40, 100) mm, oblique, concomitant, GNL, B0 map + fat
+     set  L  ntab | order 2 fwd  adj      | order 3 fwd  adj      | max phase left out: quadratic / degree-4 fit
+      0  10   665 | 1.04e-2  1.66e-2  | 6.12e-3  9.23e-3  | 3.28e-1 / 6.76e-2 rad
+      0  20   665 | 8.92e-3  1.50e-2  | 2.95e-3  6.47e-3  | 3.28e-1 / 6.76e-2 rad
+      0  20   256 | 8.92e-3  1.50e-2  | 2.96e-3  6.46e-3  | 3.28e-1 / 6.76e-2 rad
+      1  10   665 | 1.03e-2  1.63e-2  | 6.06e-3  8.71e-3  | 3.28e-1 / 6.76e-2 rad
+      1  20   665 | 8.89e-3  1.49e-2  | 2.91e-3  6.12e-3  | 3.28e-1 / 6.76e-2 rad
+      1  20   256 | 8.89e-3  1.49e-2  | 2.92e-3  6.12e-3  | 3.28e-1 / 6.76e-2 rad
+
+B0 0.55 T, FOV centre (30, -40, 100) mm, oblique, concomitant, GNL, B0 map + fat
+     set  L  ntab | order 2 fwd  adj      | order 3 fwd  adj      | max phase left out: quadratic / degree-4 fit
+      0  10   665 | 3.49e-2  7.37e-2  | 3.31e-2  7.79e-2  | 8.94e-1 / 1.84e-1 rad
+      0  20   665 | 3.13e-2  6.97e-2  | 2.92e-2  7.33e-2  | 8.94e-1 / 1.84e-1 rad
+      0  20   256 | 3.13e-2  6.97e-2  | 2.92e-2  7.32e-2  | 8.94e-1 / 1.84e-1 rad
+      1  10   665 | 3.42e-2  6.90e-2  | 3.25e-2  7.15e-2  | 8.94e-1 / 1.84e-1 rad
+      1  20   665 | 3.06e-2  6.65e-2  | 2.89e-2  6.88e-2  | 8.94e-1 / 1.84e-1 rad
+      1  20   256 | 3.06e-2  6.64e-2  | 2.88e-2  6.87e-2  | 8.94e-1 / 1.84e-1 rad
+test seg_physics_model_error_budget_cpu_order3 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 7.13s
+

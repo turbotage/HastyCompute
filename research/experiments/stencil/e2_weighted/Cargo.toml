@@ -1,0 +1,22 @@
+[package]
+name = "stencil-e2"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+hasty-cuda = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-cuda" }
+hasty-testkit = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-testkit" }
+hasty-nufft = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-nufft" }
+hasty-mrsim = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-mrsim" }
+hasty-recon = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-recon" }
+hasty-seq = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-seq" }
+hasty-bench = { path = "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-bench" }
+serde_json = "1"
+nalgebra = "0.33"
+num-complex = "0.4"
+rayon = "1.12"
+
+[profile.release]
+debug = 1

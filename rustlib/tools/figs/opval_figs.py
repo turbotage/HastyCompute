@@ -11,6 +11,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 run = Path(sys.argv[1])
 info = json.loads((run / "run.json").read_text())
@@ -19,12 +23,12 @@ sim = Path(info["sim_dir"])
 figs = run / "figs"
 figs.mkdir(exist_ok=True)
 venc = info["venc"]
-truth = np.load(sim / "truth_object.npy")  # x,y,z,4
-lum = np.load(sim / "truth_lumen_fraction.npy") > 0.5
-tvel = np.load(sim / "truth_vel_logical.npy")[..., 0]  # x,y,z,3
+truth = load_any(sim / "truth_object.npy")  # x,y,z,4
+lum = load_any(sim / "truth_lumen_fraction.npy") > 0.5
+tvel = load_any(sim / "truth_vel_logical.npy")[..., 0]  # x,y,z,3
 z = int(np.argmax(lum.sum(axis=(0, 1))))
 y = int(np.argmax(lum.sum(axis=(0, 2))))
-models = [m for m in info["models"] if (run / f"recon_{m.replace('+', '_')}.npy").exists()]
+models = [m for m in info["models"] if exists_any(run / f"recon_{m.replace('+', '_')}.npy")]
 entries = []
 
 
@@ -43,7 +47,7 @@ def show(ax, img, title, cmap="gray", vmin=None, vmax=None):
 ref = np.abs(truth[..., 0])
 hi = np.percentile(ref[ref > 0], 99.5)
 for m in models:
-    rec = np.load(run / f"recon_{m.replace('+', '_')}.npy")
+    rec = load_any(run / f"recon_{m.replace('+', '_')}.npy")
     fig, ax = plt.subplots(4, 6, figsize=(18, 11))
     for e in range(4):
         t, r = truth[:, :, z, e], rec[:, :, z, e]
@@ -60,7 +64,7 @@ for m in models:
 # velocity per model (all components), lumen-restricted error maps
 fig, ax = plt.subplots(len(models), 7, figsize=(21, 3.0 * len(models)), squeeze=False)
 for i, m in enumerate(models):
-    rec = np.load(run / f"recon_{m.replace('+', '_')}.npy")
+    rec = load_any(run / f"recon_{m.replace('+', '_')}.npy")
     v = np.stack([-np.angle(rec[..., a + 1] * np.conj(rec[..., 0])) * venc / np.pi for a in range(3)], axis=-1)
     d = (v - tvel + venc) % (2 * venc) - venc
     show(ax[i, 0], tvel[:, :, z, 0], "truth v0", cmap="RdBu_r", vmin=-venc, vmax=venc)

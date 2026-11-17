@@ -26,6 +26,10 @@ Rate maps for the model (z = R2* + i dw, s^-1, rad/s; dw relative to the map fie
 """
 import json, os, sys, time
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -89,8 +93,8 @@ def prepare():
     # pb synthesises v2 as R~ (R0 spoke) with R0 the design's own first rotation (the readout part of tr_grad[0]);
     # the records (opval_v2, as the simulator) play R spoke: compose R = R~ R0 to keep the budget's sample positions
     s_ = json.load(open(os.path.join(pb.DESIGNS['v2'], 'summary.json')))['best']
-    gtr = np.load(os.path.join(pb.DESIGNS['v2'], 'tr_grad.npy'))[0][s_['i_ro']:s_['i_ro'] + s_['i_adc'] + 1]
-    gsp = np.load(os.path.join(pb.DESIGNS['v2'], 'spoke_grad.npy'))[:s_['i_adc'] + 1]
+    gtr = load_any(os.path.join(pb.DESIGNS['v2'], 'tr_grad.npy'))[0][s_['i_ro']:s_['i_ro'] + s_['i_adc'] + 1]
+    gsp = load_any(os.path.join(pb.DESIGNS['v2'], 'spoke_grad.npy'))[:s_['i_adc'] + 1]
     U, _, Vt = np.linalg.svd(gtr.T @ gsp)
     R0 = U @ np.diag([1, 1, np.linalg.det(U @ Vt)]) @ Vt
     pb.log(f'design rotation R0: |R0 spoke - tr_grad readout| max {np.abs(gsp @ R0.T - gtr).max():.2e} T/m')
@@ -164,7 +168,7 @@ def exact(carrier='truth', rate='fit', recs='truth', kinds=('window', 'navigator
     if carrier == 'truth':
         tH, hw, hf, _ = carriers(obj, des)
     else:
-        zf = np.load(os.path.join(CASE, f'z_{rate}.npy'))[obj.idx]
+        zf = load_any(os.path.join(CASE, f'z_{rate}.npy'))[obj.idx]
         tz = torch.tensor(zf, dtype=torch.complex64, device=pb.DEV)
     ffs = torch.tensor(obj.ff, device=pb.DEV)
     m4 = pb.monos(obj.t_pos)
@@ -173,7 +177,7 @@ def exact(carrier='truth', rate='fit', recs='truth', kinds=('window', 'navigator
     for kind, recf, key in [('window', f'rec_{recs}.npy', 'n'), ('navigator', f'recnav_{recs}.npy', 'nav')]:
         if kind not in kinds:
             continue
-        rec = np.load(os.path.join(CASE, recf))
+        rec = load_any(os.path.join(CASE, recf))
         out = []
         off = 0
         t0 = time.time()
@@ -225,8 +229,8 @@ def R_of(case, y, ye, nav=False):
 def evaluate(tags):
     case = json.load(open(os.path.join(CASE, 'case.json')))
     ref = os.environ.get('RP_REF', 'y_exact')
-    ye = np.load(os.path.join(CASE, ref + '.npy'))
-    yn = np.load(os.path.join(CASE, 'ynav_exact.npy')) if os.path.exists(os.path.join(CASE, 'ynav_exact.npy')) else None
+    ye = load_any(os.path.join(CASE, ref + '.npy'))
+    yn = load_any(os.path.join(CASE, 'ynav_exact.npy')) if exists_any(os.path.join(CASE, 'ynav_exact.npy')) else None
     des = pb.Design('v2')
     fn = os.path.join(CASE, 'R.json' if ref == 'y_exact' else f'R_{ref}.json')
     res = json.load(open(fn)) if os.path.exists(fn) else {}
@@ -236,7 +240,7 @@ def evaluate(tags):
     q = des.kabs[n] / des.kmax
     nr = len(case['readouts'])
     for t in tags:
-        y = np.load(os.path.join(CASE, f'y_{t}.npy'))
+        y = load_any(os.path.join(CASE, f'y_{t}.npy'))
         info = json.load(open(os.path.join(CASE, f'y_{t}.json'))) if os.path.exists(os.path.join(CASE, f'y_{t}.json')) else {}
         if info.get('nav'):
             if yn is None:

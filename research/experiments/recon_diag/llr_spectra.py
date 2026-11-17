@@ -12,10 +12,14 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 run = sys.argv[1]
 names = sys.argv[2:]
-sup = np.load(os.path.join(run, "mask_support.npy")) > 0.5 if os.path.exists(os.path.join(run, "mask_support.npy")) else None
+sup = load_any(os.path.join(run, "mask_support.npy")) > 0.5 if exists_any(os.path.join(run, "mask_support.npy")) else None
 B = 8
 
 
@@ -61,7 +65,7 @@ def report(name, sp):
     return sig
 
 
-xs = [np.load(n, mmap_mode="r") for n in names]
+xs = [load_any(n, mmap_mode="r") for n in names]
 sps = [spectra(x) for x in xs]
 sigs = [report(os.path.basename(n), sp) for n, sp in zip(names, sps)]
 if len(xs) == 2:

@@ -1,0 +1,22 @@
+phase cycles 3.6
+L=6 white: segmented-Toeplitz vs exact normal op 3.98e-02
+L=6 object: segmented-Toeplitz vs exact normal op 7.70e-02
+  rank 1: |lambda| captured median 0.7425 min 0.2848; white vs seg 1.24e-01 vs exact 1.30e-01; object vs seg 1.17e-02 vs exact 7.85e-02
+  rank 2: |lambda| captured median 0.9075 min 0.5277; white vs seg 4.24e-02 vs exact 5.89e-02; object vs seg 2.40e-03 vs exact 7.76e-02
+  rank 3: |lambda| captured median 0.9665 min 0.7176; white vs seg 2.46e-02 vs exact 4.74e-02; object vs seg 1.77e-03 vs exact 7.70e-02
+  rank 4: |lambda| captured median 0.9891 min 0.8280; white vs seg 1.47e-02 vs exact 4.26e-02; object vs seg 1.15e-03 vs exact 7.70e-02
+  parametric rank-1 (2 reals/kappa): white vs seg 1.28e-01; object vs seg 5.23e-02 (14 s)
+L=9 white: segmented-Toeplitz vs exact normal op 9.49e-04
+L=9 object: segmented-Toeplitz vs exact normal op 1.31e-03
+  rank 1: |lambda| captured median 0.7977 min 0.3032; white vs seg 5.75e-01 vs exact 5.75e-01; object vs seg 1.40e-01 vs exact 1.40e-01
+  rank 2: |lambda| captured median 0.9322 min 0.5735; white vs seg 1.11e-01 vs exact 1.11e-01; object vs seg 6.90e-03 vs exact 7.17e-03
+  rank 3: |lambda| captured median 0.9745 min 0.7100; white vs seg 5.95e-02 vs exact 5.95e-02; object vs seg 5.77e-03 vs exact 5.87e-03
+  rank 4: |lambda| captured median 0.9885 min 0.8111; white vs seg 3.50e-02 vs exact 3.50e-02; object vs seg 2.52e-03 vs exact 2.73e-03
+  parametric rank-1 (2 reals/kappa): white vs seg 3.47e+00; object vs seg 1.64e-01 (18 s)
+L=12 white: segmented-Toeplitz vs exact normal op 1.22e-04
+L=12 object: segmented-Toeplitz vs exact normal op 1.19e-04
+  rank 1: |lambda| captured median 0.6020 min 0.2750; white vs seg 5.12e-01 vs exact 5.12e-01; object vs seg 1.59e-01 vs exact 1.59e-01
+  rank 2: |lambda| captured median 0.8496 min 0.5193; white vs seg 2.24e-01 vs exact 2.24e-01; object vs seg 1.58e-02 vs exact 1.59e-02
+  rank 3: |lambda| captured median 0.9491 min 0.6565; white vs seg 7.02e-02 vs exact 7.02e-02; object vs seg 4.35e-03 vs exact 4.31e-03
+  rank 4: |lambda| captured median 0.9737 min 0.7582; white vs seg 3.85e-02 vs exact 3.84e-02; object vs seg 3.62e-03 vs exact 3.59e-03
+  parametric rank-1 (2 reals/kappa): white vs seg 2.70e+00; object vs seg 1.84e-01 (23 s)

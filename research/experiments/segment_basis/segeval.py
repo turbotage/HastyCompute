@@ -10,6 +10,10 @@ positions k_{r,n} of NR readouts (all 32 whitened coils); elsewhere the white mo
 (validated against full-resolution FFT shell averages in validate.py). R = sqrt(mean_n E(n) / (C sigma^2)).
 """
 import numpy as np, os, json, time
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import scipy.sparse as sp
 from scipy.ndimage import uniform_filter1d
 
@@ -25,7 +29,7 @@ class Case:
         self.dims = tuple(meta['recon_dims'])
         nx, ny, nz = self.dims
         self.res = 0.002
-        mm = np.asarray(np.load(os.path.join(D, 'lock_2mm/llr/mask_maps.npy'), mmap_mode='r')) > 0.5
+        mm = np.asarray(load_any(os.path.join(D, 'lock_2mm/llr/mask_maps.npy'), mmap_mode='r')) > 0.5
         self.idx = np.flatnonzero(mm.ravel(order='F'))
         nf = len(self.idx)
         self.nf = nf
@@ -33,11 +37,11 @@ class Case:
         self.ijk = (i, j, k)
         pos = np.stack([(i - nx / 2) * self.res, (j - ny / 2) * self.res, (k - nz / 2) * self.res], 1)
         self.pos = pos
-        ppm = np.asarray(np.load(os.path.join(S, 'field_ppm_recon.npy'), mmap_mode='r')).ravel(order='F')[self.idx]
+        ppm = np.asarray(load_any(os.path.join(S, 'field_ppm_recon.npy'), mmap_mode='r')).ravel(order='F')[self.idx]
         self.hz = ppm.astype(np.float64) * GBAR * self.b0 * 1e-6
         self.om = TWO_PI * self.hz
         # trajectory: tau, |k| profile, k of NR readouts spread over the scan
-        smp = np.load(os.path.join(S, 'samples.npy'), mmap_mode='r')
+        smp = load_any(os.path.join(S, 'samples.npy'), mmap_mode='r')
         k0 = np.array(smp[0], dtype=np.float64)
         self.tau = k0[:, 3]
         self.na = len(self.tau)
@@ -55,17 +59,17 @@ class Case:
         # R2*
         self.r2 = None
         if r2s:
-            self.r2 = np.asarray(np.load(os.path.join(S, 'truth_r2s.npy'), mmap_mode='r')).ravel(order='F')[self.idx].astype(np.float64)
+            self.r2 = np.asarray(load_any(os.path.join(S, 'truth_r2s.npy'), mmap_mode='r')).ravel(order='F')[self.idx].astype(np.float64)
         # fat
         self.ff = None
         a = np.array([0.087, 0.693, 0.128, 0.004, 0.039, 0.048]); a /= a.sum()
         self.fat_amp = a
         self.fat_om = TWO_PI * GBAR * self.b0 * np.array([-3.80, -3.40, -2.60, -1.94, -0.39, 0.60]) * 1e-6
         if fat:
-            ffa = np.load(os.path.join(S, 'truth_fat_fraction.npy'), mmap_mode='r')
+            ffa = load_any(os.path.join(S, 'truth_fat_fraction.npy'), mmap_mode='r')
             self.ff = np.clip(np.asarray(ffa[..., 0]).ravel(order='F')[self.idx].astype(np.float64), 0, 1)
         # image and coils (whitened)
-        xw = np.load(os.path.join(D, 'fix_2mm/llr_s/warm_full.npy'), mmap_mode='r')
+        xw = load_any(os.path.join(D, 'fix_2mm/llr_s/warm_full.npy'), mmap_mode='r')
         self.x = np.asarray(xw[..., enc]).ravel(order='F')[self.idx].astype(np.complex64)
         acc = np.zeros(self.dims, np.float32)
         for e in range(xw.shape[3]):
@@ -77,7 +81,7 @@ class Case:
         psi = np.array(meta['psi'], dtype=np.float64)
         ev, U = np.linalg.eigh(psi)
         Wh = (U / np.sqrt(ev)) @ U.T  # psi^{-1/2}
-        sm = np.load(os.path.join(S, 'smaps_true.npy'), mmap_mode='r')
+        sm = load_any(os.path.join(S, 'smaps_true.npy'), mmap_mode='r')
         nc = sm.shape[3]
         Sraw = np.empty((nc, nf), np.complex64)
         for c in range(nc):
@@ -89,7 +93,7 @@ class Case:
         self.wE = np.abs(self.x).astype(np.float64) ** 2 * self.cE  # energy the operator sees per voxel
         self.wEs = self.mag_s.astype(np.float64) ** 2 * self.cE      # smoothed (data-derived, recon-available) version
         # measured whitened data energy per ADC sample (coil sum, mean over readouts) and the noise
-        dcl = np.load(os.path.join(S, 'data_clean.npy'), mmap_mode='r')
+        dcl = load_any(os.path.join(S, 'data_clean.npy'), mmap_mode='r')
         Emeas = np.zeros(self.na); ss = 0.0
         ros2 = np.linspace(0, dcl.shape[0] - 1, 200).astype(int)
         for r in ros2:

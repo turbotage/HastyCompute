@@ -16,6 +16,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 INK, MUTED, GRID = "#1f1f1e", "#6b6a63", "#e4e3dd"
 
@@ -25,7 +29,7 @@ def main():
     S = json.loads((run / "summary.json").read_text())
     figs = run / "figs"
     figs.mkdir(exist_ok=True)
-    L = lambda n: np.load(run / f"{n}.npy")  # noqa: E731  (x, y, z) arrays
+    L = lambda n: load_any(run / f"{n}.npy")  # noqa: E731  (x, y, z) arrays
     om4, tru, r24, ff4, wm4, fm4, sup = (L(n) for n in ("maps_omega_hz", "truth_omega_hz", "maps_r2", "maps_ff", "maps_water", "maps_fat", "support"))
     if om4.ndim == 3:
         om4, r24, ff4, wm4, fm4 = (a[..., None] for a in (om4, r24, ff4, wm4, fm4))
@@ -122,8 +126,8 @@ def main():
     fig.tight_layout()
     fig.savefig(figs / "04_conc.png", dpi=100)
     plt.close(fig)
-    if (run / "selfgate.npy").exists():
-        G = np.load(run / "selfgate.npy")
+    if exists_any(run / "selfgate.npy"):
+        G = load_any(run / "selfgate.npy")
         fig, ax = plt.subplots(figsize=(13, 3.6))
         ax.plot(G[:, 0], G[:, 1], color="#2a78d6", lw=0.8, label="self-gating surrogate (FID, first crossing)")
         if np.isfinite(G[:, 2]).any():

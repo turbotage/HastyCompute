@@ -1,0 +1,276 @@
+{
+ "E3_spread1.6": {
+  "spread": 1.6,
+  "lam_factor": 3e-05,
+  "truth_err_grid": {
+   "1e-05": 0.03868562635423258,
+   "3e-05": 0.03567859561844766,
+   "0.0001": 0.03607480830033896,
+   "0.0003": 0.051451561615838116,
+   "0.001": 0.1021323755750914
+  },
+  "truth_err_xs_l1": 0.035678593571581436,
+  "ref_check": {
+   "admm_vs_fista8000": 2.2017327603343894e-13,
+   "pg_res_admm": 1.8811031311410565e-15,
+   "pg_res_fista": 2.5777334049479775e-16
+  },
+  "runs": {
+   "FISTA-I (exact prox)": {
+    "to_1e-1": 23,
+    "to_1e-2": 107,
+    "to_1e-3": null,
+    "at10": 0.15979255385693686,
+    "at40": 0.06073181990656062,
+    "final": 0.0015727794207915753,
+    "target": "l1"
+   },
+   "FISTA-subband x set diag (exact prox)": {
+    "to_1e-1": 32,
+    "to_1e-2": 101,
+    "to_1e-3": 254,
+    "at10": 0.3628920953415585,
+    "at40": 0.0501255412825746,
+    "final": 0.0006596808289966358,
+    "target": "l1",
+    "d_coarse": 90.05966942850068,
+    "d_finest_mean": 8.775149652939957,
+    "L": 71.59356738082508,
+    "sum_offdiag_share": null
+   },
+   "ADMM-PCG rho=0.3*bulk inner=3": {
+    "to_1e-1": 7,
+    "to_1e-2": 18,
+    "to_1e-3": 41,
+    "at10": 0.04067250889001901,
+    "at40": 0.0010814145938871256,
+    "final": 8.46814692271931e-07,
+    "target": "l1"
+   },
+   "ADMM-PCG rho=0.3*bulk inner=8": {
+    "to_1e-1": 7,
+    "to_1e-2": 19,
+    "to_1e-3": 65,
+    "at10": 0.035643118260645146,
+    "at40": 0.0025394658151899592,
+    "final": 2.6281572714314224e-05,
+    "target": "l1"
+   },
+   "ADMM-PCG rho=1.0*bulk inner=3": {
+    "to_1e-1": 6,
+    "to_1e-2": 22,
+    "to_1e-3": 49,
+    "at10": 0.040472528816777514,
+    "at40": 0.001962601256065115,
+    "final": 2.0484663009176528e-09,
+    "target": "l1"
+   },
+   "ADMM-PCG rho=1.0*bulk inner=8": {
+    "to_1e-1": 7,
+    "to_1e-2": 41,
+    "to_1e-3": 113,
+    "at10": 0.05207594046405319,
+    "at40": 0.013191531143819313,
+    "final": 1.7332196624076283e-05,
+    "target": "l1"
+   },
+   "ADMM-PCG rho=3.0*bulk inner=3": {
+    "to_1e-1": 6,
+    "to_1e-2": 46,
+    "to_1e-3": 127,
+    "at10": 0.058150799720659674,
+    "at40": 0.012285615821926603,
+    "final": 3.4372492677728444e-05,
+    "target": "l1"
+   },
+   "ADMM-PCG rho=3.0*bulk inner=8": {
+    "to_1e-1": 9,
+    "to_1e-2": 129,
+    "to_1e-3": null,
+    "at10": 0.08126302963170225,
+    "at40": 0.0427481436151735,
+    "final": 0.0014202775674009556,
+    "target": "l1"
+   },
+   "NCG|I smooth gamma=1.0/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 57,
+    "to_1e-3": 107,
+    "at10": 0.12111502580442206,
+    "at40": 0.024410525716443376,
+    "final": 1.0842135397974287e-07,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 35.73,
+    "dist_l1_at40": 0.02473416703472623
+   },
+   "LBFGS|I smooth gamma=1.0/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 58,
+    "to_1e-3": 108,
+    "at10": 0.12111710484297314,
+    "at40": 0.02463951617325756,
+    "final": 1.0940895038387442e-07,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 32.21666666666667,
+    "dist_l1_at40": 0.024960769227878116
+   },
+   "NCG|Cshared smooth gamma=1.0/bulk": {
+    "to_1e-1": 10,
+    "to_1e-2": 19,
+    "to_1e-3": 30,
+    "at10": 0.08135334512964752,
+    "at40": 0.00010463422654434745,
+    "final": 1.7775118038368115e-14,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 34.67333333333333,
+    "dist_l1_at40": 0.0020288026961049564
+   },
+   "LBFGS|Cshared smooth gamma=1.0/bulk": {
+    "to_1e-1": 10,
+    "to_1e-2": 19,
+    "to_1e-3": 30,
+    "at10": 0.08138809946055084,
+    "at40": 0.00010727194637145151,
+    "final": 1.7631004386768555e-14,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 32.14333333333333,
+    "dist_l1_at40": 0.00202902376370891
+   },
+   "NCG|K(omega,k) smooth gamma=1.0/bulk": {
+    "to_1e-1": 7,
+    "to_1e-2": 14,
+    "to_1e-3": 22,
+    "at10": 0.027703036894408607,
+    "at40": 7.80298613701728e-06,
+    "final": 7.210404896177805e-15,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 33.906666666666666,
+    "dist_l1_at40": 0.0020252901987788887
+   },
+   "LBFGS|K(omega,k) smooth gamma=1.0/bulk": {
+    "to_1e-1": 7,
+    "to_1e-2": 13,
+    "to_1e-3": 22,
+    "at10": 0.027680044565733364,
+    "at40": 6.524227976336559e-06,
+    "final": 1.0160611117833588e-17,
+    "target": "smooth gamma=1.0/bulk",
+    "prior_evals_per_it": 32.083333333333336,
+    "dist_l1_at40": 0.0020252777865821443
+   },
+   "ZMSHR1-M|Cshared alpha=data smooth gamma=1.0/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 32,
+    "to_1e-3": 45,
+    "at10": 0.34529365341139545,
+    "at40": 0.002149546048561518,
+    "final": 1.987383144746573e-14,
+    "target": "smooth gamma=1.0/bulk"
+   },
+   "ZMSHR1-M|Cshared alpha=data+prior smooth gamma=1.0/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 25,
+    "to_1e-3": 41,
+    "at10": 0.32770324166635906,
+    "at40": 0.001015414869290107,
+    "final": 2.519835790704781e-14,
+    "target": "smooth gamma=1.0/bulk"
+   },
+   "NCG|I smooth gamma=0.1/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 58,
+    "to_1e-3": 109,
+    "at10": 0.12114615698568228,
+    "at40": 0.024578513856939967,
+    "final": 1.5402553203140965e-07,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 35.76,
+    "dist_l1_at40": 0.024594764733594614
+   },
+   "LBFGS|I smooth gamma=0.1/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 58,
+    "to_1e-3": 111,
+    "at10": 0.12114825817032303,
+    "at40": 0.024864238894619077,
+    "final": 1.8938304615046291e-07,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 32.23,
+    "dist_l1_at40": 0.024880351202435022
+   },
+   "NCG|Cshared smooth gamma=0.1/bulk": {
+    "to_1e-1": 10,
+    "to_1e-2": 19,
+    "to_1e-3": 31,
+    "at10": 0.08151536055634317,
+    "at40": 0.0002611681050802636,
+    "final": 1.8076610712446608e-14,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 35.21666666666667,
+    "dist_l1_at40": 0.00036889238192780254
+   },
+   "LBFGS|Cshared smooth gamma=0.1/bulk": {
+    "to_1e-1": 10,
+    "to_1e-2": 19,
+    "to_1e-3": 31,
+    "at10": 0.08155062072977062,
+    "at40": 0.00020949280435555366,
+    "final": 1.8103124696485453e-14,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 32.013333333333335,
+    "dist_l1_at40": 0.0003332559344735722
+   },
+   "NCG|K(omega,k) smooth gamma=0.1/bulk": {
+    "to_1e-1": 7,
+    "to_1e-2": 14,
+    "to_1e-3": 23,
+    "at10": 0.027859194435899095,
+    "at40": 2.9150386527836834e-05,
+    "final": 7.463565059456283e-15,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 34.43666666666667,
+    "dist_l1_at40": 0.0002608477364160821
+   },
+   "LBFGS|K(omega,k) smooth gamma=0.1/bulk": {
+    "to_1e-1": 7,
+    "to_1e-2": 13,
+    "to_1e-3": 22,
+    "at10": 0.027835970897250022,
+    "at40": 2.1008731051894553e-05,
+    "final": 2.921447550766037e-17,
+    "target": "smooth gamma=0.1/bulk",
+    "prior_evals_per_it": 32.016666666666666,
+    "dist_l1_at40": 0.00026000342472032003
+   },
+   "ZMSHR1-M|Cshared alpha=data smooth gamma=0.1/bulk": {
+    "to_1e-1": 14,
+    "to_1e-2": 33,
+    "to_1e-3": 48,
+    "at10": 0.34548447518340497,
+    "at40": 0.002085083083696969,
+    "final": 2.3139693374053543e-14,
+    "target": "smooth gamma=0.1/bulk"
+   },
+   "ZMSHR1-M|Cshared alpha=data+prior smooth gamma=0.1/bulk": {
+    "to_1e-1": 16,
+    "to_1e-2": 28,
+    "to_1e-3": 50,
+    "at10": 0.28615869339938677,
+    "at40": 0.0019543692194010152,
+    "final": 3.257782736491713e-14,
+    "target": "smooth gamma=0.1/bulk"
+   }
+  },
+  "smooth gamma=1.0/bulk": {
+   "dist_to_l1_min": 0.0020251753139948186,
+   "truth_err": 0.03586082937868088,
+   "ref_check_ncg300_vs_lbfgs": 7.210404896177805e-15
+  },
+  "smooth gamma=0.1/bulk": {
+   "dist_to_l1_min": 0.00025888465518854526,
+   "truth_err": 0.035678417875956825,
+   "ref_check_ncg300_vs_lbfgs": 7.463565059456283e-15
+  }
+ },
+ "seconds": 349.0764539241791
+}

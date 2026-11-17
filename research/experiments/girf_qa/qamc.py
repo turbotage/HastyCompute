@@ -6,6 +6,10 @@ Resumable: one JSON line per draw in <OUT>/mc_<tag>.jsonl; STOP file in <OUT> en
 """
 import argparse, json, os, sys, time
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -236,7 +240,7 @@ def v2_spectrum(f):
     """relative |G(f)| of the v2 readout on the GE raster (rotation-invariant vector magnitude)"""
     global V2SPEC
     if V2SPEC is None:
-        ro = np.load(os.path.join(PROTO, 'flowtr_ro.npy'))
+        ro = load_any(os.path.join(PROTO, 'flowtr_ro.npy'))
         nfft = 1 << 18
         ff = np.fft.rfftfreq(nfft, 4e-6)
         S = np.sqrt(sum(np.abs(np.fft.rfft(ro[:, a], nfft)) ** 2 for a in range(3)))

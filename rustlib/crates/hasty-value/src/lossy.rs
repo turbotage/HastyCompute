@@ -186,15 +186,15 @@ fn knee_of(t: Transfer) -> f64 {
 /// scale statistics of u = T(x) over a scope
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Stats {
-    max: f64,
-    ss: f64,
-    n: usize,
-    finite: bool,
+    pub(crate) max: f64,
+    pub(crate) ss: f64,
+    pub(crate) n: usize,
+    pub(crate) finite: bool,
 }
 
 impl Stats {
-    const ZERO: Stats = Stats { max: 0.0, ss: 0.0, n: 0, finite: true };
-    fn merge(a: Stats, b: Stats) -> Stats {
+    pub(crate) const ZERO: Stats = Stats { max: 0.0, ss: 0.0, n: 0, finite: true };
+    pub(crate) fn merge(a: Stats, b: Stats) -> Stats {
         Stats { max: a.max.max(b.max), ss: a.ss + b.ss, n: a.n + b.n, finite: a.finite && b.finite }
     }
 }

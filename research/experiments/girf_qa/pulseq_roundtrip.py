@@ -13,6 +13,10 @@ Writes <dir>/roundtrip.json.
 """
 import hashlib, json, os, sys, time
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import pypulseq as pp
 
 GAMMA = 42.576e6
@@ -99,7 +103,7 @@ def main():
         if os.path.exists(cs):
             seq = pp.Sequence(system=ge_system())
             seq.read(cs)
-            g_ref = np.load(os.path.join(d, f'{name}_check_grad.npy'))
+            g_ref = load_any(os.path.join(d, f'{name}_check_grad.npy'))
             dt = seq.grad_raster_time
             g = raster_from_pypulseq(seq, len(g_ref), dt)
             gm = np.abs(g_ref).max()
@@ -108,7 +112,7 @@ def main():
             r['check_max_dg_rel'] = float(np.abs(g - g_ref).max() / gm)
             r['check_max_dg_Tm'] = float(np.abs(g - g_ref).max())
             ta, _ = seq.adc_times()
-            a_ref = np.load(os.path.join(d, f'{name}_check_adc.npy'))
+            a_ref = load_any(os.path.join(d, f'{name}_check_adc.npy'))
             r['check_adc_n'] = [int(len(ta)), int(len(a_ref))]
             r['check_adc_max_dt_ns'] = float(np.abs(np.asarray(ta) - a_ref).max() * 1e9) if len(ta) == len(a_ref) and len(ta) else None
             r['check_duration'] = [float(sum(seq.block_durations.values())), float(sum(seq.block_durations.values()))]

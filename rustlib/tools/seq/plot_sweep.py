@@ -12,6 +12,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 AX = ["#2a78d6", "#eb6834", "#1baf7a"]  # x, y, z in fixed order
 INK, MUTED, GRID = "#1f1f1e", "#6b6a63", "#e4e3dd"
@@ -41,8 +45,8 @@ def main():
     rows = []
     for i, (_, run, s) in enumerate(runs):
         b, pr = s["best"], s["problem"]
-        g = np.load(run / "tr_phys.npy")[enc]
-        k = np.load(run / "k_tr.npy")
+        g = load_any(run / "tr_phys.npy")[enc]
+        k = load_any(run / "k_tr.npy")
         t = np.arange(g.shape[0]) * dt * 1e3
         for col in (0, 1):
             ax = axs[i, col]
@@ -84,7 +88,7 @@ def main():
     # base-spoke shapes
     fig, axs = plt.subplots(2, len(runs), figsize=(2.2 * len(runs), 4.6))
     for i, (_, run, s) in enumerate(runs):
-        k = np.load(run / "k_adc.npy") / s["problem"]["kmax"]
+        k = load_any(run / "k_adc.npy") / s["problem"]["kmax"]
         n = k.shape[0]
         for row, (a, c) in enumerate([(0, 1), (0, 2)]):
             ax = axs[row, i]

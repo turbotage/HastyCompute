@@ -26,6 +26,7 @@ REPO = HERE.parents[2]
 sys.path.insert(0, str(REPO / "python/lib"))
 sys.path.insert(0, str(HERE))
 from hastycompute import value_format as vf  # noqa: E402
+from hastycompute.store import save_array  # noqa: E402  (.hv, image policy 1e-4; HASTY_IO=npy: .npy)
 
 A = sys.argv[1:]
 PH, SIM = Path(A[0]), Path(A[1])
@@ -91,8 +92,8 @@ for f in range(F_):
     vb = np.where(bf[None] >= 0.25, vb, 0).astype(np.float32)
     v_xyz[..., f] = np.transpose(vb, (3, 2, 1, 0))
     bsum += bf
-np.save(SIM / "truth_vel_logical.npy", v_xyz)
-np.save(SIM / "truth_lumen_fraction.npy", np.asfortranarray(np.transpose(bsum / F_, (2, 1, 0)).astype(np.float32)))
+save_array(SIM / "truth_vel_logical.npy", v_xyz, "image")
+save_array(SIM / "truth_lumen_fraction.npy", np.asfortranarray(np.transpose(bsum / F_, (2, 1, 0)).astype(np.float32)), "image")
 bfrac_mean = bsum / F_
 del v_xyz
 # signal fat fraction per reconstruction voxel (recon_p2np --fat-fraction truth): PD × ff of the phantom's tissue
@@ -121,7 +122,7 @@ for f in range(F_):
     lab_ = np.asarray(T["labels"][f])  # [Z, Y, X] fine: per frame (the fat moves with the heart and the breathing)
     fat_s, tot_s = box(sf32[lab_]), box(st32[lab_])
     ffr[..., f] = np.transpose(np.where(tot_s > 1e-6, fat_s / np.maximum(tot_s, 1e-12), 0.0), (2, 1, 0))
-np.save(SIM / "truth_fat_fraction.npy", ffr)
+save_array(SIM / "truth_fat_fraction.npy", ffr, "image")
 meta["truth"] = {"resp_state": r_state, "fine_voxel_m": fine, "source": "phantom_4d gated" + (f" + LBM chamber flow {extra[1][4:]}" if extra else "")}
 (SIM / "meta.json").write_text(json.dumps(meta, indent=1))
 print(f"truth on {dims.tolist()} at {res * 1e3:.2f} mm, {nf} frames, r = {r_state:.2f}; blood voxels {int((bfrac_mean >= 0.5).sum())}")

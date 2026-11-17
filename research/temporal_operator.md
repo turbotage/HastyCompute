@@ -858,7 +858,32 @@ What the measurements say:
   variant 1 gains only 17 % / 13 % there (5.35 / 4.80 → 4.42 / 4.18 s). Real trajectories put the samples in ≈ ¼ of
   the tiles (the k-space ball inside the σ-oversampled grid), with long lists, so per-sample work dominates.
 
-1MM_RESULTS
+**Results, 1 mm (sparse regime), same session** (`segnufft_bench 198 189 228 …`, 22 coils in batches of 4, L = 11,
+order 2, W = 10, autotuned; `HASTY_SEG_KV=0` for the old kernels):
+
+| case | variant 0 | variant 1 (autotune's choice) |
+|---|---|---|
+| knot cubic 10, 3.34 M samples (forward + adjoint) | 5.16 + 5.93 = **11.09 s** | 5.13 + 5.06 = **10.19 s** (0.92×) |
+| tile kernels at knot 0, one batch (fwd / adj) | 53.6 / 65.7 ms | 53.0 / 51.6 ms |
+| static image, 167 k samples | 287 + 261 ms (interval-major path, variant 0 only) | unchanged: 287 + 261 ms |
+
+- At order 2 the weights are complex, so the forward gains nothing from the real-weight MAC; its float4 loads are
+  neutral (5.16 → 5.13 s). The adjoint gains 15 % from the sub-box warps and the fused staging.
+- The 1-D cubic case has 4 slots per sample, not 8, and 0.08 samples per fine cell per knot. So per-sample work
+  weighs less than at 2 mm, and the gain is smaller.
+- The static path is untouched, as intended.
+- **2-D lin6 × cubic10 at 1 mm** (synthetic: `HASTY_BENCH_2D=6,1`, 60 knot images × 445 k = 26.7 M uniform-random
+  samples, 8 coils, order 2, fixed shape cpba 4 / cpbf 4 / ppf 2, no autotune). The 2 GiB slot budget gives a coil
+  batch of 1, so every sample is staged 8 × 8 times per direction.
+
+  | | forward | adjoint | pass |
+  |---|---|---|---|
+  | variant 0 | 80.2 s | 76.5 s | 156.7 s |
+  | variant 1 | 79.3 s | 62.4 s | 141.7 s (0.90×) |
+
+  A full 1 mm encode in 2-D is far from the 1-D unit (10.2 s for 3.34 M samples × 22 coils): ≈ 4.8 × per (sample, coil), from 8 vs 4 slots
+  and a coil batch of 1 vs 4. At 1 mm the 2-D basis needs the coil batch (memory) and the per-sample staging more
+  than MAC work. This is the case for item 1 below.
 
 **Not done, ranked (measured basis above).**
 1. *Staging overlap.* Each chunk still runs stage → barrier → weights → barrier → MACs, so a block's staging latency
@@ -920,3 +945,257 @@ So the estimate is not good enough yet. Next steps, in order:
    scans).
 
 Item 3 needs the converged, preconditioned, regularised knot solver (§16.2).
+
+## 19. Knot-space solver: preconditioner and held-out validation (2026-11-17, code; test pending)
+
+§16.2 showed the basis comparison is solver-limited: unpreconditioned CGLS from zero stalls at 7–17 % of the initial
+gradient. `hasty_recon::knotsolve` adds two pieces.
+- **Kronecker preconditioner** P = G⁻¹ ⊗ C⁻¹.
+  - The normal operator on a knot stack is AᴴA = Σ_j w_κ(j) w_κ′(j) a_jᴴ a_j. When the k-space pattern near any
+    time is statistically the same (interleaved views), AᴴA ≈ G ⊗ A_sᴴA_s, with G_κκ′ = mean_j w_κ(j) w_κ′(j)
+    (K × K, the basis Gram under the actual sample times) and A_s the static operator.
+  - C⁻¹ is the existing circulant metric, applied per knot image. G⁻¹ (host inverse, small ridge) mixes knots per
+    voxel (`knot_mix` kernel).
+  - This equalises sparsely sampled knots and the ill-conditioned high-degree bases (§13: cond 18.5 cubic, 113
+    quintic).
+  - `cg::Precond` trait + `pcgls_dyn`; the existing `pcgls*` are unchanged, and the circulant metric implements the
+    trait.
+- **Held-out k-space** (`heldout_mask`): a deterministic 1/n of the readouts (hash of the readout index, so every
+  breathing / cardiac / encode stratum loses the same share) stays out of the fit.
+  - Their residual is the ground-truth-free prediction error, used for early stopping, comparing bases, and accepting
+    model components (motion α, B0, …; research/model_robustness.md E1).
+  - On the phantom, E1 is checked first: does the held-out ranking agree with the frame_fit ranking?
+
+### 16.3 Arms v2: preconditioned knot CG with held-out k-space (2026-11-17)
+
+(Held-out column corrected 2026-11-17 from the run logs, `best at iteration 40`: lin6 0.0583 / 0.0573, lin4 0.0492 / 0.0486, bins8 0.0660 / 0.0659 per encode; the held-out ranking agrees with the truth ranking, as §19.1 states.)
+
+**Setup.** `splinerecon`: warm start, then G⁻¹ ⊗ C⁻¹ preconditioned CGLS (§19), 40 iterations; 1/20 of the readouts
+held out; encodes 0–1; scored by the encode 1 − 0 velocity-phase slope / corr against each breathing state's own
+truth (r = 0.07 / 0.181 / 0.493); scripts in research/experiments/spline2d/arms_v2.sh, score_pair.py.
+
+Scores at iteration 40 (range over the three states):
+
+| arm (resp × cardiac 10 cubic) | depth ≥ 5 | dynamics depth ≥ 2 | depth 0–2 (edges) | held-out residual |
+|---|---|---|---|---|
+| 8 bins | 0.16–0.18 / 0.09–0.11 | 0.12–0.13 / 0.05–0.06 | 0.10–0.13 / 0.06–0.07 | 0.066 |
+| 6 linear knots | 0.21–0.28 / 0.14–0.20 | 0.16–0.20 / 0.09–0.11 | 0.16–0.19 / 0.11–0.14 | 0.058 |
+| 4 linear knots | **0.30–0.34 / 0.22–0.26** | **0.21–0.25 / 0.11–0.15** | **0.20–0.22 / 0.15–0.16** | **0.049** |
+
+- **Decision (pre-registered §16):** linear respiratory knots beat bins at every state and in every band, edges
+  included. The knot driver path gets respiratory splines.
+- **4 knots beat 6 on the truth metrics.** At this undersampling and this iteration count, data per knot wins.
+- **Model-robustness E1 fails in part.** Held-out k-space ranks bins last, as the truth does, but prefers 6 knots
+  over 4, while the truth prefers 4.
+  - Held-out error alone is therefore not yet a safe selector between nearby bases.
+  - [CHECK] Hypothesis: the held-out residual rewards fitting magnitude / motion detail, while velocity phase rewards
+    SNR per knot. Test it with converged runs (still improving at iteration 40) and with a regulariser.
+
+### 19.1 Arms v2 result (2026-11-17)
+
+Setup:
+- preconditioned knot CG (G⁻¹ ⊗ C⁻¹), warm start, 40 iterations;
+- held-out 1/20 of the readouts;
+- encodes 0–1, 2 mm, B0 physics, true breathing coordinate;
+- respiratory basis × 10 cubic cardiac knots.
+
+Score: encode 1 − 0 velocity-phase slope / corr against each state's own truth, at the best held-out iterate (iteration 40 in every arm: still improving).
+
+| respiratory basis | depth ≥ 5, r 0.07 / 0.181 / 0.493 | edge band depth 0–2, r 0.493 | dynamics, r 0.493 | held-out residual |
+|---|---|---|---|---|
+| 8 bins | 0.161/0.094, 0.179/0.106, 0.159/0.094 | 0.102/0.057 | 0.115/0.050 | 0.066 |
+| 6 linear knots | 0.211/0.144, 0.273/0.197, 0.276/0.199 | 0.170/0.119 | 0.186/0.102 | 0.058 |
+| 4 linear knots | 0.299/0.216, 0.282/0.198, 0.344/0.260 | 0.217/0.164 | 0.248/0.146 | 0.049 |
+
+Reading:
+- **Pre-registered answer: yes.** Linear respiratory knots beat 8 bins at every state, in the deep lumen, in the edge band and in the dynamics. Fewer knots win (4 > 6 > 8 bins): more data per unknown at R ≈ 50+.
+- At 2 mm the edge band shows no double-edge penalty for 4 knots.
+- **E1 passes here.** The held-out residual ranks the arms exactly as the truth scores do: ground-truth-free basis selection works on this case.
+- All arms are still far from slope 1. The solver is unregularised and not converged, so the next step is the classical priors (spatial wavelet, temporal LLR) and running to the held-out minimum.
+- Timing per pass (new kernels): lin6 13.7 s vs 8 × 20 per-frame 13.8 s (§17). The v2 runs had arm-dependent coil batches (memory plans), so their s/iteration is not a timing comparison.
+
+
+## 20. FFT pruning, KB-Horner kernel, grid-size selection (2026-11-17)
+
+Stencil-doc proposals 4, 5 and 7 (research/stencil_kernel_optimality.md §6), measured on the RTX 4090 with
+`segnufft_bench` (no other compute process during the timed runs; nvidia-smi checked before each). Unless stated,
+1 mm = 198 × 189 × 228, 22 coils in batches of 4, L = 11, order 2, W = 10, σ = 1.25, autotuned shapes.
+
+**Answer.**
+1. **k-support pruning of the grid FFTs: on by default, exact, 1.11× on a 1 mm static image with a ball / kooshball
+   trajectory** (535 → 481 ms forward + adjoint), 1.06× with stack of spirals, 1.05× on the 1 mm knot unit and on
+   the 2 mm dense 2-D unit (ball), 1.00× for samples filling the cube.
+2. **KB-Horner window: implemented, opt-in (`HASTY_SEG_KERNEL=kb`), not the default.** On the operator (rms over
+   samples) it is as accurate as ES or better (0.63× at W 8), but its *max-norm* derivative errors (e_2, e_4 at the
+   band edge) exceed ES's at every W tested, so the "at least as accurate in value and derivatives" rule fails.
+   Speed: equal in all three regimes (1 mm static, 1 mm knot cubic 10, 2 mm dense 2-D).
+3. **Grid size: the smallest 2·3·5·7-smooth size is already (within 2 %) the fastest.** FFT time is ∝ volume for
+   this generated FFT; powers of two are not faster. The measured choice (`HASTY_NUFFT_GRID=auto`) finds ≤ 1.2 % (2 mm
+   dense) and nothing at 1 mm, so it stays opt-in. With a chosen grid larger than the default, β (ES and KB) is set
+   for σ_eff = min_a nf_a / N_a, which makes the larger grid strictly more accurate (W 8: 3.4e-5 → 3.2e-6 at
+   σ_eff 1.43).
+
+### 20.1 k-support pruning of the last forward / first inverse passes
+
+**Geometry, corrected.** σ refines the k grid, it does not extend it: samples with |k_a Δ_a| ≤ π span ±nf_a/2 cells,
+i.e. the whole fine grid. The stencil doc's estimate (z-pass columns 55 %, y-pass 84 %) assumed a k extent of ±N/2 in
+a σN grid and is wrong; a ball of radius ≈ π (+ W/2 halo) keeps 84 % of the (kx, ky) columns and ≈ 59 % of the cells
+(ball / cube = 52 % + halo + 4³-tile rounding). A uniform cube keeps everything.
+
+**What is pruned** (`hasty_fft::KSupport`, `PrunedChanFft3::new_ksupport`). The support is the union of the
+nonempty TT³ tiles of every sample set an engine made or used (tile lists already exist; a set that extends it
+re-plans the transforms before its next use, `SegNufft::kcover`). On top of the block pruning (zero image planes in,
+image block out):
+- forward y pass: lines (channel, kx) of the support's kx range, writing only the ky range of the support's columns
+  at that kx; forward z pass: per ky row, only the (channel, kx) lines of the row's columns (runtime per-row line
+  ranges, `AxisPlan::set_arange`), writing only that column's kz range (runtime per-line entry ranges,
+  `AxisPlan::set_lrange`: the chord of a ball);
+- inverse z and y passes: the same lines, reading only the same ranges (the rest of a scatter grid is zero).
+The forward spectrum is exact on every cell the gather reads; the inverse equals the full one because everything it
+skips is zero. Kernel cost: the per-line ranges are a predicate on each load / store (one table read per line).
+
+**Exactness.** FFT level (`tests/chanfft.rs::ksupport_matches_full`, ball with per-column chords, cube, a 2 % support,
+full): forward on the support **bit-for-bit** (0.0) against the full transform, inverse 1.1–1.7e-7 (f32 rounding,
+the same as block pruning alone). Engine level (`tests/seg_pruned.rs::kpruned_grid_fft_matches_block_pruned`: stacks
+of spirals and kooshballs, support cells 0.46–1.00, orders 0 / 2 / 3, 4 frames, the multi-image path, support growth):
+k-pruned vs block-pruned within the run-to-run spread of the block-pruned path itself (f32 atomics: forward 5–14e-7,
+adjoint 1.5–7e-5).
+
+**FFT micro-benchmark** (288 × 240 × 250 × 16 channels, image 228 × 189 × 198, forward / inverse):
+
+| support | z-pass columns | cells | forward | inverse |
+|---|---|---|---|---|
+| block only (before) | 1.00 | 1.00 | 10.80 ms | 10.61 ms |
+| ball, columns only (first version, no per-line ranges) | 0.84 | — | operator 1.04× (535 → 514 ms, static 1 mm) | |
+| **ball, columns + per-line ranges** | 0.81 | 0.55 | 8.85 ms (1.22×) | 8.84 ms (1.20×) |
+
+**Operator, 1 mm static image, 167 k samples** (`HASTY_SEG_KPRUNE=0` vs default; `HASTY_BENCH_TRAJ`):
+
+| trajectory | support cells | off: fwd + adj | on: fwd + adj | gain |
+|---|---|---|---|---|
+| cube (uniform in [−3.1, 3.1]³, the old bench) | 1.00 | 287.1 + 260.6 ms | 286.9 + 261.4 ms | 1.00× |
+| ball (uniform in the ball) | 0.59 | 271.8 + 263.7 ms | 242.7 + 237.8 ms | **1.11×** |
+| koosh (3-D radial, density ∝ 1/k²) | 0.58 | 273.4 + 323.8 ms | 242.9 + 296.9 ms | **1.11×** |
+| sos (stack of spirals: disk × kz) | 0.85 | 279.4 + 261.8 ms | 262.7 + 246.6 ms | 1.06× |
+
+**Other regimes, ball trajectory** (research/experiments/opbench/regimes_2026-11-17.sh: knot = `HASTY_BENCH_FRAMES=10,3
+HASTY_BENCH_KNOT=1 … 334000 22`; dense = 2 mm 254 × 144 × 114, `HASTY_BENCH_2D=6,1 HASTY_BENCH_FRAMES=10,3`, 15 M
+samples, 8 coils, L 10, order 0, W 8):
+
+| unit | support cells | off | on | gain |
+|---|---|---|---|---|
+| 1 mm knot cubic 10 (3.34 M samples) | 0.61 | 4.95 + 5.04 s | 4.67 + 4.79 s | 1.055× |
+| 2 mm dense 2-D lin6 × cubic10 | 0.63 | 5.11 + 5.05 s | 4.86 + 4.82 s | 1.05× |
+
+The FFT is ≈ 60 % of a static image and ≈ 10–20 % of the knot / dense units, so the gains follow the FFT share. The
+support is computed host-side from the tile lists in `points()` (≪ the tile-list build itself); a re-plan reuses the
+cached kernels. Switches: `HASTY_SEG_KPRUNE=0` (env) or `SegNufft::set_kprune(false)`; `HASTY_SEG_KPRUNE_LOG=1` prints
+each support. A per-set support (one plan per set) would not gain more: every realistic set with the W = 10 halo
+covers the whole ball.
+
+### 20.2 Kaiser–Bessel window by Horner polynomials
+
+**Form** (`KbPoly`, kernel.rs). φ(z) = I₀(β√(1 − z²)) / I₀(β), Beatty β = π√((W/σ)²(σ − ½)² − 0.8). φ and its
+derivatives up to order 4 are entire and even / odd, so each is z^(n mod 2) · P_n(2z² − 1): one Chebyshev fit per
+order, converted to monomials, emitted as literal f32 Horner chains (`kb_eval`, no tables, no clamp). The tile
+kernels' `es3` / `es5` call it under `KER_KB`; the deapodisation factors are KB's. Fit tolerance (relative to
+max|φ⁽ⁿ⁾|) `HASTY_SEG_KB_TOL`, default 1e-8: degrees 13 / 13 / 14 / 14 / 15 at W 10 (12–13 at 1e-7, 11–13 at 1e-6);
+f32 evaluation error ≤ 2.3e-7 (φ) … 8.5e-7 (φ⁽⁴⁾) of max.
+
+**Accuracy, window level** (kernel.rs `kb_poly_interpolation_errors`; 1-D e_n of stencil §2.1, 48 offsets × 121
+frequencies in |ξ| ≤ π/σ, σ 1.25; max / rms):
+
+| W | window | e0 | e1 | e2 | e3 | e4 |
+|---|---|---|---|---|---|---|
+| 6 | ES (clamped, production) | 3.3e-3 / 5.1e-4 | 1.2e-2 / 1.0e-3 | 1.9e-2 / 2.9e-3 | 7.8e-2 / 8.7e-3 | 1.7e-1 / 2.4e-2 |
+| 6 | KB f32 poly | 1.9e-3 / 2.7e-4 | 1.5e-2 / 8.7e-4 | 2.6e-2 / 3.5e-3 | 1.2e-1 / 1.1e-2 | 1.1e-1 / 2.1e-2 |
+| 8 | ES | 1.2e-4 / 2.5e-5 | 6.2e-4 / 6.5e-5 | 3.4e-3 / 3.8e-4 | 1.0e-2 / 9.4e-4 | 3.2e-2 / 3.8e-3 |
+| 8 | KB | 1.4e-4 / 1.6e-5 | 5.9e-4 / 4.8e-5 | 4.7e-3 / 3.2e-4 | 1.2e-2 / 1.1e-3 | 3.9e-2 / 3.3e-3 |
+| 10 | ES | 1.3e-5 / 2.4e-6 | 8.0e-5 / 6.7e-6 | 4.6e-4 / 3.9e-5 | 1.3e-3 / 1.3e-4 | 6.8e-3 / 6.1e-4 |
+| 10 | KB (tol 1e-8) | 1.2e-5 / 1.4e-6 | 3.3e-5 / 3.1e-6 | 5.6e-4 / 2.4e-5 | 1.0e-3 / 1.0e-4 | 7.5e-3 / 4.0e-4 |
+| 10 | KB (tol 1e-6) | 1.6e-5 / 2.4e-6 | 3.4e-5 / 3.6e-6 | 5.6e-4 / 2.4e-5 | 1.0e-3 / 1.0e-4 | 7.5e-3 / 4.0e-4 |
+
+KB wins the rms of e0, e1, e2, e4 (1.2–1.8×) but loses the max of e2 (1.2–1.4×) and e3 / e4 at W 6–8; the ES clamp
+does not cost ES its max-norm lead here. At W 10 the f32 polynomial at tol 1e-6 brings e0 to ES's level (the exact KB
+has 1.0e-6 rms); tol 1e-8 keeps the f32 polynomial within 1.4× of the exact KB on e0 and equal on e1–e4.
+
+**Accuracy, operator level** (tests/seg_kernel.rs: 20 × 18 × 14, 3000 samples, 2 coils, against f64 direct sums;
+forward / adjoint relative error):
+
+| case | W 6 ES → KB | W 8 ES → KB | W 10 ES → KB |
+|---|---|---|---|
+| plain (order 0) | 3.19e-4 → 3.03e-4 | 3.47e-5 → 2.19e-5 | 9.1e-6 → 9.1e-6 (f32 floor) |
+| order 1, χ 0.05 rad | 3.44e-4 → 3.18e-4 | 1.07e-4 → 1.04e-4 | 1.02e-4 → 1.02e-4 (Taylor floor) |
+| order 2, χ 0.05 rad | 3.30e-4 → 3.11e-4 | 3.50e-5 → 2.21e-5 | 1.14e-5 → 1.20e-5 (f32 floor) |
+| order 2, χ 0.4 rad | 7.40e-4 → 7.46e-4 | 5.85e-4 → 5.85e-4 | 5.85e-4 → 5.85e-4 (truncation) |
+
+(adjoints within 10 % of these; tol 1e-6 gives the same table.) On the operator KB is never worse beyond the f32
+floor; the max-norm derivative deficit does not show in rms-over-samples errors.
+
+**Speed** (cube trajectory, same session, k-pruning on):
+
+| regime | ES | KB tol 1e-8 | KB tol 1e-6 |
+|---|---|---|---|
+| 1 mm static, 167 k | 286.7 + 261.7 ms | 287.5 + 261.4 ms | — |
+| 1 mm knot cubic 10, 3.34 M | 5.13 + 5.08 s | 5.13 + 5.02 s | 5.13 + 5.03 s |
+| 2 mm dense 2-D, W 8, order 0, 15 M | 5.40 + 5.23 s | 5.39 + 5.21 s | — |
+
+A first KB knot run measured 5.91 + 5.74 s; it was not reproducible (rerun 5.13 + 5.02 s; another process had used
+the GPU during that batch), so the five Horner chains per (sample, tile cell, axis) of the order-2 staging cost no
+more than ES's exp / rsqrt there (tol 1e-7: 5.13 + 5.03 s; the fit tolerance does not change the time).
+
+**Decision.** ES stays the default. KB is selectable (`HASTY_SEG_KERNEL=kb`, or `hasty_nufft::set_thread_seg_kernel`
+per thread) for experiments where rms matters more than the band-edge max, e.g. W 8 at 2 mm (operator 0.63×). The
+proposal's "half a tap" does not hold in max norm on our grid of frequencies.
+
+### 20.3 Fine-grid size selection
+
+**FFT time per size** (`gridfft_bench nx ny nz nch 1.25 W 1.3 8`: block-pruned forward + inverse, one axis varied,
+the others at the default; time relative to the default grid):
+
+1 mm, 198 × 189 × 228, 44 channels (default 250 × 240 × 288, 59.4 ms):
+
+| axis | sizes (σ) → relative time |
+|---|---|
+| x (198) | 250 (1.263) 1.000, 252 1.006, 256 1.035, 270 1.066, 280 1.108, 288 1.150, 294 1.178, 300 1.174 |
+| y (189) | 240 (1.270) 1.000, 250 1.021, 252 1.027, 256 1.050, 270 1.072, 280 1.100, 288 1.118, 294 1.154 |
+| z (228) | 288 (1.263) 1.000, 294 1.002, 300 1.010, 320 1.030, 324 1.044, 336 1.039, 350 1.053, 360 1.067 |
+
+2 mm box, 99 × 95 × 114, 44 channels (default 126 × 120 × 144, 7.48 ms): x 128 1.025, 140 1.116, 144 1.133, 160 1.228;
+y 126 1.065, 128 1.071, 140 1.095; z 150 1.005, 160 1.035, 162 1.003, 168 1.036, 180 1.060.
+
+2 mm dense, 254 × 144 × 114, 80 channels, W 8 (default 320 × 180 × 144, 54.4 ms): x 324 **0.980**, 336 1.025, 350
+1.046, 384 1.180; y 192 1.005, 200 1.024, 216 1.114; z 150 0.999, 160 1.028, 162 1.004, 180 1.052. Chosen
+324 × 180 × 150: 53.75 ms (0.988×).
+
+Reading: the generated mixed-radix FFT runs at bandwidth for every 7-smooth length, so time ∝ volume and the
+smallest admissible size wins; powers of two (256, 128, 384) are not faster. The only gains are a few lengths whose
+factorisation suits the line shape (320 → 324 = 4 · 81). The search is therefore opt-in: `HASTY_NUFFT_GRID=auto`
+(per axis ≤ 4 candidates up to 1.15 × the default, separable, confirmed by a direct timing, cached per process and
+image; 16 channels so that all engines of a process share one grid), `=n0,n1,n2` explicit, default `fixed`.
+
+**β for the effective σ.** With a selected grid other than the default, the engine plans with σ_eff = min_a nf_a / N_a
+(ES β = 0.97π(1 − 1/2σ_eff)W, KB Beatty β(σ_eff), deapodisation on the actual grid). Accuracy
+(tests/seg_kernel.rs `larger_grid_with_effective_sigma_is_not_less_accurate`, 20 × 18 × 14, forward relative error):
+
+| W | window | default 28 × 24 × 18 (β for σ 1.25) | 30 × 28 × 20 (σ_eff 1.43) | 36 × 30 × 24 (σ_eff 1.67) |
+|---|---|---|---|---|
+| 6 | ES / KB | 3.16e-4 / 3.00e-4 | 1.52e-4 / 7.29e-5 | 3.39e-5 / 2.13e-5 |
+| 8 | ES / KB | 3.38e-5 / 2.12e-5 | 3.19e-6 / 2.50e-6 | 1.65e-6 / 1.39e-6 |
+
+(order 2, χ 0.05 the same within 10 %). The default grid itself has σ_eff 1.26–1.29 but keeps β(1.25), so the
+numerics of existing runs are unchanged. A cheap accuracy option the timings expose: on the z axis at 1 mm, 288 → 294
+costs 0.2 % — but σ_eff is the minimum over axes, so raising accuracy needs all three axes (≈ +3–5 % FFT time for
+σ_eff ≈ 1.29 at 1 mm).
+
+### 20.4 Switches, tests
+
+- `HASTY_SEG_KPRUNE` (default on), `HASTY_SEG_KPRUNE_LOG`; `SegNufft::set_kprune`, `grid_fft_ksupport`.
+- `HASTY_SEG_KERNEL=es|kb`, `HASTY_SEG_KB_TOL`; `set_thread_seg_kernel`, `SegNufft::kernel_kind`.
+- `HASTY_NUFFT_GRID=fixed|auto|n0,n1,n2`, `HASTY_NUFFT_GRID_LOG`; `set_thread_grid_rule`, `choose_grid`,
+  `gridfft_bench`.
+- `segnufft_bench`: `HASTY_BENCH_TRAJ=cube|ball|koosh|sos`; prints grid, window and support fractions.
+- New tests: hasty-fft `chanfft::ksupport_matches_full` / `ksupport_timing`; hasty-nufft `seg_pruned::kpruned_grid_fft_matches_block_pruned`,
+  `seg_kernel::{kb_window_at_least_as_accurate_as_es, larger_grid_with_effective_sigma_is_not_less_accurate}`, kernel.rs
+  `kb_poly_fits_and_derivatives`, `kb_poly_interpolation_errors`, `cheb_mono_roundtrip`.
+- Gate: `cargo test --release -j 4 -p hasty-fft -p hasty-nufft` — 82 passed, 0 failed, 3 ignored (seg_stream passed this run).

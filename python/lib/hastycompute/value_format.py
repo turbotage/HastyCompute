@@ -9,6 +9,10 @@ tuple, dict (str keys, order kept). Codecs: stored, LZ4 (package `lz4`), zstd (p
     value = decode_chunks(iterable_of_bytes)   # e.g. a gRPC response stream
     write("x.hv", value, codec="zstd"); value = read("x.hv")
     tree = open_lazy("case.hv"); tree["x"][10:40, :, :, 3:5]   # random access (chunked tensors decode only what is needed)
+
+Quantised chunked tensors (tag 10, lossy float storage) decode everywhere; they are written by
+`hastycompute.store` (precision policies) or by `iter_encode(..., chunks=..., loss=...)`. Streams with an integrity
+digest (header flags 1 / 2) are accepted; the digest is verified when the `xxhash` / `blake3` package is installed.
 """
 import struct
 import zlib
@@ -17,7 +21,9 @@ import numpy as np
 
 MAGIC = b"HSTV"
 VERSION = 1
-TAG_NONE, TAG_BOOL, TAG_INT, TAG_FLOAT, TAG_STR, TAG_LIST, TAG_TUPLE, TAG_DICT, TAG_TENSOR, TAG_CHUNKED = range(10)
+TAG_NONE, TAG_BOOL, TAG_INT, TAG_FLOAT, TAG_STR, TAG_LIST, TAG_TUPLE, TAG_DICT, TAG_TENSOR, TAG_CHUNKED, TAG_QCHUNKED = range(11)
+QPREFIX = 20  # quantised chunk prefix: qw u8, transfer u8, pad u16, step f64, knee f64
+DIGEST_LEN = {0: 0, 1: 16, 2: 32}  # stream flags: integrity algorithm -> trailing digest bytes
 CODEC_NONE, CODEC_LZ4, CODEC_ZSTD = 0, 1, 2
 FILTER_SHUFFLE, FILTER_DELTA = 1, 2
 FLAG_CRC = 1
@@ -269,7 +275,7 @@ def _value(r: _Reader):
             _decode_block(h, payload, mv[off:off + h[4]])
             off += h[4]
         return np.frombuffer(out, dt).reshape(shape)
-    if tag == TAG_CHUNKED:
+    if tag in (TAG_CHUNKED, TAG_QCHUNKED):
         code, ndim, _, block_size = struct.unpack("<BBBI", r.read(7))
         shape = struct.unpack(f"<{ndim}Q", r.read(8 * ndim)) if ndim else ()
         chunk = struct.unpack(f"<{ndim}Q", r.read(8 * ndim)) if ndim else ()
@@ -279,12 +285,36 @@ def _value(r: _Reader):
         dt = DTYPES[code][0]
         out = np.zeros(shape, dt)
         grid = [-(-s // c) for s, c in zip(shape, chunk)]
-        for ci in range(n):
+        mv = memoryview(data)
+
+        def one(ci):
             lo, ext = _chunk_box(ci, grid, chunk, shape)
-            raw = _decode_blocks(memoryview(data)[index[ci, 0]:index[ci, 0] + index[ci, 1]], int(np.prod(ext)) * dt.itemsize, block_size)
-            out[tuple(slice(a, a + e) for a, e in zip(lo, ext))] = np.frombuffer(raw, dt).reshape(ext)
+            c = _decode_chunk(mv[index[ci, 0]:index[ci, 0] + index[ci, 1]], int(np.prod(ext)), dt, block_size, tag == TAG_QCHUNKED)
+            out[tuple(slice(a, a + e) for a, e in zip(lo, ext))] = c.reshape(ext)
+
+        _parallel(one, range(n))
         return out
     raise ValueError(f"unknown value tag {tag}")
+
+
+def _threads():
+    import os
+
+    return max(1, int(os.environ.get("HASTY_IO_THREADS", min(os.cpu_count() or 4, 12))))
+
+
+def _parallel(fn, items):
+    """run fn over items on a thread pool (zstd / lz4 / numpy release the GIL)"""
+    items = list(items)
+    if len(items) <= 1 or _threads() == 1:
+        for i in items:
+            fn(i)
+        return
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(_threads()) as ex:
+        for _ in ex.map(fn, items):
+            pass
 
 
 def _chunk_box(ci, grid, chunk, shape):
@@ -318,6 +348,33 @@ def _decode_blocks(buf, raw_len: int, block_size: int) -> bytearray:
     return out
 
 
+def _zigzag_decode(z):
+    z = z.astype(np.uint64)
+    return ((z >> np.uint64(1)).astype(np.int64)) ^ -((z & np.uint64(1)).astype(np.int64))
+
+
+def _decode_qchunk(buf, numel: int, dt: np.dtype, block_size: int) -> np.ndarray:
+    """one quantised chunk (prefix + blocks) -> flat array of `numel` elements of dtype `dt`"""
+    qw, tf = buf[0], buf[1]
+    if qw == 0:
+        return np.frombuffer(_decode_blocks(buf[QPREFIX:], numel * dt.itemsize, block_size), dt)
+    step, knee = struct.unpack_from("<dd", buf, 4)
+    comps = 2 if dt.kind == "c" else 1
+    n = numel * comps
+    words = np.frombuffer(_decode_blocks(buf[QPREFIX:], n * qw, block_size), _UINT[qw])
+    u = _zigzag_decode(words).astype(np.float64) * step
+    if tf == 1:
+        u = knee * np.sinh(u / knee)
+    real = np.float32 if dt in (np.dtype("<f4"), np.dtype("<c8")) else np.float64
+    return u.astype(real).view(dt) if comps == 2 else u.astype(dt)
+
+
+def _decode_chunk(buf, numel, dt, block_size, quant):
+    if quant:
+        return _decode_qchunk(buf, numel, dt, block_size)
+    return np.frombuffer(_decode_blocks(buf, numel * dt.itemsize, block_size), dt)
+
+
 _CAPI = None
 _HANDLES = {}
 
@@ -348,7 +405,9 @@ def _handle(path):
     """per-process handle (DataLoader workers are forked: never reuse the parent's thread pool)"""
     import os
 
-    key = (os.getpid(), str(path))
+    st = os.stat(path)
+    # keyed by inode and mtime too: a file replaced under the same name (os.replace of a rewrite) gets a new handle
+    key = (os.getpid(), str(path), st.st_ino, st.st_mtime_ns)
     if key not in _HANDLES:
         h = _capi().hv_open(str(path).encode(), int(os.environ.get("HASTY_VALUE_THREADS", "4")))
         if not h:
@@ -369,8 +428,9 @@ class LazyTensor:
     """A tensor in a memory-mapped .hv file. `t[...]` / `read_box(lo, hi)` read only what is needed (chunked tensors
     decode just the overlapping chunks); `read()` reads everything."""
 
-    def __init__(self, mm, code, shape, block_size, offset, end=None, chunk=None, index=None, file=None, key=""):
+    def __init__(self, mm, code, shape, block_size, offset, end=None, chunk=None, index=None, file=None, key="", quant=False):
         self.mm, self.code, self.shape, self.block_size = mm, code, tuple(shape), block_size
+        self.quant = quant
         self.file, self.key = file, key
         self.dtype = DTYPES[code][0]
         self.offset, self.end, self.chunk, self.index = offset, end, chunk, index
@@ -391,12 +451,17 @@ class LazyTensor:
         if self.file is not None and _capi() is not None:  # Rust: parallel, multi-GB/s
             import ctypes
 
-            out = np.empty(ext, self.dtype)
-            arr = ctypes.c_uint64 * max(self.ndim, 1)
-            rc = _capi().hv_read_box(_handle(self.file), self.key.encode(), arr(*lo), arr(*hi), out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
-            if rc != 0:
-                raise OSError(_capi_error())
-            return out
+            try:
+                h = _handle(self.file)
+            except OSError:
+                h = None  # e.g. an older library without quantised tensors: the Python decoder below
+            if h is not None:
+                out = np.empty(ext, self.dtype)
+                arr = ctypes.c_uint64 * max(self.ndim, 1)
+                rc = _capi().hv_read_box(h, self.key.encode(), arr(*lo), arr(*hi), out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
+                if rc != 0:
+                    raise OSError(_capi_error())
+                return out
         if self.chunk is None:
             raw = _decode_blocks(self.mm[self.offset:self.end], int(np.prod(self.shape)) * self.dtype.itemsize, self.block_size)
             full = np.frombuffer(raw, self.dtype).reshape(self.shape)
@@ -405,18 +470,20 @@ class LazyTensor:
         if any(e == 0 for e in ext):
             return out
         ranges = [range(a // c, (b - 1) // c + 1) for a, b, c in zip(lo, hi, self.chunk)]
-        for g in np.ndindex(*[len(r) for r in ranges]):
+
+        def one(g):
             gi = [r[k] for r, k in zip(ranges, g)]
             ci = 0
             for x, n in zip(gi, self.grid):
                 ci = ci * n + x
             clo, cext = _chunk_box(ci, self.grid, self.chunk, self.shape)
             off, ln = int(self.index[ci, 0]), int(self.index[ci, 1])
-            raw = _decode_blocks(self.mm[self.offset + off:self.offset + off + ln], int(np.prod(cext)) * self.dtype.itemsize, self.block_size)
-            cdat = np.frombuffer(raw, self.dtype).reshape(cext)
+            cdat = _decode_chunk(self.mm[self.offset + off:self.offset + off + ln], int(np.prod(cext)), self.dtype, self.block_size, self.quant).reshape(cext)
             a = [max(c, l) for c, l in zip(clo, lo)]
             b = [min(c + e, h) for c, e, h in zip(clo, cext, hi)]
             out[tuple(slice(x - l, y - l) for x, y, l in zip(a, b, lo))] = cdat[tuple(slice(x - c, y - c) for x, y, c in zip(a, b, clo))]
+
+        _parallel(one, np.ndindex(*[len(r) for r in ranges]))
         return out
 
     def __getitem__(self, key):
@@ -490,7 +557,7 @@ def open_lazy(path):
                 pos += k
                 d[name] = val(f'{key}["{name}"]')
             return d
-        if tag in (TAG_TENSOR, TAG_CHUNKED):
+        if tag in (TAG_TENSOR, TAG_CHUNKED, TAG_QCHUNKED):
             code, ndim, _, bs = u("<BBBI", 7)
             shape = u(f"<{ndim}Q", 8 * ndim) if ndim else ()
             if tag == TAG_TENSOR:
@@ -504,7 +571,7 @@ def open_lazy(path):
             (n,) = u("<Q", 8)
             index = np.frombuffer(mm[pos:pos + 16 * n], "<u8").reshape(n, 2)
             pos += 16 * n
-            t = LazyTensor(mm, code, shape, bs, pos, chunk=chunk, index=index, file=fpath, key=key)
+            t = LazyTensor(mm, code, shape, bs, pos, chunk=chunk, index=index, file=fpath, key=key, quant=tag == TAG_QCHUNKED)
             pos += int(index[:, 1].sum())
             return t
         raise ValueError(f"unknown value tag {tag}")
@@ -519,7 +586,12 @@ def decode_chunks(chunks):
         raise ValueError("not a hasty value stream (bad magic)")
     if head[4] != VERSION:
         raise ValueError(f"unsupported format version {head[4]}")
+    if head[5] not in DIGEST_LEN:
+        raise ValueError(f"unsupported stream flags {head[5]}")
     v = _value(r)
+    n = DIGEST_LEN[head[5]]
+    if n:
+        r.read(n)  # trailing integrity digest (verified by the Rust reader / `hvtool verify`)
     if not r.at_end():
         raise ValueError("data after the end of the value")
     return v

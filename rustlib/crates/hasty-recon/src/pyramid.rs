@@ -299,7 +299,7 @@ impl InitImages {
     fn pick(dir: &Path) -> Result<PathBuf, Error> {
         let mut recon: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)?
             .flatten()
-            .filter(|e| { let n = e.file_name().to_string_lossy().into_owned(); n.starts_with("recon_") && n.ends_with(".npy") })
+            .filter(|e| { let n = e.file_name().to_string_lossy().into_owned(); n.starts_with("recon_") && (n.ends_with(".npy") || n.ends_with(".hv")) })
             .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
             .collect();
         recon.sort();
@@ -307,8 +307,8 @@ impl InitImages {
             return Ok(p);
         }
         for n in ["warm_full.npy", "warm.npy"] {
-            if dir.join(n).exists() {
-                return Ok(dir.join(n));
+            if let Some(p) = hasty_value::store::resolve(&dir.join(n)) {
+                return Ok(p);
             }
         }
         Err(Error::Format(format!("--init-from {}: no recon_*.npy, warm_full.npy or warm.npy", dir.display())))

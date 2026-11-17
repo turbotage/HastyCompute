@@ -14,16 +14,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 P = Path(sys.argv[1])
 S = Path(sys.argv[2]) if len(sys.argv) > 2 else P.parent
 F = P / "figs"
 F.mkdir(exist_ok=True)
 J = json.loads((P / "summary.json").read_text())
-ld = lambda n: np.load(P / n)  # noqa: E731
+ld = lambda n: load_any(P / n)  # noqa: E731
 lum = None
-if (S / "truth_lumen_fraction.npy").exists():
-    fr = np.load(S / "truth_lumen_fraction.npy")
+if exists_any(S / "truth_lumen_fraction.npy"):
+    fr = load_any(S / "truth_lumen_fraction.npy")
     lum = (fr if fr.ndim == 3 else fr[..., 0]) > 0.9
     if lum.shape != tuple(J["dims"]):
         lum = None

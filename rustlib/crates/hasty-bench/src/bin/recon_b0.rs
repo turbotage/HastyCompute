@@ -172,7 +172,7 @@ fn main() {
     let ro = read_npy(&dir.join("readouts.npy")).unwrap().f64s();
 
     // ── data: whiten (Ψ^{-1/2}) and compress ──
-    let dname = if !clean && dir.join("data.npy").exists() { "data.npy" } else { "data_clean.npy" };
+    let dname = if !clean && hasty_value::store::exists_any(&dir.join("data.npy")) { "data.npy" } else { "data_clean.npy" };
     let data = read_npy(&dir.join(dname)).unwrap().c32s();
     let psi = DMatrix::<f64>::from_fn(nc, nc, |i, j| meta["psi"][i][j].as_f64().unwrap());
     let e = SymmetricEigen::new(psi);

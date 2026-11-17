@@ -18,14 +18,18 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 scan = sys.argv[1]
 names = sys.argv[2:]
-z = np.load(os.path.join(scan, os.environ.get("FRAME_FIT_TRUTH", "truth_pc_frames.npz")))  # FRAME_FIT_TRUTH: a truth of another breathing state
+z = load_any(os.path.join(scan, os.environ.get("FRAME_FIT_TRUTH", "truth_pc_frames.npz")))  # FRAME_FIT_TRUTH: a truth of another breathing state
 idx, C, cov = z["idx"], z["c"], z["cov"]
 E, NC = C.shape[1], C.shape[2]
-lum = np.load(os.path.join(scan, "truth_lumen_fraction.npy")) > 0.5
+lum = load_any(os.path.join(scan, "truth_lumen_fraction.npy")) > 0.5
 depth = ndimage.distance_transform_edt(lum).ravel(order="F")[idx]
 pred = np.angle(C[:, 1:, :] * np.conj(C[:, :1, :]))  # (n, E-1, 20)
 far = ndimage.distance_transform_edt(~lum) >= 5
@@ -44,7 +48,7 @@ def load(nm):
     """recon npy (nx, ny, nz, ne, F), or the iterate x (first stack) of a host-state raw checkpoint state_*.hsk[.tmp]:
     sets t = frame * ne + encode, one image each (F-order), memory-mapped (a partial .tmp file has x complete first)"""
     if ".hsk" not in nm:
-        return np.load(nm, mmap_mode="r")
+        return load_any(nm, mmap_mode="r")
     import json
     with open(nm, "rb") as f:
         f.read(8)
@@ -63,7 +67,7 @@ def load(nm):
 
 for nm in names:
     lumen_only = nm.endswith("_lumen.npy")  # framerecon output: (n, E, F) at the truth voxels, no tissue
-    x = np.load(nm, mmap_mode="r") if lumen_only else load(nm)
+    x = load_any(nm, mmap_mode="r") if lumen_only else load(nm)
     F = x.shape[2] if lumen_only else x.shape[4]
     rec = np.zeros((idx.size, E - 1, F), np.float32)
     mags = []

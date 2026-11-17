@@ -1142,7 +1142,11 @@ pub fn run_objective_with(
             alpha = crate::checkpoint::get_f64(&v, "alpha")?;
             *x = value_stack(st, get(&v, "x")?, &lens)?;
             if quasi {
-                x_prev.load_value(st, get(&v, "x_prev")?)?;
+                // x_prev = x̃ − s̃ (states since 2026-11-17 store the secant step s; older ones x_prev)
+                match v.get("s") {
+                    Some(s) => x_prev.load_value(st, &crate::checkpoint::secant_diff(get(&v, "x")?, s)?)?,
+                    None => x_prev.load_value(st, get(&v, "x_prev")?)?,
+                }
                 g_prev.load_value(st, get(&v, "g_prev")?)?;
             }
             eprintln!("  resuming {name} at iteration {k0} / {iters}");
@@ -1152,8 +1156,10 @@ pub fn run_objective_with(
         report(usize::MAX, x, f64::NAN);
     }
     let save = |c: &RunCtl, name: &str, next: usize, x: &Stack, xp: &Store, gp: &Store| -> Result<(), Error> {
-        let (xpv, gpv) = if quasi { (xp.to_value(st)?, gp.to_value(st)?) } else { (Value::List(vec![]), Value::List(vec![])) };
-        c.save(name, &Value::Dict(vec![("k".into(), Value::Int(next as i64)), ("precond".into(), Value::Str(format!("{precond:?}"))), ("alpha".into(), Value::Float(alpha)), ("x".into(), stack_value(st, x)?), ("x_prev".into(), xpv), ("g_prev".into(), gpv)]))
+        let xv = stack_value(st, x)?;
+        // the secant step s = x − x_prev instead of x_prev: its precision is relative to the step (RunCtl::save)
+        let (sv, gpv) = if quasi { (crate::checkpoint::secant_diff(&xv, &xp.to_value(st)?)?, gp.to_value(st)?) } else { (Value::List(vec![]), Value::List(vec![])) };
+        c.save(name, &Value::Dict(vec![("k".into(), Value::Int(next as i64)), ("precond".into(), Value::Str(format!("{precond:?}"))), ("alpha".into(), Value::Float(alpha)), ("x".into(), xv), ("s".into(), sv), ("g_prev".into(), gpv)]))
     };
     let one = Complex64::new(1.0, 0.0);
     let re = |v: f64| Complex64::new(v, 0.0);

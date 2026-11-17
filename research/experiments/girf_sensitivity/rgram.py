@@ -13,6 +13,10 @@ Also the exact (non-linearised) error energy of the budget's T10 cases (girf_err
 """
 import argparse, json, os, sys, time
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +81,7 @@ def main():
     tau = v.te + v.t[n]
     log(f'{obj.N} voxels, {obj.nc} coils, sigma {obj.sigma:.2f}; {ns} samples ({isrec.sum()} recon), {a.nr} readouts')
     # budget T10 cases: girf_err.npy (rotation of the seqdesign search set) rotated with each readout, as run_global
-    ge = np.load(v2seq.RUN + '/girf_err.npy') * 2 * np.pi
+    ge = load_any(v2seq.RUN + '/girf_err.npy') * 2 * np.pi
     tg = np.arange(len(ge)) * 1e-5
     dk_t10 = np.stack([np.interp(v.t[n], tg, ge[:, c]) for c in range(3)], 1)
     vox_reg = region_vox(obj, a.region) if a.region else np.zeros(0, int)

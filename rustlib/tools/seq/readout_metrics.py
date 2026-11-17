@@ -29,6 +29,10 @@ import sys
 for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "4")
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 GAMMA = 2.6752218744e8
 GBAR = GAMMA / (2 * np.pi)
@@ -46,7 +50,7 @@ def load_run(run):
     b = s["best"]
     dt, t_rf = f["dt"], f["t_rf"]
     up = b["upsample"]
-    k = np.load(os.path.join(run, "k_adc.npy"))  # spoke, upsampled raster, cycles/m (base frame)
+    k = load_any(os.path.join(run, "k_adc.npy"))  # spoke, upsampled raster, cycles/m (base frame)
     tk = np.arange(len(k)) * dt / up
     t_adc = b["i_adc"] * dt
     na = int(math.floor(t_adc / DWELL + 1e-9))
@@ -60,23 +64,23 @@ def load_run(run):
     for a, c in rec:
         mask |= (tn >= a * dt - 1e-12) & (tn < c * dt - 1e-12)
     # first moment (RF-centre origin) along the TR for encode 0 / rotation 0, at the samples; readout part = minus the echo
-    tm = np.load(os.path.join(run, "tr_moments.npy"))[0]  # (n_tr+1, 6): k, M1
+    tm = load_any(os.path.join(run, "tr_moments.npy"))[0]  # (n_tr+1, 6): k, M1
     ttr = np.arange(len(tm)) * dt
     m1 = np.stack([np.interp(b["i_ro"] * dt + tn, ttr, tm[:, 3 + a]) for a in range(3)], 1)
     i_echo = b.get("i_echo", 0)
     m1e = np.array([np.interp(b["i_ro"] * dt + i_echo * dt, ttr, tm[:, 3 + a]) for a in range(3)])
     dm1 = GAMMA * np.linalg.norm(m1 - m1e, axis=1)
     # TR totals per encode (rotation 0): M0 as k and M1
-    tmall = np.load(os.path.join(run, "tr_moments.npy"))
+    tmall = load_any(os.path.join(run, "tr_moments.npy"))
     k_end = tmall[:, b["n_tr"], :3]
     m1_end = tmall[:, b["n_tr"], 3:]
-    den = np.load(os.path.join(run, "density.npy"))  # r, l1, need
+    den = load_any(os.path.join(run, "density.npy"))  # r, l1, need
     return dict(s=s, b=b, f=f, dt=dt, tau=tau, kr=kr, mask=mask, dm1=dm1, te=te_ro + i_echo * dt, k_end=k_end, m1_end=m1_end, den=den,
                 kmax=f["kmax"], na=na)
 
 
 def energy_model(prof):
-    z = np.load(prof)
+    z = load_any(prof)
     kr, e, split = z["kr"], z["e"], int(z["split"])
     kmax = kr.max()
     rc, p_out, p_ret = z["rc"] / kmax, z["p_out"], z["p_ret"]

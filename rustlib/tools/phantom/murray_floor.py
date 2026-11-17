@@ -12,12 +12,16 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 E, F = Path(sys.argv[1]), Path(sys.argv[2])
 f = float(sys.argv[sys.argv.index("--f") + 1]) if "--f" in sys.argv else 0.75
-g = dict(np.load(E / "graph.npz"))
+g = dict(load_any(E / "graph.npz"))
 gj = json.loads((E / "graph.json").read_text())
-q = np.load(F / "network_flow.npz")["q"]
+q = load_any(F / "network_flow.npz")["q"]
 ratl = g.get("radius_atlas", g["radius"]).astype(np.float64)
 eoff, ecomp = g["edge_offsets"], g["edge_comp"]
 comps = {c["id"]: c for c in gj["components"]}

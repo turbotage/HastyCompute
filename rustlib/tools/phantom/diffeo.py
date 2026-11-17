@@ -26,6 +26,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 HERE = Path(__file__).resolve().parent
@@ -108,7 +112,7 @@ if np.abs(ls).max() > 0:
     # the flow of v = diag(ls)(x − c) scales by e^{ls} about c; windowed
     V += (X - cen) * ls * W[..., None]
 
-G = np.load(SRC_GRAPH / "graph.npz")
+G = load_any(SRC_GRAPH / "graph.npz")
 GJ = json.loads((SRC_GRAPH / "graph.json").read_text())
 eoff = G["edge_offsets"]
 names = GJ["edge_names"]

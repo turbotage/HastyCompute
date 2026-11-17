@@ -8,6 +8,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -26,7 +30,7 @@ def auto_slab(ph, labels=None, below=10e-3, above=5e-3):
     o, h = np.asarray(labels["origin_m"], float), float(labels["voxel_m"])
     hz = np.nonzero(np.isin(lab, [names.index(c) for c in ("blood_LA", "blood_LV", "blood_RA", "blood_RV", "myocardium")]).any((1, 2)))[0]
     z_lo = o[2] + hz.min() * h - below
-    G = np.load(ph / "graph.npz")
+    G = load_any(ph / "graph.npz")
     GJ = json.loads((ph / "graph.json").read_text())
     eo = G["edge_offsets"]
     arch = [k for k, n in enumerate(GJ["edge_names"]) if "aortic arch" in n.lower()]

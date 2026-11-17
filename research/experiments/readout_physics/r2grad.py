@@ -11,6 +11,10 @@ Also: how linear is the intravoxel field of the simulator (source-field spread v
 Writes <OUT>/r2grad_<design>.json.
 """
 import json, os, sys, time
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import numpy as np, torch
 sys.path.insert(0, os.path.dirname(__file__))
 import pb, seg
@@ -22,7 +26,7 @@ R2B = 31.0
 if __name__ == '__main__':
     torch.set_num_threads(6)
     obj0 = pb.Obj()
-    hz3 = np.asarray(np.load(os.path.join(pb.SCAN, 'field_ppm_recon.npy'), mmap_mode='r')).astype(np.float64) * 2 * np.pi * pb.GBAR * obj0.b0 * 1e-6
+    hz3 = np.asarray(load_any(os.path.join(pb.SCAN, 'field_ppm_recon.npy'), mmap_mode='r')).astype(np.float64) * 2 * np.pi * pb.GBAR * obj0.b0 * 1e-6
     gmap = np.stack(np.gradient(hz3, obj0.res), -1).reshape(-1, 3, order='F')[obj0.idx]  # rad/s/m
     tg = torch.tensor(gmap, dtype=torch.float64, device=pb.DEV)
     for dname in ['v2', 'current']:

@@ -21,10 +21,32 @@ pub struct NpyArray {
     pub bytes: Vec<u8>,
 }
 
+/// Read an array file: `.npy`, or a `.hv` written by `hasty_value::store` (also when `path` names the `.npy` and only
+/// the `.hv` sibling exists). Fortran-ordered `.hv` arrays come back exactly as their `.npy` would (numpy's shape,
+/// `fortran`, the same bytes).
 pub fn read_npy(path: &Path) -> Result<NpyArray, Error> {
-    let buf = std::fs::read(path)?;
+    let p = hasty_value::store::resolve(path).ok_or_else(|| Error::Format(format!("{}: no such file (nor its .npy / .hv sibling)", path.display())))?;
+    if p.extension().and_then(|e| e.to_str()) == Some("hv") {
+        let (t, order) = hasty_value::store::load_array(&p).map_err(|e| Error::Format(format!("{}: {e}", p.display())))?;
+        let shape: Vec<usize> = if order.is_f() { t.shape().iter().rev().copied().collect() } else { t.shape().to_vec() };
+        let descr = match t.dtype() {
+            hasty_value::DType::C64 => "<c8",
+            hasty_value::DType::C128 => "<c16",
+            hasty_value::DType::F32 => "<f4",
+            hasty_value::DType::F64 => "<f8",
+            hasty_value::DType::I32 => "<i4",
+            hasty_value::DType::I64 => "<i8",
+            hasty_value::DType::U8 => "|u1",
+            hasty_value::DType::Bool => "|b1",
+            d => d.name(),
+        }
+        .to_string();
+        let (_, _, buf) = t.into_parts();
+        return Ok(NpyArray { shape, fortran: order.is_f(), descr, bytes: buf.as_bytes().to_vec() });
+    }
+    let buf = std::fs::read(&p)?;
     if &buf[..6] != b"\x93NUMPY" {
-        return Err(Error::Format(format!("{}: not npy", path.display())));
+        return Err(Error::Format(format!("{}: not npy", p.display())));
     }
     let (hlen, hs) = if buf[6] == 1 { (u16::from_le_bytes([buf[8], buf[9]]) as usize, 10) } else { (u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]) as usize, 12) };
     let h = std::str::from_utf8(&buf[hs..hs + hlen]).map_err(|e| Error::Format(e.to_string()))?;
@@ -300,13 +322,14 @@ impl SimData {
         // whitening; σ/√2 per component); 0 = noise-free
         // without data.npy (default since sims store only the clean data): noise at the simulated level
         let env_sigma = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok());
-        let sigma = env_sigma.or_else(|| (!dir.join("data.npy").exists()).then(|| meta["noise_sigma"].as_f64().unwrap()));
+        let has = |n: &str| hasty_value::store::exists_any(&dir.join(n));
+        let sigma = env_sigma.or_else(|| (!has("data.npy")).then(|| meta["noise_sigma"].as_f64().unwrap()));
         let mut lazy_src = None;
         let data = match sigma {
             _ if lazy => {
                 // noise (if any) is added on load, after whitening (kload)
                 let (file, sg) = match sigma {
-                    Some(sg) if dir.join("data_clean.npy").exists() => ("data_clean.npy", Some(sg).filter(|&v| v > 0.0)),
+                    Some(sg) if has("data_clean.npy") => ("data_clean.npy", Some(sg).filter(|&v| v > 0.0)),
                     _ => ("data.npy", None),
                 };
                 let f = crate::kload::NpyFile::open(&dir.join(file))?;
@@ -314,7 +337,7 @@ impl SimData {
                 lazy_src = Some(std::sync::Arc::new(crate::kload::LazySource { data: f, sigma: sg, seed: 0x9E37_79B9_7F4A_7C15, sched: lazy_sched.take() }));
                 vec![]
             }
-            Some(sigma) if dir.join("data_clean.npy").exists() => {
+            Some(sigma) if has("data_clean.npy") => {
                 let mut d = read_npy(&dir.join("data_clean.npy"))?.c32s();
                 let n = psi.len();
                 let mut l = vec![vec![0.0f64; n]; n];
@@ -818,6 +841,69 @@ mod tests {
         meta_all["sequence"]["recon_adc"] = serde_json::json!([[0, na + 1]]);
         assert!(recon_window(&meta_all, na).is_err());
         std::fs::write(dir.join("meta.json"), serde_json::to_string(&meta).unwrap()).unwrap();
+    }
+
+    /// the same sim stored as `.hv` (hasty_value::store with the simulator's policies: quantised k-space, 24-bit
+    /// per-field records, image-policy maps; no .npy of those) loads like the `.npy` one, eager and streamed (kload)
+    #[test]
+    fn hv_sim_files_load_like_npy() {
+        use hasty_value::store::{self, Chunking};
+        use hasty_value::{DType, Order, Policy, Save};
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-tmp");
+        let (dn, dh) = (base.join("simdata_hv_npy"), base.join("simdata_hv_hv"));
+        let (n_ro, na, nc, d) = (6usize, 5usize, 2usize, 4usize);
+        let nv = d * d * d;
+        let meta = serde_json::json!({
+            "b0": 2.89, "gmax": 0.08, "smax": 200.0, "dt": 1e-5, "dwell": 2e-6, "fov": [0.2, 0.2, 0.2], "res": [0.05, 0.05, 0.05],
+            "n_int": 1, "fov_edge_ratio": 1.0, "venc": 1.5, "encoding": "Referenced", "coverage": "Rotated3d", "t_rf": 1.5e-4,
+            "t_spoil": 1e-3, "scan_time": 0.06, "rot_presc": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], "fov_center_scanner": [0.0, 0.0, 0.0],
+            "mean_rr": 1.0, "rr_rel_std": 0.0, "n_frames": 2, "seed": 1, "n_coils": nc, "n_adc": na, "n_readouts": n_ro, "recon_dims": [d, d, d],
+            "psi": [[1.0, 0.0], [0.0, 1.0]], "gnl": {"r0": 0.25, "transverse": [0.0, 0.0], "longitudinal": [0.0, 0.0]},
+            "noise_sigma": 0.5, "sequence": {"kind": "flow", "encoding": {"venc_lo": 1.0}},
+        });
+        let tab: Vec<u8> = (0..n_ro).flat_map(|i| { let mut r = [0.0f64; 14]; r[0] = i as f64 * 0.01; r[1] = (i % 2) as f64; r[3] = (i / 3) as f64; r.into_iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>() }).collect();
+        let rec: Vec<f32> = (0..n_ro * na * SAMPLE_FLOATS).map(|i| { let (f, n) = (i % SAMPLE_FLOATS, (i / SAMPLE_FLOATS) % na); match f { 0..=2 => 37.0 * (n + 1 + f) as f32, 5 => 3e-3 * (i / (na * SAMPLE_FLOATS)) as f32, 13 => 1e-3 + n as f32 * 1e-5, _ => 0.0 } }).collect();
+        let data: Vec<f32> = (0..n_ro * na * nc).flat_map(|i| { let a = 100.0 / (1.0 + (i / nc % na) as f32); [a * (i as f32 * 0.7).cos(), a * (i as f32 * 0.3).sin()] }).collect();
+        let smaps: Vec<f32> = (0..2 * nc * nv).map(|i| 0.5 + 0.01 * i as f32).collect();
+        let small: Vec<f32> = (0..nv).map(|i| 0.1 * i as f32).collect();
+        let vel = vec![0.25f32; 6 * nv];
+        for (dir, hv) in [(&dn, false), (&dh, true)] {
+            let _ = std::fs::remove_dir_all(dir);
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("meta.json"), serde_json::to_string(&meta).unwrap()).unwrap();
+            npy(&dir.join("readouts.npy"), "<f8", &[n_ro, 14], &tab);
+            let put = |name: &str, dt: DType, descr: &str, shape: &[usize], b: &[u8], save: Save| {
+                if hv {
+                    store::save_bytes(&dir.join(name), dt, shape, Order::C, b, &save).unwrap();
+                } else {
+                    npy(&dir.join(name), descr, shape, b);
+                }
+            };
+            put("sched_nominal.npy", DType::F32, "<f4", &[n_ro, na, SAMPLE_FLOATS], &f4(&rec), Save::default().policy(Policy::Bits(24)).chunk(Chunking::Shape(vec![1, na, 1])).delta(true));
+            put("data_clean.npy", DType::C64, "<c8", &[n_ro, na, nc], &f4(&data), Save::default().policy(Policy::Abs(1e-3)).chunk(Chunking::Rows(1)));
+            put("smaps_true.npy", DType::C64, "<c8", &[nc, d, d, d], &f4(&smaps), Save::image());
+            put("field_ppm_recon.npy", DType::F32, "<f4", &[d, d, d], &f4(&small), Save::image());
+            put("truth_vel_logical.npy", DType::F32, "<f4", &[6 * nv], &f4(&vel), Save::image());
+            put("truth_lumen_fraction.npy", DType::F32, "<f4", &[nv], &f4(&small), Save::image());
+        }
+        assert!(!dh.join("data_clean.npy").exists() && dh.join("data_clean.hv").exists());
+        let w = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let o = crate::kload::LoadOpts { w: &w, cc: None, keep: None, data: true };
+        for lazy in [true, false] {
+            let a = SimData::load_traj_opts(&dn, "nominal", lazy).unwrap();
+            let b = SimData::load_traj_opts(&dh, "nominal", lazy).unwrap();
+            assert_eq!(b.lazy.as_ref().map(|l| l.data.is_hv()), lazy.then_some(true));
+            assert!(a.smaps_true.iter().zip(&b.smaps_true).all(|(x, y)| (x.re - y.re).abs() < 1e-3 && (x.im - y.im).abs() < 1e-3));
+            assert!(a.truth_frac.iter().zip(&b.truth_frac).all(|(x, y)| (x - y).abs() < 1e-3));
+            let (sa, sb) = (a.load_set(&[0, 3, 5], &o).unwrap(), b.load_set(&[0, 3, 5], &o).unwrap());
+            for ax in 0..3 {
+                assert!(sa.coords[ax].iter().zip(&sb.coords[ax]).all(|(x, y)| (x - y).abs() <= x.abs() * 1e-6 + 1e-6), "coords {ax}");
+            }
+            assert!(sa.tau.iter().zip(&sb.tau).all(|(x, y)| (x - y).abs() < 1e-9));
+            // k-space: |err| ≤ step / 2 per component (+ the same counter-based noise in both, lazy)
+            let e = sa.y.iter().zip(&sb.y).map(|(x, y)| (x.re - y.re).abs().max((x.im - y.im).abs())).fold(0.0f32, f32::max);
+            assert!(e <= 0.5e-3 + 2e-5, "k-space error {e} (lazy {lazy})");
+        }
     }
 
     /// end-to-end on a real simulator output (`HASTY_TEST_SIM=<scan dir>` of `simphantom --seq flow --flow-run

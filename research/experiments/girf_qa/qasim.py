@@ -16,6 +16,10 @@ Exact in-plane sums on a 4 mm grid (no linearisation), on the GPU in time chunks
 """
 import json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,11 +58,11 @@ class Proto:
         self.d = d
         self.p = json.load(open(os.path.join(d, 'protocol.json')))
         self.cols = self.p['frame_columns']
-        self.F = np.load(os.path.join(d, 'frames.npy'))
-        self.inputs = np.load(os.path.join(d, 'inputs.npy'))
+        self.F = load_any(os.path.join(d, 'frames.npy'))
+        self.inputs = load_any(os.path.join(d, 'inputs.npy'))
         self.in_names = [i['name'] for i in self.p['inputs']]
         self.in_len = [i['n'] for i in self.p['inputs']]
-        self.power = np.load(os.path.join(d, 'power.npy'))
+        self.power = load_any(os.path.join(d, 'power.npy'))
         c = self.p['config']
         self.dt = c['grad_raster']
         self.dwell = c['dwell']
@@ -68,12 +72,12 @@ class Proto:
         self.parts = {q['name']: i for i, q in enumerate(self.p['parts'])}
         fv = os.path.join(d, 'vframe_in.npy')
         if os.path.exists(fv):
-            self.v_in = np.load(fv)
-            self.v_R = np.load(os.path.join(d, 'vframe_R.npy'))
-            self.v_enc = np.load(os.path.join(d, 'vframe_enc.npy')).astype(int)
-            self.ft_enc = np.load(os.path.join(d, 'flowtr_enc.npy'))
-            self.ft_ro = np.load(os.path.join(d, 'flowtr_ro.npy'))
-            self.ft_tail = np.load(os.path.join(d, 'flowtr_tail.npy'))
+            self.v_in = load_any(fv)
+            self.v_R = load_any(os.path.join(d, 'vframe_R.npy'))
+            self.v_enc = load_any(os.path.join(d, 'vframe_enc.npy')).astype(int)
+            self.ft_enc = load_any(os.path.join(d, 'flowtr_enc.npy'))
+            self.ft_ro = load_any(os.path.join(d, 'flowtr_ro.npy'))
+            self.ft_tail = load_any(os.path.join(d, 'flowtr_tail.npy'))
 
     def col(self, name):
         return self.cols.index(name)

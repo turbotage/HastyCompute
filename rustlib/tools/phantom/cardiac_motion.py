@@ -33,6 +33,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python/lib"))
@@ -164,7 +168,7 @@ V0 = {r: regmask[r].sum() * h**3 for r in REG}
 
 
 # ── target volume curves ───────────────────────────────────────────────────────────────────────────────────────────
-net = np.load(FLD / "network_flow.npz")
+net = load_any(FLD / "network_flow.npz")
 Tp = float(net["period"])
 om = net["omega"]
 NH = len(om) - 1
@@ -178,7 +182,7 @@ def resample(w):
 
 
 Q_AO, Q_PA = resample(net["Q_aorta"]), resample(net["Q_pulmonary"])
-g = np.load(EXP / "graph.npz")
+g = load_any(EXP / "graph.npz")
 gj = json.loads((EXP / "graph.json").read_text())
 eoff, ea, eb = g["edge_offsets"], g["edge_a"], g["edge_b"]
 qh = net["q"]

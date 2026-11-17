@@ -11,6 +11,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 GAMMA_BAR = 2.6752218744e8 / (2 * np.pi)
 
@@ -26,8 +30,8 @@ def main():
              f"PNS ≤ {pr['pns_target']}% [{pr['pns_hw']}]")
 
     # ── base spoke ──
-    k = np.load(run / "k_adc.npy")
-    g = np.load(run / "spoke_grad.npy")
+    k = load_any(run / "k_adc.npy")
+    g = load_any(run / "spoke_grad.npy")
     t = np.arange(g.shape[0]) * dt * 1e3
     fig = plt.figure(figsize=(15, 9))
     ax = fig.add_subplot(2, 3, 1, projection="3d")
@@ -62,10 +66,10 @@ def main():
     plt.close(fig)
 
     # ── TR waveforms ──
-    trp = np.load(run / "tr_phys.npy")
+    trp = load_any(run / "tr_phys.npy")
     ne, n, _ = trp.shape
     tt = np.arange(n) * dt * 1e3
-    ktr = np.load(run / "k_tr.npy") if (run / "k_tr.npy").exists() else None
+    ktr = load_any(run / "k_tr.npy") if exists_any(run / "k_tr.npy") else None
     nrow = ne + (ktr is not None)
     fig, axs = plt.subplots(nrow, 1, figsize=(12, 2.2 * nrow), sharex=True)
     if ktr is not None:
@@ -94,7 +98,7 @@ def main():
     # ── PNS ──
     fig, axs = plt.subplots(2, 1, figsize=(13, 6))
     for ax, name, lab in [(axs[0], "pns_trace", "first 4 rotations"), (axs[1], "pns_worst", "window ending at the worst TR")]:
-        p = np.load(run / f"{name}.npy")
+        p = load_any(run / f"{name}.npy")
         tp = np.arange(p.shape[0]) * dt * 1e3
         for q in range(3):
             ax.plot(tp, p[:, q], lw=0.6, label="xyz"[q])
@@ -113,7 +117,7 @@ def main():
 
     # ── density + coverage + GIRF ──
     fig, axs = plt.subplots(1, 3, figsize=(16, 4.5))
-    d = np.load(run / "density.npy")
+    d = load_any(run / "density.npy")
     axs[0].semilogy(d[:, 0], d[:, 2], label="spokes needed per shell")
     n_eff = b.get("n_eff", b["n_design"])
     axs[0].axhline(n_eff, color="r", ls="--", label=f"design N {n_eff:.0f}")
@@ -121,7 +125,7 @@ def main():
     axs[0].set_xlabel("k radius (cycles/m)")
     axs[0].legend(fontsize=7)
     axs[0].set_title(f"N* = {b['n_star']:.0f}")
-    c = np.load(run / "coverage.npy")
+    c = load_any(run / "coverage.npy")
     for i, name in enumerate(["super-Fibonacci", "Fibonacci×golden", "golden means"]):
         axs[1].plot(c[i, :, 0], c[i, :, 1], label=f"{name} (N)")
         axs[1].plot(c[i, :, 0], c[i, :, 3], ls="--", label=f"{name} (N/8 contiguous)")
@@ -131,7 +135,7 @@ def main():
     axs[1].set_ylabel("empty Nyquist cells")
     axs[1].legend(fontsize=6)
     axs[1].set_title("coverage of concrete rotation sets")
-    ge = np.load(run / "girf_err.npy")
+    ge = load_any(run / "girf_err.npy")
     tg = np.arange(ge.shape[0]) * dt * 1e3
     axs[2].plot(tg, np.linalg.norm(ge, axis=1) * pr["fov"])
     axs[2].set_xlabel("ms from echo")
@@ -142,7 +146,7 @@ def main():
     plt.close(fig)
 
     # ── design space ──
-    gr = np.load(run / "grid.npy")  # kg0, wobble, freq, n, tr, pns, aniso, objective
+    gr = load_any(run / "grid.npy")  # kg0, wobble, freq, n, tr, pns, aniso, objective
     ev = [json.loads(l) for l in (run / "evals.jsonl").read_text().splitlines() if l.strip()]
     ev = [e for e in ev if e["objective"] > 0]
     fig, axs = plt.subplots(1, 2, figsize=(13, 5))

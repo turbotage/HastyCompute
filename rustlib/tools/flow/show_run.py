@@ -12,6 +12,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "python/lib"))
@@ -33,13 +37,13 @@ spacing = meta.get("res", [2e-3] * 3)
 dt = float(meta.get("mean_rr", 1.0)) / nf
 venc = info.get("venc_range", [info.get("venc")])[0] if info.get("venc_range") else info.get("venc")
 c = Client(opt("--server"))
-tags = opt("--tags").split(",") if opt("--tags") else [p.stem[len("vel_"):] for p in sorted(run.glob("vel_*.npy"))]
+tags = opt("--tags").split(",") if opt("--tags") else [p.stem[len("vel_"):] for p in sorted(map(Path, glob_any(run / "vel_*.npy")))]
 mag = None
-tv = np.load(sim / "truth_vel_logical.npy", mmap_mode="r")
+tv = load_any(sim / "truth_vel_logical.npy", mmap_mode="r")
 on_grid = tv.shape[:3] == tuple(meta["recon_dims"])
 for tag in tags:
-    vel = np.load(run / f"vel_{tag}.npy")  # Fortran [X, Y, Z, 3, F]
-    rec = np.load(run / f"recon_{tag}.npy", mmap_mode="r")  # [X, Y, Z, E, F] complex
+    vel = load_any(run / f"vel_{tag}.npy")  # Fortran [X, Y, Z, 3, F]
+    rec = load_any(run / f"recon_{tag}.npy", mmap_mode="r")  # [X, Y, Z, E, F] complex
     mag = np.abs(rec[:, :, :, 0, :])
     i = c.put(flow_value(vel, mag, spacing, dt, venc), name=f"{run.name} {tag}", metadata={"kind": "flow4d", "run": str(run), "tag": tag})
     print(f"{tag}: {c.viewer_url(i, 'flow')}")

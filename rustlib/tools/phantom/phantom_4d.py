@@ -43,6 +43,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch  # noqa: E402
 import torch.nn.functional as Fnn  # noqa: E402
 from scipy import ndimage  # noqa: E402
@@ -245,7 +249,7 @@ V = vf.read(P0 / "vessels.hv")
 P_ref = np.asarray(V["points"]).astype(np.float64)
 R_ref = np.asarray(V["radius"]).astype(np.float64)
 cls = np.asarray(V["cls"])
-net = np.load(P0 / "flow" / "network_flow.npz")
+net = load_any(P0 / "flow" / "network_flow.npz")
 om = net["omega"]
 p_h = net["p"]
 qn = net["q"]
@@ -299,7 +303,7 @@ del iz_, iy_, ix_
 
 # heart roots
 EXP = P0 if (P0 / "graph.npz").exists() else REPO / "data/hasty/external/zanatomy/export"  # per-phantom graph (radius jitter)
-G = np.load(EXP / "graph.npz")
+G = load_any(EXP / "graph.npz")
 GJ = json.loads((EXP / "graph.json").read_text())
 eoff_g, ea_g, eb_g = G["edge_offsets"], G["edge_a"], G["edge_b"]
 enames = GJ["edge_names"]

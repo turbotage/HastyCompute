@@ -5,13 +5,17 @@
 Times from the echo (the first k = 0 of the readout), raster dt of the design (10 us).
 """
 import sys, json, numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 G = 2.6752218744e8
 
 
 def readout_moments(run):
     b = json.load(open(run + '/summary.json'))['best']
     dt = json.load(open(run + '/summary.json'))['problem']['dt']
-    g = np.load(run + '/tr_grad.npy')[0]
+    g = load_any(run + '/tr_grad.npy')[0]
     i0 = b['i_ro'] + b.get('i_echo', 0)
     i1 = b['i_ro'] + b.get('recon', [[0, b['i_adc']]])[0][1]
     t = (np.arange(len(g)) - i0) * dt

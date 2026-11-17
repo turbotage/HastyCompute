@@ -19,22 +19,26 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 scan = sys.argv[1]
 recons = sys.argv[2:]
-z = np.load(os.path.join(scan, "truth_pc_frames.npz"))
+z = load_any(os.path.join(scan, "truth_pc_frames.npz"))
 idx, C, cov = z["idx"], z["c"], z["cov"]  # (n,), (n, E, F), (n, F)
 dims = tuple(int(v) for v in z["dims"])
 E, F = C.shape[1], C.shape[2]
 meta = json.load(open(os.path.join(scan, "meta.json")))
 K = z["k"]
-lumf = np.load(os.path.join(scan, "truth_lumen_fraction.npy"))
+lumf = load_any(os.path.join(scan, "truth_lumen_fraction.npy"))
 lum = lumf > 0.5
 depth = ndimage.distance_transform_edt(lum)
 dep = depth.ravel(order="F")[idx]
 lf = lumf.ravel(order="F")[idx]
-up = np.nan_to_num(np.load(os.path.join(scan, "truth_bias.npz"))["u_pc"])  # (X, Y, Z, 3, F)
+up = np.nan_to_num(load_any(os.path.join(scan, "truth_bias.npz"))["u_pc"])  # (X, Y, Z, 3, F)
 spd = np.stack([np.linalg.norm(up[..., f], axis=-1).ravel(order="F")[idx] for f in range(F)], -1)  # (n, F)
 
 A = np.abs(C)
@@ -71,10 +75,10 @@ print(f"wall / partial voxels: {wall.sum()}")
 print(f"  blood only (no tissue): spread {q(S[wall][cov[wall] > 0.2])}")
 # partial-volume interference with static tissue
 r_tb = 1.0
-if len(recons) or os.path.exists(os.path.join(os.path.dirname(scan), "..", "pyr_diag", "warm100", "warm.npy")):
+if len(recons) or exists_any(os.path.join(os.path.dirname(scan), "..", "pyr_diag", "warm100", "warm.npy")):
     wpath = os.path.join(scan, "..", "..", "pyr_diag", "warm100", "warm.npy")
-    if os.path.exists(wpath):
-        w0 = np.abs(np.load(wpath, mmap_mode="r")[..., 0])
+    if exists_any(wpath):
+        w0 = np.abs(load_any(wpath, mmap_mode="r")[..., 0])
         ring = (ndimage.distance_transform_edt(~lum) >= 2) & (ndimage.distance_transform_edt(~lum) <= 4)
         r_tb = float(np.median(w0[ring]) / np.median(w0[depth >= 3]))
 print(f"  tissue / blood brightness ratio (warm image) r_tb = {r_tb:.3f}")
@@ -88,7 +92,7 @@ for lo, hi in [(0.1, 0.3), (0.3, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 0.99)]:
     print(f"  blood fraction {lo}-{hi} ({m.sum()} voxel-frames): spread blood + static tissue {q(St[m])}; blood only {q(S[m])}")
 
 for rn in recons:
-    x = np.load(rn, mmap_mode="r")
+    x = load_any(rn, mmap_mode="r")
     print(f"== reconstruction {rn} {x.shape}")
     far = ndimage.distance_transform_edt(~lum) >= 5
     mag0 = np.abs(np.asarray(x[..., 0, 0]))

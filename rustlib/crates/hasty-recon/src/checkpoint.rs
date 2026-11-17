@@ -12,7 +12,7 @@ use std::sync::{Arc, Once};
 
 use cudarc::driver::{CudaSlice, CudaStream};
 use hasty_cuda::C32;
-use hasty_value::{DType, Options, Tensor, Value};
+use hasty_value::{DType, Tensor, Value};
 
 use crate::p2np::Stack;
 use crate::Error;
@@ -95,11 +95,17 @@ impl RunCtl {
         self.dir.join(format!("state_{name}.hv"))
     }
 
+    /// Save a state tree. Every float tensor of ≥ 65536 elements is quantised on its own scale at
+    /// [`hasty_value::store::CHECKPOINT_REL`] (quantisation noise 1e-6 of its rms), smaller tensors (parameters, counters)
+    /// and non-float data are bit-exact; zstd-1, big tensors chunked. Store secant steps as differences
+    /// ([`secant_diff`]) so their precision is relative to the step, not the iterate (research/io_policy.md §2).
+    /// `HASTY_IO_LOSSLESS=1`: everything bit-exact.
     pub fn save(&self, name: &str, v: &Value) -> Result<(), Error> {
+        use hasty_value::store::{self, Policy, Save, CHECKPOINT_MIN_LOSSY, CHECKPOINT_REL};
         let tmp = self.dir.join(format!("state_{name}.hv.tmp"));
         {
-            let mut w = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
-            hasty_value::write(v, &Options::default(), &mut w)?;
+            let mut w = std::io::BufWriter::with_capacity(8 << 20, std::fs::File::create(&tmp)?);
+            store::write_value(&mut w, v, &Save::default().policy(Policy::Uniform { rel: CHECKPOINT_REL }), CHECKPOINT_MIN_LOSSY)?;
             std::io::Write::flush(&mut w)?;
             w.get_ref().sync_all()?;
         }
@@ -149,6 +155,20 @@ pub fn value_stack(st: &Arc<CudaStream>, v: &Value, lens: &[usize]) -> Result<St
         return Err(Error::Format(format!("checkpoint: {} sets, expected {}", items.len(), lens.len())));
     }
     Ok(Stack { v: items.iter().zip(lens).map(|(x, &n)| value_dev(st, x, n)).collect::<Result<_, _>>()? })
+}
+
+/// `a − b` for two state values of the same structure (complex64 tensors, or lists of them): the secant step
+/// s = x − x_prev of a quasi-Newton state, stored instead of x_prev (see [`RunCtl::save`])
+pub fn secant_diff(a: &Value, b: &Value) -> Result<Value, Error> {
+    match (a, b) {
+        (Value::List(x), Value::List(y)) if x.len() == y.len() => Ok(Value::List(x.iter().zip(y).map(|(p, q)| secant_diff(p, q)).collect::<Result<_, _>>()?)),
+        (Value::Tensor(x), Value::Tensor(y)) if x.dtype() == DType::C64 && y.dtype() == DType::C64 && x.numel() == y.numel() => {
+            let (p, q) = (x.as_slice::<num_complex::Complex32>()?, y.as_slice::<num_complex::Complex32>()?);
+            let d: Vec<num_complex::Complex32> = p.iter().zip(q).map(|(a, b)| a - b).collect();
+            Ok(Value::Tensor(Tensor::from_slice(x.shape(), &d)?))
+        }
+        _ => Err(Error::Format("checkpoint: secant pair of different structure".into())),
+    }
 }
 
 pub fn get<'a>(v: &'a Value, k: &str) -> Result<&'a Value, Error> {

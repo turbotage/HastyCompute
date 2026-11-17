@@ -13,6 +13,10 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.insert(0, os.path.join(REPO, "python/lib"))
@@ -43,7 +47,7 @@ ss = np.sin(flip) * (1 - e1) / (1 - np.cos(flip) * e1) * inslab
 fat = sh[ok] != 0
 n = dims[0] * dims[1] * dims[2]
 raw_w = np.bincount(q[~fat], weights=pd[ok][~fat], minlength=n)
-ref = np.load(os.path.join(scan, "truth_pd_water.npy")).reshape(-1, order="F")
+ref = load_any(os.path.join(scan, "truth_pd_water.npy")).reshape(-1, order="F")
 err = np.abs(raw_w - ref).max() / ref.max()
 print(f"deposition check vs truth_pd_water: max rel diff {err:.2e}")
 assert err < 1e-4, "deposition does not reproduce simphantom's truth map"

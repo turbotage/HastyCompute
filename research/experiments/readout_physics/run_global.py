@@ -8,6 +8,10 @@ Writes <OUT>/global_<design>.json (+ .npz with the per-sample error energies) an
     run_global.py [--designs current,v2] [--nr 48]
 """
 import json, os, sys, time, argparse
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import numpy as np, torch
 sys.path.insert(0, os.path.dirname(__file__))
 import pb, seg
@@ -312,7 +316,7 @@ def main(dname):
     # ── T10 GIRF (illustrative clinical chain, rotation-0 error rotated with the readout; 5 % residual) ──
     if 't10' in a.parts:
         run_dir = pb.DESIGNS[dname]
-        ge = np.load(run_dir + '/girf_err.npy') * 2 * np.pi  # rad/m, 10 us raster from the ADC start
+        ge = load_any(run_dir + '/girf_err.npy') * 2 * np.pi  # rad/m, 10 us raster from the ADC start
         tg = np.arange(len(ge)) * 1e-5
         dk = np.stack([np.interp(des.t, tg, ge[:, c]) for c in range(3)], 1)
         def girf(scale):

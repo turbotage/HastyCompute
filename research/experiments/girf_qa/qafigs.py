@@ -5,6 +5,10 @@
 """
 import json, os, sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -34,7 +38,7 @@ def save(fig, name):
 
 def protocol():
     p = json.load(open(os.path.join(PROTO, 'protocol.json')))
-    X = np.load(os.path.join(PROTO, 'inputs.npy'))
+    X = load_any(os.path.join(PROTO, 'inputs.npy'))
     dt = p['config']['grad_raster']
     klim = p['config']['klim']
     # 1. inputs: g(t) and |k(t)| / k_lim
@@ -56,7 +60,7 @@ def protocol():
     axs[-1, 1].set_xlabel('time from the input-block start (ms)')
     save(fig, 'protocol_inputs.png')
     # 2. timeline: parts, power / P_flow, example thermal state
-    pw = np.load(os.path.join(PROTO, 'power.npy'))
+    pw = load_any(os.path.join(PROTO, 'power.npy'))
     pf = p['flow_tr']['p_flow_T2m2']
     P = pw[:, 1:].sum(1) / pf
     ker = np.ones(15) / 15
@@ -103,12 +107,12 @@ def protocol():
     save(fig, 'protocol_pns.png')
     # 4. one v2-validation frame: history (3 axes) + the measured TR's axis-x components
     try:
-        R = np.load(os.path.join(PROTO, 'vframe_R.npy'))
-        E = np.load(os.path.join(PROTO, 'vframe_enc.npy')).astype(int)
-        vin = np.load(os.path.join(PROTO, 'vframe_in.npy'))
-        enc = np.load(os.path.join(PROTO, 'flowtr_enc.npy'))
-        ro = np.load(os.path.join(PROTO, 'flowtr_ro.npy'))
-        tail = np.load(os.path.join(PROTO, 'flowtr_tail.npy'))
+        R = load_any(os.path.join(PROTO, 'vframe_R.npy'))
+        E = load_any(os.path.join(PROTO, 'vframe_enc.npy')).astype(int)
+        vin = load_any(os.path.join(PROTO, 'vframe_in.npy'))
+        enc = load_any(os.path.join(PROTO, 'flowtr_enc.npy'))
+        ro = load_any(os.path.join(PROTO, 'flowtr_ro.npy'))
+        tail = load_any(os.path.join(PROTO, 'flowtr_tail.npy'))
         gap = np.zeros((p['config']['seg_gap_samples'], 3))
         h = np.concatenate([np.concatenate([enc[E[0, j]], gap, ro @ R[0, j].T, gap, tail[E[0, j]], gap]) for j in range(R.shape[1] - 1)])
         v = vin[0, 0]

@@ -12,19 +12,23 @@ aliasing swamps the lumen; this x★ has the object's own spectrum.
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 scan, idx_p, out_w, out_s = sys.argv[1:5]
-z = np.load(scan + "/truth_pc_frames.npz")
+z = load_any(scan + "/truth_pc_frames.npz")
 tidx, C, cov = z["idx"], z["c"], z["cov"]
 E, F = C.shape[1], C.shape[2]
-pd = np.load(scan + "/truth_pd_water.npy") + np.load(scan + "/truth_pd_fat.npy")
+pd = load_any(scan + "/truth_pd_water.npy") + load_any(scan + "/truth_pd_fat.npy")
 dims = pd.shape
 nv = pd.size
 pdf = pd.reshape(nv, order="F").astype(np.float32)
 w = np.zeros((nv, E), np.complex64, order="F")
 w[:] = pdf[:, None]
 np.save(out_w, np.asfortranarray(w.reshape(*dims, E, order="F")))
-idx = np.load(idx_p).astype(np.int64)
+idx = load_any(idx_p).astype(np.int64)
 pos = {q: i for i, q in enumerate(tidx)}
 out = np.repeat(pdf[idx][:, None, None], E, axis=1).repeat(F, axis=2).astype(np.complex64)
 hit = 0

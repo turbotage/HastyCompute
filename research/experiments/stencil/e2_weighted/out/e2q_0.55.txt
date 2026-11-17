@@ -1,0 +1,34 @@
+
+running 1 test
+LS ridge toward Taylor: eps = 1e-6 (rad^2 units)
+
+=== E2 B0 0.55 T, FOV centre (30, -40, 100) mm, oblique, concomitant, GNL, B0 map + fat
+  set 0 (3990 samples)  rows: method | white fwd  adj | object fwd with weight: oracle  box  shifted-24mm  blend(0.7 shift + 0.3 box)
+   degree-2 fit (order 1 / 2 kernel):
+    P2 LS energy (full target)         | 2.41e-2 4.57e-2 |
+    P2 LS energy: max |p_n - Taylor_n| n = 0, 1, 2: 1.56e-2 7.33e-2 8.53e-1
+    P2 LS energy coefficients (max over samples): ||p0|-1| 5.65e-3, |arg p0| 1.46e-2 rad, |Re q| 1.34e-2, |Im q - 1| 7.23e-2, |Re r + 1/2| 7.96e-2, |Im r| 8.50e-1  (Taylor: q = i, r = -1/2)
+    P2 LS energy, f16 kernel params    | 2.41e-2 4.57e-2 |
+    P2 LS energy, coeffs every 8th ADC | 2.41e-2 4.57e-2 |
+   degree-4 fit (order 3 kernel):
+    P2 LS band-energy (full target)    | object fwd: band 1.44e-2 vs |x|^2 1.32e-2 vs Taylor 1.82e-2  (samples per band [63, 55, 219, 3653])
+    O3 LS band-energy [1,psi,psi^2,c]  | object fwd: band 9.96e-3 vs |x|^2 7.68e-3 vs Taylor 1.52e-2  (samples per band [63, 55, 219, 3653])
+    O3 LS energy [1,psi,psi^2,c]       | 1.44e-2 3.37e-2 |
+    O3 LS energy, f16 side record      | 1.44e-2 3.37e-2 |
+  set 1 (3990 samples)  rows: method | white fwd  adj | object fwd with weight: oracle  box  shifted-24mm  blend(0.7 shift + 0.3 box)
+   degree-2 fit (order 1 / 2 kernel):
+    P2 LS energy (full target)         | 2.39e-2 4.37e-2 |
+    P2 LS energy: max |p_n - Taylor_n| n = 0, 1, 2: 1.56e-2 7.33e-2 8.53e-1
+    P2 LS energy coefficients (max over samples): ||p0|-1| 5.65e-3, |arg p0| 1.46e-2 rad, |Re q| 1.34e-2, |Im q - 1| 7.23e-2, |Re r + 1/2| 7.96e-2, |Im r| 8.50e-1  (Taylor: q = i, r = -1/2)
+    P2 LS energy, f16 kernel params    | 2.39e-2 4.37e-2 |
+    P2 LS energy, coeffs every 8th ADC | 2.39e-2 4.37e-2 |
+   degree-4 fit (order 3 kernel):
+    P2 LS band-energy (full target)    | object fwd: band 1.28e-2 vs |x|^2 1.15e-2 vs Taylor 1.59e-2  (samples per band [63, 55, 219, 3653])
+    O3 LS band-energy [1,psi,psi^2,c]  | object fwd: band 8.63e-3 vs |x|^2 6.46e-3 vs Taylor 1.30e-2  (samples per band [63, 55, 219, 3653])
+    O3 LS energy [1,psi,psi^2,c]       | 1.43e-2 3.20e-2 |
+test e2_weighted_chirp_polynomial_cpu has been running for over 60 seconds
+    O3 LS energy, f16 side record      | 1.43e-2 3.20e-2 |
+test e2_weighted_chirp_polynomial_cpu ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 60.37s
+

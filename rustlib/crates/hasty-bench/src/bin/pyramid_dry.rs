@@ -155,7 +155,7 @@ fn main() {
             println!("  R2* (truth): {nv} values, median over the signal voxels {:.1} (point) / {:.1} (box) 1/s", pct(&mut rp, 0.5), pct(&mut rb, 0.5));
         }
         let ffp = dir.join("truth_fat_fraction.npy");
-        if ffp.exists() {
+        if hasty_value::store::exists_any(&ffp) {
             for boxed in [false, true] {
                 let tf = std::time::Instant::now();
                 let (ff, res) = maps_on_recon_grid(&sd, &ffp, &grid.x_log, boxed).unwrap();

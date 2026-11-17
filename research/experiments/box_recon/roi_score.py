@@ -23,6 +23,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 A = sys.argv[1:]
 opts = {}
@@ -33,12 +37,12 @@ for k in ("--truth-vel", "--roi", "--bin"):
         del A[i:i + 2]
 SC, BR = Path(A[0]), Path(A[1])
 names = A[2:]
-tv = np.load(opts.get("--truth-vel", SC / "truth_vel_logical.npy"), mmap_mode="r")  # [X, Y, Z, 3, F]
-roi = np.load(opts.get("--roi", BR / "coronary_roi.npz"))
-ext = np.load(BR / "lumen_idx_ext_f32.npy").astype(np.int64)
+tv = load_any(opts.get("--truth-vel", SC / "truth_vel_logical.npy"), mmap_mode="r")  # [X, Y, Z, 3, F]
+roi = load_any(opts.get("--roi", BR / "coronary_roi.npz"))
+ext = load_any(BR / "lumen_idx_ext_f32.npy").astype(np.int64)
 order = np.argsort(ext)
 X, Y, Z, _, NC = tv.shape
-zb = np.load(SC / "truth_bias.npz")
+zb = load_any(SC / "truth_bias.npz")
 K = zb["k"]  # [E, 3] rad per (m/s)
 E = K.shape[0]
 D = -(K[1:] - K[0])  # Δφ_e = −(k_e − k_0)·u
@@ -81,7 +85,7 @@ s_rows = pos(sflat)
 s_true = up[sel[0][pick], sel[1][pick], sel[2][pick]]  # (n, 3, F)
 
 for nm in names:
-    x = np.load(nm, mmap_mode="r")
+    x = load_any(nm, mmap_mode="r")
     Fr = x.shape[2]
     nb = Fr // NC
     bins = [int(opts["--bin"])] if "--bin" in opts else list(range(nb))

@@ -8,6 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -25,7 +29,7 @@ net = get_network_from_plans(cm.network_arch_class_name, cm.network_arch_init_kw
                              len(dj["channel_names"]), len(dj["labels"]), allow_init=False, deep_supervision=False)
 net.load_state_dict(load_state(str(folder / f"fold_{fold}" / "checkpoint_final.pth")))
 net.to(dev).eval()
-x = torch.from_numpy(np.load(norm).astype(np.float32))[None]
+x = torch.from_numpy(load_any(norm).astype(np.float32))[None]
 for name, axes in (("mirror", (0, 1, 2)), ("plain", None)):
     p = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=axes is not None, perform_everything_on_device=True, device=dev, verbose=False)
     p.network, p.configuration_manager, p.allowed_mirroring_axes = net, cm, axes

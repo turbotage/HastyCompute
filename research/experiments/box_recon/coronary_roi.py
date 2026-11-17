@@ -20,6 +20,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 REPO = Path(__file__).resolve().parents[3]
@@ -101,7 +105,7 @@ def raster(pts, rad, shrink=0.0):
     return m
 
 
-lum = np.load(SC / "truth_lumen_fraction.npy")
+lum = load_any(SC / "truth_lumen_fraction.npy")
 for nm, pi in (("aorta", p_ao), ("coronary artery", p_art), ("cardiac vein", p_vein)):
     q = np.rint((P[F // 2][pi] - c0) / res).astype(np.int64)
     ok = np.all((q >= 0) & (q < dims), 1)
@@ -142,7 +146,7 @@ for nm, pi in (("art", p_art), ("vein", p_vein)):
     print(f"{nm}: {flat.size} voxels (union over frames, dilated); per frame {inf.sum((0, 1, 2)).min()}–{inf.sum((0, 1, 2)).max()}, core {core.sum((0, 1, 2)).min()}–{core.sum((0, 1, 2)).max()}")
 OUT.mkdir(parents=True, exist_ok=True)
 np.savez_compressed(OUT / "coronary_roi.npz", **out, dims=dims)
-tidx = np.load(TIDX).astype(np.int64)
+tidx = load_any(TIDX).astype(np.int64)
 extra = np.setdiff1d(np.union1d(out["idx_art"], out["idx_vein"]), tidx)
 ext = np.concatenate([tidx, extra])
 assert ext.max() < 2 ** 24, "f32 index not exact"

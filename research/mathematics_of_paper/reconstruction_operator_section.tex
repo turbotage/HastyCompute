@@ -113,6 +113,9 @@ max over samples and FOV & 0.08 rad & 0.96 rad ($\le0.29$ cells) & 3.1 rad\\
 \end{center}
 Without GNL the quadratic fit residual $\varepsilon_j$ is zero. At GNL-warped positions it is $4.5\cdot10^{-3}$ rad rms ($0.056$ max) for degree 2, and degree 4 removes most of it (table in \cref{sec:stencil}).
 
+\paragraph{What GNL changes, and what it does not.} The nonlinear gradient fields are separable in space and time, $B_z(\rr,t)=\sum_aG_a(t)h_a(\rr)$, so the encoding phase is $\kk_j\!\cdot\!u(\rr)$ with $u=(h_a)_a$. On the apparent grid $\bm\rho=u(\rr)$ this is exactly $\kk_j\!\cdot\!\bm\rho$: the NUFFT needs no change, and the Jacobian $|\det J_u|$ is a voxel factor. Every per-voxel diagonal is simply evaluated at the true positions $\rr(\bm\rho)$: coil maps, $\omega$, $R_2^*$, fat, and the encode-mean concomitant phase $\sum_q\bar w_q(\tau)m_q(\rr(\bm\rho))$ inside $\psi$. Segments represent any spatial function, so GNL does not raise $L$.
+What GNL changes is only the per-sample term $\Delta_j=\sum_q\Delta w_{jq}m_q$. It varies between readouts at the same $\tau$ (each readout's own gradient history), so it cannot ride on the $\tau$-segments without enlarging them by the span of $(\Delta w_{jq})_q$. Instead it is applied inside the interpolation kernel, where multiplication by $\bm\rho^\alpha$ becomes a kernel derivative $\partial^\alpha$. That requires $\Delta_j$ to be a low-degree polynomial in the FFT coordinate $\bm\rho$. GNL keeps the field separable, but not polynomial: $m_q(\rr(\bm\rho))$ is the same function, yet a quadratic in $\rr$ composed with the nonlinear $\rr(\bm\rho)$ is not a quadratic in $\bm\rho$. The degree-4 fit and the residual $\varepsilon_j$ measure exactly this. The alternative is a union segment basis over $(\tau,\Delta\bm w)$: exact for any spatial shape, at the price of more segments.
+
 % -----------------------------------------------------------------------------
 \subsection{Time segments}
 \label{sec:segments}
@@ -243,7 +246,7 @@ stencil order $P$ & $L=6$ & $L=8$ & $L=10$\\
 \bottomrule
 \end{tabular}
 \end{center}
-Each order has a floor set by the dropped next term, independent of $L$. Full model with GNL ($L=20$, forward / adjoint) [measured, CPU emulation]:
+Each order has a floor set by the dropped next term, independent of $L$. Full model with GNL, forward / adjoint [measured, CPU emulation]. Here $L=20$ is chosen large so that the segment error is negligible and the table isolates the stencil floor; GNL itself does not raise $L$ (\cref{eq:dC} and the paragraph after it):
 \begin{center}
 \begin{tabular}{lccc}
 \toprule

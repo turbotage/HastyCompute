@@ -7,15 +7,19 @@ arg(C_e C̄_0) (truth_pc_frames.npz); voxels the truth does not cover in a frame
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 scan, warm_p, idx_p, out_p = sys.argv[1:5]
-z = np.load(scan + "/truth_pc_frames.npz")
+z = load_any(scan + "/truth_pc_frames.npz")
 tidx, C, cov = z["idx"], z["c"], z["cov"]
 E, F = C.shape[1], C.shape[2]
-w = np.load(warm_p, mmap_mode="r")
+w = load_any(warm_p, mmap_mode="r")
 nv = int(np.prod(w.shape[:3]))
 wf = np.asarray(w).reshape(nv, E, order="F")
-idx = np.load(idx_p).astype(np.int64)
+idx = load_any(idx_p).astype(np.int64)
 out = np.repeat(wf[idx][:, :, None], F, axis=2).astype(np.complex64)
 pos = {q: i for i, q in enumerate(idx)}
 rows = np.array([i for i, q in enumerate(tidx) if q in pos])

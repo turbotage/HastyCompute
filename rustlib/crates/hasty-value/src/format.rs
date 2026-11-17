@@ -311,28 +311,13 @@ impl Enc<'_> {
         let chunk: Vec<usize> = chunk.iter().zip(shape).map(|(&c, &n)| c.clamp(1, n.max(1))).collect();
         let grid: Vec<usize> = shape.iter().zip(&chunk).map(|(&n, &c)| n.div_ceil(c)).collect();
         let nchunks: usize = if shape.iter().any(|&n| n == 0) { 0 } else { grid.iter().product() };
-        let (es, bs, word, delta_ok, o) = (t.dtype().size(), self.o.block_bytes(), t.dtype().word(), t.dtype().is_integer(), *self.o);
+        let (es, bs, o) = (t.dtype().size(), self.o.block_bytes(), *self.o);
         let global = quant.filter(|q| q.scope == Scope::Tensor).map(|q| lossy::tensor_stats(q, t));
         let enc = |ci: usize| -> Vec<u8> {
             let (lo, ext) = chunk_box(ci, &grid, &chunk, shape);
             let mut raw = vec![0u8; ext.iter().product::<usize>() * es];
             copy_sub(t.bytes(), shape, &lo, &mut raw, &ext, &vec![0; nd], &ext, es);
-            let mut out = Vec::with_capacity(raw.len() / 2 + 32);
-            match quant {
-                Some(q) => {
-                    let (payload, qw) = lossy::encode_chunk(q, t.dtype(), &raw, global.as_ref());
-                    out.extend_from_slice(&payload[..lossy::PREFIX]);
-                    for b in payload[lossy::PREFIX..].chunks(bs) {
-                        encode_block(b, qw, false, &o, &mut out);
-                    }
-                }
-                None => {
-                    for b in raw.chunks(bs) {
-                        encode_block(b, word, delta_ok, &o, &mut out);
-                    }
-                }
-            }
-            out
+            encode_chunk_raw(&raw, t.dtype(), quant, global.as_ref(), &o)
         };
         let encoded: Vec<Vec<u8>> = if self.o.parallel { (0..nchunks).into_par_iter().map(enc).collect() } else { (0..nchunks).map(enc).collect() };
         self.buf.extend_from_slice(&[if quant.is_some() { TAG_QCHUNKED } else { TAG_CHUNKED }, t.dtype() as u8, nd as u8, 0]);
@@ -353,6 +338,31 @@ impl Enc<'_> {
         }
         Ok(())
     }
+}
+
+/// Encode the C-order bytes of one chunk (`raw`): plain blocks, or the quantiser prefix + blocks of quantised words
+/// (`quant`; `global` = tensor-scope statistics). With `o.delta` the quantised words are delta-filtered too (smooth
+/// data such as trajectories; the block filter bit makes this transparent to every decoder).
+pub(crate) fn encode_chunk_raw(raw: &[u8], dtype: DType, quant: Option<&Quant>, global: Option<&lossy::Stats>, o: &Options) -> Vec<u8> {
+    let bs = o.block_bytes();
+    let mut out = Vec::with_capacity(raw.len() / 2 + 32);
+    match quant {
+        Some(q) => {
+            let (payload, qw) = lossy::encode_chunk(q, dtype, raw, global);
+            out.extend_from_slice(&payload[..lossy::PREFIX]);
+            // a chunk stored losslessly (qw 0 in the prefix) keeps the dtype word (and no integer delta)
+            let (word, delta_ok) = if payload[0] == 0 { (dtype.word(), false) } else { (qw, true) };
+            for b in payload[lossy::PREFIX..].chunks(bs) {
+                encode_block(b, word, delta_ok, o, &mut out);
+            }
+        }
+        None => {
+            for b in raw.chunks(bs) {
+                encode_block(b, dtype.word(), dtype.is_integer(), o, &mut out);
+            }
+        }
+    }
+    out
 }
 
 /// Encode `value`, handing out chunks of roughly 1 MiB to `sink`.

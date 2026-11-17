@@ -1,12 +1,16 @@
 # how the dynamics error of ROI-averaged phases scales with the ROI size (blocks of B voxels): incoherent errors fall
 # as 1/sqrt(n), coherent (streak aliasing / bias) do not
 import sys, numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 scan, idxp = sys.argv[1], sys.argv[2]
-z = np.load(scan + "/truth_pc_frames.npz"); idx, C, cov = z["idx"], z["c"], z["cov"]
+z = load_any(scan + "/truth_pc_frames.npz"); idx, C, cov = z["idx"], z["c"], z["cov"]
 NC = C.shape[2]
-dims = np.load(scan + "/truth_lumen_fraction.npy", mmap_mode="r").shape
-idx_rec = np.load(idxp).astype(np.int64)
+dims = load_any(scan + "/truth_lumen_fraction.npy", mmap_mode="r").shape
+idx_rec = load_any(idxp).astype(np.int64)
 pos = {q: i for i, q in enumerate(idx_rec)}
 vol = np.zeros(int(np.prod(dims)), bool); vol[idx[cov.mean(1) >= 0.5]] = True
 depth = ndimage.distance_transform_edt(vol.reshape(dims, order="F")).ravel(order="F")[idx]
@@ -21,7 +25,7 @@ def roi(a, B):
     w = np.bincount(b2, None, nb); a = a[keep]
     return np.stack([np.stack([np.bincount(b2, a[:, j, f], nb) for f in range(a.shape[2])], -1) for j in range(a.shape[1])], 1) / w[:, None, None], int(w.mean())
 for nm in sys.argv[3:]:
-    x = np.load(nm, mmap_mode="r")
+    x = load_any(nm, mmap_mode="r")
     xs = np.asarray(x[rr][:, :, :NC])
     rec = np.angle(xs[:, 1:] * np.conj(xs[:, :1]))
     line = []

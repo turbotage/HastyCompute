@@ -43,7 +43,7 @@ RECON=("${BASE[@]}" "${RESP[@]}" --iters "$ITERS" --warm 20)
 
 echo "== waiting for the phantom pipeline: $(date +%H:%M:%S)"
 while pgrep -f "tools/phantom/realistic_scan.sh" >/dev/null; do stop; sleep 30; done
-[[ -n $SB && -f $SB/data_clean.npy && -f $SF/data_clean.npy ]] || { echo "!! scans missing (flow $SF, B0 $SB)"; exit 1; }
+[[ -n $SB && ( -f $SB/data_clean.npy || -f $SB/data_clean.hv ) && ( -f $SF/data_clean.npy || -f $SF/data_clean.hv ) ]] || { echo "!! scans missing (flow $SF, B0 $SB)"; exit 1; }
 
 # ── 2. B0 / R2* / fat maps from the B0 scan ───────────────────────────────────────────────────────────────────────
 B0R=$PH/recon_b0_2p5min

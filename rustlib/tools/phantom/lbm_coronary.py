@@ -30,6 +30,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -56,11 +60,11 @@ LEFT = ("Left coronary artery", "Anterior interventricular artery", "Circumflex 
 V = vf.read(P0 / "vessels.hv")
 P = np.asarray(V["points"], float)
 R = np.asarray(V["radius"], float)
-G = np.load(P0 / "graph.npz")
+G = load_any(P0 / "graph.npz")
 GJ = json.loads((P0 / "graph.json").read_text())
 eoff, ea, eb = G["edge_offsets"], G["edge_a"], G["edge_b"]
 names = GJ["edge_names"]
-net = np.load(P0 / "flow" / "network_flow.npz")
+net = load_any(P0 / "flow" / "network_flow.npz")
 om, qn, pn = net["omega"], net["q"], net["p"]
 cm = vf.read(P0 / "motion" / "cardiac_motion.hv")
 period = float(cm["period"])

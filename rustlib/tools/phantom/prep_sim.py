@@ -45,6 +45,10 @@ import time
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import torch
 
 HERE = Path(__file__).resolve().parent
@@ -125,7 +129,7 @@ if opt("--keep-box", None):
         if kb.startswith("great"):
             # + the great vessels of the vessel graph in the slab (radius ≥ 7 mm: aortic arch, pulmonary trunk, cavae;
             # the atlas labels stop at the vessel roots), each point with its radius
-            G_ = np.load(PH / "graph.npz")
+            G_ = load_any(PH / "graph.npz")
             gp_, gr_ = np.asarray(G_["points"], float), np.asarray(G_["radius"], float)
             sel_ = gr_ >= 7e-3
             if slab is not None:

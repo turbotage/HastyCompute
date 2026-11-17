@@ -72,6 +72,16 @@ pub struct AxisCfg {
     pub poly_post: bool,
     /// voxel grid `[Nx, Ny, Nz]` the polynomial coordinates refer to (x = position along the pass axis, y = `la`, z = `lb`)
     pub vox: [usize; 3],
+    /// strided passes only: a runtime table `arange[2 lb] = head, arange[2 lb + 1] = tail` per line group `lb` restricts
+    /// the `a` index of that group to `[0, head) ∪ [la_cnt − tail, la_cnt)` (k-support pruning: the lines of a row that
+    /// meet no sample are neither read nor written). Adds a trailing `const int* arange` kernel parameter.
+    pub arange: bool,
+    /// `arange` passes only: a runtime table `lrange[2 q], lrange[2 q + 1]` = (head, tail) per line, q = lb · lr_stride +
+    /// la / lr_div, restricts the entries read (`lrange_in`) or written (`lrange_out`) on that line to
+    /// `[0, head) ∪ [N − tail, N)`, within the static N_IN / N_OUT ranges (k-support pruning inside a line: the chord of a
+    /// ball column). Adds trailing `const int* lrange, long lr_div, long lr_stride` parameters.
+    pub lrange_in: bool,
+    pub lrange_out: bool,
 }
 
 impl AxisCfg {
@@ -106,6 +116,9 @@ impl AxisCfg {
             poly_pre: false,
             poly_post: false,
             vox: [1, 1, 1],
+            arange: false,
+            lrange_in: false,
+            lrange_out: false,
         }
     }
     pub fn block_threads(&self) -> usize {
@@ -239,8 +252,9 @@ pub fn generate(cfg: &AxisCfg) -> String {
     .unwrap();
     writeln!(
         s,
-        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {kty} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn,\n  long lb1_cnt, long lb1_hi, long lb1_gap, long lb2_hi, long lb2_gap, long in_lb2, long out_lb2) {{",
-        cfg.block_threads()
+        "extern \"C\" __global__ void __launch_bounds__({}) fft_axis(const cx* __restrict__ in, cx* out, const cx* __restrict__ tw_m, const cx* __restrict__ tw_p, {kty} __restrict__ kern, real kscale,\n  const cx* __restrict__ p0, const cx* __restrict__ p1, const cx* __restrict__ p2, const cx* __restrict__ p3,\n  const cx* __restrict__ q0, const cx* __restrict__ q1, const cx* __restrict__ q2, const cx* __restrict__ q3,\n  const real* __restrict__ ppre, int nppre, const real* __restrict__ ppost, int nppost,\n  long la_cnt, long lb_cnt, long in_la, long in_lb, long in_sn, long out_la, long out_lb, long out_sn,\n  long lb1_cnt, long lb1_hi, long lb1_gap, long lb2_hi, long lb2_gap, long in_lb2, long out_lb2{}) {{",
+        cfg.block_threads(),
+        if cfg.arange { ", const int* __restrict__ arange" } else { "" }.to_string() + if cfg.lrange_in || cfg.lrange_out { ", const int* __restrict__ lrange, long lr_div, long lr_stride" } else { "" }
     )
     .unwrap();
     writeln!(s, "  extern __shared__ cx smem[];").unwrap();
@@ -259,6 +273,29 @@ pub fn generate(cfg: &AxisCfg) -> String {
 #define SIDX(n) (li * N + (n))"#
         )
         .unwrap();
+    } else if cfg.arange {
+        // k-support pruning: the row's `a` range is [0, h) ∪ [la_cnt − t, la_cnt); blocks past it leave (block-uniform)
+        writeln!(
+            s,
+            r#"  const int tid = threadIdx.x;
+  const int li = tid % LPB, tl = tid / LPB;
+  const long lb = blockIdx.y;
+  const long ar_h = arange[2 * lb], ar_c = ar_h + arange[2 * lb + 1];
+  if ((long)blockIdx.x * LPB >= ar_c) return;
+  long la = (long)blockIdx.x * LPB + li;
+  const bool act = la < ar_c;
+  if (la >= ar_h) la += la_cnt - ar_c;
+  long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;
+  if (lb1 >= lb1_hi) lb1 += lb1_gap;
+  if (lb2 >= lb2_hi) lb2 += lb2_gap;
+  const long ib = la * in_la + lb1 * in_lb + lb2 * in_lb2, ob_ = la * out_la + lb1 * out_lb + lb2 * out_lb2;
+#define SIDX(n) ((n) * LPB + li)"#
+        )
+        .unwrap();
+        if cfg.lrange_in || cfg.lrange_out {
+            writeln!(s, "  int lr_h = 0, lr_t = 0;
+  if (act) {{ const long q = lb * lr_stride + la / lr_div; lr_h = lrange[2 * q]; lr_t = lrange[2 * q + 1]; }}").unwrap();
+        }
     } else {
         writeln!(
             s,
@@ -326,12 +363,13 @@ pub fn generate(cfg: &AxisCfg) -> String {
             .unwrap();
             if first {
                 writeln!(s, "        const int e = {jj} + t * {m};").unwrap();
+                let lr = if cfg.lrange_in { " && (e < lr_h || e >= N - lr_t)" } else { "" };
                 if cfg.n_in_tail > 0 {
-                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && (e < N_IN || e >= N - N_IN_TAIL)) {{ x = in[GIN(e)];").unwrap();
+                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && (e < N_IN || e >= N - N_IN_TAIL){lr}) {{ x = in[GIN(e)];").unwrap();
                 } else if cfg.n_in < n {
-                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && e < N_IN) {{ x = in[GIN(e)];").unwrap();
+                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act && e < N_IN{lr}) {{ x = in[GIN(e)];").unwrap();
                 } else {
-                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act) {{ x = in[GIN(e)];").unwrap();
+                    writeln!(s, "        cx x = make_cx(RL(0), RL(0));\n        if (act{lr}) {{ x = in[GIN(e)];").unwrap();
                 }
                 for (k, op) in cfg.pre.iter().enumerate() {
                     let f = if *op == DiagOp::Mult { "cmul" } else { "cmulc" };
@@ -375,7 +413,8 @@ pub fn generate(cfg: &AxisCfg) -> String {
                 } else {
                     "act"
                 };
-                writeln!(s, "        if ({guard}) {{ cx w = {vv}[u];").unwrap();
+                let lr = if cfg.lrange_out { " && (e < lr_h || e >= N - lr_t)" } else { "" };
+                writeln!(s, "        if ({guard}{lr}) {{ cx w = {vv}[u];").unwrap();
                 if cfg.scale != 1.0 {
                     writeln!(s, "          w = cscale(w, RL({:.17e}));", cfg.scale).unwrap();
                 }

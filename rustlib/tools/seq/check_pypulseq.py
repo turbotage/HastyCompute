@@ -8,6 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from pypulseq.utils.safe_pns_prediction import safe_gwf_to_pns, safe_example_hw
 
 
@@ -42,14 +46,14 @@ def main():
     print(f"hw {c['hw_name']} (identical to pypulseq safe_example_hw: {same_as_example})")
     ok = True
     for name in c["cases"]:
-        gwf = np.load(run / f"{name}_gwf.npy")
-        pr = np.load(run / f"{name}_pns.npy")
+        gwf = load_any(run / f"{name}_gwf.npy")
+        pr = load_any(run / f"{name}_pns.npy")
         pp, _ = safe_gwf_to_pns(gwf, np.zeros(gwf.shape[0]), dt, hw, True)
         pn = np.sqrt((pp ** 2).sum(1))
         e_ax = np.abs(pp - pr[:, :3]).max()
         e_n = np.abs(pn - pr[:, 3]).max()
         rel = e_n / max(pn.max(), 1e-30)
-        m_r = np.load(run / f"{name}_moments.npy")
+        m_r = load_any(run / f"{name}_moments.npy")
         m_p = moments_fine(gwf, dt)
         scale = np.abs(m_p).max(0) + 1e-30
         e_m = (np.abs(m_r - m_p) / scale).max(0)

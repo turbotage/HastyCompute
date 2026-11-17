@@ -13,19 +13,23 @@ import os
 import sys
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 
 run, rname, scan = sys.argv[1:4]
 dmin = float(sys.argv[4]) if len(sys.argv) > 4 else 3.0
 GAMMA = 2.6752218744e8
-x = np.load(os.path.join(run, rname), mmap_mode="r")
+x = load_any(os.path.join(run, rname), mmap_mode="r")
 # TRUTH=u_pc|u_vol|u_sig: a truth of truth_bias.npz (bias_truth.py: the beat library over the scan's beats) instead of
 # truth_vel_logical.npy
 _tk = os.environ.get("TRUTH")
-vt = np.load(os.path.join(scan, "truth_bias.npz"))[_tk] if _tk else np.load(os.path.join(scan, "truth_vel_logical.npy"), mmap_mode="r")
+vt = load_any(os.path.join(scan, "truth_bias.npz"))[_tk] if _tk else load_any(os.path.join(scan, "truth_vel_logical.npy"), mmap_mode="r")
 if _tk:
     vt = np.nan_to_num(vt)
-lum = np.load(os.path.join(scan, "truth_lumen_fraction.npy")) > 0.5
+lum = load_any(os.path.join(scan, "truth_lumen_fraction.npy")) > 0.5
 meta = json.load(open(os.path.join(scan, "meta.json")))
 rot = np.array(meta["rot_presc"])
 M1 = np.array([e["m1"] for e in meta["sequence"]["encoding"]["at_te"]]) @ rot  # physical → logical (rows: Rᵀ m)

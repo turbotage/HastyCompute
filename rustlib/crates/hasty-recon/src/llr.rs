@@ -24,12 +24,90 @@ pub struct Llr {
     /// (shrink by the threshold). With a rank cap the soft rule subtracts s_{R+1} from every kept value and shrinks
     /// the weaker cardiac components most (pf_rank_2mm: dynamics gain falling over the iterations).
     pub hard: bool,
+    /// fixed absolute threshold (replaces κσ̂; σ̂ is still estimated and reported): a fixed operator, e.g. the prox
+    /// of a fixed nuclear-norm prior inside a Moreau envelope (research/convergence_strategy.md §3.3, `knotncg`)
+    pub thr_abs: Option<f64>,
+    /// optional temporal basis U (T × T, row-major U[t][ω], real): [`LlrStats::zeta`] then holds, per column ω, the
+    /// discarded energy fraction 1 − mean_blocks ‖V_keptᴴ u_ω‖² (the LLR envelope curvature per temporal frequency)
+    pub zeta_basis: Option<Vec<f64>>,
+    /// numbers of the last `apply` (CPU or GPU path)
+    pub last: LlrStats,
     seed: u64,
+}
+
+/// Singular-value numbers of the last LLR application (at the thresholds actually used)
+#[derive(Clone, Debug, Default)]
+pub struct LlrStats {
+    /// σ̂ (median over blocks of each block's s[len / 4]) and the global threshold used
+    pub sigma: f64,
+    pub thr: f64,
+    /// Σ_blocks Σ_{s > t_b} (t_b s − t_b² / 2) and Σ_blocks Σ_{s > t_b} s²: with ‖x‖² over the blocks, the Huber
+    /// (Moreau envelope at γ, t = λγ) value is [(‖x‖² − s2_above) / 2 + lin] / γ
+    pub lin: f64,
+    pub s2_above: f64,
+    /// singular values above their threshold, and in total (decomposed blocks)
+    pub n_above: usize,
+    pub n_sv: usize,
+    pub blocks: usize,
+    /// see [`Llr::zeta_basis`] (empty without a basis)
+    pub zeta: Vec<f64>,
+}
+
+/// per-block contribution to [`LlrStats`]: (lin, s2_above, n_above, ‖V_keptᴴ u_ω‖² per ω); `col(c, t)` = entry t of the
+/// eigenvector of singular value `sv[c]`
+pub(crate) fn block_stats(sv: &[f32], tb: f32, nt: usize, basis: Option<&[f64]>, col: impl Fn(usize, usize) -> Complex32) -> (f64, f64, usize, Vec<f64>) {
+    let (mut lin, mut s2, mut n) = (0.0f64, 0.0f64, 0usize);
+    let mut proj = vec![0.0f64; if basis.is_some() { nt } else { 0 }];
+    for (c, &s) in sv.iter().enumerate() {
+        if s > tb {
+            let (s, t) = (s as f64, tb as f64);
+            lin += t * s - 0.5 * t * t;
+            s2 += s * s;
+            n += 1;
+            if let Some(u) = basis {
+                let v: Vec<Complex32> = (0..nt).map(|t| col(c, t)).collect();
+                for (w, p) in proj.iter_mut().enumerate() {
+                    let (mut re, mut im) = (0.0f64, 0.0f64);
+                    for (t, vt) in v.iter().enumerate() {
+                        re += vt.re as f64 * u[t * nt + w];
+                        im += vt.im as f64 * u[t * nt + w];
+                    }
+                    *p += re * re + im * im;
+                }
+            }
+        }
+    }
+    (lin, s2, n, proj)
+}
+
+/// sum per-block [`block_stats`] into [`LlrStats`]
+pub(crate) fn sum_stats(parts: impl Iterator<Item = (f64, f64, usize, Vec<f64>, usize)>, nt: usize, with_basis: bool, sigma: f64, thr: f64) -> LlrStats {
+    let mut s = LlrStats { sigma, thr, zeta: vec![0.0; if with_basis { nt } else { 0 }], ..Default::default() };
+    for (lin, s2, n, proj, nsv) in parts {
+        s.lin += lin;
+        s.s2_above += s2;
+        s.n_above += n;
+        s.n_sv += nsv;
+        s.blocks += 1;
+        for (z, p) in s.zeta.iter_mut().zip(&proj) {
+            *z += p;
+        }
+    }
+    let nb = s.blocks.max(1) as f64;
+    for z in s.zeta.iter_mut() {
+        *z = 1.0 - *z / nb;
+    }
+    s
 }
 
 impl Llr {
     pub fn new(dims: [usize; 3], block: usize, kappa: f64, support: Vec<bool>) -> Self {
-        Self { block, kappa, dims, support, rank: None, hard: false, seed: 0x1234_5678 }
+        Self { block, kappa, dims, support, rank: None, hard: false, thr_abs: None, zeta_basis: None, last: LlrStats::default(), seed: 0x1234_5678 }
+    }
+
+    /// the global threshold of this application: [`Self::thr_abs`] or κσ̂
+    pub fn threshold(&self, sigma: f64) -> f32 {
+        self.thr_abs.unwrap_or(self.kappa * sigma) as f32
     }
 
     /// in-place on `x` laid out [t][v] (t = 0..nt)
@@ -164,8 +242,21 @@ impl Llr {
         let Some(sigma) = Self::sigma_hat(decomp.iter().map(|(sv, _)| sv.as_slice())) else {
             return;
         };
-        let thr = (self.kappa * sigma) as f32;
+        let thr = self.threshold(sigma);
         let (rank, hard) = (self.rank, self.hard);
+        {
+            let basis = self.zeta_basis.as_deref();
+            let parts: Vec<_> = decomp
+                .iter()
+                .filter(|(sv, _)| !sv.is_empty())
+                .map(|(sv, v)| {
+                    let tb = Self::block_threshold(rank, sv, thr);
+                    let (a, b, c, d) = block_stats(sv, tb, nt, basis, |c, t| v[(t, c)]);
+                    (a, b, c, d, sv.len())
+                })
+                .collect();
+            self.last = sum_stats(parts.into_iter(), nt, basis.is_some(), sigma, thr as f64);
+        }
         // pass 2: A ← A V diag(shrink(s)/s) V^H, written back
         let xp = x.as_mut_ptr() as usize;
         std::thread::scope(|sc| {

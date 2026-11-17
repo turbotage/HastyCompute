@@ -12,6 +12,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 
 def main():
@@ -19,10 +23,10 @@ def main():
     M = json.loads((run / "motion.json").read_text())
     figs = run / "figs"
     figs.mkdir(exist_ok=True)
-    S = np.load(run / "motion_S_mm.npy")
-    P = np.load(run / "motion_pred.npy")
-    B = np.load(run / "motion_bins.npy")
-    sup = np.load(run / "support.npy") > 0
+    S = load_any(run / "motion_S_mm.npy")
+    P = load_any(run / "motion_pred.npy")
+    B = load_any(run / "motion_bins.npy")
+    sup = load_any(run / "support.npy") > 0
     nx, ny, nz, nb = B.shape
     cor = lambda a: a[:, ny // 2, :].T[::-1]  # noqa: E731
     sag = lambda a: a[nx // 2, :, :].T[::-1]  # noqa: E731

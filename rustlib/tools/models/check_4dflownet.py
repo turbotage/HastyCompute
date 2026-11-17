@@ -2,12 +2,16 @@
 and ONNX must reproduce the stored torch reference. usage: python check_4dflownet.py <model dir> [patch=16]"""
 import sys
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import onnxruntime as ort
 
 d = sys.argv[1]
 n = int(sys.argv[2]) if len(sys.argv) > 2 else 16
 s = ort.InferenceSession(d + "/model.onnx", providers=["CPUExecutionProvider"])
-ref = np.load(d + "/ref.npz")
+ref = load_any(d + "/ref.npz")
 names = ["u", "v", "w", "u_mag", "v_mag", "w_mag"]
 y = s.run(None, {k: ref[k] for k in names})[0]
 print("onnx vs torch ref max|diff|", np.abs(y - ref["y"]).max())

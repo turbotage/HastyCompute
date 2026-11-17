@@ -1,0 +1,7 @@
+== data/hasty/phantom/factory_arms/ph0001/box_recon/R1/frame_lumen.npy: 1065194 voxels, 7 encodes, 20 frames (1 respiratory bin(s))
+  bin 0: sign check (20000 fast LBM voxels): x slope 0.11 corr 0.06, y slope 0.13 corr 0.07, z slope 0.13 corr 0.09
+  bin 0    LM:    255 core voxels/frame; voxel rms err  44.3 cm/s (truth rms speed 20.5); axial ROI-mean: truth  13.7 cm/s (range 6.6..24.4), |err| 17.9 (flat-truth  4.0), corr -0.07, mean ratio -0.31
+  bin 0   LAD:    910 core voxels/frame; voxel rms err 112.1 cm/s (truth rms speed 15.3); axial ROI-mean: truth  -5.0 cm/s (range -16.4..2.5), |err| 10.0 (flat-truth  6.3), corr -0.21, mean ratio -0.05
+  bin 0   LCx:    152 core voxels/frame; voxel rms err 126.6 cm/s (truth rms speed 11.0); axial ROI-mean: truth  -6.5 cm/s (range -12.0..-2.8), |err| 10.3 (flat-truth  2.3), corr  0.11, mean ratio -0.41
+  bin 0   RCA:   1338 core voxels/frame; voxel rms err  81.4 cm/s (truth rms speed 15.5); axial ROI-mean: truth  -9.0 cm/s (range -19.5..-4.7), |err| 11.4 (flat-truth  2.2), corr  0.33, mean ratio -0.27
+  bin 0 veins:   3417 core voxels/frame; voxel rms err  97.4 cm/s (truth rms speed 12.7); axial ROI-mean: truth  -1.1 cm/s (range -4.6..2.1), |err|  5.7 (flat-truth  1.7), corr -0.24, mean ratio -3.69

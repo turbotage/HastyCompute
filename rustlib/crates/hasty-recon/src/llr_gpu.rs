@@ -365,8 +365,24 @@ impl LlrGpu {
         let Some(sigma) = Llr::sigma_hat(res.iter().flat_map(|(sv, _)| sv.iter().map(|s| s.as_slice()))) else {
             return Ok(());
         };
-        let thr = (self.llr.kappa * sigma) as f32;
+        let thr = self.llr.threshold(sigma);
         let (rank, hard) = (self.llr.rank, self.llr.hard);
+        {
+            let basis = self.llr.zeta_basis.as_deref();
+            let parts: Vec<_> = res
+                .iter()
+                .flat_map(|(svs, vs)| svs.iter().enumerate().map(move |(j, sv)| (sv, &vs[j * nt * nt..(j + 1) * nt * nt])))
+                .filter(|(sv, _)| !sv.is_empty())
+                .collect::<Vec<_>>()
+                .into_par_iter()
+                .map(|(sv, v)| {
+                    let tb = Llr::block_threshold(rank, sv, thr);
+                    let (a, b, c, d) = crate::llr::block_stats(sv, tb, nt, basis, |c, t| { let z = v[c * nt + t]; num_complex::Complex32::new(z.re, z.im) });
+                    (a, b, c, d, sv.len())
+                })
+                .collect();
+            self.llr.last = crate::llr::sum_stats(parts.into_iter(), nt, basis.is_some(), sigma, thr as f64);
+        }
         // pass 2 on every device, written back in place (disjoint blocks)
         let (xp, xlen) = (x.as_mut_ptr() as usize, x.len());
         let ks: Vec<Result<usize, Error>> = std::thread::scope(|sc| {

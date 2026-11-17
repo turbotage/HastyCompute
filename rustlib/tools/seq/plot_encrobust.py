@@ -17,6 +17,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from matplotlib.ticker import FuncFormatter  # noqa: E402
 
 PLAIN = FuncFormatter(lambda v, _: f"{v:g}")
@@ -46,10 +50,10 @@ def main():
     J = json.loads((run / "encrobust.json").read_text())
     names = J["designs"]
     rows = {r["design"]: r for r in J["rows"]}
-    W = np.load(run / "enc_waves.npy")
-    sens, taus = np.load(run / "sens.npy"), np.load(run / "sens_tau.npy")
-    spec, freqs = np.load(run / "spec.npy"), np.load(run / "spec_f.npy")
-    tr, wts = np.load(run / "traces.npy"), np.load(run / "weights.npy")
+    W = load_any(run / "enc_waves.npy")
+    sens, taus = load_any(run / "sens.npy"), load_any(run / "sens_tau.npy")
+    spec, freqs = load_any(run / "spec.npy"), load_any(run / "spec_f.npy")
+    tr, wts = load_any(run / "traces.npy"), load_any(run / "weights.npy")
     dt = J["dt"]
     figs = run / "figs"
     figs.mkdir(exist_ok=True)

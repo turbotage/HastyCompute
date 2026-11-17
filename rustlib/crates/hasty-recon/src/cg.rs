@@ -109,6 +109,18 @@ pub fn pcgls_cb(
     Ok(pcgls_ctl(op, pre, st, y, x, lambda, iters, cb, None)?.0)
 }
 
+/// A preconditioner z = M⁻¹ r for [`pcgls_dyn`] (the circulant metric, or composite ones such as a knot-space
+/// Kronecker preconditioner).
+pub trait Precond {
+    fn apply(&mut self, st: &Arc<CudaStream>, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>) -> Result<(), Error>;
+}
+
+impl Precond for crate::precond::CirculantPrecond {
+    fn apply(&mut self, st: &Arc<CudaStream>, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>) -> Result<(), Error> {
+        crate::precond::CirculantPrecond::apply(self, st, r, z)
+    }
+}
+
 /// Resumable [`pcgls_cb`]: with `ctl = (run control, state name)` it continues from a saved state (x, r, p, γ, ‖s₀‖,
 /// iteration, history), checkpoints every `ctl.every` iterations and stops cleanly on request.
 #[allow(clippy::too_many_arguments)]
@@ -123,12 +135,34 @@ pub fn pcgls_ctl(
     cb: &mut dyn FnMut(usize, &CudaSlice<C32>),
     ctl: Option<(&crate::checkpoint::RunCtl, &str)>,
 ) -> Result<(Vec<f64>, crate::checkpoint::Outcome), Error> {
+    pcgls_dyn(op, pre.map(|p| p as &mut dyn Precond), st, Data::Borrowed(y), x, lambda, iters, cb, ctl)
+}
+
+/// the data of [`pcgls_dyn`]: borrowed (copied into the residual) or owned (becomes the residual: one data vector less)
+pub enum Data<'a> {
+    Borrowed(&'a CudaSlice<C32>),
+    Owned(CudaSlice<C32>),
+}
+
+/// [`pcgls_ctl`] with any [`Precond`].
+#[allow(clippy::too_many_arguments)]
+pub fn pcgls_dyn(
+    op: &mut impl LinOp,
+    pre: Option<&mut dyn Precond>,
+    st: &Arc<CudaStream>,
+    y: Data<'_>,
+    x: &mut CudaSlice<C32>,
+    lambda: f64,
+    iters: usize,
+    cb: &mut dyn FnMut(usize, &CudaSlice<C32>),
+    ctl: Option<(&crate::checkpoint::RunCtl, &str)>,
+) -> Result<(Vec<f64>, crate::checkpoint::Outcome), Error> {
     use crate::checkpoint::{dev_value, get, get_f64, get_usize, value_dev, Outcome};
     use hasty_value::{Tensor, Value};
     let nv = op.len_x();
     let one = Complex64::new(1.0, 0.0);
     let mut pre = pre;
-    let m_len = y.len();
+    let m_len = match &y { Data::Borrowed(v) => v.len(), Data::Owned(v) => v.len() };
     let mut q = st.alloc_zeros::<C32>(m_len)?;
     let mut s = st.alloc_zeros::<C32>(nv)?;
     // z = M⁻¹ s only with a preconditioner; without one s itself serves (one image vector less)
@@ -148,7 +182,7 @@ pub fn pcgls_ctl(
         hist = get(&v, "hist")?.as_tensor().map(|t| t.to_vec::<f64>()).transpose()?.unwrap_or_default();
         eprintln!("  resuming {} at CG iteration {it0} / {iters}", ctl.unwrap().1);
     } else {
-        r = st.clone_dtod(y)?;
+        r = match y { Data::Borrowed(v) => st.clone_dtod(v)?, Data::Owned(v) => v };
         op.forward(st, x, &mut q)?;
         op.kernels().axpby(st, -one, &q, one, &mut r)?;
         op.adjoint(st, &r, &mut s)?;

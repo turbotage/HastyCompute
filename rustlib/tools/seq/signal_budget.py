@@ -25,6 +25,10 @@ import sys
 for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "4")
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import scipy.fft as sfft  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -59,15 +63,15 @@ if os.environ.get("SKIP_PHANTOM") is not None and os.path.exists(os.path.join(ou
 if os.environ.get("SKIP_PHANTOM") is None:
     md = os.environ.get("MAPS")  # steady-state weighted maps (ss_maps.py); default: raw PD truth maps
     if md:
-        w = np.load(os.path.join(md, "ss_water.npy")).astype(np.float64)
-        pf = np.load(os.path.join(md, "ss_fat.npy")).astype(np.float64)
+        w = load_any(os.path.join(md, "ss_water.npy")).astype(np.float64)
+        pf = load_any(os.path.join(md, "ss_fat.npy")).astype(np.float64)
     else:
-        w = np.load(os.path.join(scan, "truth_pd_water.npy")).astype(np.float64)
-        pf = np.load(os.path.join(scan, "truth_pd_fat.npy")).astype(np.float64)
+        w = load_any(os.path.join(scan, "truth_pd_water.npy")).astype(np.float64)
+        pf = load_any(os.path.join(scan, "truth_pd_fat.npy")).astype(np.float64)
     summ["maps"] = md or "raw PD"
-    r2 = np.nan_to_num(np.load(os.path.join(scan, "truth_r2s.npy")).astype(np.float64), nan=0.0)
-    fppm = np.nan_to_num(np.load(os.path.join(scan, "field_ppm_recon.npy")).astype(np.float64), nan=0.0)
-    sm = np.load(os.path.join(scan, "smaps_true.npy"), mmap_mode="r")
+    r2 = np.nan_to_num(load_any(os.path.join(scan, "truth_r2s.npy")).astype(np.float64), nan=0.0)
+    fppm = np.nan_to_num(load_any(os.path.join(scan, "field_ppm_recon.npy")).astype(np.float64), nan=0.0)
+    sm = load_any(os.path.join(scan, "smaps_true.npy"), mmap_mode="r")
     dims, res = w.shape, meta["res"]
     kk = [sfft.fftfreq(n, d=r) for n, r in zip(dims, res)]
     kr = np.sqrt(kk[0][:, None, None] ** 2 + kk[1][None, :, None] ** 2 + kk[2][None, None, :] ** 2)
@@ -110,7 +114,7 @@ if os.environ.get("SKIP_PHANTOM") is None:
                 Esh[v][i] += np.bincount(shb_s, weights=p[shsel], minlength=6)
         print(f"Δτ {dt*1e3:5.2f} ms: " + ", ".join(f"{v} {E[v][0.1][i]/E[v][0.1][0]:.3f}" for v in variants) + f", total {Etot[i]/Etot[0]:.3f}")
     # measured: return / out ratio at the same |k| (low k), current design
-    z = np.load(prof)
+    z = load_any(prof)
     rc, p_out, p_ret = z["rc"] / z["kr"].max(), z["p_out"], z["p_ret"]
     meas = {f"{x:.3f}": float(r) for x, r in zip(rc, p_ret / p_out) if x < 0.12 and np.isfinite(r)}
     i_o, i_r = 1, int(np.argmin(np.abs(dts - 7.93e-3)))

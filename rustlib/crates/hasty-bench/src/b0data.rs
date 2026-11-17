@@ -141,7 +141,7 @@ pub fn load(dir: &Path, o: &LoadOpts) -> B0Data {
     assert_eq!((sch.n_readouts(), sch.n_adc()), (n_ro, na), "schedule mismatch");
     let samples = read_npy(&dir.join("samples.npy")).unwrap().f32s();
     let ro = read_npy(&dir.join("readouts.npy")).unwrap().f64s();
-    let dname = if !o.clean && dir.join("data.npy").exists() { "data.npy" } else { "data_clean.npy" };
+    let dname = if !o.clean && hasty_value::store::exists_any(&dir.join("data.npy")) { "data.npy" } else { "data_clean.npy" };
     let data = read_npy(&dir.join(dname)).unwrap().c32s();
     // whitening
     let psi = DMatrix::<f64>::from_fn(nc, nc, |i, j| meta["psi"][i][j].as_f64().unwrap());
@@ -270,7 +270,7 @@ pub fn load(dir: &Path, o: &LoadOpts) -> B0Data {
     let te = (0..nset).map(|t| te_s[(t % n_win) / n_echo][t % n_echo]).collect();
     // truth
     let gbar = hasty_mrsim::GAMMA_BAR;
-    let rd = |name: &str| -> Vec<f32> { if dir.join(name).exists() { down_f32(&read_npy(&dir.join(name)).unwrap().f32s(), dims_f, gs) } else { vec![f32::NAN; nv] } };
+    let rd = |name: &str| -> Vec<f32> { if hasty_value::store::exists_any(&dir.join(name)) { down_f32(&read_npy(&dir.join(name)).unwrap().f32s(), dims_f, gs) } else { vec![f32::NAN; nv] } };
     let truth_om_hz = rd("field_ppm_recon.npy").iter().map(|&p| (gbar * b0 * p as f64 * 1e-6) as f32).collect();
     B0Data {
         dims,

@@ -13,6 +13,10 @@ PYTHONPATH must contain `lz4` (hv reader).  usage: nav_motion_sim.py [--snr 20] 
 import json, sys, os
 sys.path.insert(0, 'python/lib')
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy import ndimage
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
@@ -30,8 +34,8 @@ PH = 'data/hasty/phantom/factory_arms/ph0001'
 GAMMA, dt, h, KMAX = 42.577e6, 10e-6, 2e-3, 250.0
 sm = json.load(open(f'{RUN}/summary.json'))['best']
 ie, ir = sm['i_enc'], sm['i_ro']
-G = np.load(f'{RUN}/tr_grad.npy')
-rho0 = (np.load(f'{SCAN}/truth_pd_water.npy') + np.load(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
+G = load_any(f'{RUN}/tr_grad.npy')
+rho0 = (load_any(f'{SCAN}/truth_pd_water.npy') + load_any(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
 nx, ny, nz = rho0.shape
 meta = json.load(open(f'{SCAN}/meta.json'))
 cen = np.array(meta['presc_center_subject'])

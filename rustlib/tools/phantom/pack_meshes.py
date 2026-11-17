@@ -16,6 +16,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python/lib"))
 from hastycompute import value_format as vf  # noqa: E402
@@ -50,7 +54,7 @@ for name, system, pat, flags in RECIPE:
     if system not in M:
         print(f"{name}: no system {system}")
         continue
-    data = np.load(E / f"meshes_{system}.npz")
+    data = load_any(E / f"meshes_{system}.npz")
     V, T, off = data["verts"], data["tris"], data["tri_offsets"]
     rx = re.compile(pat)
     tris, members, offs = [], [], [0]

@@ -21,6 +21,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from matplotlib.patches import Patch  # noqa: E402
 
 AX = ["#2a78d6", "#eb6834", "#1baf7a"]  # x, y, z (fixed order)
@@ -72,13 +76,13 @@ def main():
     dt, kmax, gmax, smax = F["dt"], F["kmax"], F["gmax"], F["smax"]
     names = F["parts"]
     var = F["variants"]
-    sg = np.load(run / "seq_grad.npy")
-    sp = np.load(run / "seq_part.npy")
-    pns = np.load(run / "seq_pns.npy")
-    trg = np.load(run / "tr_grad.npy")
-    trm = np.load(run / "tr_moments.npy")
-    ks = np.load(run / "k_spokes.npy")
-    gi = np.load(run / "girf.npy")
+    sg = load_any(run / "seq_grad.npy")
+    sp = load_any(run / "seq_part.npy")
+    pns = load_any(run / "seq_pns.npy")
+    trg = load_any(run / "tr_grad.npy")
+    trm = load_any(run / "tr_moments.npy")
+    ks = load_any(run / "k_spokes.npy")
+    gi = load_any(run / "girf.npy")
     nv, L = trg.shape[0], trg.shape[1]
     t_tr = np.arange(L) * dt * 1e3
     is_b0 = F["kind"] == "b0_multiecho"

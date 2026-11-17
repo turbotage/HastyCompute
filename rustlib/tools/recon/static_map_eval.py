@@ -22,6 +22,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 from scipy.ndimage import map_coordinates  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
@@ -59,10 +63,10 @@ r = vf.read(ph / "motion/resp_motion.hv")
 B = np.asarray(r["B"], dtype=np.float32).sum(axis=0)  # [comp, z, y, x] m
 d_resp = 1e3 * np.sqrt(sum(sample(B[k], r["origin_m"], r["voxel_m"], X) ** 2 for k in range(3)))
 
-lum = np.load(sim / "truth_lumen_fraction.npy") > 0.1
-pd = np.load(sim / "truth_pd_water.npy")
-if (sim / "truth_pd_fat.npy").exists():
-    pd = pd + np.load(sim / "truth_pd_fat.npy")
+lum = load_any(sim / "truth_lumen_fraction.npy") > 0.1
+pd = load_any(sim / "truth_pd_water.npy")
+if exists_any(sim / "truth_pd_fat.npy"):
+    pd = pd + load_any(sim / "truth_pd_fat.npy")
 grad = np.sqrt(sum(np.gradient(pd, res * 1e3, axis=a) ** 2 for a in range(3)))  # per mm
 bright = np.percentile(pd[pd > 0], 95) if (pd > 0).any() else 1.0
 vis_card = lum | (d_card * grad > 0.05 * bright)
@@ -72,9 +76,9 @@ stat_resp = ~lum & (d_resp < 1.0)
 body = pd > 0.05 * bright
 
 out = {}
-for mp in sorted(run.glob("static_map_*.npy")):
+for mp in sorted(map(Path, glob_any(run / "static_map_*.npy"))):
     tag = mp.stem[len("static_map_"):]
-    m = np.load(mp)
+    m = load_any(mp)
     w_card, w_resp = m[..., 3] > 0.5, m[..., 4] > 0.5
     frac = lambda w, cls: float(w[cls].mean()) if cls.any() else float("nan")  # noqa: E731
     e = {

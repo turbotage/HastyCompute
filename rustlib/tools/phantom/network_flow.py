@@ -29,6 +29,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 import scipy.sparse as sp  # noqa: E402
 import scipy.sparse.linalg as spl  # noqa: E402
 from matplotlib.collections import LineCollection  # noqa: E402
@@ -57,7 +61,7 @@ K1, K2, K3 = 2.0e6, -2253.0, 8.65e4  # Olufsen 2000 (SI): Eh/r0 = k1 exp(k2 r0) 
 SEG = 5e-3
 PHI_VE = 0.15  # wall viscoelastic loss tangent (≈ 8.5°; damps the high-frequency reflections)
 
-g = np.load(E / "graph.npz")
+g = load_any(E / "graph.npz")
 gj = json.loads((E / "graph.json").read_text())
 npos, ea, eb, eoff = g["node_pos"].astype(np.float64), g["edge_a"], g["edge_b"], g["edge_offsets"]
 pts, rad, ecomp = g["points"].astype(np.float64), g["radius"].astype(np.float64), g["edge_comp"]

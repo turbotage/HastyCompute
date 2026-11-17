@@ -3,10 +3,14 @@
 d s_c(0)/d t_a = sum rho d_a S_c ;  d s_c(0)/d r_a = sum rho (e_a x (x - c)) . grad S_c ; nuisance: global phase + amplitude per sample.
 Coils: the phantom's true (Sum|S|^2 = 1 normalised) maps; noise as in nav_crlb.py (image SNR 20 at 2 mm, 10 min, M = 2e8)."""
 import numpy as np, json
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 SCAN = 'data/hasty/phantom/factory_arms/ph0001/sim_b0_2.5min/scan'
 h = 2e-3
-rho = (np.load(f'{SCAN}/truth_pd_water.npy') + np.load(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
-sm = np.load(f'{SCAN}/smaps_true.npy', mmap_mode='r')
+rho = (load_any(f'{SCAN}/truth_pd_water.npy') + load_any(f'{SCAN}/truth_pd_fat.npy')).astype(np.float32)
+sm = load_any(f'{SCAN}/smaps_true.npy', mmap_mode='r')
 nc = sm.shape[-1]
 com = [(rho.sum(axis=tuple(j for j in range(3) if j != a)) * np.arange(rho.shape[a])).sum() / rho.sum() for a in range(3)]
 ax = [((np.arange(rho.shape[a]) - com[a]) * h).astype(np.float32) for a in range(3)]

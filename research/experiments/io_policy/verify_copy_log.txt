@@ -1,0 +1,9 @@
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/data_clean.npy -> rustlib/target/iopolicy_verify/scan/data_clean.hv: 14.484 -> 3.413 GB (0.236), kspace, max err 7.422e-02 (step/2 7.401e-02), 101 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/samples.npy -> rustlib/target/iopolicy_verify/scan/samples.hv: 0.905 -> 0.297 GB (0.328), traj, max err 2.441e-04, 14 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/samples_played.npy -> rustlib/target/iopolicy_verify/scan/samples_played.hv: 1.810 -> 0.669 GB (0.370), traj, max err 2.441e-04, 25 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/sched_nominal.npy -> rustlib/target/iopolicy_verify/scan/sched_nominal.hv: 3.621 -> 1.128 GB (0.311), traj, max err 2.441e-04, 48 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/sched_played.npy -> rustlib/target/iopolicy_verify/scan/sched_played.hv: 3.621 -> 1.212 GB (0.335), traj, max err 2.441e-04, 47 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/smaps_true.npy -> rustlib/target/iopolicy_verify/scan/smaps_true.hv: 2.184 -> 0.549 GB (0.251), image, max err 3.719e-05 (step/2 3.680e-05), 16 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/truth_fat_fraction.npy -> rustlib/target/iopolicy_verify/scan/truth_fat_fraction.hv: 0.683 -> 0.036 GB (0.052), image, max err 7.460e-05 (step/2 7.461e-05), 5 s
+OK   data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan/truth_vel_logical.npy -> rustlib/target/iopolicy_verify/scan/truth_vel_logical.hv: 2.048 -> 0.103 GB (0.050), image, max err 1.097e-05 (step/2 1.077e-05), 14 s
+total 29.36 -> 7.41 GB

@@ -8,6 +8,10 @@ import argparse
 import os
 
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+_sys.path.insert(0, str(next(p for p in _Path(__file__).resolve().parents if (p / "python/lib/hastycompute").is_dir()) / "python/lib"))
+from hastycompute.store import load_any, exists_any, glob_any  # noqa: E402,F401  (.npy or the .hv written instead)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("scan")
@@ -16,8 +20,8 @@ ap.add_argument("--readouts", type=int, default=448)
 ap.add_argument("--split", type=int, default=None, help="first sample of the return leg (default: argmax |k|)")
 a = ap.parse_args()
 
-d = np.load(os.path.join(a.scan, "data_clean.npy"), mmap_mode="r")
-s = np.load(os.path.join(a.scan, "samples.npy"), mmap_mode="r")
+d = load_any(os.path.join(a.scan, "data_clean.npy"), mmap_mode="r")
+s = load_any(os.path.join(a.scan, "samples.npy"), mmap_mode="r")
 nr, na, nc = d.shape
 idx = np.linspace(0, nr - 1, a.readouts).round().astype(int)
 e = np.zeros(na)

@@ -6,6 +6,11 @@
 //! HASTY_BENCH_2D="kr,rdeg": respiratory × cardiac knots (`SegNufft::new_temporal2d`, kr respiratory knots of degree
 //! rdeg, the FRAMES knots cardiac; M samples per knot image, so kr · F · M samples).
 //! HASTY_BENCH_W: kernel width (default 10); HASTY_BENCH_RES: voxel size in m (default 0.002).
+//! HASTY_BENCH_TRAJ: sample distribution in k·Δ: cube (default, uniform in [−3.1, 3.1]³), ball (uniform in the ball of
+//! radius 3.1: yarn-ball coverage), koosh (3-D radial / kooshball: random spoke directions, radius uniform in [0, 3.1],
+//! so density ∝ 1/k², centre-dense) or sos (stack of spirals: uniform in the disk of radius 3.1 × kz).
+//! HASTY_SEG_KPRUNE=0 turns the k-support pruning of the grid FFTs off, HASTY_SEG_KERNEL=kb selects the KB window,
+//! HASTY_NUFFT_GRID=auto the measured fine-grid sizes (hasty-nufft; research/temporal_operator.md §20).
 use cudarc::driver::sys::CUevent_flags;
 use hasty_cuda::{Device, C32};
 use hasty_nufft::{build_segments, NufftOpts, NufftPlan, SegNufft, SegNufftOpts};
@@ -41,7 +46,33 @@ fn main() {
         let nv = dims.iter().product::<usize>();
         let mut s = 12345u64;
         let mut u = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; (s >> 11) as f64 / (1u64 << 53) as f64 - 0.5 };
-        let coords: [Vec<f32>; 3] = [0, 1, 2].map(|_| (0..m).map(|_| (u() * 6.2) as f32).collect());
+        let traj = std::env::var("HASTY_BENCH_TRAJ").unwrap_or_else(|_| "cube".into());
+        let coords: [Vec<f32>; 3] = match traj.as_str() {
+            "cube" => [0, 1, 2].map(|_| (0..m).map(|_| (u() * 6.2) as f32).collect()),
+            "ball" | "sos" => {
+                let mut c: [Vec<f32>; 3] = Default::default();
+                while c[0].len() < m {
+                    let p = [u() * 6.2, u() * 6.2, u() * 6.2];
+                    let r2 = p[0] * p[0] + p[1] * p[1] + if traj == "ball" { p[2] * p[2] } else { 0.0 };
+                    if r2 <= 3.1 * 3.1 {
+                        (0..3).for_each(|a| c[a].push(p[a] as f32));
+                    }
+                }
+                c
+            }
+            "koosh" => {
+                // 3-D radial: random spoke directions, radius uniform in [0, 3.1] (density ∝ 1/k², centre-dense)
+                let mut c: [Vec<f32>; 3] = Default::default();
+                for _ in 0..m {
+                    let (cz, ph, r) = (2.0 * u(), 2.0 * std::f64::consts::PI * (u() + 0.5), 3.1 * (u() + 0.5));
+                    let sz = (1.0 - cz * cz).max(0.0).sqrt();
+                    let p = [r * sz * ph.cos(), r * sz * ph.sin(), r * cz];
+                    (0..3).for_each(|a| c[a].push(p[a] as f32));
+                }
+                c
+            }
+            t => panic!("HASTY_BENCH_TRAJ={t}: cube, ball, sos or koosh"),
+        };
         let x: Vec<C32> = (0..nv * nimg).map(|_| C32::new(u() as f32, u() as f32)).collect();
         let tfr: Vec<f32> = (0..m).map(|_| ((u() + 0.5) * frames as f64) as f32).collect();
         // 2-D: respiratory interval and fraction (nri = kr for bins, kr − 1 for linear)
@@ -105,7 +136,9 @@ fn main() {
             let mut xo = st.alloc_zeros::<C32>(nv * nimg).unwrap();
             let tf = time(&mut || op.forward(&st, &seg, &pts, &dx, &mut y).unwrap());
             let ta = time(&mut || op.adjoint(&st, &seg, &pts, &y, &mut xo).unwrap());
-            println!("  SegNufft L={nseg:>2} order {order}: forward {tf:.1} ms, adjoint {ta:.1} ms (coil batch {}, set_points {tp:.0} ms)", op.cb);
+            let nfg = [op.plan.nf[0], op.plan.nf[1], op.plan.nf[2]];
+            let ks = op.grid_fft_ksupport().map(|k| (k.fractions(nfg), k.cell_fraction(nfg)));
+            println!("  SegNufft L={nseg:>2} order {order}: forward {tf:.1} ms, adjoint {ta:.1} ms (coil batch {}, set_points {tp:.0} ms; traj {traj}, grid {:?}, window {:?}, k-support {})", op.cb, op.plan.nf, op.kernel_kind(), ks.map_or("off".to_string(), |((c, p), v)| format!("columns {c:.2}, proj {p:.2?}, cells {v:.2}")));
         }
     }
 }

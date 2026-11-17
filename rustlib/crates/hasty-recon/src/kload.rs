@@ -12,8 +12,6 @@
 //! calibration region and the compressed data see the same noise (as in a real scan). The realisation differs from
 //! the legacy loader's.
 
-use std::fs::File;
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 
 use hasty_cuda::C32;
@@ -23,56 +21,53 @@ use rayon::prelude::*;
 use crate::data::{SampleSet, SimData};
 use crate::Error;
 
-/// A `.npy` file read by positional reads (C order, little-endian).
+/// An array file read by positional reads (C order, little-endian): a `.npy` (raw positional reads) or a chunked `.hv`
+/// (`hasty_value::store`, e.g. a sim's quantised k-space with one readout per chunk; only the chunks overlapping a
+/// read are decoded). The name is historical; [`NpyFile::open`] takes either and falls back to the sibling with the
+/// other extension.
 pub struct NpyFile {
     pub path: PathBuf,
-    file: File,
+    rows: hasty_value::store::RowFile,
     pub shape: Vec<usize>,
     pub descr: String,
-    /// byte offset of element 0
-    pub offset: u64,
     pub fortran: bool,
+}
+
+fn descr_of(d: hasty_value::DType) -> String {
+    use hasty_value::DType as D;
+    match d {
+        D::C64 => "<c8",
+        D::C128 => "<c16",
+        D::F32 => "<f4",
+        D::F64 => "<f8",
+        D::I32 => "<i4",
+        D::I64 => "<i8",
+        D::U8 => "|u1",
+        d => d.name(),
+    }
+    .to_string()
 }
 
 impl NpyFile {
     pub fn open(path: &Path) -> Result<Self, Error> {
-        let file = File::open(path)?;
-        let mut pre = [0u8; 12];
-        file.read_exact_at(&mut pre, 0)?;
-        if &pre[..6] != b"\x93NUMPY" {
-            return Err(Error::Format(format!("{}: not npy", path.display())));
-        }
-        let (hlen, hs) = if pre[6] == 1 { (u16::from_le_bytes([pre[8], pre[9]]) as usize, 10) } else { (u32::from_le_bytes([pre[8], pre[9], pre[10], pre[11]]) as usize, 12) };
-        let mut hb = vec![0u8; hlen];
-        file.read_exact_at(&mut hb, hs as u64)?;
-        let h = String::from_utf8_lossy(&hb).to_string();
-        let descr = h.split("'descr':").nth(1).and_then(|s| s.split('\'').nth(1)).unwrap_or("").to_string();
-        let fortran = h.contains("'fortran_order': True");
-        let shp = h.split("'shape':").nth(1).and_then(|s| s.split('(').nth(1)).and_then(|s| s.split(')').next()).unwrap_or("");
-        let shape = shp.split(',').filter_map(|t| t.trim().parse().ok()).collect();
-        Ok(Self { path: path.to_path_buf(), file, shape, descr, offset: (hs + hlen) as u64, fortran })
+        let rows = hasty_value::store::RowFile::open(path).map_err(|e| Error::Format(format!("{}: {e}", path.display())))?;
+        let fortran = rows.order.is_f();
+        // numpy's shape (Fortran files: reversed C-order shape), as the npy header states it
+        let shape: Vec<usize> = if fortran { rows.shape.iter().rev().copied().collect() } else { rows.shape.clone() };
+        Ok(Self { path: rows.path.clone(), descr: descr_of(rows.dtype), shape, fortran, rows })
     }
 
     pub fn numel(&self) -> usize {
         self.shape.iter().product()
     }
 
-    fn elem(&self) -> usize {
-        match self.descr.as_str() {
-            "<c8" | "<f8" => 8,
-            "<f4" => 4,
-            "<c16" => 16,
-            d => panic!("{}: dtype {d}", self.path.display()),
-        }
+    /// the file is a compressed `.hv`
+    pub fn is_hv(&self) -> bool {
+        self.rows.is_hv()
     }
 
     fn read_raw(&self, start: usize, out: &mut [u8]) -> Result<(), Error> {
-        let e = self.elem();
-        if start * e + out.len() > self.numel() * e {
-            return Err(Error::Format(format!("{}: read past the end", self.path.display())));
-        }
-        self.file.read_exact_at(out, self.offset + (start * e) as u64)?;
-        Ok(())
+        self.rows.read_elems(start, out).map_err(|e| Error::Format(format!("{}: {e}", self.path.display())))
     }
 
     /// complex64 elements [start, start + out.len())

@@ -10,9 +10,13 @@
 
 use std::path::PathBuf;
 
-use hasty_phantom::volume::write_npy;
 use hasty_recon::data::read_npy;
 use hasty_recon::motion::{fit_shared, warp};
+
+/// float32 map (Fortran order): `hasty_value::store` image policy → `<name>.hv` (research/io_policy.md)
+fn save_f4(path: &std::path::Path, shape: &[usize], v: &[f32]) {
+    hasty_value::store::save_slice(path, shape, hasty_value::Order::F, v, &hasty_value::Save::image()).unwrap();
+}
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -69,7 +73,7 @@ fn main() {
         t0.elapsed().as_secs_f64()
     );
     let smm: Vec<f32> = (0..3).flat_map(|a| s[a * nv..(a + 1) * nv].iter().map(|x| (x * res * 1e3) as f32).collect::<Vec<_>>()).collect();
-    write_npy(&run.join("motion_S_mm.npy"), "<f4", &[dims[0], dims[1], dims[2], 3], true, &smm.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    save_f4(&run.join("motion_S_mm.npy"), &[dims[0], dims[1], dims[2], 3], &smm);
     let mut pred = Vec::with_capacity(nb * nv);
     let mut meas = Vec::with_capacity(nb * nv);
     let mut per_bin = vec![];
@@ -86,7 +90,7 @@ fn main() {
         pred.extend(p);
         meas.extend(ims[b].iter().copied());
     }
-    let wf = |name: &str, v: &[f32]| write_npy(&run.join(name), "<f4", &[dims[0], dims[1], dims[2], nb], true, &v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    let wf = |name: &str, v: &[f32]| save_f4(&run.join(name), &[dims[0], dims[1], dims[2], nb], v);
     wf("motion_pred.npy", &pred);
     wf("motion_bins.npy", &meas);
 
