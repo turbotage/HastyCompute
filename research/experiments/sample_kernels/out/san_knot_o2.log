@@ -1,0 +1,5 @@
+=== san_knot_o2: env [HASTY_SEG_KV=1 HASTY_NVRTC_LINEINFO=1] memcheck --mode base --knot --m 200000 --ncb 10 --nseg 10 --order 2 (Thu Nov 19 02:50:18 PM CET 2026)
+========= COMPUTE-SANITIZER
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 200000
+trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  engine points 0.2 s, grid [200, 200, 200]

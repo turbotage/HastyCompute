@@ -3,3 +3,5 @@
 device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 200000
 trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
   engine points 0.7 s, grid [200, 200, 200]
+  base (today's tile kernels, autotuned 518 s): forward 877.68 ms TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 2, chunk: 64, max_item: 1024, acb: 1, fsb: 4, fcb: 1, kv: 1 }, adjoint 1545.93 ms TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 64, max_item: 1024, acb: 1, fsb: 4, fcb: 1, kv: 1 } (default TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 } / TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 })
+========= ERROR SUMMARY: 0 errors
