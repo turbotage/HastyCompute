@@ -55,6 +55,8 @@ struct Args {
     tune: String,
     json: Option<String>,
     fixed: Option<String>,
+    /// fwd: time, check and log every candidate (not only each design's best)
+    each: bool,
 }
 
 fn args() -> Args {
@@ -73,6 +75,7 @@ fn args() -> Args {
         tune: get("--tune").unwrap_or("quick".into()),
         json: get("--json"),
         fixed: get("--fixed"),
+        each: v.iter().any(|x| x == "--each"),
     }
 }
 
@@ -150,7 +153,9 @@ fn es5(z: f32, beta: f64) -> [f64; 5] {
 }
 
 /// per-sample f64 weights over the W^3 support (order 0 or 2, the kernels' formulas) and the support corner
-fn weights(sc: [f32; 3], d: &[f64; 6], order: u32, beta: f64, nf: usize) -> ([usize; 3], Vec<(f64, f64)>) {
+/// order 3: plus the degree-3 (real, + hc wy_b wz_{3-a-b}) and degree-4 (imaginary, − hc wy_b wz_{4-a-b}) terms of
+/// segnufft_knot.cu stage_weights_hk, hc = the sample's 25 coefficients (degree 3 then 4, a outer, b inner)
+fn weights(sc: [f32; 3], d: &[f64; 6], order: u32, beta: f64, nf: usize, hc: Option<&[f64; 25]>) -> ([usize; 3], Vec<(f64, f64)>) {
     let mut k = [[[0f64; W]; 5]; 3];
     let mut c0 = [0usize; 3];
     for a in 0..3 {
@@ -176,7 +181,7 @@ fn weights(sc: [f32; 3], d: &[f64; 6], order: u32, beta: f64, nf: usize) -> ([us
     for tz in 0..W {
         for ty in 0..W {
             let (wy, wz) = ([0, 1, 2, 3, 4].map(|q| k[1][q][ty]), [0, 1, 2, 3, 4].map(|q| k[2][q][tz]));
-            let (mut r, mut qq) = ([0f64; 5], [0f64; 3]);
+            let (mut r, mut qq) = ([0f64; 5], [0f64; 5]);
             r[0] = wy[0] * wz[0];
             if order >= 2 {
                 qq[0] = d[1] * wy[2] * wz[0] + d[2] * wy[0] * wz[2] + d[5] * wy[1] * wz[1];
@@ -190,9 +195,24 @@ fn weights(sc: [f32; 3], d: &[f64; 6], order: u32, beta: f64, nf: usize) -> ([us
                     }
                 }
             }
+            if let (true, Some(hc)) = (order >= 3, hc) {
+                let mut j = 0;
+                for a in 0..=3 {
+                    for b in 0..=3 - a {
+                        r[a] += hc[j] * wy[b] * wz[3 - a - b];
+                        j += 1;
+                    }
+                }
+                for a in 0..=4 {
+                    for b in 0..=4 - a {
+                        qq[a] -= hc[j] * wy[b] * wz[4 - a - b];
+                        j += 1;
+                    }
+                }
+            }
             for tx in 0..W {
                 let wr: f64 = if order >= 2 { (0..5).map(|a| k[0][a][tx] * r[a]).sum() } else { k[0][0][tx] * r[0] };
-                let wi: f64 = if order >= 2 { (0..3).map(|a| k[0][a][tx] * qq[a]).sum() } else { 0.0 };
+                let wi: f64 = if order >= 2 { (0..5).map(|a| k[0][a][tx] * qq[a]).sum() } else { 0.0 };
                 w[(tz * W + ty) * W + tx] = (wr, wi);
             }
         }
@@ -206,6 +226,10 @@ struct Problem {
     sc: Vec<[f32; 3]>, // grid coordinates, original order
     d: Vec<[f32; 6]>,  // ΔC (kernel-argument units), original order
     a: Vec<C32>,       // [j][l], original order
+    /// order 3: per-sample u (float4, original order) and H' (4 x 25, q-major), hc_ja = Σ_q u_jq H'_qa (as the engine's
+    /// uw / htab)
+    u: Vec<[f32; 4]>,
+    htab: Vec<f32>,
 }
 
 /// per-sample device arrays in sorted order; depend only on (home tile dims, rx), so all (smax, sb) item lists of one
@@ -219,6 +243,8 @@ struct SBufs {
     dco: CudaSlice<f32>,
     acf: CudaSlice<C32>,
     perm: CudaSlice<u32>,
+    /// order 3 (vs): u in the sorted order (float4 per sample; 4 floats when unused)
+    uw: CudaSlice<f32>,
 }
 
 struct Sorted {
@@ -263,7 +289,7 @@ fn sort(st: &Arc<CudaStream>, p: &Problem, td: [usize; 3], smax: usize, sb: usiz
             }
             let ns = p.a.len() / m;
             let acf: Vec<C32> = perm.iter().flat_map(|&j| (0..ns).map(move |l| (j as usize, l))).map(|(j, l)| p.a[j * ns + l]).collect();
-            let b = Arc::new(SBufs { td, rx, pos: st.clone_htod(&pos).unwrap(), dco: st.clone_htod(&dco).unwrap(), acf: st.clone_htod(&acf).unwrap(), perm: st.clone_htod(&perm).unwrap(), keys, perm_h: perm });
+            let b = Arc::new(SBufs { td, rx, pos: st.clone_htod(&pos).unwrap(), dco: st.clone_htod(&dco).unwrap(), acf: st.clone_htod(&acf).unwrap(), perm: st.clone_htod(&perm).unwrap(), uw: st.alloc_zeros::<f32>(4).unwrap(), keys, perm_h: perm });
             cache.push(b.clone());
             b
         }
@@ -354,7 +380,8 @@ fn sort_vs(st: &Arc<CudaStream>, p: &Problem, td: [usize; 3], smax: usize, cache
             }
             let ns = p.a.len() / m;
             let acf: Vec<C32> = perm.iter().flat_map(|&j| (0..ns).map(move |l| (j as usize, l))).map(|(j, l)| p.a[j * ns + l]).collect();
-            let b = Arc::new(SBufs { td, rx: marker, pos: st.clone_htod(&pos).unwrap(), dco: st.clone_htod(&dco).unwrap(), acf: st.clone_htod(&acf).unwrap(), perm: st.clone_htod(&perm).unwrap(), keys, perm_h: perm });
+            let uw: Vec<f32> = if p.u.is_empty() { vec![0f32; 4] } else { perm.iter().flat_map(|&j| p.u[j as usize]).collect() };
+            let b = Arc::new(SBufs { td, rx: marker, pos: st.clone_htod(&pos).unwrap(), dco: st.clone_htod(&dco).unwrap(), acf: st.clone_htod(&acf).unwrap(), perm: st.clone_htod(&perm).unwrap(), uw: st.clone_htod(&uw).unwrap(), keys, perm_h: perm });
             cache.push(b.clone());
             b
         }
@@ -459,6 +486,18 @@ struct Cfg {
     nwc: usize,
     nws: usize,
     vxpad: usize,
+    /// vs tunables of research/sample_kernels.md §13: VT (per-(sample, plane) weight table, order ≥ 2), VSHR (half 1
+    /// hands its evicted row to half 0 by SHFL), VPF (next window row one step ahead), VS2 (two samples per iteration,
+    /// order 0), VPT (parallel range-table build); `minb` doubles as VMINB for vs; carve = preferred shared-memory
+    /// carve-out in % (driver attribute; −1 = default)
+    vt: usize,
+    shr: usize,
+    pf: usize,
+    s2: usize,
+    pt: usize,
+    carve: i32,
+    /// vt: software-pipelined table build (VTP, §13)
+    vtp: usize,
 }
 
 fn sw(order: u32, nseg: usize) -> usize {
@@ -472,6 +511,10 @@ fn sw_a(order: u32, nseg: usize, acfg: usize) -> usize {
 fn vs_sw(c: &Cfg, order: u32) -> usize {
     let kxn = if c.vxpad == 1 { c.tt + W - 1 } else { W };
     let kxs = (kxn + 2).div_ceil(4) * 4;
+    if c.vt == 1 {
+        // §13.1 record: kx 60, wy/wz 80 + 20, e/d 24 (+ hc 28 at order 3), ox/oy/oz 4
+        return if order >= 3 { 216 } else { 188 };
+    }
     let sw0 = if order >= 2 { 5 * kxs + 56 + 52 + 15 + 6 } else { 2 * kxs + 8 + 10 };
     (sw0 + 2).div_ceil(4) * 4
 }
@@ -479,7 +522,8 @@ fn smem(c: &Cfg, order: u32, nseg: usize) -> usize {
     if c.halo == 4 {
         // vs: records + range table (NPLM x NCLS words) + accumulators (nwc x 2 planes of SMAX * 16 + 16 floats)
         let tab = ((c.tz + W - 1) * c.tt * c.ty * 4 + 15) & !15;
-        return c.smax * vs_sw(c, order) * 4 + tab + c.nwc * 2 * (c.smax * 16 + 16) * 4;
+        // vt: + per warp a double-buffered 10 x 10 complex weight table (1600 B)
+        return c.smax * vs_sw(c, order) * 4 + tab + c.nwc * 2 * (c.smax * 16 + 16) * 4 + if c.vt == 1 { c.nwc * c.nws * 1600 } else { 0 };
     }
     let hw = c.tt + W - 1;
     if c.halo == 3 {
@@ -509,12 +553,12 @@ fn source(c: &Cfg, a: &Args, beta: f64) -> (String, String) {
         if c.halo >= 3 { 1 } else { c.sb },
         if c.halo >= 3 { 1 } else { c.rx }
     );
-    let src = if c.halo == 4 { format!("#define VS 1\n#define TX {}\n#define TY {}\n#define TZ {}\n#define NWC {}\n#define NWS {}\n#define VXPAD {}\n{src}", c.tt, c.ty, c.tz, c.nwc, c.nws, c.vxpad) } else { src };
+    let src = if c.halo == 4 { format!("#define VS 1\n#define TX {}\n#define TY {}\n#define TZ {}\n#define NWC {}\n#define NWS {}\n#define VXPAD {}\n#define VT {}\n#define VSHR {}\n#define VPF {}\n#define VS2 {}\n#define VPT {}\n#define VMINB {}\n#define VTP {}\n{src}", c.tt, c.ty, c.tz, c.nwc, c.nws, c.vxpad, c.vt, c.shr, c.pf, c.s2, c.pt, c.minb, c.vtp) } else { src };
     let src = if c.halo == 3 { format!("#define PS 1\n#define TX {}\n#define TY {}\n#define TZ {}\n#define NCG {}\n#define FC {}\n#define FSB {}\n#define PS_ACFG {}\n#define PS_PFS {}\n#define PS_MINB {}\n{src}", c.tt, c.ty, c.tz, c.tps, c.ch / c.tps, c.sb, c.acfg, c.pfs, c.minb) } else { src };
     // PG_DEFS=A,B: extra defines (timing ablations of pg_fwd_ps, e.g. PS_NOLOAD,PS_NOSYNC; research/sample_kernels.md §11)
     let pd = pg_defs();
     let src = format!("{}{src}", pd.iter().map(|d| format!("#define {d} 1\n")).collect::<String>());
-    let name = format!("proto_gather_o{}_c{}_l{}_h{}_t{}_ch{}_p{}_n{}_s{}_pad{}_sb{}_rx{}_y{}_z{}{}{}", a.order, a.ncb, a.nseg, c.halo, c.tt, c.ch, c.tps, c.nt, c.smax, c.padc, c.sb, c.rx, c.ty, c.tz, format!("{}{}{}", if c.acfg == 1 { "_acfg" } else { "" }, if c.pfs == 1 { "_pfs" } else { "" }, if c.minb > 0 { format!("_mb{}", c.minb) } else { String::new() }) + &if c.halo == 4 { format!("_vs{}_{}_{}", c.nwc, c.nws, c.vxpad) } else { String::new() }, pd.iter().map(|d| format!("_{}", d.to_lowercase())).collect::<String>());
+    let name = format!("proto_gather_o{}_c{}_l{}_h{}_t{}_ch{}_p{}_n{}_s{}_pad{}_sb{}_rx{}_y{}_z{}{}{}", a.order, a.ncb, a.nseg, c.halo, c.tt, c.ch, c.tps, c.nt, c.smax, c.padc, c.sb, c.rx, c.ty, c.tz, format!("{}{}{}", if c.acfg == 1 { "_acfg" } else { "" }, if c.pfs == 1 { "_pfs" } else { "" }, if c.minb > 0 && c.halo == 3 { format!("_mb{}", c.minb) } else { String::new() }) + &if c.halo == 4 { format!("_vs{}_{}_{}{}", c.nwc, c.nws, c.vxpad, if c.vt + c.shr + c.pf + c.s2 + c.pt + c.minb + c.vtp > 0 { format!("_t{}{}{}{}{}m{}p{}", c.vt, c.shr, c.pf, c.s2, c.pt, c.minb, c.vtp) } else { String::new() }) } else { String::new() }, pd.iter().map(|d| format!("_{}", d.to_lowercase())).collect::<String>());
     (name, src)
 }
 
@@ -532,6 +576,43 @@ fn owns(c: &Cfg, a: &Args) -> bool {
 
 fn pg_defs() -> Vec<String> {
     std::env::var("PG_DEFS").unwrap_or_default().split(',').filter(|d| !d.is_empty()).map(|d| d.trim().to_string()).collect()
+}
+
+/// second autotune stage of vs (§13): the kept tunables on the best shape of the first stage. Order 0: VSHR, VPT,
+/// VS2, VPF and combinations (each within ±5 % alone, case-dependent); order >= 2 (vt): VTP, VSHR, VPT.
+fn vs_refine(b: &Cfg, order: u32) -> Vec<Cfg> {
+    let combos: &[(usize, usize, usize, usize, usize)] = if order >= 2 && b.vt == 1 {
+        // (shr, pt, s2, pf, vtp)
+        &[(1, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 0, 0, 1), (1, 0, 0, 0, 1), (1, 1, 0, 0, 1), (1, 1, 0, 0, 0)]
+    } else if order >= 2 {
+        &[(1, 0, 0, 0, 0), (0, 1, 0, 0, 0), (1, 1, 0, 0, 0)]
+    } else {
+        &[(1, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 1, 0, 0), (0, 0, 0, 1, 0), (0, 1, 1, 0, 0), (1, 1, 0, 0, 0), (1, 1, 1, 0, 0), (1, 0, 0, 1, 0), (1, 1, 1, 1, 0)]
+    };
+    combos.iter().map(|&(shr, pt, s2, pf, vtp)| Cfg { shr, pt, s2, pf, vtp, ..*b }).collect()
+}
+
+/// one `--fixed` vs configuration: tx,ty,tz,smax,nwc,nws[,vxpad][,key=value ...]
+fn parse_vs(fx: &str) -> Cfg {
+    let toks: Vec<&str> = fx.split(',').map(|t| t.trim()).collect();
+    let v: Vec<usize> = toks.iter().filter(|t| !t.contains('=')).map(|t| t.parse().unwrap()).collect();
+    let (nwc, nws) = (v[4], v[5]);
+    let mut c = Cfg { halo: 4, tt: v[0], ty: v[1], tz: v[2], smax: v[3], nwc, nws, vxpad: v.get(6).copied().unwrap_or(0), ch: 16 * nwc, tps: 1, nt: 32 * nwc * nws, padc: 0, sb: 0, rx: 0, acfg: 0, pfs: 0, minb: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 };
+    for t in toks.iter().filter(|t| t.contains('=')) {
+        let (k, val) = t.split_once('=').unwrap();
+        match k {
+            "vt" => c.vt = val.parse().unwrap(),
+            "shr" => c.shr = val.parse().unwrap(),
+            "pf" => c.pf = val.parse().unwrap(),
+            "s2" => c.s2 = val.parse().unwrap(),
+            "pt" => c.pt = val.parse().unwrap(),
+            "minb" => c.minb = val.parse().unwrap(),
+            "carve" => c.carve = val.parse().unwrap(),
+            "vtp" => c.vtp = val.parse().unwrap(),
+            _ => panic!("--fixed vs: unknown key {k}"),
+        }
+    }
+    c
 }
 
 fn divisors(n: usize) -> Vec<usize> {
@@ -560,7 +641,7 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
                                 }
                                 for padc in if full { vec![0usize, 2] } else { vec![0] } {
                                     for (sb, rx) in if halo == 1 { vec![(1usize, 1usize), (2, 2), (4, 2)] } else { vec![(1, 1)] } {
-                                    let c = Cfg { halo, tt, ch, tps, nt, smax, padc, sb, rx, ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0 };
+                                    let c = Cfg { halo, tt, ch, tps, nt, smax, padc, sb, rx, ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 };
                                     if smem(&c, a.order, a.nseg) <= smax_opt && (ch % 2 == 0 || padc == 0) && tt % rx == 0 {
                                         v.push(c);
                                     }
@@ -613,7 +694,7 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
                                 }
                                 for &acfg in acfgs {
                                 for &pfs in pfss {
-                                let c = Cfg { halo: 3, tt: tx, ch, tps: ncg, nt, smax: nt / ncg * fsb, padc: 0, sb: fsb, rx: 1, ty, tz, acfg, pfs, minb: 0, nwc: 0, nws: 0, vxpad: 0 };
+                                let c = Cfg { halo: 3, tt: tx, ch, tps: ncg, nt, smax: nt / ncg * fsb, padc: 0, sb: fsb, rx: 1, ty, tz, acfg, pfs, minb: 0, nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 };
                                 // planes within 64 KB; per-thread plane prefetch ≤ 16 float4
                                 let plane = (tx + W - 1) * (ty + W - 1) * ch * 8;
                                 if smem(&c, a.order, a.nseg) <= smax_opt && plane <= 32 << 10 && plane / 16 <= 16 * nt {
@@ -631,8 +712,12 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
             // value-stationary rows (§12): footprint tx x ty (the L2 staging budget wants ≈ 16 cells), tz, items of
             // smax, nwc channel groups x nws window splits per block
             let g = nch.div_ceil(16);
-            let tiles: &[[usize; 3]] = if full { &[[2, 8, 8], [2, 8, 16], [4, 4, 8], [4, 4, 16], [2, 4, 8], [2, 4, 16], [1, 8, 16], [4, 8, 8], [1, 16, 8]] } else if a.order >= 2 { &[[2, 4, 8], [2, 8, 8], [4, 4, 8]] } else { &[[2, 8, 8], [2, 8, 16], [4, 4, 8], [4, 4, 16], [2, 4, 16]] };
+            let tiles: &[[usize; 3]] = if full { &[[2, 8, 8], [2, 8, 16], [4, 4, 8], [4, 4, 16], [2, 4, 8], [2, 4, 16], [1, 8, 16], [4, 8, 8], [1, 16, 8]] } else if a.order >= 2 { &[[2, 4, 8], [2, 8, 8], [4, 4, 8], [4, 4, 16], [2, 4, 16]] } else { &[[2, 8, 8], [2, 8, 16], [4, 4, 8], [4, 4, 16], [2, 4, 16]] };
             let smaxs: &[usize] = if a.order >= 2 { &[16, 32, 48] } else if full { &[32, 48, 64, 96, 128] } else { &[32, 64, 96, 128] };
+            // order >= 2: the per-lane x-moment body (vt 0, §12) and the shared weight table (vt 1, §13); order 3: vt only
+            let vts: &[usize] = if a.order >= 3 { &[1] } else if a.order == 2 { &[0, 1] } else { &[0] };
+            for &vt in vts {
+            let smaxs: &[usize] = if vt == 1 { &[16, 32, 48, 64] } else { smaxs };
             for &[tx, ty, tz] in tiles {
                 for &smax in smaxs {
                     // channel groups per block: small (more blocks) or all (plain stores)
@@ -644,11 +729,11 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
                             if ty % nws != 0 || 32 * nwc * nws > ntmax {
                                 continue;
                             }
-                            for vxpad in if full || a.order >= 2 { vec![0usize, 1] } else { vec![0] } {
+                            for vxpad in if vt == 1 { vec![0usize] } else if full || a.order >= 2 { vec![0usize, 1] } else { vec![0] } {
                                 if vxpad == 1 && tx == 1 {
                                     continue;
                                 }
-                                let c = Cfg { halo: 4, tt: tx, ch: 16 * nwc, tps: 1, nt: 32 * nwc * nws, smax, padc: 0, sb: 0, rx: 0, ty, tz, acfg: 0, pfs: 0, minb: 0, nwc, nws, vxpad };
+                                let c = Cfg { halo: 4, tt: tx, ch: 16 * nwc, tps: 1, nt: 32 * nwc * nws, smax, padc: 0, sb: 0, rx: 0, ty, tz, acfg: 0, pfs: 0, minb: 0, nwc, nws, vxpad, vt, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 };
                                 if smem(&c, a.order, a.nseg) <= smax_opt {
                                     v.push(c);
                                 }
@@ -656,6 +741,7 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
                         }
                     }
                 }
+            }
             }
         }
         _ => {
@@ -669,7 +755,7 @@ fn candidates(a: &Args, design: &str, smax_opt: usize) -> Vec<Cfg> {
                         for &nt in nts {
                             for smax in if full { vec![32usize, 64, 128] } else { vec![64] } {
                                 for (sb, rx) in [(1usize, 1usize), (2, 2), (4, 2)] {
-                                    v.push(Cfg { halo: 0, tt, ch, tps, nt, smax, padc: 0, sb, rx, ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0 });
+                                    v.push(Cfg { halo: 0, tt, ch, tps, nt, smax, padc: 0, sb, rx, ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 });
                                 }
                             }
                         }
@@ -824,7 +910,14 @@ fn main() {
         let ph0 = vec![0f32; m];
         let tp = Instant::now();
         let tk: Vec<f32> = vec![0.25; m];
-        let pts = op.points(&st, [&c[0], &c[1], &c[2]], &tau, &ph0, &dcv, if knot { Some(&tk) } else { None }).unwrap();
+        // order 3: the degree-3/4 tables (points_hi: u SoA 4 x m, H' 4 x NHI; values only need to be finite)
+        let pts = if a.order >= 3 {
+            let uu: Vec<f32> = (0..4 * m).map(|_| u() as f32).collect();
+            let hh: Vec<f64> = (0..4 * hasty_nufft::NHI).map(|_| u() * 1e5).collect();
+            op.points_hi(&st, [&c[0], &c[1], &c[2]], &tau, &ph0, &dcv, &uu, &hh, if knot { Some(&tk) } else { None }).unwrap()
+        } else {
+            op.points(&st, [&c[0], &c[1], &c[2]], &tau, &ph0, &dcv, if knot { Some(&tk) } else { None }).unwrap()
+        };
         st.synchronize().unwrap();
         println!("  engine points {:.1} s, grid {:?}", tp.elapsed().as_secs_f64(), op.plan.nf);
         let def = (op.tiles_fwd, op.tiles_adj);
@@ -866,8 +959,10 @@ fn main() {
             }
             return;
         }
+        // LDSB_BLK=1: blocked address pattern (lane / (32 / ncg)) instead of interleaved (lane % ncg), §13
+        let blk: usize = std::env::var("LDSB_BLK").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
         for kf in [0usize, 4, 8, 16] {
-            let f = dev.load_function(&format!("proto_gather_ldsb_kf{kf}"), &format!("#define LDSB 1\n#define KF {kf}\n#define W 10\n#define BETA 1\n#define CORR 0\n#define NCB 1\n#define NSEG 1\n#define TT 4\n#define CH 1\n#define TPS 1\n#define NT 128\n#define SMAX 1\n{SRC}"), "pg_lds_bench", &CompileSettings::default()).unwrap();
+            let f = dev.load_function(&format!("proto_gather_ldsb_kf{kf}_b{blk}"), &format!("#define LDSB 1\n#define LDSBLK {blk}\n#define KF {kf}\n#define W 10\n#define BETA 1\n#define CORR 0\n#define NCB 1\n#define NSEG 1\n#define TT 4\n#define CH 1\n#define TPS 1\n#define NT 128\n#define SMAX 1\n{SRC}"), "pg_lds_bench", &CompileSettings::default()).unwrap();
             for k in [1usize, 2, 3, 6] {
                 for ncg in [1i32, 2, 4, 8, 32] {
                     let cfg = LaunchConfig { grid_dim: ((nsm * k) as u32, 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 };
@@ -877,7 +972,7 @@ fn main() {
                     let per_sm_ns = lds / nsm as f64 / (ms * 1e6);
                     let ffma = lds * kf as f64 * 32.0 / (ms * 1e-3) / peak_fma;
                     println!("  LDSB kf {kf:>2} warps/SM {:>2} ncg {ncg:>2}: {ms:8.3} ms, {per_sm_ns:.3} warp-LDS.128 per SM per ns ({:.2} clk each at 2.79 GHz), FFMA {:.1} % of peak (device clock)", k * 8, 2.79 / per_sm_ns, 100.0 * ffma);
-                    json(serde_json::json!({"design": "ldsbench", "kf": kf, "warps_sm": k * 8, "ncg": ncg, "ms": ms, "lds_per_sm_ns": per_sm_ns, "ffma_frac": ffma, "tag": tag}));
+                    json(serde_json::json!({"design": "ldsbench", "kf": kf, "blk": blk, "warps_sm": k * 8, "ncg": ncg, "ms": ms, "lds_per_sm_ns": per_sm_ns, "ffma_frac": ffma, "tag": tag}));
                 }
             }
         }
@@ -891,7 +986,15 @@ fn main() {
         sc: kd.iter().map(|k| k.map(|v| { let mut g = ((v as f64 / (2.0 * std::f64::consts::PI)) * nf as f64).rem_euclid(nf as f64) as f32; if g >= nf as f32 { g -= nf as f32; } g })).collect(),
         d: (0..m).map(|_| [0; 6].map(|_| (u() * 0.1) as f32)).collect(),
         a: (0..m * a.nseg).map(|_| C32::new((u() * 2.0) as f32, (u() * 2.0) as f32)).collect(),
+        // order 3: |u| ≤ 0.5, |H'| ≤ 0.05 → |hc| ≲ 0.05 (the size of the ΔC terms)
+        u: if a.order >= 3 { (0..m).map(|_| [0; 4].map(|_| u() as f32)).collect() } else { Vec::new() },
+        htab: if a.order >= 3 { (0..100).map(|_| (u() * 0.1) as f32).collect() } else { Vec::new() },
     };
+    assert!(a.order <= 2 || (a.mode != "fwd" || a.designs.iter().all(|d| d == "vs")), "order 3: vs (vt) only");
+    let htab_d = st.clone_htod(&if p.htab.is_empty() { vec![0f32; 100] } else { p.htab.clone() }).unwrap();
+    let hi = a.order >= 3;
+    // hc of sample j (original order), f64 from the f32 inputs
+    let hc_of = |j: usize| -> [f64; 25] { std::array::from_fn(|k| (0..4).map(|q| p.u[j][q] as f64 * p.htab[q * 25 + k] as f64).sum()) };
     let ng = nf * nf * nf * nch;
     let dims = Dims { nf0: nf as i32, nf1: nf as i32, nf2: nf as i32 };
     let mi = m as i32;
@@ -921,6 +1024,10 @@ fn main() {
                 let name = match c.halo { 1 => "pg_fwd_halo", 0 => "pg_fwd_gm", 3 => "pg_fwd_ps", 4 => "pg_fwd_vs", _ => "pg_adj_sm" };
                 let f = match md.load_function(name) { Ok(f) => f, Err(e) => { println!("    function {name} {c:?}: {e:?}"); return None; } };
                 if let Err(e) = f.set_attribute(sys::CUfunction_attribute_enum::CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, smem(c, a.order, a.nseg) as i32) { println!("    smem {} B {c:?}: {e:?}", smem(c, a.order, a.nseg)); return None; }
+                if c.halo == 4 && c.carve >= 0 {
+                    // vs (§13): preferred shared-memory carve-out (percent of the unified L1 / shared memory)
+                    if let Err(e) = f.set_attribute(sys::CUfunction_attribute_enum::CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT, c.carve) { println!("    carve {} {c:?}: {e:?}", c.carve); return None; }
+                }
                 if c.halo == 0 {
                     // prefer L1 over shared memory
                     let _ = f.set_attribute(sys::CUfunction_attribute_enum::CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT, 0);
@@ -938,23 +1045,27 @@ fn main() {
         for design in &a.designs {
             let mut cs = candidates(&a, design, smax_opt);
             if let Some(fx) = a.fixed.as_ref().filter(|_| design == "vs") {
-                // tx,ty,tz,smax,nwc,nws[,vxpad]
-                let v: Vec<usize> = fx.split(',').map(|s| s.parse().unwrap()).collect();
-                let (nwc, nws) = (v[4], v[5]);
-                cs = vec![Cfg { halo: 4, tt: v[0], ty: v[1], tz: v[2], smax: v[3], nwc, nws, vxpad: v.get(6).copied().unwrap_or(0), ch: 16 * nwc, tps: 1, nt: 32 * nwc * nws, padc: 0, sb: 0, rx: 0, acfg: 0, pfs: 0, minb: 0 }];
+                // tx,ty,tz,smax,nwc,nws[,vxpad][,key=value ...] with keys vt, shr, pf, s2, pt, minb, carve (§13);
+                // several configurations separated by ';' (with --each every one is timed, checked and logged)
+                cs = fx.split(';').filter(|x| !x.trim().is_empty()).map(parse_vs).collect();
             } else if let Some(fx) = a.fixed.as_ref().filter(|_| design == "ps") {
                 // tx,ty,tz,ncg,fc,fsb,nt[,acfg]
                 let v: Vec<usize> = fx.split(',').map(|s| s.parse().unwrap()).collect();
-                cs = vec![Cfg { halo: 3, tt: v[0], ty: v[1], tz: v[2], tps: v[3], ch: v[3] * v[4], sb: v[5], nt: v[6], smax: v[6] / v[3] * v[5], padc: 0, rx: 1, acfg: v.get(7).copied().unwrap_or(0), pfs: v.get(8).copied().unwrap_or(0), minb: v.get(9).copied().unwrap_or(0), nwc: 0, nws: 0, vxpad: 0 }];
+                cs = vec![Cfg { halo: 3, tt: v[0], ty: v[1], tz: v[2], tps: v[3], ch: v[3] * v[4], sb: v[5], nt: v[6], smax: v[6] / v[3] * v[5], padc: 0, rx: 1, acfg: v.get(7).copied().unwrap_or(0), pfs: v.get(8).copied().unwrap_or(0), minb: v.get(9).copied().unwrap_or(0), nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 }];
             } else if let Some(fx) = &a.fixed {
                 let v: Vec<usize> = fx.split(',').map(|s| s.parse().unwrap()).collect();
-                cs = vec![Cfg { halo: if design == "halo" { 1 } else { 0 }, tt: v[0], ch: v[1], tps: v[2], nt: v[3], smax: v[4], padc: v[5], sb: v[6], rx: v[7], ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0 }];
+                cs = vec![Cfg { halo: if design == "halo" { 1 } else { 0 }, tt: v[0], ch: v[1], tps: v[2], nt: v[3], smax: v[4], padc: v[5], sb: v[6], rx: v[7], ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 }];
             }
             let tc = Instant::now();
-            let fs = compile_all(&cs);
+            let mut round = cs.clone();
+            let mut fs = compile_all(&round);
             println!("  {design}: {} candidates, compiled in {:.1} s", cs.len(), tc.elapsed().as_secs_f64());
             let mut best = (f32::INFINITY, cs[0]);
-            for (c, f) in cs.iter().zip(fs) {
+            // vs autotune in two stages (§13): the shape search with default tunables, then the tunable combinations
+            // (vs_refine) on the best shape
+            let refinable = design == "vs" && a.fixed.is_none() && !a.each;
+            for pass in 0..2 {
+            for (c, f) in round.iter().zip(fs) {
                 let Some(f) = f else { continue };
                 let isvs = c.halo == 4;
                 let so = match sorted.iter().position(|s| s.vs == isvs && s.td == tdims(c) && s.smax == c.smax && s.sb == c.sb && s.rx == c.rx) {
@@ -968,21 +1079,40 @@ fn main() {
                     if !own {
                         st.memset_zeros(&mut y).unwrap();
                     }
-                    unsafe { st.launch_builder(&f).arg(&sr.b.pos).arg(&sr.b.dco).arg(&sr.b.acf).arg(&sr.b.perm).arg(&sr.items).arg(&sr.units).arg(&grid).arg(&mut y).arg(&mi).arg(&dims).launch(cfg).unwrap() };
+                    {
+                    let mut lb = st.launch_builder(&f);
+                    lb.arg(&sr.b.pos).arg(&sr.b.dco).arg(&sr.b.acf).arg(&sr.b.perm).arg(&sr.items).arg(&sr.units).arg(&grid).arg(&mut y).arg(&mi).arg(&dims);
+                    if hi {
+                        lb.arg(&sr.b.uw).arg(&htab_d);
+                    }
+                    unsafe { lb.launch(cfg).unwrap() };
+                }
                 };
                 let ms = time(&mut run, if best.0.is_finite() { 2 } else { 1 }, 3.0 * best.0);
                 let regs = f.num_regs().unwrap_or(-1);
-                println!("    {design} t {:?} ch {:>3} tps {:>2} (fc {:>2}) nt {:>3} smax {:>3} sb {} rx {}{} smem {:>6} regs {regs:>3}: {ms:8.2} ms", tdims(c), c.ch, c.tps, c.ch / c.tps, c.nt, c.smax, c.sb, c.rx, format!("{}{}{}", if c.acfg == 1 { " acfg" } else { "" }, if c.pfs == 1 { " pfs" } else { "" }, if c.minb > 0 { format!(" minb {}", c.minb) } else { String::new() }) + &if c.halo == 4 { format!(" nwc {} nws {} vxpad {}", c.nwc, c.nws, c.vxpad) } else { String::new() }, smem(c, a.order, a.nseg));
+                println!("    {design} t {:?} ch {:>3} tps {:>2} (fc {:>2}) nt {:>3} smax {:>3} sb {} rx {}{} smem {:>6} regs {regs:>3}: {ms:8.2} ms", tdims(c), c.ch, c.tps, c.ch / c.tps, c.nt, c.smax, c.sb, c.rx, format!("{}{}{}", if c.acfg == 1 { " acfg" } else { "" }, if c.pfs == 1 { " pfs" } else { "" }, if c.minb > 0 && c.halo == 3 { format!(" minb {}", c.minb) } else { String::new() }) + &if c.halo == 4 { format!(" nwc {} nws {} vxpad {} vt {} vtp {} shr {} pf {} s2 {} pt {} minb {} carve {}", c.nwc, c.nws, c.vxpad, c.vt, c.vtp, c.shr, c.pf, c.s2, c.pt, c.minb, c.carve) } else { String::new() }, smem(c, a.order, a.nseg));
                 if ms < best.0 {
                     best = (ms, *c);
                 }
             }
-            best_all.push((design.clone(), best.0, best.1));
+            if pass == 0 && refinable {
+                round = vs_refine(&best.1, a.order);
+                fs = compile_all(&round);
+                println!("  {design}: refinement of the best shape, {} variants", round.len());
+            } else {
+                break;
+            }
+            }
+            if a.each {
+                best_all.extend(cs.iter().map(|c| (design.clone(), f32::NAN, *c)));
+            } else {
+                best_all.push((design.clone(), best.0, best.1));
+            }
         }
         // verify and time each design's best with full reps
         for (design, _, c) in &best_all {
             let fs = compile_all(&[*c]);
-            let f = fs[0].clone().unwrap();
+            let Some(f) = fs[0].clone() else { println!("  SKIP (compile / load failed) {c:?}"); continue; };
             let sr = sorted.iter().find(|s| s.vs == (c.halo == 4) && s.td == tdims(c) && s.smax == c.smax && s.sb == c.sb && s.rx == c.rx).unwrap();
             let cfg = LaunchConfig { grid_dim: (sr.nitems as u32, gridy(c, nch), 1), block_dim: (c.nt as u32, 1, 1), shared_mem_bytes: smem(c, a.order, a.nseg) as u32 };
             let own = owns(c, &a);
@@ -990,7 +1120,14 @@ fn main() {
                 if !own {
                     st.memset_zeros(&mut y).unwrap();
                 }
-                unsafe { st.launch_builder(&f).arg(&sr.b.pos).arg(&sr.b.dco).arg(&sr.b.acf).arg(&sr.b.perm).arg(&sr.items).arg(&sr.units).arg(&grid).arg(&mut y).arg(&mi).arg(&dims).launch(cfg).unwrap() };
+                {
+                    let mut lb = st.launch_builder(&f);
+                    lb.arg(&sr.b.pos).arg(&sr.b.dco).arg(&sr.b.acf).arg(&sr.b.perm).arg(&sr.items).arg(&sr.units).arg(&grid).arg(&mut y).arg(&mi).arg(&dims);
+                    if hi {
+                        lb.arg(&sr.b.uw).arg(&htab_d);
+                    }
+                    unsafe { lb.launch(cfg).unwrap() };
+                }
             };
             let ms = time(&mut run, a.reps, f32::INFINITY);
             // resources without the profiler: registers, local memory (spills), resident blocks per SM
@@ -1002,7 +1139,7 @@ fn main() {
             if c.halo == 4 {
                 let w = vs_work(&p, sr, c);
                 println!("  WORK vs: item fill {:.3}, samples active per (item, plane) {:.1}, bodies per (plane, window step) {:.1}, planes per item {:.1}, channel-lane efficiency {:.3}; FFMA-pipe use of issued work {:.1} %", w[0], w[1], w[2], w[3], w[4],
-                    100.0 * macs * fma_per_mac / (ms as f64 * 1e-3) / peak_fma / w[4] * if a.order >= 2 { 706.0 / 200.0 } else { 112.0 / 100.0 });
+                    100.0 * macs * fma_per_mac / (ms as f64 * 1e-3) / peak_fma / w[4] * if c.vt == 1 { if a.order >= 3 { 329.0 / 200.0 } else { 287.0 / 200.0 } } else if a.order >= 2 { 706.0 / 200.0 } else { 112.0 / 100.0 });
             }
             println!("  RES {design}: regs {regs}, local {lmem} B, smem {} B, blocks/SM {bps}, warps/SM {warps_sm} of 48", smem(c, a.order, a.nseg));
             if let Some(w) = &wk {
@@ -1025,7 +1162,8 @@ fn main() {
             let res: Vec<Vec<(f64, f64)>> = std::thread::scope(|scp| {
                 let hs: Vec<_> = (0..4).map(|t| { let (chk, p, a2) = (&chk, &p, &a); scp.spawn(move || chk.iter().skip(t).step_by(4).map(|&j| {
                     let dd = p.d[j].map(|v| v as f64);
-                    let (c0, w) = weights(p.sc[j], &dd, a2.order, beta, nf);
+                    let hcj = if a2.order >= 3 { Some(hc_of(j)) } else { None };
+                    let (c0, w) = weights(p.sc[j], &dd, a2.order, beta, nf, hcj.as_ref());
                     let mut out = vec![(0.0, 0.0); a2.ncb];
                     for tz in 0..W { for ty in 0..W { for tx in 0..W {
                         let (gx, gy, gz) = ((c0[0] + tx) % nf, (c0[1] + ty) % nf, (c0[2] + tz) % nf);
@@ -1085,7 +1223,7 @@ fn main() {
         let mut cs = candidates(&a, "smspread", smax_opt);
         if let Some(fx) = &a.fixed {
             let v: Vec<usize> = fx.split(',').map(|s| s.parse().unwrap()).collect();
-            cs = vec![Cfg { halo: 2, tt: v[0], ch: v[1], tps: v[2], nt: v[3], smax: v[4], padc: v[5], sb: v[6], rx: v[7], ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0 }];
+            cs = vec![Cfg { halo: 2, tt: v[0], ch: v[1], tps: v[2], nt: v[3], smax: v[4], padc: v[5], sb: v[6], rx: v[7], ty: 0, tz: 0, acfg: 0, pfs: 0, minb: 0, nwc: 0, nws: 0, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1, vtp: 0 }];
         }
         let fs = compile_all(&cs);
         let mut sorted: Vec<Sorted> = Vec::new();
@@ -1127,7 +1265,7 @@ fn main() {
                 let t: Vec<usize> = (0..3).map(|x| (q[x] + nf - c0[x]) % nf).collect();
                 if t.iter().all(|&v| v < W) {
                     let dd = p.d[j].map(|v| v as f64);
-                    let (_, w) = weights(p.sc[j], &dd, a.order, beta, nf);
+                    let (_, w) = weights(p.sc[j], &dd, a.order, beta, nf, None);
                     let wv = w[(t[2] * W + t[1]) * W + t[0]];
                     for ch in 0..nch {
                         let (cc, l) = (ch / a.nseg, ch % a.nseg);

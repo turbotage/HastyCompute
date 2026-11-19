@@ -1,0 +1,39 @@
+== seg_knot_kv
+test kv_2d_linear_cubic ... ok
+test kv_1d_cubic_orders ... ok
+test kv_split_lists ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+== seg_tile_block
+test static_blocked_and_ragged_shapes ... ok
+test balanced_batches_and_defaults_vs_one_coil_batches ... ok
+test blocked_shapes_split_lists ... ok
+test knot_blocked_and_ragged_shapes has been running for over 60 seconds
+test knot_blocked_and_ragged_shapes ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 198.86s
+== seg_stream
+test streamed_tables_joint_fat ... ok
+test packed_tables_match_resident ... ok
+test streamed_tables_match_resident ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.65s
+== seg_joint_chunks
+test joint_phi_gemm_chunks_and_inner_shapes ... FAILED
+thread 'joint_phi_gemm_chunks_and_inner_shapes' (872457) panicked at crates/hasty-nufft/tests/seg_joint_chunks.rs:181:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+error: test failed, to rerun pass `-p hasty-nufft --test seg_joint_chunks`
+== segnufft
+test segnufft_is_adjoint ... ok
+test segnufft_temporal_is_adjoint ... ok
+test segnufft_temporal_matches_direct_sum ... ok
+test segnufft_matches_direct_sum ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.90s
+== seg_knot
+test knot_major_linear_matches_interval_major ... ok
+test knot_major_cubic_matches_interval_major ... ok
+test knot_major_split_lists_match_interval_major ... ok
+test knot_major_order0_matches_interval_major ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.38s
+== seg_knot2d
+test knot2d_bins_match_reference ... ok
+test knot2d_split_lists_match_reference ... ok
+test knot2d_linear_match_reference ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s

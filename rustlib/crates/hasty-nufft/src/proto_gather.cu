@@ -825,6 +825,20 @@ extern "C" __global__ void PS_LB pg_fwd_ps(const float4* __restrict__ pos, const
 // block holds the whole coil, else one atomic per (sample, coil piece)). CORR 2: the same body with x-moments: per
 // (sample, plane) E_ab = e_ab wz_{4−a−b}(tz) (+ wz0 for the leading term) and Q coefficients, per row R_a = Σ_b E_ab
 // wy_b, Q_a; per derivative a: m_a = Σ_t kx_a(t) v, r += (R_a + i Q_a) m_a.
+//
+// Tunables of §13 (all default 0 = the §12 kernel):
+//   VT 1 (CORR >= 2, VXPAD 0; CORR 3 only with VT): per (sample, plane) the warp builds the 10 × 10 complex weights
+//        (lanes 0..29 = row × x group, terms of segnufft_knot.cu stage_weights / stage_weights_hk, wz folded in) into a
+//        warp-private double-buffered 800 B table; each lane reads its half's 50 weights as 25 broadcast LDS.128.
+//        CORR 3: + per-sample degree-3/4 coefficients hc = Σ_q uw_q htab_q (engine stage_hc_k), trailing kernel args.
+//   VTP 1 (with VT): software pipelining: the next sample's table is built (into the other buffer) during this
+//        sample's MACs, across class ranges of the plane.
+//   VSHR 1: half 1 hands the row it evicts (row st + 4) to half 0 by SHFL; half 0 loads only at the window start
+//        (L2 rows per plane and warp TY + 9 instead of 2 (TY + 4)); half 1's loads are predicated.
+//   VPF 1: the next window step's row is loaded one step ahead into HXV spare float2 registers.
+//   VS2 1 (CORR 0): two samples per inner iteration (two independent bodies).
+//   VPT 1: the range table is built in parallel (one thread per (plane, class), binary searches).
+//   VMINB n: __launch_bounds__(NTV, n) (register cap).
 #define HXV (TX + W - 1)
 #define NCLS (TX * TY)
 #define NPLM (TZ + W - 1)
@@ -833,8 +847,35 @@ extern "C" __global__ void PS_LB pg_fwd_ps(const float4* __restrict__ pos, const
 #ifndef VXPAD
 #define VXPAD 0
 #endif
+#ifndef VT
+#define VT 0
+#endif
+#ifndef VSHR
+#define VSHR 0
+#endif
+#ifndef VTP
+#define VTP 0
+#endif
+#ifndef VPF
+#define VPF 0
+#endif
+#ifndef VS2
+#define VS2 0
+#endif
+#ifndef VPT
+#define VPT 0
+#endif
 #if TY % NWS != 0
 #error "vs: NWS must divide TY"
+#endif
+#if VT && (CORR < 2 || VXPAD)
+#error "vs: VT needs CORR >= 2 and VXPAD 0"
+#endif
+#if CORR >= 3 && !VT
+#error "vs: CORR 3 only with VT"
+#endif
+#if VS2 && CORR >= 2
+#error "vs: VS2 is order 0 only"
 #endif
 #if CORR >= 2
 #define VK 5
@@ -848,6 +889,22 @@ extern "C" __global__ void PS_LB pg_fwd_ps(const float4* __restrict__ pos, const
 #endif
 #define KXS (((KXN + 2) + 3) / 4 * 4)   // x row stride: KXN weights, oz (int bits), o0: φy of row 4 of the half
 #define VR_KX 0
+#if VT
+// kx[a][12] (t padded to 12), wy[i][8] = wy_0..4(i), wz_0..2(i); wz_3..4 [i][2]; e[15], d[6] (+3); CORR 3 hc[25] (+3)
+#define VR_WY 60
+#define VR_WZH 140
+#define VR_E 160
+#define VR_D (VR_E + 15)
+#if CORR >= 3
+#define VR_H 184
+#define VSW0 212
+#else
+#define VSW0 184
+#endif
+#define VR_M VSW0                        // ox, oy, oz (int), pad
+#define VR_OZ (VR_M + 2)
+#define VSW (VSW0 + 4)
+#else
 #if CORR >= 2
 #define VR_WY (VK * KXS)                 // [h][28]: wy_b(5h + i) at i * 5 + b
 #define VR_WZ (VR_WY + 56)               // [tz][5] (+2 pad)
@@ -860,22 +917,88 @@ extern "C" __global__ void PS_LB pg_fwd_ps(const float4* __restrict__ pos, const
 #define VSW0 (VR_WZ + 10)
 #endif
 #define VR_M VSW0                        // ox, oy (int)
+#define VR_OZ (VR_KX + KXN)
 #define VSW ((VSW0 + 2 + 3) / 4 * 4)
+#endif
 #define APL (SMAX * 16 + 16)             // accumulator plane stride (re / im planes 16 banks apart)
 #define NOXV (VXPAD ? 1 : TX)
-extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+#if CORR >= 3
+#define VHI_ARGS , const float4* __restrict__ uw, const float* __restrict__ htab
+#else
+#define VHI_ARGS
+#endif
+// v = pr ? *p : v, as one predicated non-coherent global load (lanes without pr issue no memory request)
+__device__ __forceinline__ void ldg2_if(const float2* p, bool pr, float2& v) {
+  asm("{\n\t.reg .pred q;\n\t.reg .u64 g;\n\tsetp.ne.b32 q, %3, 0;\n\tcvta.to.global.u64 g, %2;\n\t@q ld.global.nc.v2.f32 {%0, %1}, [g];\n\t}"
+      : "+f"(v.x), "+f"(v.y) : "l"(p), "r"((int)pr));
+}
+// VMINB > 0: __launch_bounds__ minimum resident blocks (register cap 64 K / (VMINB · NTV)), for the small-window
+// variants that should fit 12–16 warps per SM
+#ifndef VMINB
+#define VMINB 0
+#endif
+#if VMINB > 0
+#define VS_LB __launch_bounds__(NTV, VMINB)
+#else
+#define VS_LB __launch_bounds__(NTV)
+#endif
+extern "C" __global__ void VS_LB pg_fwd_vs(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
                                                             const unsigned int* __restrict__ perm, const Item* __restrict__ items, const unsigned int* __restrict__ units,
-                                                            const cx* __restrict__ grid, cx* __restrict__ y, int M, Dims d) {
+                                                            const cx* __restrict__ grid, cx* __restrict__ y, int M, Dims d VHI_ARGS) {
   extern __shared__ __align__(16) unsigned char smem[];
   float* S = reinterpret_cast<float*>(smem);
   unsigned int* tab = reinterpret_cast<unsigned int*>(smem + (size_t)SMAX * VSW * 4);
   float* accb = reinterpret_cast<float*>(smem + (size_t)SMAX * VSW * 4 + (((size_t)NPLM * NCLS * 4 + 15) & ~(size_t)15));
+#if VT
+  float4* tabw_all = reinterpret_cast<float4*>(accb + (size_t)NWC * 2 * APL);   // NWV × 2 × 50 float4
+#endif
   const Item it = items[blockIdx.x];
   const int ntx = (d.nf0 + TX - 1) / TX, nty = (d.nf1 + TY - 1) / TY;
   const int o0 = (it.tile % ntx) * TX, o1 = ((it.tile / ntx) % nty) * TY, o2 = (it.tile / (ntx * nty)) * TZ;
   const int zlo = it.ufirst & 0xffff, npl = (it.ufirst >> 16) - zlo + W;
   const int cnt = it.count;
   // ---- stage the sample records
+#if VT
+  for (int q = threadIdx.x; q < cnt * 3 * W; q += NTV) {
+    const int s = q / (3 * W), a = (q / W) % 3, t = q % W;
+    const float4 r = pos[it.first + s];
+    const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+    const int i0 = (int)ceilf(sc - (float)W * 0.5f);
+    const int n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2), og = a == 0 ? o0 : (a == 1 ? o1 : o2);
+    const int off = wrapi(i0, n) - og;
+    float* P = S + (size_t)s * VSW;
+    float o[5];
+    kern(((float)(i0 + t) - sc) * (2.f / (float)W), o);
+    if (a == 0) {
+      #pragma unroll
+      for (int k = 0; k < 5; ++k) P[VR_KX + k * 12 + t] = o[k];
+      if (t < 2) {
+        #pragma unroll
+        for (int k = 0; k < 5; ++k) P[VR_KX + k * 12 + 10 + t] = 0.f;
+      }
+    } else if (a == 1) {
+      #pragma unroll
+      for (int k = 0; k < 5; ++k) P[VR_WY + t * 8 + k] = o[k];
+    } else {
+      #pragma unroll
+      for (int k = 0; k < 3; ++k) P[VR_WY + t * 8 + 5 + k] = o[k];
+      P[VR_WZH + t * 2] = o[3]; P[VR_WZH + t * 2 + 1] = o[4];
+    }
+    if (t == 0) reinterpret_cast<int*>(P)[VR_M + a] = off;
+  }
+#if CORR >= 3
+  // degree-3/4 coefficients (segnufft_knot.cu stage_hc_k; uw in the sorted sample order here)
+  for (int q = threadIdx.x; q < cnt * 28; q += NTV) {
+    const int s = q / 28, a = q % 28;
+    float v = 0.f;
+    if (a < 25) {
+      const float4 u = uw[it.first + s];
+      v = fmaf(u.x, htab[a], fmaf(u.y, htab[25 + a], fmaf(u.z, htab[50 + a], u.w * htab[75 + a])));
+    }
+    S[(size_t)s * VSW + VR_H + a] = v;
+  }
+#endif
+#else
   constexpr int WQ = KXN > W ? KXN : W;
   for (int q = threadIdx.x; q < cnt * 3 * WQ; q += NTV) {
     const int s = q / (3 * WQ), a = (q / WQ) % 3, t = q % WQ;
@@ -921,6 +1044,7 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
       }
     }
   }
+#endif
 #if CORR >= 2
   for (int q = threadIdx.x; q < cnt; q += NTV) {
     float* P = S + (size_t)q * VSW;
@@ -941,15 +1065,35 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
     }
     #pragma unroll
     for (int k = 0; k < 15; ++k) P[VR_E + k] = e[k];
+#if VT
+    P[VR_E + 21] = 0.f; P[VR_E + 22] = 0.f; P[VR_E + 23] = 0.f;
+#endif
   }
 #endif
   for (int q = threadIdx.x; q < NWC * 2 * APL; q += NTV) accb[q] = 0.f;
   __syncthreads();
   // ---- per-item table: active range of each class in each plane (samples sorted by (class key, oz))
+  auto key = [&](int s) { const int* m = reinterpret_cast<const int*>(S + (size_t)s * VSW) + VR_M; return m[1] * TX + m[0]; };
+  auto ozs = [&](int s) { return reinterpret_cast<const int*>(S + (size_t)s * VSW)[VR_OZ]; };
+#if VPT
+  for (int p = threadIdx.x; p < npl * NCLS; p += NTV) {
+    const int hz = p / NCLS, q = p % NCLS, z = zlo + hz;
+    int lo = 0, hi = cnt;   // class range: first key >= q, first key > q
+    while (lo < hi) { const int mid = (lo + hi) >> 1; if (key(mid) >= q) hi = mid; else lo = mid + 1; }
+    const int cb = lo;
+    hi = cnt;
+    while (lo < hi) { const int mid = (lo + hi) >> 1; if (key(mid) > q) hi = mid; else lo = mid + 1; }
+    const int ce = lo;
+    lo = cb; hi = ce;       // active: oz in [z − (W − 1), z]
+    while (lo < hi) { const int mid = (lo + hi) >> 1; if (ozs(mid) >= z - (W - 1)) hi = mid; else lo = mid + 1; }
+    const int a = lo;
+    hi = ce;
+    while (lo < hi) { const int mid = (lo + hi) >> 1; if (ozs(mid) > z) hi = mid; else lo = mid + 1; }
+    tab[hz * NCLS + q] = (unsigned)a | ((unsigned)lo << 16);
+  }
+#else
   if (threadIdx.x < NCLS) {
     const int q = threadIdx.x;
-    auto key = [&](int s) { const int* m = reinterpret_cast<const int*>(S + (size_t)s * VSW) + VR_M; return m[1] * TX + m[0]; };
-    auto ozs = [&](int s) { return reinterpret_cast<const int*>(S + (size_t)s * VSW)[VR_KX + KXN]; };
     int cb = 0;
     while (cb < cnt && key(cb) < q) ++cb;
     int ce = cb;
@@ -962,6 +1106,7 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
       tab[hz * NCLS + q] = (unsigned)a | ((unsigned)b << 16);
     }
   }
+#endif
   __syncthreads();
   // ---- main loop (per warp, no barriers)
   const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
@@ -971,11 +1116,130 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
   const bool valid = ch < NCH;
   float* accm = accb + (size_t)(cg * 2 + h) * APL + c;   // half 0: real plane, half 1: imaginary plane
   const int stb = NWS == 1 ? 0 : sp * (TY / NWS);
+#if VT
+  float4* tabw = tabw_all + (size_t)warp * 100;
+  const int bi = lane % 10, bg = lane / 10;   // builder lane: row bi, x group bg (lanes 30, 31 idle)
+  int par = 0;
+#endif
+  // combine the two halves' partials of sample s (one SHFL) and add into the accumulator
+  auto fin = [&](int s, float pr, float pi, float fz) {
+    const float snd = h ? pr : pi;
+    const float rcv = __shfl_xor_sync(0xffffffffu, snd, 16);
+    const float mine = (h ? pi : pr) + rcv;
+    if (valid) accm[s * 16] = fmaf(fz, mine, accm[s * 16]);
+  };
+#if VT
+  // VT: build the (sample s, plane hz) weight table into Tb (all lanes compute; lane (bi, bg) → row bi, x points
+  // 4 bg .. 4 bg + 3; lanes 30, 31 and store = false compute on clamped indices and store nothing)
+  auto vt_build = [&](int s, int hz, float4* Tb, bool store) {
+    const float* P = S + (size_t)s * VSW;
+    const int tz = zlo + hz - reinterpret_cast<const int*>(P)[VR_OZ];
+    const float4 za = *reinterpret_cast<const float4*>(P + VR_WY + tz * 8 + 4);
+    const float2 zb = *reinterpret_cast<const float2*>(P + VR_WZH + tz * 2);
+    const float wz[5] = {za.y, za.z, za.w, zb.x, zb.y};
+    float ev[24];
+    #pragma unroll
+    for (int k = 0; k < 6; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_E + 4 * k); ev[4 * k] = u.x; ev[4 * k + 1] = u.y; ev[4 * k + 2] = u.z; ev[4 * k + 3] = u.w; }
+    const float* dv = ev + 15;   // [xx, yy, zz, xy, xz, yz]
+    float ER[15], EQ[15];
+    {
+      int idx = 0;
+      #pragma unroll
+      for (int a = 0; a <= 4; ++a) {
+        #pragma unroll
+        for (int b = 0; b <= 4 - a; ++b) { ER[idx] = ev[idx] * wz[4 - a - b]; EQ[idx] = 0.f; ++idx; }
+      }
+    }
+    ER[0] += wz[0];
+    EQ[0] = dv[2] * wz[2]; EQ[1] = dv[5] * wz[1]; EQ[2] = dv[1] * wz[0];
+    EQ[5] = dv[4] * wz[1]; EQ[6] = dv[3] * wz[0]; EQ[9] = dv[0] * wz[0];
+#if CORR >= 3
+    {
+      float hv[28];
+      #pragma unroll
+      for (int k = 0; k < 7; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_H + 4 * k); hv[4 * k] = u.x; hv[4 * k + 1] = u.y; hv[4 * k + 2] = u.z; hv[4 * k + 3] = u.w; }
+      int j = 0;
+      #pragma unroll
+      for (int a = 0; a <= 3; ++a) {   // degree 3: + c ∂^α φ (real)
+        #pragma unroll
+        for (int b = 0; b <= 3 - a; ++b) { const int id = a * (11 - a) / 2 + b; ER[id] = fmaf(hv[j], wz[3 - a - b], ER[id]); ++j; }
+      }
+      #pragma unroll
+      for (int a = 0; a <= 4; ++a) {   // degree 4: −i c ∂^α φ (imaginary)
+        #pragma unroll
+        for (int b = 0; b <= 4 - a; ++b) {
+          const int id = a * (11 - a) / 2 + b;
+          // (zero entries of EQ: a plain product, no fma with a constant 0)
+          const bool nz = id == 0 || id == 1 || id == 2 || id == 5 || id == 6 || id == 9;
+          EQ[id] = nz ? fmaf(-hv[j], wz[4 - a - b], EQ[id]) : -hv[j] * wz[4 - a - b];
+          ++j;
+        }
+      }
+    }
+#endif
+    const float4 ya = *reinterpret_cast<const float4*>(P + VR_WY + bi * 8);
+    const float wy[5] = {ya.x, ya.y, ya.z, ya.w, P[VR_WY + bi * 8 + 4]};
+    float R[5], Q[5];
+    {
+      int idx = 0;
+      #pragma unroll
+      for (int a = 0; a <= 4; ++a) {
+        R[a] = ER[idx] * wy[0];
+        #pragma unroll
+        for (int b = 1; b <= 4 - a; ++b) R[a] = fmaf(ER[idx + b], wy[b], R[a]);
+#if CORR >= 3
+        Q[a] = EQ[idx] * wy[0];
+        #pragma unroll
+        for (int b = 1; b <= 4 - a; ++b) Q[a] = fmaf(EQ[idx + b], wy[b], Q[a]);
+#endif
+        idx += 5 - a;
+      }
+    }
+#if CORR < 3
+    Q[0] = fmaf(EQ[2], wy[2], fmaf(EQ[1], wy[1], EQ[0] * wy[0]));
+    Q[1] = fmaf(EQ[6], wy[1], EQ[5] * wy[0]);
+    Q[2] = EQ[9] * wy[0];
+    Q[3] = 0.f; Q[4] = 0.f;
+#endif
+    constexpr int NQ = CORR >= 3 ? 5 : 3;
+    float wr[4], wi[4];
+    #pragma unroll
+    for (int a = 0; a < 5; ++a) {
+      const float4 u = *reinterpret_cast<const float4*>(P + VR_KX + a * 12 + bg * 4);
+      const float kk[4] = {u.x, u.y, u.z, u.w};
+      #pragma unroll
+      for (int j = 0; j < 4; ++j) {
+        wr[j] = a == 0 ? kk[j] * R[0] : fmaf(kk[j], R[a], wr[j]);
+        if (a < NQ) wi[j] = a == 0 ? kk[j] * Q[0] : fmaf(kk[j], Q[a], wi[j]);
+      }
+    }
+    if (store && lane < 30) {
+      Tb[bi * 5 + bg * 2] = make_float4(wr[0], wi[0], wr[1], wi[1]);
+      if (bg < 2) Tb[bi * 5 + bg * 2 + 1] = make_float4(wr[2], wi[2], wr[3], wi[3]);
+    }
+  
+  };
+  const int qbeg = stb * TX, qend = (NWS == 1 ? TY : stb + TY / NWS) * TX;
+  (void)qbeg; (void)qend;
+#endif
   for (int hz = 0; hz < npl; ++hz) {
     int gz = o2 + zlo + hz;
     gz -= gz >= d.nf2 ? d.nf2 : 0;
     const cx* gpl = grid + (size_t)gz * d.nf1 * d.nf0 * NCH + (valid ? ch : 0);
     float2 V[5][HXV];
+#if VPF
+    float2 NX[HXV];
+    #pragma unroll
+    for (int t = 0; t < HXV; ++t) NX[t] = make_float2(0.f, 0.f);
+#endif
+#if VT && VTP
+    {   // the table of this warp's first active sample in the plane
+      int f = -1;
+      for (int q = qbeg; q < qend; ++q) { const unsigned r2 = tab[hz * NCLS + q]; if ((r2 & 0xffffu) < (r2 >> 16)) { f = (int)(r2 & 0xffffu); break; } }
+      vt_build(f >= 0 ? f : 0, hz, tabw + (par ? 50 : 0), f >= 0);
+      __syncwarp();
+    }
+#endif
     // zop: an opaque zero produced right before the loads of each window step, so that the (row, x) address offsets
     // are computed per step instead of being hoisted out of the plane loop and kept live (they do not depend on the
     // plane: 22 x 13 64-bit offsets, spills)
@@ -990,6 +1254,19 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
         Vr[t] = valid ? __ldg(reinterpret_cast<const float2*>(rp + (size_t)gx * NCH)) : make_float2(0.f, 0.f);
       }
     };
+    // the same, only lanes with pr load (others keep Vr); rows past the tile edge wrap as above
+    auto loadrow_if = [&](float2 (&Vr)[HXV], int yrel, int zop, bool pr) {
+      int gy = o1 + yrel + zop;
+      gy -= gy >= d.nf1 ? d.nf1 : 0;
+      const cx* rp = gpl + (size_t)gy * d.nf0 * NCH;
+      #pragma unroll
+      for (int t = 0; t < HXV; ++t) {
+        int gx = o0 + t + zop;
+        gx -= gx >= d.nf0 ? d.nf0 : 0;
+        ldg2_if(reinterpret_cast<const float2*>(rp + (size_t)gx * NCH), pr && valid, Vr[t]);
+      }
+    };
+    (void)loadrow_if;
     #pragma unroll
     for (int st = 0; st < TY; ++st) {
       if (NWS > 1 && (st < stb || st >= stb + TY / NWS)) continue;
@@ -997,22 +1274,139 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
       // sample loops (else every step's rows are live at once: 255 registers and spills)
       int zop;
       asm volatile("mov.u32 %0, 0;" : "=r"(zop) :: "memory");
-      if (NWS == 1 ? st == 0 : st == stb) {
+      const bool wfirst = NWS == 1 ? st == 0 : st == stb;
+      if (wfirst) {
         #pragma unroll
         for (int i = 0; i < 5; ++i) loadrow(V[(st + i) % 5], st + 5 * h + i, zop);
       } else {
-        loadrow(V[(st + 4) % 5], st + 4 + 5 * h, zop);
+        const int k = (st + 4) % 5;
+#if VSHR
+        // half 0 takes row st + 4 from half 1 (which drops it now); half 1 gets row st + 9
+        #pragma unroll
+        for (int t = 0; t < HXV; ++t) {
+          float2 x;
+          x.x = __shfl_xor_sync(0xffffffffu, V[k][t].x, 16);
+          x.y = __shfl_xor_sync(0xffffffffu, V[k][t].y, 16);
+#if VPF
+          V[k][t] = h ? NX[t] : x;
+#else
+          if (!h) V[k][t] = x;
+#endif
+        }
+#if !VPF
+        loadrow_if(V[k], st + 9, zop, h != 0);
+#endif
+#else
+#if VPF
+        #pragma unroll
+        for (int t = 0; t < HXV; ++t) V[k][t] = NX[t];
+#else
+        loadrow(V[k], st + 4 + 5 * h, zop);
+#endif
+#endif
       }
+#if VPF
+      // the next step's row, one step ahead
+      if (NWS == 1 ? st + 1 < TY : st + 1 < stb + TY / NWS) {
+#if VSHR
+        loadrow_if(NX, st + 10, zop, h != 0);
+#else
+        loadrow(NX, st + 5 + 5 * h, zop);
+#endif
+      }
+#endif
       #pragma unroll
       for (int oxv = 0; oxv < NOXV; ++oxv) {
         const int xsh = VXPAD ? 0 : oxv;   // compile-time after unrolling
         for (int ox = (VXPAD ? 0 : oxv); ox < (VXPAD ? TX : oxv + 1); ++ox) {
           const unsigned rg = tab[hz * NCLS + st * TX + ox];
           const int sa = (int)(rg & 0xffffu), sb = (int)(rg >> 16);
+#if CORR < 2
+          // order-0 body of sample s: x contraction of the lane's 5 rows, y combination, z factor
+          auto body0 = [&](int s, float& pr, float& pi, float& fz) {
+            const float* P = S + (size_t)s * VSW;
+            pr = 0.f; pi = 0.f;
+            float kx[KXS];
+            #pragma unroll
+            for (int k = 0; k < KXS / 4; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_KX + h * KXS + 4 * k); kx[4 * k] = u.x; kx[4 * k + 1] = u.y; kx[4 * k + 2] = u.z; kx[4 * k + 3] = u.w; }
+            const int oz = __float_as_int(kx[KXN]);
+            const float4 yv = *reinterpret_cast<const float4*>(P + VR_Y4 + 4 * h);
+            const float wy[5] = {yv.x, yv.y, yv.z, yv.w, kx[KXN + 1]};
+            fz = P[VR_WZ + zlo + hz - oz];
+            #pragma unroll
+            for (int i = 0; i < 5; ++i) {
+              const int slot = (st + i) % 5;
+              float mr = 0.f, mi = 0.f;
+              #pragma unroll
+              for (int t = 0; t < KXN; ++t) { mr = fmaf(kx[t], V[slot][t + xsh].x, mr); mi = fmaf(kx[t], V[slot][t + xsh].y, mi); }
+              pr = fmaf(wy[i], mr, pr); pi = fmaf(wy[i], mi, pi);
+            }
+          };
+#if VS2
+          int s = sa;
+          for (; s + 1 < sb; s += 2) {
+            float ar, ai, az, br, bi2, bz;
+            body0(s, ar, ai, az);
+            body0(s + 1, br, bi2, bz);
+            fin(s, ar, ai, az);
+            fin(s + 1, br, bi2, bz);
+          }
+          if (s < sb) { float ar, ai, az; body0(s, ar, ai, az); fin(s, ar, ai, az); }
+#else
+          for (int s = sa; s < sb; ++s) { float pr, pi, fz; body0(s, pr, pi, fz); fin(s, pr, pi, fz); }
+#endif
+#else
+#if VT && VTP
+          int nq = -1;   // first sample of the next non-empty class of this warp's range in this plane (−1: none)
+          if (sa < sb) {
+            for (int q = st * TX + ox + 1; q < qend; ++q) { const unsigned r2 = tab[hz * NCLS + q]; if ((r2 & 0xffffu) < (r2 >> 16)) { nq = (int)(r2 & 0xffffu); break; } }
+          }
+#endif
           for (int s = sa; s < sb; ++s) {
             const float* P = S + (size_t)s * VSW;
             float pr = 0.f, pi = 0.f;
-#if CORR >= 2
+#if VT
+#if VTP
+            // pipelined: the next sample's table (next in this range, else the next non-empty class's first) is built
+            // into the other buffer while this sample's MACs run (MAC loads first in program order, so the build's
+            // loads and arithmetic can interleave with the MAC FFMAs; its stores follow); one __syncwarp per sample
+            const float4* Tb = tabw + (par ? 50 : 0);
+#else
+            float4* Tb = tabw + (par ? 50 : 0);
+            par ^= 1;
+            vt_build(s, hz, Tb, true);
+            __syncwarp();
+#endif
+            // -- MAC: the lane's 5 rows × 10 points against the half's 50 table weights
+            {
+              const float4* Th = Tb + h * 25;
+              float ar[5], ai[5];
+              #pragma unroll
+              for (int r = 0; r < 5; ++r) {
+                const int slot = (st + r) % 5;
+                #pragma unroll
+                for (int k = 0; k < 5; ++k) {
+                  const float4 q = Th[r * 5 + k];
+                  const float2 v0 = V[slot][2 * k + xsh], v1 = V[slot][2 * k + 1 + xsh];
+                  if (k == 0) { ar[r] = q.x * v0.x; ai[r] = q.x * v0.y; } else { ar[r] = fmaf(q.x, v0.x, ar[r]); ai[r] = fmaf(q.x, v0.y, ai[r]); }
+                  ar[r] = fmaf(-q.y, v0.y, ar[r]); ai[r] = fmaf(q.y, v0.x, ai[r]);
+                  ar[r] = fmaf(q.z, v1.x, ar[r]); ai[r] = fmaf(q.z, v1.y, ai[r]);
+                  ar[r] = fmaf(-q.w, v1.y, ar[r]); ai[r] = fmaf(q.w, v1.x, ai[r]);
+                }
+              }
+              pr = (ar[0] + ar[1]) + (ar[2] + ar[3]) + ar[4];
+              pi = (ai[0] + ai[1]) + (ai[2] + ai[3]) + ai[4];
+            }
+#if VTP
+            {
+              const int nx = s + 1 < sb ? s + 1 : nq;
+              vt_build(nx >= 0 ? nx : s, hz, tabw + (par ? 0 : 50), nx >= 0);
+            }
+            __syncwarp();
+            par ^= 1;
+#endif
+            const float fz = 1.f;
+#else
             const int oz = reinterpret_cast<const int*>(P)[VR_KX + KXN];
             const int tz = zlo + hz - oz;
             float wz[5];
@@ -1062,28 +1456,10 @@ extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __rest
               }
             }
             const float fz = 1.f;
-#else
-            float kx[KXS];
-            #pragma unroll
-            for (int k = 0; k < KXS / 4; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_KX + h * KXS + 4 * k); kx[4 * k] = u.x; kx[4 * k + 1] = u.y; kx[4 * k + 2] = u.z; kx[4 * k + 3] = u.w; }
-            const int oz = __float_as_int(kx[KXN]);
-            const float4 yv = *reinterpret_cast<const float4*>(P + VR_Y4 + 4 * h);
-            const float wy[5] = {yv.x, yv.y, yv.z, yv.w, kx[KXN + 1]};
-            const float fz = P[VR_WZ + zlo + hz - oz];
-            #pragma unroll
-            for (int i = 0; i < 5; ++i) {
-              const int slot = (st + i) % 5;
-              float mr = 0.f, mi = 0.f;
-              #pragma unroll
-              for (int t = 0; t < KXN; ++t) { mr = fmaf(kx[t], V[slot][t + xsh].x, mr); mi = fmaf(kx[t], V[slot][t + xsh].y, mi); }
-              pr = fmaf(wy[i], mr, pr); pi = fmaf(wy[i], mi, pi);
-            }
 #endif
-            const float snd = h ? pr : pi;
-            const float rcv = __shfl_xor_sync(0xffffffffu, snd, 16);
-            const float mine = (h ? pi : pr) + rcv;
-            if (valid) accm[s * 16] = fmaf(fz, mine, accm[s * 16]);
+            fin(s, pr, pi, fz);
           }
+#endif
         }
       }
     }
@@ -1177,7 +1553,12 @@ extern "C" __global__ void __launch_bounds__(256) pg_lds_bench(float* __restrict
   for (int i = threadIdx.x; i < 1024; i += blockDim.x) buf[i] = make_float4(1e-3f * i, 1e-3f, 2e-3f, 3e-3f);
   __syncthreads();
   const int lane = threadIdx.x & 31;
+#if defined(LDSBLK) && LDSBLK
+  // blocked (§13): lanes 32/ncg·g .. read address g (one address per quarter-warp when ncg <= 4)
+  const int idx = lane / (32 / ncg);
+#else
   const int idx = lane % ncg;
+#endif
   float acc[8];
   #pragma unroll
   for (int k = 0; k < 8; ++k) acc[k] = 0.f;

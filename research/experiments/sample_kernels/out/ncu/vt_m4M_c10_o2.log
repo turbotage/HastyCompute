@@ -1,0 +1,194 @@
+=== vt_m4M_c10_o2 --mode fwd --m 4000000 --ncb 10 --nseg 10 --order 2 --designs vs --fixed 4,4,8,48,7,1,vt=1 (Thu Nov 19 03:44:45 PM CET 2026)
+==PROF== Connected to process 871225 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 2.3 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 1
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.95 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1146 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871225
+==PROF== Connected to process 871271 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 2
+
+==WARNING== Launching the workload is taking more time than expected. If this continues to hang, terminate the profile and re-try by profiling the range of all related launches using '--replay-mode app-range'. See https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay for more details.
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   199.12 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.93 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871271
+==PROF== Connected to process 871375 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 3
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871375
+==PROF== Connected to process 871419 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 4
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.92 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871419
+==PROF== Connected to process 871457 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 5
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.95 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.91 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871457
+==PROF== Connected to process 871496 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 6
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.92 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871496
+==PROF== Connected to process 871543 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 7
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   199.00 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.85 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2012 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871543
+==PROF== Connected to process 871587 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 8
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   199.12 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871587
+==PROF== Connected to process 871624 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 9
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.98 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.91 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871624
+==PROF== Connected to process 871663 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 10
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.95 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1146 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871663
+==PROF== Connected to process 871709 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 11
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   199.00 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.93 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871709
+==PROF== Connected to process 871746 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 12
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.91 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871746
+==PROF== Connected to process 871783 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 13
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871783
+==PROF== Connected to process 871829 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 14
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   199.12 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.92 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871829
+==PROF== Connected to process 871873 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 15
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.95 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.91 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871873
+==PROF== Connected to process 871912 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 16
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.98 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.93 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871912
+==PROF== Connected to process 871949 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/proto_gather_s13b)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_vs": Application replay pass 17
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  92288 regs 248:   198.99 ms
+  WORK vs: item fill 0.830, samples active per (item, plane) 36.1, bodies per (plane, window step) 9.0, planes per item 12.2, channel-lane efficiency 0.893; FFMA-pipe use of issued work 30.8 %
+  RES vs: regs 248, local 0 B, smem 92288 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 198.94 ms Cfg { halo: 4, tt: 4, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 100437 | 2011 G cMAC/s, 19.1 % of FP32 FMA peak (4 FMA/MAC) | value loads 16.1 TB/s (L1/smem), halo staging 1147 GB/s | rel err 6.48e-7 (max 1.75e-5 of rms 9.49e0) on 10 samples
+==PROF== Disconnected from process 871949
+==PROF== Creating report from application replay data: 0%...................100%
+==WARNING== Failed to import the following source files:
+==WARNING==  /home/turbotage/Documents/GitHub/HastyCompute/rustlib/proto_gather_o2_c10_l10_h4_t4_ch112_p1_n224_s48_pad0_sb0_rx0_y4_z8_vs7_1_0_t10000m0.cu
+==PROF== Report: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/sample_kernels/out/ncu/vt_m4M_c10_o2.ncu-rep

@@ -1,0 +1,14 @@
+==PROF== Connected to process 860038 (/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/release/proto_gather)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 48 (48 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 2.86 GiB, y 1.43 GiB, 192000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.7 s
+==PROF== Profiling "pg_fwd_vs": 0%.
+==WARNING== Launching the workload is taking more time than expected. If this continues to hang, terminate the profile and re-try by profiling the range of all related launches using '--replay-mode range'. See https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay for more details.
+...50%....100% - 17 passes
+    vs t [2, 4, 16] ch  48 tps  1 (fc 48) nt  96 smax  32 sb 0 rx 0 nwc 3 nws 1 vxpad 0 smem  19104 regs 168:    32.96 ms
+  WORK vs: item fill 0.872, samples active per (item, plane) 22.9, bodies per (plane, window step) 5.7, planes per item 13.2, channel-lane efficiency 1.000; FFMA-pipe use of issued work 30.1 %
+  RES vs: regs 168, local 0 B, smem 19104 B, blocks/SM 4, warps/SM 12 of 48
+  BEST vs: 33.96 ms Cfg { halo: 4, tt: 2, ch: 48, tps: 1, nt: 96, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 3, nws: 1, vxpad: 0 } items 143422 | 5654 G cMAC/s, 26.9 % of FP32 FMA peak (2 FMA/MAC) | value loads 45.2 TB/s (L1/smem), halo staging 3759 GB/s | rel err 5.51e-7 (max 3.99e-6 of rms 1.90e0) on 20 samples
+==PROF== Disconnected from process 860038
+==PROF== Report: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/sample_kernels/out/ncu/vs_m4M_c48.ncu-rep

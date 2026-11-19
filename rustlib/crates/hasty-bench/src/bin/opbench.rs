@@ -5,6 +5,12 @@
 //!           [--models sense,seg-none,seg-b0,seg-full] [--nseg 10] [--order 2] [--b0-nseg 6] [--ntab 256]
 //!           [--temporal off|linear|cubic] [--iters 40] [--sets 2] [--reps 5] [--adc-step 1]
 //!           [--fov-centre 0,0,0.05] [--no-gnl] [--no-tune] [--max-grid-gb 6] [--quick] [--json file] [--plan]
+//!           [--knot] [--cb-cap N] [--vs-compare]
+//!
+//! `--knot`: temporal models on a knot-major engine (`SegNufft::new_temporal(.., true)`, one slot per knot) instead
+//! of the interval-major one. `--cb-cap N`: coil batch cap of the engine (default 16). `--vs-compare`: after the
+//! autotune, the forward / adjoint / normal times of the measured sets once with the vs forward off (tile kernels)
+//! and once on (the autotune's best vs shape; research/sample_kernels.md §14), plus the autotune's kernel times.
 //!
 //! Defaults: the user's 10-minute free-breathing 4D-flow scan (flow_thorax: TR 11.29 ms, 7 encodes, 3990 ADC samples
 //! at 2 µs per readout → ≈ 53 000 readouts, 2.1e8 samples), 12 virtual coils (32 → 12 compression happens before
@@ -89,12 +95,19 @@ struct Args {
     json: Option<PathBuf>,
     /// CPU-only dry run: schedules, sets, one set's host tables, memory estimates (no GPU)
     plan: bool,
+    /// knot-major temporal engine
+    knot: bool,
+    /// coil batch cap (None: the engine default)
+    cb_cap: Option<usize>,
+    /// measure vs off / on after the autotune
+    vs_compare: bool,
 }
 
 fn parse() -> Args {
     let mut a: Vec<String> = std::env::args().skip(1).collect();
     let mut flag = |n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let (quick, no_gnl, no_tune, plan) = (flag("--quick"), flag("--no-gnl"), flag("--no-tune"), flag("--plan"));
+    let (knot, vs_compare) = (flag("--knot"), flag("--vs-compare"));
     let mut take = |n: &str| -> Option<String> { a.iter().position(|x| x == n).map(|i| { a.remove(i); a.remove(i) }) };
     let v3 = |s: String| -> Vec3 { let v: Vec<f64> = s.split(',').map(|x| x.parse().unwrap()).collect(); [v[0], v[1], v[2]] };
     let args = Args {
@@ -129,6 +142,9 @@ fn parse() -> Args {
         max_grid: (take("--max-grid-gb").map(|s| s.parse::<f64>().unwrap()).unwrap_or(6.0) * GB) as usize,
         json: take("--json").map(PathBuf::from),
         plan,
+        knot,
+        cb_cap: take("--cb-cap").map(|s| s.parse().unwrap()),
+        vs_compare,
     };
     assert!(a.is_empty(), "unknown arguments {a:?}");
     args
@@ -478,7 +494,10 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
     }
     // segmented physics NUFFT: one engine, per-set points, segments per encode
     let f0 = free_mem(dev, st);
-    let mut eng = SegNufft::new(dev, dims, sd.vox, nc, SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline: a.temporal.unwrap_or(1), max_grid_bytes: a.max_grid }).unwrap();
+    hasty_nufft::set_thread_cb_cap(a.cb_cap);
+    let eopts = SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline: a.temporal.unwrap_or(1), max_grid_bytes: a.max_grid };
+    let mut eng = SegNufft::new_temporal(dev, dims, sd.vox, nc, eopts, temporal && a.knot).unwrap();
+    hasty_nufft::set_thread_cb_cap(None);
     eng.set_maps(st, &grid.smaps).unwrap();
     res.engine_bytes = f0.saturating_sub(free_mem(dev, st));
     res.coil_batch = eng.cb;
@@ -521,6 +540,9 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
             let (kf, ka) = eng.autotune(st, seg, &pts).unwrap();
             res.tune_s = tt.elapsed().as_secs_f64();
             println!("    autotune {:.1} s: fwd {:?}, adj {:?}", res.tune_s, eng.tiles_fwd, eng.tiles_adj);
+            if let Some((tt, tv)) = eng.vs_tune_times() {
+                println!("    autotune forward kernels (one coil batch{}): tile {tt:.2} ms, vs {tv:.2} ms ({:?}, {:?}) -> {}; adjoint {ka:.2} ms; vs tables {:.1} B/sample", if temporal { ", knot 0" } else { "" }, eng.vs_geom(), eng.vs_tune_cfg(), if eng.vs_active().is_some() { "vs" } else { "tile" }, pts.vs_table_bytes() as f64 / m as f64);
+            }
             // kernels of one coil batch (static sets: the whole set) → all batches
             let nb = nc.div_ceil(eng.cb) as f64;
             if !temporal {
@@ -531,6 +553,22 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
         let fwd = tm.ms(st, &mut || eng.forward(st, seg, &pts, &x, &mut y).unwrap());
         let adj = tm.ms(st, &mut || eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
         let normal = tm.ms(st, &mut || { eng.forward(st, seg, &pts, &x, &mut y).unwrap(); eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+        if a.vs_compare {
+            // the same operator with the vs forward off (tile kernels) and on (the autotune's best vs shape)
+            let keep = eng.vs_active().map(|v| v.1);
+            for (lab, c) in [("vs off", None), ("vs on", eng.vs_tune_cfg())] {
+                if lab == "vs on" && c.is_none() {
+                    println!("    {:<28} {lab}: no vs shape (no tables or not a candidate)", set.label);
+                    continue;
+                }
+                eng.set_vs(c).unwrap();
+                let f = tm.ms(st, &mut || eng.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let ad = tm.ms(st, &mut || eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                let nm = tm.ms(st, &mut || { eng.forward(st, seg, &pts, &x, &mut y).unwrap(); eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                println!("    {:<28} {lab:<7} M {m:>9}: forward {f:>8.1} ms, adjoint {ad:>8.1} ms, gradient (forward + adjoint) {nm:>8.1} ms", set.label);
+            }
+            eng.set_vs(keep).unwrap();
+        }
         // FFT per call: every frame once per coil batch (temporal: + the wrap-around slots)
         let loads = if temporal { (frames + eng.nf - 1) as f64 } else { 1.0 };
         let fft = (ff * nc as f64 * loads, fi * nc as f64 * loads);

@@ -3,3 +3,9 @@ data/hasty
 __pycache__/
 *.pyc
 .venv/
+
+# experiment run outputs: arrays, profiles (logs, notes, figures stay tracked)
+research/experiments/**/*.hv
+research/experiments/**/*.npy
+research/experiments/**/*.npz
+research/experiments/**/*.ncu-rep

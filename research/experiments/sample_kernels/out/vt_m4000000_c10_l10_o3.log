@@ -1,0 +1,57 @@
+=== vt_m4000000_c10_l10_o3: env [] --mode fwd --m 4000000 --ncb 10 --nseg 10 --order 3 --designs vs --check 400 --reps 5 (Thu Nov 19 03:44:14 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 3, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  vs: 49 candidates, compiled in 34.2 s
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  16 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  18144 regs 168:   259.44 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  16 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  19744 regs 168:   310.72 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  16 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  22944 regs 168:   440.48 ms
+    vs t [2, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  16 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  40800 regs 192:   223.32 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  34016 regs 168:   483.97 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  32 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  35616 regs 168:   379.53 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  32 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  38816 regs 168:   368.94 ms
+    vs t [2, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  32 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  68960 regs 192:   199.49 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  48 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  49888 regs 168:   466.43 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  48 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  51488 regs 168:   680.04 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  48 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  54688 regs 168:   446.32 ms
+    vs t [2, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  97120 regs 192:   186.51 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  64 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  65760 regs 168:   930.66 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  64 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  67360 regs 168:   657.98 ms
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  64 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  70560 regs 168:   418.89 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  32 smax  16 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  18688 regs 172:   448.45 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  64 smax  16 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  20288 regs 168:   693.65 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 128 smax  16 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  23488 regs 168:  1024.77 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 256 smax  16 sb 0 rx 0 nwc 1 nws 8 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  29888 regs 174:  1841.64 ms
+    vs t [2, 8, 8] ch 112 tps  1 (fc 112) nt 224 smax  16 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  41344 regs 172:   255.48 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  34560 regs 172:   594.79 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  64 smax  32 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  36160 regs 168:   537.67 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 128 smax  32 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  39360 regs 168:   753.26 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 256 smax  32 sb 0 rx 0 nwc 1 nws 8 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  45760 regs 174:  1346.68 ms
+    vs t [2, 8, 8] ch 112 tps  1 (fc 112) nt 224 smax  32 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  69504 regs 172:   214.14 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  32 smax  48 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  50432 regs 172:  1088.32 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  64 smax  48 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  52032 regs 168:   831.23 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 128 smax  48 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  55232 regs 168:   686.30 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 256 smax  48 sb 0 rx 0 nwc 1 nws 8 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  61632 regs 174:  1140.61 ms
+    vs t [2, 8, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  97664 regs 172:   200.42 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  32 smax  64 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  66304 regs 172:  1047.68 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt  64 smax  64 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  67904 regs 168:   790.53 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 128 smax  64 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  71104 regs 168:   625.40 ms
+    vs t [2, 8, 8] ch  16 tps  1 (fc 16) nt 256 smax  64 sb 0 rx 0 nwc 1 nws 8 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  77504 regs 174:  1033.98 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  16 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  18688 regs 248:   359.60 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  16 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  20288 regs 238:   550.52 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  16 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  23488 regs 234:   945.94 ms
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  16 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  41344 regs 248:   229.78 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  34560 regs 248:   473.13 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  32 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  36160 regs 238:   417.38 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  32 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  39360 regs 234:   677.06 ms
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  32 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  69504 regs 248:   198.80 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  48 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  50432 regs 248:   922.53 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  48 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  52032 regs 238:   610.43 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  48 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  55232 regs 234:   595.23 ms
+    vs t [4, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  48 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  97664 regs 248:   187.75 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  32 smax  64 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  66304 regs 248:   886.18 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  64 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  67904 regs 238:   574.63 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt 128 smax  64 sb 0 rx 0 nwc 1 nws 4 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  71104 regs 234:   529.27 ms
+  WORK vs: item fill 0.706, samples active per (item, plane) 29.2, bodies per (plane, window step) 7.3, planes per item 13.6, channel-lane efficiency 0.893; FFMA-pipe use of issued work 37.4 %
+  RES vs: regs 192, local 0 B, smem 97120 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 187.65 ms Cfg { halo: 4, tt: 2, ch: 112, tps: 1, nt: 224, smax: 48, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 118074 | 2132 G cMAC/s, 20.3 % of FP32 FMA peak (4 FMA/MAC) | value loads 17.1 TB/s (L1/smem), halo staging 1354 GB/s | rel err 6.77e-7 (max 5.91e-4 of rms 1.63e2) on 400 samples

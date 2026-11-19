@@ -1,0 +1,13 @@
+=== smoke_vt_a: env [] --mode fwd --m 200000 --ncb 10 --nseg 10 --order 2 --designs vs --each --check 300 --reps 2 --fixed 2,4,8,32,7,1,vt=1;4,4,8,16,1,2,vt=1 (Thu Nov 19 03:34:26 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 200000
+trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.01 GiB, 20000000000 useful complex MACs per pass
+  vs: 2 candidates, compiled in 2.5 s
+    vs t [2, 4, 8] ch 112 tps  1 (fc 112) nt 224 smax  32 sb 0 rx 0 nwc 7 nws 1 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  65376 regs 190:    16.35 ms
+    vs t [4, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  16 sb 0 rx 0 nwc 1 nws 2 vxpad 0 vt 1 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  18496 regs 238:    32.52 ms
+  WORK vs: item fill 0.183, samples active per (item, plane) 7.2, bodies per (plane, window step) 1.8, planes per item 11.9, channel-lane efficiency 0.893; FFMA-pipe use of issued work 18.8 %
+  RES vs: regs 190, local 0 B, smem 65376 B, blocks/SM 1, warps/SM 7 of 48
+  BEST vs: 16.31 ms Cfg { halo: 4, tt: 2, ch: 112, tps: 1, nt: 224, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 7, nws: 1, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 34156 | 1227 G cMAC/s, 11.7 % of FP32 FMA peak (4 FMA/MAC) | value loads 9.8 TB/s (L1/smem), halo staging 3926 GB/s | rel err 6.62e-7 (max 3.01e-5 of rms 1.02e1) on 301 samples
+  WORK vs: item fill 0.506, samples active per (item, plane) 8.3, bodies per (plane, window step) 2.1, planes per item 12.4, channel-lane efficiency 0.893; FFMA-pipe use of issued work 9.4 %
+  RES vs: regs 238, local 0 B, smem 18496 B, blocks/SM 4, warps/SM 8 of 48
+  BEST vs: 32.43 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 64, smax: 16, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 2, vxpad: 0, vt: 1, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 24707 | 617 G cMAC/s, 5.9 % of FP32 FMA peak (4 FMA/MAC) | value loads 4.9 TB/s (L1/smem), halo staging 1754 GB/s | rel err 6.63e-7 (max 3.09e-5 of rms 1.02e1) on 301 samples

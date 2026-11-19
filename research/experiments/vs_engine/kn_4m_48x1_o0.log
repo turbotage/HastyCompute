@@ -1,0 +1,20 @@
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.9 GiB free), PCIe pinned 21.8 / 20.6 GB/s (h2d / d2h), device 932 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 48 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 1 iterations
+
+== 4D flow 1.3 min (80 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 1009 rotations, GIRF ideal
+   7063 readouts × 3990 ADC samples (step 1), 28181370 samples; 140 static sets (samples per set 175560 / 199500 / 227430 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 77.6 s
+  model seg-none (temporal B-spline 3):
+    autotune 392.9 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 16, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 4, kv: 1 }, adj TileCfg { tt: 4, cpba: 16, cpbf: 16, ppf: 2, chunk: 32, max_item: 1024, acb: 4, fsb: 1, fcb: 4, kv: 1 }
+    autotune forward kernels (one coil batch, knot 0): tile 30.86 ms, vs 13.43 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 32 }), Some(VsCfg { nwc: 1, nws: 1, vxpad: 0 })) -> vs; adjoint 31.80 ms; vs tables 19.1 B/sample
+    encode 3 (all frames)        vs off  M   4025910: forward   1146.5 ms, adjoint   1109.8 ms, gradient (forward + adjoint)   2260.6 ms
+    encode 3 (all frames)        vs on   M   4025910: forward    741.6 ms, adjoint   1110.2 ms, gradient (forward + adjoint)   1852.8 ms
+    encode 3 (all frames)        M   4025910: forward    738.6 ms, adjoint   1108.5 ms, normal   1850.2 ms | kernels – / – ms, FFT 470.7 / 469.9 ms, pad/crop/rest – / – ms | tables 4.2 s, 225 B/sample on the GPU
+    engine 6.22 GiB (coil batch 48), segment tables 0.03 GiB per encode (0.0 s), resident problem 68.0 GiB (does not fit: data streamed from host), device part without data 30.1 GiB
+    per iteration: operator 12.93 s (forward + adjoint over 7 sets, 2.818e7 samples; FFT 51 %) + data streaming 0.79 s + prior round trip 0.60 s + ZMSHR1 vectors 0.07 s = 14.38 s; setup 478 s; 1 iterations ≈ 8.2 min
+    format error: memory plan: nothing fits — smallest placement needs 33.82 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 1.3 min (1 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-none   1  0 |         14.38 |       8.2 |     68.0 (streamed)
+wrote /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/vs_engine/kn_4m_48x1_o0.json

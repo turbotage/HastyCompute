@@ -1,0 +1,5 @@
+== HASTY_SEG_VS=0
+== HASTY_SEG_VS=auto
+Static0 R = 65: Φ CGEMM vs kernel: forward 7.6e-5, adjoint 2.6e-7
+thread 'joint_phi_gemm_chunks_and_inner_shapes' (876235) panicked at crates/hasty-nufft/tests/seg_joint_chunks.rs:181:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s

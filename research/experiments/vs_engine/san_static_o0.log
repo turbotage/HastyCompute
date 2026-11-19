@@ -1,0 +1,19 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 6.5e-5 (tile shapes 5.9e-5), adjointness 2.7e-6 (tile 3.0e-6)
+env 0,6,4,0,10,3000,6,4,4,16,64: tile cpbf 1 ppf 1 vs base 5.9e-5
+env 0,6,4,0,10,3000,6,4,4,16,64: tile cpbf 2 ppf 4 vs base 5.4e-5
+env 0,6,4,0,10,3000,6,4,4,16,64: tile cpbf 4 ppf 1 vs base 5.9e-5
+test vs_env_case ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.50s
+
+========= ERROR SUMMARY: 0 errors

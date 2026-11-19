@@ -1,0 +1,78 @@
+{
+  "adc_step": 1,
+  "cmdline": "target/release/opbench --seq flow --sets 1 --iters 1 --reps 5 --max-grid-gb 10 --vs-compare --models seg-none --vcoils 48 --cb-cap 48 --frames 7 --json /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/vs_engine/st_4m_48x1_o0.json",
+  "d2h_gbs": 20.580680023430048,
+  "device": "NVIDIA GeForce RTX 4090",
+  "device_gbs": 932.0157724244145,
+  "dims": [
+    225,
+    225,
+    112
+  ],
+  "fov_centre": [
+    0.0,
+    0.0,
+    0.05
+  ],
+  "gnl": true,
+  "h2d_gbs": 21.809133862771397,
+  "iters": 1,
+  "res": 0.002,
+  "scans": {
+    "4D flow 10.0 min": {
+      "seg-none": {
+        "autotune_s": 224.494142823,
+        "coil_batch": 48,
+        "engine_gib": 6.220703125,
+        "frames_per_set": 1,
+        "measured": [
+          {
+            "adjoint_ms": 255.97567749023438,
+            "fft_ms": [
+              23.40556812286377,
+              23.40403175354004
+            ],
+            "forward_ms": 71.89997100830078,
+            "kernels_ms": [
+              47.071903228759766,
+              221.9356231689453
+            ],
+            "normal_ms": 328.6504821777344,
+            "sample_table_bytes": 905969664,
+            "samples": 4317180,
+            "set": "frame 5 encode 3",
+            "set_points_ms": 0.0,
+            "tables_s": 3.325629602
+          }
+        ],
+        "nseg": 1,
+        "order": 0,
+        "projection": {
+          "data_streamed": true,
+          "device_gib": 22.151784213259816,
+          "fft_fraction": 0.1427663203740882,
+          "fits": false,
+          "iteration_s": 22.32162628896362,
+          "iterations": 1,
+          "kernel_fraction": 0.8204559491672856,
+          "normal_s": 16.142145309476444,
+          "operator_s": 16.104088229026022,
+          "plan": "memory plan: sample tables host (streamed), data host (streamed), secant pair device, w Host; device 22.15 / 22.34 GiB budget, transfers 5.984 s, predicted 22.088 s / iteration\n    ✗ tables host, data dev, secant dev, w Device    96.89 GiB  18.144 s\n    ✗ tables host, data dev, secant dev, w Host      94.82 GiB  18.354 s\n    ✗ tables host, data dev, secant dev, w Recompute   94.82 GiB  18.508 s\n    ✗ tables host, data dev, secant host, w Device   92.75 GiB  18.768 s\n    ✗ tables host, data dev, secant host, w Host     90.68 GiB  18.978 s\n    ✗ tables host, data dev, secant host, w Recompute   90.68 GiB  19.336 s\n    ✗ tables host, data host, secant dev, w Device   24.22 GiB  21.878 s\n    · tables host, data host, secant dev, w Host     22.15 GiB  22.088 s\n    · tables host, data host, secant dev, w Recompute   22.15 GiB  22.242 s\n    · tables host, data host, secant host, w Device   20.08 GiB  22.502 s\n    · tables host, data host, secant host, w Host    18.01 GiB  22.712 s\n    · tables host, data host, secant host, w Recompute   18.01 GiB  23.069 s\n",
+          "prior_roundtrip_s": 0.20990969470381737,
+          "resident_gib": 212.18626561799465,
+          "samples": 212044560,
+          "sets": 49,
+          "setup_s": 398.00545940894995,
+          "stream_s": 5.983780700143109,
+          "tables_streamed": true,
+          "total_s": 420.32708569791356,
+          "vector_s": 0.023847665090670486
+        },
+        "segment_tables_gib": 0.0625,
+        "segments_s": 0.040749576
+      }
+    }
+  },
+  "total_gib": 23.5164794921875,
+  "vcoils": 48
+}

@@ -1,0 +1,78 @@
+{
+  "adc_step": 1,
+  "cmdline": "target/release/opbench --seq flow --sets 1 --iters 1 --reps 5 --max-grid-gb 10 --vs-compare --models seg-b0 --nseg 10 --vcoils 10 --order 0 --temporal cubic --knot --frames 20 --scan-min 0.44 --json /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/vs_engine/kn_1m3_10x10_o0.json",
+  "d2h_gbs": 20.70527603182576,
+  "device": "NVIDIA GeForce RTX 4090",
+  "device_gbs": 931.291493414517,
+  "dims": [
+    225,
+    225,
+    112
+  ],
+  "fov_centre": [
+    0.0,
+    0.0,
+    0.05
+  ],
+  "gnl": true,
+  "h2d_gbs": 21.844174283721273,
+  "iters": 1,
+  "res": 0.002,
+  "scans": {
+    "4D flow 0.4 min": {
+      "seg-b0": {
+        "autotune_s": 55.392540012,
+        "coil_batch": 10,
+        "engine_gib": 9.126953125,
+        "frames_per_set": 20,
+        "measured": [
+          {
+            "adjoint_ms": 1552.132080078125,
+            "fft_ms": [
+              1249.8944282531738,
+              1249.4463920593262
+            ],
+            "forward_ms": 1213.9468994140625,
+            "kernels_ms": [
+              null,
+              null
+            ],
+            "normal_ms": 2767.34716796875,
+            "sample_table_bytes": 301989888,
+            "samples": 1332660,
+            "set": "encode 3 (all frames)",
+            "set_points_ms": 0.0,
+            "tables_s": 1.384125129
+          }
+        ],
+        "nseg": 10,
+        "order": 0,
+        "projection": {
+          "data_streamed": false,
+          "device_gib": 31.682265758514404,
+          "fft_fraction": 0.9035681333912394,
+          "fits": false,
+          "iteration_s": 20.15909750907982,
+          "iterations": 1,
+          "kernel_fraction": null,
+          "normal_s": 19.37143017578125,
+          "operator_s": 19.362552856445312,
+          "plan": "format error: memory plan: nothing fits — smallest placement needs 35.54 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)\n",
+          "prior_roundtrip_s": 0.5974181022405625,
+          "resident_gib": 50.81515109539032,
+          "samples": 9328620,
+          "sets": 7,
+          "setup_s": 150.7651606160625,
+          "stream_s": 0.1309373739126177,
+          "tables_streamed": false,
+          "total_s": 170.92425812514233,
+          "vector_s": 0.06818917648132583
+        },
+        "segment_tables_gib": 0.40625,
+        "segments_s": 0.380475666
+      }
+    }
+  },
+  "total_gib": 23.5164794921875,
+  "vcoils": 10
+}

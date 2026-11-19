@@ -1,0 +1,5 @@
+=== knotref2_m4000000_c10_l10_o2: env [] --mode base --knot --m 4000000 --ncb 10 --nseg 10 --order 2 (Thu Nov 19 03:52:46 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  engine points 3.4 s, grid [200, 200, 200]
+  base (today's tile kernels, autotuned 370 s): forward 236.62 ms TileCfg { tt: 4, cpba: 1, cpbf: 6, ppf: 4, chunk: 64, max_item: 1024, acb: 1, fsb: 4, fcb: 1, kv: 1 }, adjoint 288.56 ms TileCfg { tt: 4, cpba: 5, cpbf: 6, ppf: 4, chunk: 64, max_item: 1024, acb: 1, fsb: 4, fcb: 1, kv: 1 } (default TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 } / TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 })

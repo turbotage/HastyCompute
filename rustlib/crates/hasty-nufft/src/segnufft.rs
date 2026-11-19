@@ -30,6 +30,9 @@ use hasty_fft::{Direction, FftPlan, KSupport, Norm, PrunedChanFft3};
 
 use crate::plan::{MDims, NufftError, NufftOpts, NufftPlan};
 
+mod vs;
+pub use vs::{VsCfg, VsGeom};
+
 pub struct SegNufftOpts {
     pub sigma: f64,
     pub width: usize,
@@ -87,7 +90,8 @@ pub struct TileCfg {
     /// with sub-box warps (support-box skips per 8 points), z = y·a·β folded coefficients and one fused staging pass;
     /// 2 (opt-in, HASTY_SEG_KV=2, with HASTY_SEG_BOXSORT=1 tables): adjoint as 1, forward looping over the union of a
     /// warp's support boxes (measured slower than 1 at 2 mm, §17). Variants ≥ 1 need TT = 4 and a knot-major
-    /// engine; other engines: 0. The autotune times 0 and 1.
+    /// engine; other engines: 0. The autotune times 0 and 1. The vs forward (`segnufft/vs.rs`, [`VsCfg`]) is a separate
+    /// variant next to these, not a `kv` value.
     pub kv: usize,
 }
 
@@ -626,6 +630,9 @@ pub struct SegPoints {
     nri: u32,
     /// fine-grid k-space columns and kz planes the set's nonempty tiles cover (k-support pruning of the grid FFTs)
     cols: Arc<KCols>,
+    /// home-tile tables of the vs forward (`segnufft/vs.rs`), built when the engine has a vs geometry; None otherwise
+    /// (and in the engine's streaming slots: host-resident sets run the tile kernels)
+    vs: Option<vs::VsTables>,
 }
 
 /// The fine-grid cells a sample set's tile kernels read (forward) or write nonzero (adjoint): the union of its
@@ -854,14 +861,19 @@ impl SegPoints {
     /// bytes of the set's sample tables (records, tile lists, work items, order-3 data), wherever they live
     pub fn table_bytes(&self) -> usize {
         match &self.host {
-            Some(h) => h.rec.bytes() + h.tl.bytes() + h.items.bytes() + h.hi.as_ref().map_or(0, |(u, t)| u.bytes() + t.bytes()),
+            Some(h) => h.rec.bytes() + h.tl.bytes() + h.items.bytes() + h.hi.as_ref().map_or(0, |(u, t)| u.bytes() + t.bytes()) + self.vs.as_ref().map_or(0, |v| v.bytes()),
             None => self.device_bytes(),
         }
     }
 
     /// device bytes held by this object now (placeholders only when host-resident)
     pub fn device_bytes(&self) -> usize {
-        4 * (self.rec.len() + self.tl.len() + self.items.len()) + self.hi.as_ref().map_or(0, |(u, t)| 4 * (u.len() + t.len()))
+        4 * (self.rec.len() + self.tl.len() + self.items.len()) + self.hi.as_ref().map_or(0, |(u, t)| 4 * (u.len() + t.len())) + self.vs.as_ref().map_or(0, |v| v.device_bytes())
+    }
+
+    /// bytes of the set's vs tables (0 without; included in [`table_bytes`](Self::table_bytes))
+    pub fn vs_table_bytes(&self) -> usize {
+        self.vs.as_ref().map_or(0, |v| v.bytes())
     }
 
     /// Move the tables to pinned host memory (freeing the device copies); the engine streams them into a device slot
@@ -877,6 +889,9 @@ impl SegPoints {
         };
         let hi = hi.map(|(u, t)| (HostBuf::Pinned(u), HostBuf::Pinned(t)));
         let h = PointsHost { rec: HostBuf::Pinned(pinned_copy(ctx, st, &self.rec)?), tl: HostBuf::Pinned(pinned_copy(ctx, st, &self.tl)?), items: HostBuf::Pinned(pinned_copy(ctx, st, &self.items)?), hi };
+        if let Some(v) = self.vs.as_mut() {
+            v.to_host(st)?;
+        }
         st.synchronize()?;
         self.rec = st.alloc_zeros(1)?;
         self.tl = st.alloc_zeros(1)?;
@@ -896,6 +911,9 @@ impl SegPoints {
             Some((u, t)) => Some((u.to_dev(st)?, t.to_dev(st)?)),
             None => None,
         };
+        if let Some(v) = self.vs.as_mut() {
+            v.to_device(st)?;
+        }
         st.synchronize()?;
         Ok(self.device_bytes())
     }
@@ -997,6 +1015,11 @@ pub struct SegNufft {
     /// operator (`segjoint`), whose channel batches accumulate into one image. Single-image paths (static, order-3 multi
     /// with one image, knot-major); the warp correction is not accumulated.
     pub adjoint_accumulate: bool,
+    /// vs forward (`segnufft/vs.rs`): geometry of the tables built by `points` (None: no tables), the active kernel
+    /// (None: the tile kernels), and the last autotune's (tile, vs) forward kernel times
+    vs_geom: Option<VsGeom>,
+    vs: Option<vs::VsActive>,
+    vs_tune: Option<(f32, f32, Option<VsCfg>)>,
 }
 
 /// Pinned staging buffer of one table slot for packed tables, and the event of its last upload.
@@ -1377,7 +1400,7 @@ impl SegNufft {
         let gfft = GridFft::new(dev, [plan.nf[0], plan.nf[1], plan.nf[2]], dims, nch, None)?;
         let stream = dev.default_stream();
         let slots = (0..nf).map(|_| stream.alloc_zeros::<C32>(nch * ge)).collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
+        let mut eng = Self {
             plan,
             nseg: opts.nseg,
             order: opts.order,
@@ -1410,7 +1433,12 @@ impl SegNufft {
             kcols: KCols::default(),
             kprune: kprune_default(),
             adjoint_accumulate: false,
-        })
+            vs_geom: None,
+            vs: None,
+            vs_tune: None,
+        };
+        eng.vs_init()?;
+        Ok(eng)
     }
 
     /// In-readout motion of the moving voxels (`segwarp`): one [`crate::SegWarp`] per frame (its node displacements
@@ -1665,7 +1693,8 @@ impl SegNufft {
             box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
             let ivals = vec![Interval { first: 0, count: items.len(), split }];
             let cols = self.kcols_of(&items);
-            return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0, cols });
+            let vs = self.vs_tables(st, &sc, m, Some(&ival))?;
+            return Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: nfr as u32, nri: 0, cols, vs });
         }
         // tile lists per interval (samples kept in bin-sorted order)
         let mut tl_all: Vec<u32> = Vec::new();
@@ -1681,7 +1710,9 @@ impl SegNufft {
             items_all.extend_from_slice(&items);
         }
         let cols = self.kcols_of(&items_all);
-        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: 0, nri: 0, cols })
+        // vs tables: static images only (one frame slot; interval-major frames run the tile kernels)
+        let vs = if nfr == 1 { self.vs_tables(st, &sc, m, None)? } else { None };
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl_all)?, items: st.clone_htod(items_all.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: 0, nri: 0, cols, vs })
     }
 
     fn mdims(&self) -> MDims {
@@ -1903,7 +1934,6 @@ impl SegNufft {
         }
         let (nv, m) = (self.nv(), pts.m);
         assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
-        let (fwd, tc) = (self.f.fwd.clone(), self.tiles_fwd);
         let mut c0 = 0;
         while c0 < self.nc {
             let ncb = self.cb.min(self.nc - c0);
@@ -1916,7 +1946,7 @@ impl SegNufft {
                     self.load_frame(st, seg, s, x, held[s].unwrap(), c0, ncb)?;
                 }
                 let g = self.grids(st, &map);
-                self.launch_fwd(st, &fwd, &tc, seg, pts, i, g, y, c0, ncb)?;
+                self.gather(st, seg, pts, i, g, y, c0, ncb)?;
             }
             c0 += ncb;
         }
@@ -2155,6 +2185,9 @@ impl SegNufft {
                 }
             }
         }
+        // vs forward (segnufft/vs.rs): a separate variant timed on the same interval / knot; kept where faster (env
+        // HASTY_SEG_VS=1: always, HASTY_SEG_VS=0: never timed). Sets without vs tables keep the current choice.
+        let vs_best = if vs::vs_mode() != vs::VsMode::Off { self.autotune_vs(st, seg, pts, if self.ks > 0 { 0 } else { busiest }, g, &mut ys, ncb)? } else { None };
         let mut best_a = (f32::INFINITY, self.tiles_adj);
         let combos: Vec<(usize, usize, usize)> = groups.iter().filter(|&&c| c <= cb).flat_map(|&c| acbs.iter().flat_map(|&a| kvs.iter().map(move |&k| (c, a, k))).collect::<Vec<_>>()).collect();
         for (cpba, acb, kv) in combos {
@@ -2169,7 +2202,19 @@ impl SegNufft {
             }
         }
         self.set_tiles(best_f.1, best_a.1)?;
-        Ok((best_f.0, best_a.0))
+        let mut tf = best_f.0;
+        if let Some((t, a)) = vs_best {
+            self.vs_tune = Some((best_f.0, t, Some(a.cfg)));
+            if vs::vs_mode() == vs::VsMode::On || t < best_f.0 {
+                tf = t;
+                self.vs = Some(a);
+            } else {
+                self.vs = None;
+            }
+        } else {
+            self.vs_tune = Some((best_f.0, f32::NAN, None));
+        }
+        Ok((tf, best_a.0))
     }
 }
 
@@ -3216,6 +3261,7 @@ fn fill_slot(on: &Arc<CudaStream>, src: &SegPoints, slot: &mut Option<SegPoints>
             knot: 0,
             nri: 0,
             cols: Arc::default(),
+            vs: None,
         });
     }
     let s = slot.as_mut().unwrap();
@@ -3282,6 +3328,7 @@ impl SegNufft {
                 knot: 0,
                 nri: 0,
                 cols: Arc::default(),
+                vs: None,
             });
             s.owner[i] = None;
             s.ready[i] = None;
@@ -3633,8 +3680,8 @@ impl SegNufft {
                             self.on_device(st, pts[j], |e, p| e.mlaunch_fwd(km, &f, &tc, st, seg, p, i, g, WPtrs { p: [0; 4] }, 1, y, c0, ncb))?;
                         }
                         None => {
-                            let (f, tc, g) = (self.f.fwd.clone(), self.tiles_fwd, self.grids(st, &map));
-                            self.on_device(st, pts[j], |e, p| e.launch_fwd(st, &f, &tc, seg, p, i, g, y, c0, ncb))?;
+                            let g = self.grids(st, &map);
+                            self.on_device(st, pts[j], |e, p| e.gather(st, seg, p, i, g, y, c0, ncb))?;
                         }
                     }
                     self.group_prefetch(st, pts, &seq, pos)?;
@@ -3775,7 +3822,6 @@ impl SegNufft {
         assert!(x.len() >= self.frames * self.nv());
         let n = pts.len();
         if self.ks > 0 {
-            let (fwd, tc) = (self.f.fwd.clone(), self.tiles_fwd);
             let g = self.grids(st, &[0]);
             let mut c0 = 0;
             while c0 < self.nc {
@@ -3785,7 +3831,7 @@ impl SegNufft {
                     for j in 0..n {
                         let m = pts[j].m;
                         st.memset_zeros(&mut buf.slice_mut(c0 * m..(c0 + ncb) * m))?;
-                        self.on_device(st, pts[j], |e, p| e.launch_fwd_k(st, &fwd, &tc, seg, p, b, g, buf, c0, ncb))?;
+                        self.on_device(st, pts[j], |e, p| e.gather(st, seg, p, b, g, buf, c0, ncb))?;
                         sink(st, j, c0, ncb, buf)?;
                     }
                 }
@@ -3822,8 +3868,8 @@ impl SegNufft {
                                 self.on_device(st, pts[j], |e, p| e.mlaunch_fwd(km, &f, &tc, st, seg, p, i, g, WPtrs { p: [0; 4] }, 1, buf, c0, ncb))?;
                             }
                             None => {
-                                let (f, tc, g) = (self.f.fwd.clone(), self.tiles_fwd, self.grids(st, &map));
-                                self.on_device(st, pts[j], |e, p| e.launch_fwd(st, &f, &tc, seg, p, i, g, buf, c0, ncb))?;
+                                let g = self.grids(st, &map);
+                                self.on_device(st, pts[j], |e, p| e.gather(st, seg, p, i, g, buf, c0, ncb))?;
                             }
                         }
                         sink(st, j, c0, ncb, buf)?;
@@ -3965,7 +4011,6 @@ impl SegNufft {
         let (nv, m) = (self.nv(), pts.m);
         assert!(pts.knot as usize == self.mc && (self.kr == 0) == (pts.nri == 0), "knot-major engine of {} cardiac knots (2-D: {}), tables of {} intervals ({} respiratory)", self.mc, self.kr, pts.knot, pts.nri);
         assert!(x.len() >= self.frames * nv && y.len() >= self.nc * m);
-        let (fwd, tc) = (self.f.fwd.clone(), self.tiles_fwd);
         let g = self.grids(st, &[0]);
         let mut c0 = 0;
         while c0 < self.nc {
@@ -3973,7 +4018,7 @@ impl SegNufft {
             self.init_rows(st, init, y, c0 * m, (c0 + ncb) * m)?;
             for b in 0..self.frames {
                 self.load_frame(st, seg, 0, x, b, c0, ncb)?;
-                self.launch_fwd_k(st, &fwd, &tc, seg, pts, b, g, y, c0, ncb)?;
+                self.gather(st, seg, pts, b, g, y, c0, ncb)?;
             }
             c0 += ncb;
         }
@@ -4182,7 +4227,8 @@ impl SegNufft {
         box_sort(&mut tl, &items, &sc, m, self.plan.nf, self.plan.ker.w, self.tiles_fwd.tt, 25);
         let ivals = vec![Interval { first: 0, count: items.len(), split }];
         let cols = self.kcols_of(&items);
-        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32, cols })
+        let vs = self.vs_tables(st, &sc, m, Some(&key))?;
+        Ok(SegPoints { rec: st.clone_htod(&rec)?, tl: st.clone_htod(&tl)?, items: st.clone_htod(items.as_flattened())?, ivals, m, hi: None, host: None, id: POINTS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed), knot: mc as u32, nri: nri as u32, cols, vs })
     }
 
     /// [`points2d`](Self::points2d) for correction order 3: additionally the per-sample degree-3/4 polynomial phase of

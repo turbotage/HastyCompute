@@ -1,0 +1,45 @@
+=== ab_m4000000_c16_l1: env [] --mode fwd --m 4000000 --ncb 16 --nseg 1 --order 0 --designs vs --each --check 400 --reps 5 --fixed 4,4,16,32,1,1;4,4,16,32,1,1,shr=1;4,4,16,32,1,1,carve=50;4,4,16,32,1,1,carve=0;4,4,16,32,1,1,pf=1;4,4,16,32,1,1,s2=1;4,4,16,32,1,1,pt=1;1,16,16,32,1,1;1,16,16,32,1,1,shr=1;1,16,16,32,1,1,shr=1,minb=16 (Thu Nov 19 04:31:56 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 16 (16 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 0.95 GiB, y 0.48 GiB, 64000000000 useful complex MACs per pass
+  vs: 10 candidates, compiled in 3.1 s
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  11456 regs 171:    12.42 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 1 pf 0 s2 0 pt 0 minb 0 carve -1 smem  11456 regs 195:    12.84 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 0 pt 0 minb 0 carve 50 smem  11456 regs 171:    15.99 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 0 pt 0 minb 0 carve 0 smem  11456 regs 171:    72.19 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 1 s2 0 pt 0 minb 0 carve -1 smem  11456 regs 231:    12.70 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 1 pt 0 minb 0 carve -1 smem  11456 regs 190:    16.01 ms
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 0 pt 1 minb 0 carve -1 smem  11456 regs 171:    12.54 ms
+    vs t [1, 16, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 0 pf 0 s2 0 pt 0 minb 0 carve -1 smem  11456 regs 149:    18.17 ms
+    vs t [1, 16, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 1 pf 0 s2 0 pt 0 minb 0 carve -1 smem  11456 regs 161:    16.42 ms
+    vs t [1, 16, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 vt 0 shr 1 pf 0 s2 0 pt 0 minb 16 carve -1 smem  11456 regs 128:    21.69 ms
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 27.8 %
+  RES vs: regs 171, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 12.28 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 134355 | 5210 G cMAC/s, 24.8 % of FP32 FMA peak (2 FMA/MAC) | value loads 41.7 TB/s (L1/smem), halo staging 3413 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 26.4 %
+  RES vs: regs 195, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 12.94 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 1, pf: 0, s2: 0, pt: 0, carve: -1 } items 134355 | 4945 G cMAC/s, 23.5 % of FP32 FMA peak (2 FMA/MAC) | value loads 39.6 TB/s (L1/smem), halo staging 3240 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 21.4 %
+  RES vs: regs 171, local 0 B, smem 11456 B, blocks/SM 5, warps/SM 5 of 48
+  BEST vs: 15.97 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: 50 } items 134355 | 4008 G cMAC/s, 19.1 % of FP32 FMA peak (2 FMA/MAC) | value loads 32.1 TB/s (L1/smem), halo staging 2626 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 5.0 %
+  RES vs: regs 171, local 0 B, smem 11456 B, blocks/SM 1, warps/SM 1 of 48
+  BEST vs: 68.64 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: 0 } items 134355 | 932 G cMAC/s, 4.4 % of FP32 FMA peak (2 FMA/MAC) | value loads 7.5 TB/s (L1/smem), halo staging 611 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 26.8 %
+  RES vs: regs 231, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 12.74 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 1, s2: 0, pt: 0, carve: -1 } items 134355 | 5022 G cMAC/s, 23.9 % of FP32 FMA peak (2 FMA/MAC) | value loads 40.2 TB/s (L1/smem), halo staging 3290 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 21.3 %
+  RES vs: regs 190, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 16.01 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 1, pt: 0, carve: -1 } items 134355 | 3999 G cMAC/s, 19.0 % of FP32 FMA peak (2 FMA/MAC) | value loads 32.0 TB/s (L1/smem), halo staging 2620 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 27.2 %
+  RES vs: regs 171, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 12.53 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 1, carve: -1 } items 134355 | 5108 G cMAC/s, 24.3 % of FP32 FMA peak (2 FMA/MAC) | value loads 40.9 TB/s (L1/smem), halo staging 3347 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.924, samples active per (item, plane) 26.1, bodies per (plane, window step) 1.6, planes per item 11.9, channel-lane efficiency 1.000; FFMA-pipe use of issued work 18.8 %
+  RES vs: regs 149, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 18.15 ms Cfg { halo: 4, tt: 1, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 16, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 0, pf: 0, s2: 0, pt: 0, carve: -1 } items 135349 | 3526 G cMAC/s, 16.8 % of FP32 FMA peak (2 FMA/MAC) | value loads 28.2 TB/s (L1/smem), halo staging 4550 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.924, samples active per (item, plane) 26.1, bodies per (plane, window step) 1.6, planes per item 11.9, channel-lane efficiency 1.000; FFMA-pipe use of issued work 20.8 %
+  RES vs: regs 161, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 16.44 ms Cfg { halo: 4, tt: 1, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 16, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 1, pf: 0, s2: 0, pt: 0, carve: -1 } items 135349 | 3894 G cMAC/s, 18.5 % of FP32 FMA peak (2 FMA/MAC) | value loads 31.1 TB/s (L1/smem), halo staging 5024 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples
+  WORK vs: item fill 0.924, samples active per (item, plane) 26.1, bodies per (plane, window step) 1.6, planes per item 11.9, channel-lane efficiency 1.000; FFMA-pipe use of issued work 15.8 %
+  RES vs: regs 128, local 64 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 21.65 ms Cfg { halo: 4, tt: 1, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 16, tz: 16, acfg: 0, pfs: 0, minb: 16, nwc: 1, nws: 1, vxpad: 0, vt: 0, shr: 1, pf: 0, s2: 0, pt: 0, carve: -1 } items 135349 | 2956 G cMAC/s, 14.1 % of FP32 FMA peak (2 FMA/MAC) | value loads 23.7 TB/s (L1/smem), halo staging 3815 GB/s | rel err 6.30e-7 (max 5.38e-6 of rms 1.91e0) on 400 samples

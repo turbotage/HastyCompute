@@ -1,0 +1,23 @@
+15:42:57 start san_static_o0: VS_DBG=0,6,4,0,10,3000,6,4,4,16,64
+15:44:30 done san_static_o0
+15:44:30 start san_static_o1: VS_DBG=0,6,4,1,10,3000,6,2,4,16,32
+15:49:42 done san_static_o1
+15:49:42 start san_knot1d_o0: VS_DBG=1,4,3,0,10,3000,4,4,4,16,64
+15:52:58 done san_knot1d_o0
+15:52:58 start san_knot2d_o1: VS_DBG=2,4,3,1,8,3000,4,4,2,8,48
+15:59:29 done san_knot2d_o1
+15:59:29 start st_4m_10x10_o0: --models seg-b0 --nseg 10 --vcoils 10 --order 0 --frames 7
+16:14:29 FAILED st_4m_10x10_o0 (exit 0)
+16:14:29 start st_4m_48x1_o0: --models seg-none --vcoils 48 --cb-cap 48 --frames 7
+16:22:31 done st_4m_48x1_o0
+16:22:31 start st_1m3_10x10_o0: --models seg-b0 --nseg 10 --vcoils 10 --order 0 --frames 23
+16:26:46 done st_1m3_10x10_o0
+16:26:46 start kn_4m_10x10_o0: --models seg-b0 --nseg 10 --vcoils 10 --order 0 --temporal cubic --knot --frames 20 --scan-min 1.33
+16:31:29 done kn_4m_10x10_o0
+16:31:29 start kn_4m_48x1_o0: --models seg-none --vcoils 48 --cb-cap 48 --temporal cubic --knot --frames 20 --scan-min 1.33
+16:41:07 done kn_4m_48x1_o0
+16:41:07 start kn_1m3_10x10_o0: --models seg-b0 --nseg 10 --vcoils 10 --order 0 --temporal cubic --knot --frames 20 --scan-min 0.44
+16:44:12 done kn_1m3_10x10_o0
+16:44:12 start st_4m_10x10_o1: --models seg-full --nseg 10 --vcoils 10 --order 1 --frames 7
+16:49:18 done st_4m_10x10_o1
+16:49:18 start kn_4m_10x10_o1: --models seg-full --nseg 10 --vcoils 10 --order 1 --temporal cubic --knot --frames 20 --scan-min 1.33

@@ -1,0 +1,1 @@
+=== san_vt_o3: env [HASTY_NVRTC_LINEINFO=1] memcheck --mode fwd --m 200000 --ncb 10 --nseg 10 --order 3 --designs vs --each --check 50 --reps 1 --fixed 4,4,8,48,7,1,vt=1,vtp=1,shr=1,pt=1;2,4,8,16,1,2,vt=1 (Thu Nov 19 04:51:22 PM CET 2026)

@@ -1,0 +1,12 @@
+==PROF== Connected to process 860356 (/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/release/proto_gather)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 16 (16 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 0.95 GiB, y 0.48 GiB, 64000000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.9 s
+==PROF== Profiling "pg_fwd_vs": 0%....50%....100% - 16 passes
+    vs t [4, 4, 16] ch  16 tps  1 (fc 16) nt  32 smax  32 sb 0 rx 0 nwc 1 nws 1 vxpad 0 smem  11456 regs 171:    12.50 ms
+  WORK vs: item fill 0.930, samples active per (item, plane) 26.6, bodies per (plane, window step) 6.6, planes per item 11.7, channel-lane efficiency 1.000; FFMA-pipe use of issued work 27.5 %
+  RES vs: regs 171, local 0 B, smem 11456 B, blocks/SM 8, warps/SM 8 of 48
+  BEST vs: 12.43 ms Cfg { halo: 4, tt: 4, ch: 16, tps: 1, nt: 32, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 16, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 1, vxpad: 0 } items 134355 | 5151 G cMAC/s, 24.5 % of FP32 FMA peak (2 FMA/MAC) | value loads 41.2 TB/s (L1/smem), halo staging 3375 GB/s | rel err 5.19e-7 (max 2.85e-6 of rms 1.96e0) on 20 samples
+==PROF== Disconnected from process 860356
+==PROF== Report: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/sample_kernels/out/ncu/vs_m4M_c16.ncu-rep
