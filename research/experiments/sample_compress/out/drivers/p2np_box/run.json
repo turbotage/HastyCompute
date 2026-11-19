@@ -1,0 +1,192 @@
+{
+  "block": 8,
+  "cmdline": "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/rcompress_snap/recon_p2np data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan --grid-scale 0.5 --kcrop --keep 4 --iters 3 --every 1 --kappa 0 --no-full-save --fresh --rcompress box --out research/experiments/sample_compress/out/drivers/p2np_box",
+  "coil_mask": "none",
+  "coils": {
+    "eig_rel": [
+      0.38829600166114064,
+      0.16977640067006816,
+      0.1524513337046624,
+      0.12580613297969134,
+      0.04860571245326157,
+      0.031085653182217208,
+      0.022833289115316794,
+      0.015960384369737284,
+      0.012610535490641724,
+      0.00820070092748903,
+      0.005248835160098176,
+      0.00473789982353672,
+      0.0036206708384562427,
+      0.0029135982621156377,
+      0.0017421159339027221,
+      0.0012849986725338193,
+      0.0010850074995928923,
+      0.0008761603338496038,
+      0.0006925280258166903,
+      0.0005978502686505701,
+      0.0005161652911430182,
+      0.0002978336907138371,
+      0.0002090718758367072,
+      0.0001580311590817789,
+      0.00012405275632620464,
+      0.00008596041252501938,
+      0.00006532240520213023,
+      0.00003490878961559707,
+      0.0000295837239635046,
+      0.00002184717471029117,
+      0.000016756047488446095,
+      0.00001465730061429035
+    ],
+    "gram": "calib",
+    "kept": 22,
+    "of": 32,
+    "retained": 0.9992398083546361,
+    "rule": "energy ≥ 99.900 %"
+  },
+  "conc_fit": "quad",
+  "dims": [
+    100,
+    96,
+    120
+  ],
+  "encoding": "Referenced",
+  "eps": 0.001,
+  "estimates": {
+    "rcompress": {
+      "band": "[-997, 928] Hz, decay ≤ 300 1/s",
+      "data_constant": 29216074272.692554,
+      "data_energy": 153358523264209.94,
+      "designs": 1235,
+      "kept": 1632841,
+      "mode": "Box { os: None }",
+      "os": 1.35,
+      "q": 32,
+      "reduction": 1.5088131667443432,
+      "roi": "box 200.0 × 191.0 × 229.9 mm",
+      "samples": 2463652,
+      "table_gib": 0.19292855262756348
+    },
+    "rcompress_gate": {
+      "frob": 0.000012276370995154621,
+      "gram": 4.617340204152119e-6,
+      "worst": 0.00002793130054492374
+    }
+  },
+  "fat_model": null,
+  "field": "truth",
+  "gnl": false,
+  "iters": 3,
+  "kdata": {
+    "describe": "dense in RAM",
+    "file": null,
+    "path": "streamed",
+    "quant_step": 0.0,
+    "ratio": 1.0,
+    "raw_bytes": 2081867920,
+    "spec": "ram",
+    "stored_bytes": 2081867920,
+    "tag_hash": "ccff3612c40bd5c9"
+  },
+  "keep_frames": null,
+  "lagged": null,
+  "lambda_max": 102179231.70083505,
+  "lambda_max_mn": 1.0,
+  "learned_dir": null,
+  "learned_prec": "bf16",
+  "model": "seg",
+  "n_enc": 7,
+  "n_frames": 20,
+  "native_dims": [
+    198,
+    189,
+    228
+  ],
+  "noise_sigma_env": null,
+  "nseg": 8,
+  "order": 2,
+  "phys": "full",
+  "prior": "llr",
+  "prior_detail": {
+    "air": null,
+    "dfw": null,
+    "prior": "llr",
+    "static_lock": null,
+    "wavelet": {
+      "levels": 3,
+      "mix": 0.0,
+      "thr": 1.0
+    }
+  },
+  "prior_mode": "pnp",
+  "pyramid": {
+    "grid": [
+      100,
+      96,
+      120
+    ],
+    "init_from": null,
+    "kcrop": {
+      "adc_window": [
+        0,
+        1041
+      ],
+      "frac": 1.0,
+      "fraction": 0.20827582183984084,
+      "kept": 2463652,
+      "prefix": false,
+      "total": 11828795,
+      "window_ms": [
+        1.5800005057826638,
+        3.66200041025877
+      ]
+    },
+    "native": [
+      198,
+      189,
+      228
+    ],
+    "truth_sampling": "point",
+    "vox": [
+      0.00198,
+      0.00196875,
+      0.0019
+    ]
+  },
+  "r2s": "off",
+  "red_rho": null,
+  "red_shifts": null,
+  "respiration": null,
+  "runs": [
+    "seg_zmshr1_k0"
+  ],
+  "segments": {
+    "basis": "fixed",
+    "weight": "count"
+  },
+  "setup_s": 59.665065937,
+  "sim_dir": "data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan",
+  "smaps": "truth",
+  "temporal": null,
+  "tile": null,
+  "tsub": null,
+  "vcoils": 22,
+  "vdecode": {
+    "active": true,
+    "first_stage_range": 1.5000000062343688,
+    "margin": 1.0,
+    "mode": "ml",
+    "vext": 3.0
+  },
+  "venc": 1.0,
+  "venc_range": [
+    1.499999988077329,
+    1.499999949044227,
+    1.5000000062343688
+  ],
+  "vox": [
+    0.00198,
+    0.00196875,
+    0.0019
+  ],
+  "warm_iters": 0
+}

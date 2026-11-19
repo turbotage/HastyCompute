@@ -1,0 +1,7 @@
+=== smoke_ps_o0c: env [] --mode fwd --m 200000 --ncb 3 --nseg 4 --order 0 --designs ps --fixed 4,4,8,1,2,2,128 --check 300 --reps 2 (Thu Nov 19 11:18:25 AM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 12 (3 coils x 4 seg), order 0, M 200000
+trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  grid 0.72 GiB, y 0.00 GiB, 2400000000 useful complex MACs per pass
+  ps: 1 candidates, compiled in 0.3 s
+    ps t [4, 4, 8] ch   2 tps  1 (fc  2) nt 128 smax 256 sb 2 rx 1 smem  47392 regs  95:     8.60 ms
+  BEST ps: 8.59 ms Cfg { halo: 3, tt: 4, ch: 2, tps: 1, nt: 128, smax: 256, padc: 0, sb: 2, rx: 1, ty: 4, tz: 8 } items 21613 | 280 G cMAC/s, 1.3 % of FP32 FMA peak (2 FMA/MAC) | value loads 2.2 TB/s (L1/smem), halo staging 694 GB/s | rel err 6.55e-7 (max 9.92e-6 of rms 3.99e0) on 301 samples

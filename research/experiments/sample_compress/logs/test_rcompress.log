@@ -1,0 +1,18 @@
+
+running 1 test
+grid [100, 96, 120] at 1.98 mm, 287 fit + 67 held-out readouts, 455381 + 104149 samples → 336598 + 76533 (1.353×), box 200.0 × 191.0 × 229.9 mm, band [-841, 782] Hz, decay ≤ 300 1/s, os 1.35, q 32, 354 design(s)
+test compressed_cgls_matches_on_real_data has been running for over 60 seconds
+W 10, σ 1.25: objective 2.94e-8, gradient 2.42e-4; iterates ["1.7e-4", "1.7e-4", "1.9e-4", "2.1e-4", "2.1e-4", "2.3e-4", "6.2e-4", "1.6e-2"]; held-out (uncompressed ["0.69276", "0.54946", "0.46474", "0.37431", "0.31648", "0.24714", "0.20877", "0.15486"]) rel. diff ["3.3e-6", "1.0e-5", "4.0e-6", "9.8e-6", "1.2e-5", "8.9e-6", "8.2e-5", "1.2e-2"]
+
+thread 'compressed_cgls_matches_on_real_data' (733688) panicked at crates/hasty-recon/tests/rcompress.rs:210:9:
+W 10: objective 2.94e-8 / gradient 2.42e-4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test compressed_cgls_matches_on_real_data ... FAILED
+
+failures:
+
+failures:
+    compressed_cgls_matches_on_real_data
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6253.05s
+

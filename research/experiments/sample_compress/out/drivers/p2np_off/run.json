@@ -1,0 +1,172 @@
+{
+  "block": 8,
+  "cmdline": "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/rcompress_snap/recon_p2np data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan --grid-scale 0.5 --kcrop --keep 4 --iters 3 --every 1 --kappa 0 --no-full-save --fresh --rcompress off --out research/experiments/sample_compress/out/drivers/p2np_off",
+  "coil_mask": "none",
+  "coils": {
+    "eig_rel": [
+      0.3883629223601752,
+      0.16979922103691317,
+      0.1524384830368782,
+      0.12575992932046595,
+      0.048608294895905325,
+      0.03106879181846368,
+      0.02283354368289922,
+      0.015958534120738815,
+      0.012607119696411848,
+      0.008198495461605983,
+      0.005247507536432113,
+      0.0047367666776445974,
+      0.003618923337418457,
+      0.0029123279541097675,
+      0.0017408566724157438,
+      0.001285555071156111,
+      0.0010848292810044762,
+      0.0008757335217666023,
+      0.0006923985472255728,
+      0.0005976404106949036,
+      0.0005151537780577647,
+      0.0002976283980105021,
+      0.00020890892036828367,
+      0.00015787151756030496,
+      0.00012388747811103534,
+      0.0000859781193178688,
+      0.00006520244698686193,
+      0.00003483420864793785,
+      0.0000295319956891146,
+      0.000021793893751364695,
+      0.000016725875187715176,
+      0.000014608927985619447
+    ],
+    "gram": "calib",
+    "kept": 22,
+    "of": 32,
+    "retained": 0.9992406566163943,
+    "rule": "energy ≥ 99.900 %"
+  },
+  "conc_fit": "quad",
+  "dims": [
+    100,
+    96,
+    120
+  ],
+  "encoding": "Referenced",
+  "eps": 0.001,
+  "estimates": {},
+  "fat_model": null,
+  "field": "truth",
+  "gnl": false,
+  "iters": 3,
+  "kdata": {
+    "describe": "dense in RAM",
+    "file": null,
+    "path": "streamed",
+    "quant_step": 0.0,
+    "ratio": 1.0,
+    "raw_bytes": 2081867920,
+    "spec": "ram",
+    "stored_bytes": 2081867920,
+    "tag_hash": "ccff3612c40bd5c9"
+  },
+  "keep_frames": null,
+  "lagged": null,
+  "lambda_max": 102178753.93384713,
+  "lambda_max_mn": 1.0,
+  "learned_dir": null,
+  "learned_prec": "bf16",
+  "model": "seg",
+  "n_enc": 7,
+  "n_frames": 20,
+  "native_dims": [
+    198,
+    189,
+    228
+  ],
+  "noise_sigma_env": null,
+  "nseg": 8,
+  "order": 2,
+  "phys": "full",
+  "prior": "llr",
+  "prior_detail": {
+    "air": null,
+    "dfw": null,
+    "prior": "llr",
+    "static_lock": null,
+    "wavelet": {
+      "levels": 3,
+      "mix": 0.0,
+      "thr": 1.0
+    }
+  },
+  "prior_mode": "pnp",
+  "pyramid": {
+    "grid": [
+      100,
+      96,
+      120
+    ],
+    "init_from": null,
+    "kcrop": {
+      "adc_window": [
+        0,
+        1041
+      ],
+      "frac": 1.0,
+      "fraction": 0.20827582183984084,
+      "kept": 2463652,
+      "prefix": false,
+      "total": 11828795,
+      "window_ms": [
+        1.5800005057826638,
+        3.66200041025877
+      ]
+    },
+    "native": [
+      198,
+      189,
+      228
+    ],
+    "truth_sampling": "point",
+    "vox": [
+      0.00198,
+      0.00196875,
+      0.0019
+    ]
+  },
+  "r2s": "off",
+  "red_rho": null,
+  "red_shifts": null,
+  "respiration": null,
+  "runs": [
+    "seg_zmshr1_k0"
+  ],
+  "segments": {
+    "basis": "fixed",
+    "weight": "count"
+  },
+  "setup_s": 147.283872156,
+  "sim_dir": "data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan",
+  "smaps": "truth",
+  "temporal": null,
+  "tile": null,
+  "tsub": null,
+  "vcoils": 22,
+  "vdecode": {
+    "active": true,
+    "first_stage_range": 1.5000000062343688,
+    "margin": 1.0,
+    "mode": "ml",
+    "vext": 3.0
+  },
+  "venc": 1.0,
+  "venc_range": [
+    1.499999988077329,
+    1.499999949044227,
+    1.5000000062343688
+  ],
+  "vox": [
+    0.00198,
+    0.00196875,
+    0.0019
+  ],
+  "warm_iters": 0
+}

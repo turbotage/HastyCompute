@@ -80,7 +80,20 @@ fn case(nseg: usize, order: u32, kr: usize, m: usize) {
             n += 1;
         }
     }
-    assert!(n >= 7, "only {n} variant shapes ran");
+    // variant 1 with adjoint coil register blocking (acb coils per thread; research/sample_kernels.md)
+    for (cpba, acb) in [(2usize, 2usize), (4, 2), (4, 4), (8, 2), (8, 4), (8, 8)] {
+        let Some(ta) = op.tile_shape(cpba, 4, 2, acb, 1, 1) else { continue };
+        assert_eq!(ta.acb, acb);
+        let tf = op.tile_shape(4, 4, 2, 1, 1, 1).unwrap();
+        op.set_tiles(tf, ta).unwrap();
+        let (y, xa) = run(&mut op);
+        let (ef, ea) = (rel(&y, &y0), rel(&xa, &x0));
+        let e = (dot(&yd, &y) - dot(&xa, &x)).norm() / (dot(&yd, &yd).re * dot(&y, &y).re).sqrt();
+        eprintln!("nseg {nseg} order {order} kr {kr} m {m}: kv 1 cpba {cpba} acb {acb}: vs kv 0 forward {ef:.1e}, adjoint {ea:.1e}, adjointness {e:.1e}");
+        assert!(ef < 3e-5 && ea < 6e-5 && e < 2e-6, "kv 1 acb {acb} {ta:?}: forward {ef:.1e}, adjoint {ea:.1e}, adjointness {e:.1e}");
+        n += 1;
+    }
+    assert!(n >= 11, "only {n} variant shapes ran");
 }
 
 #[test]

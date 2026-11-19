@@ -1,0 +1,121 @@
+\section{Physics: when the Fourier transform is not enough}
+
+\begin{frame}{Image formation: ideal vs.\ real}
+\textbf{Ideal MRI.} Spins at $r\in\RR^3$ with density $\rho(r)$, gradients $G(t)$ steer
+$k(t)=\tfrac{\gamma}{2\pi}\!\int_0^t G$:
+\[ s(t)=\int \rho(r)\,e^{-2\pi\ii k(t)\cdot r}\,dr \qquad\Longrightarrow\qquad s=\mathcal F\rho\ \text{ sampled at }k(t).\]
+\pause
+\textbf{Real MRI.} Every ``small'' effect adds a phase or a decay that depends on \emph{both} $r$ and $t$:
+\[ s(t)=\int \rho(r)\,\exp\!\Big(-2\pi\ii\, k(t)\!\cdot\! r\;-\;\underbrace{\big(R_2^*(r)-\ii\,\omega_0(r)\big)t}_{\text{off-resonance, decay}}\;-\;\ii\,\underbrace{\Theta(r,t)}_{\text{concomitant, gradient nonlinearity}}\Big)dr \]
+\vspace{-1mm}
+\begin{itemize}
+\item $\omega_0(r)$: $B_0$ inhomogeneity, susceptibility, fat shift; $R_2^*(r)$: signal decay rate.
+\item $\Theta(r,t)$: from Maxwell's equations, a gradient is never alone.
+\end{itemize}
+\pause
+\centering\Large $s = \mathcal A\rho$ with $\mathcal A$ a \hl{Fourier integral operator}, not a Fourier transform.
+\end{frame}
+
+\iflong
+\begin{frame}{Example: concomitant (Maxwell) fields}
+A gradient $G$ must satisfy $\nabla\!\cdot\!B=0,\ \nabla\!\times\!B=0$, hence $B=(B_0+G\!\cdot\! r)\hat z+(G_x z-\tfrac12G_z x)\hat x+(G_y z-\tfrac12 G_z y)\hat y$. The field magnitude gains a term
+\[ B_c(r,t)=\frac{(G_x z-\tfrac12 G_z x)^2+(G_y z-\tfrac12 G_z y)^2}{2B_0},\qquad \Theta(r,t)=\gamma\!\int_0^t B_c . \]
+\pause
+\begin{itemize}
+\item $\Theta(r,t)=r^{\!\top}C(t)\,r$: a \hl{quadratic form in $r$ with time-dependent matrix} $C(t)\in\mathrm{Sym}_3$ (a chirp in space).
+\item Size (3\,T, 80\,mT/m, 36\,cm FOV, simulated spiral sequence): linear part $\le 1$ rad, quadratic part $\approx 3$ rad at the FOV corners.
+\item Linear part $=$ shift of $k$, free. Quadratic part is what costs.
+\end{itemize}
+\pause
+\Q{$C(t)$ is determined by the waveform, $C(t)=\mathcal C[G]$. How well can a low-dimensional family of waveforms $G$ be designed so that $C$ is small \emph{and} the encoding stays good?}
+\end{frame}
+\fi
+
+\begin{frame}{Geometric optics: space-dependent $k$-space}
+Stationary phase on $\int\rho(r)\,e^{-\ii\Phi(r,t)}dr$: the \emph{local frequency} at $r$ is $\nabla_r\Phi/2\pi$.
+\vspace{-1mm}
+\[ k_{\rm eff}(r,t)=k(t)+\tfrac1{2\pi}\nabla_r\Theta(r,t)+\tfrac{t}{2\pi}\nabla\omega_0(r)\]
+\vspace{-6mm}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+\begin{itemize}
+\item Blurring, geometric distortion, and signal pile-up are exactly this $r$-dependent $k_{\rm eff}$.
+\item A chirp $e^{\ii r^\top C r}$ is a \emph{linear canonical} (metaplectic) transform: for a purely quadratic $\Phi$ the problem is Fresnel / fractional Fourier.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.9]
+ \draw[->] (-1.8,0)--(1.8,0) node[right]{$k_x$}; \draw[->] (0,-1.8)--(0,1.8) node[above]{$k_y$};
+ \draw[thick,mLightBrown,domain=0:900,samples=150,smooth,variable=\t]
+   plot ({1.6*\t/900*cos(\t)},{1.6*\t/900*sin(\t)});
+ \draw[thick,blue!60!black,domain=0:900,samples=150,smooth,variable=\t]
+   plot ({0.35+1.6*\t/900*cos(\t)+0.35*\t/900*\t/900},{-0.2+1.6*\t/900*sin(\t)*1.1});
+ \node[mLightBrown,font=\scriptsize] at (1.0,-1.5) {$k(t)$};
+ \node[blue!60!black,font=\scriptsize] at (1.4,1.5) {$k_{\rm eff}(r,t)$};
+\end{tikzpicture}
+\end{column}
+\end{columns}
+\pause
+\medskip
+Different voxels see \emph{different} trajectories. The data are not samples of one function's spectrum.
+\end{frame}
+
+\begin{frame}{The computational problem}
+Discretise: $y=A x+n$, $\;A_{(t),(r)}=\exp\!\big(-\ii\Phi(r,t)\big)\cdot(\text{coil sensitivity})$.
+\pause
+\begin{itemize}
+\item Iterative reconstruction needs the gradient $\nabla f(x)=A^\adj(Ax-y)$ \hl{every iteration}, for $\approx$100 iterations (more with learned priors).
+\item Dense $A$: $\#\text{samples}\times\#\text{voxels}\sim10^{9\text{--}10}\times10^{7\text{--}8}$ complex exponentials per application. Not feasible.
+\item Pure Fourier: $A=P\mathcal F$, and $A^\adj A = \mathcal F^\adj P^\adj P\mathcal F$ is a \emph{convolution} (Toeplitz): one FFT pair, \hl{no} sample-domain work at all.
+\end{itemize}
+\pause
+\textbf{What we want:} an approximation $\tilde A^\adj\tilde A\approx A^\adj A$ whose cost is $O(L\cdot N\log N)$, with controlled error in $\norm{\cdot}$ and \emph{in the gradient}, with $L$ small.
+\Q{Which error is the right one? Operator error $\norm{A-\tilde A}$ is pessimistic; what matters is the error on the \emph{iterates' tangent space} (cf.\ the PnP theory later).}
+\end{frame}
+
+\begin{frame}{Two routes to a fast normal operator}
+\small
+\textbf{(1) Time segmentation = low-rank in $(r,t)$.}
+\[ e^{-\ii\Psi(r,t)}\approx\sum_{\ell=1}^{L}b_\ell(t)\,c_\ell(r)\ \Rightarrow\ A\approx\sum_\ell B_\ell\,\mathcal F\,C_\ell,\quad A^\adj A\approx\sum_{\ell,m}C_\ell^\adj\mathcal F^\adj (B_\ell^\adj B_m)\mathcal F C_m .\]
+Measured rank (error $10^{-2}$, body voxels): $B_0$ alone $L{=}8$, concomitant alone $4$, \emph{jointly} $15$ (error $2\!\cdot\!10^{-3}$: $22$). Cost grows like $L^2$ kernels.
+\pause
+\medskip
+\textbf{(2) Pseudo-differential / Weyl symbol.} With midpoint $m=\tfrac{r+r'}2$ and $d=r-r'$, the kernel of $A^\adj A$ is
+\[ K(r,r')=\sum_t \exp\!\big(\ii[\,2\pi k_t\!\cdot\! d+\underbrace{2\,d^{\!\top}C_t\,m}_{\Psi(r)-\Psi(r')}]\big)=\sigma(m,\,d). \]
+For quadratic $\Psi$ this is \hl{linear in $m$ in the exponent}: Taylor in the pair phase gives operators $\{X_p,[X_q,S]\}$ with $S$ Toeplitz. First order $\approx$ a handful of extra FFT pairs.
+\Q{Optimal $L$ for a given phase class = Kolmogorov $n$-width of $\{e^{-\ii\Psi(\cdot,t)}\}_t$. For which classes is the symbol expansion provably better than segmentation?}
+\end{frame}
+
+\iflong
+\begin{frame}{Links to other problems}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+\textbf{Fourier integral operators.}
+\begin{itemize}
+\item $\int e^{-\ii\Phi(r,t)}\rho(r)\,dr$ is an FIO. The same structure occurs in seismic migration (Kirchhoff) and variable-coefficient wave propagation.
+\item Butterfly / fast-FIO algorithms (Cand\`es--Demanet--Ying): oscillatory kernels are low-rank on dyadic phase-space boxes, with rank $\sim$ phase variation. Same mechanism as segmentation.
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\textbf{Damped waves and chirps.}
+\begin{itemize}
+\item $e^{(\ii\omega_0(r)-R_2^*(r))t}$: a continuum of \emph{damped modes}, superposed with density $\rho(r)$. Inverting is a spatially resolved Laplace / Prony problem.
+\item Quadratic $\Theta$: chirps, Wigner distribution, metaplectic group, Schr\"odinger propagators.
+\item Complex ``frequency'' $\omega_0+\ii R_2^*$ makes $A$ non-normal: $A^\adj A$ is not the right object for model-based fitting of $(\omega_0,R_2^*)$.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Gradients with respect to the physics}
+We also fit the physics: $\theta=(\omega_0,R_2^*,\text{waveform errors, GIRF})$. Joint objective $\tfrac12\norm{A_\theta x-y}^2$:
+\[ \partial_\theta f=\mathrm{Re}\,\big\langle (\partial_\theta A_\theta)\,x,\ A_\theta x-y\big\rangle . \]
+\begin{itemize}
+\item $\partial_\theta A$ has the same structure as $A$ (extra factor $-\ii\,\partial_\theta\Phi$), so the same fast machinery applies.
+\item But now the error needed is on a \emph{bilinear} functional, and the problem is non-convex (phase wrapping in $\omega_0$).
+\item Gradient-delay or $B_0$ errors are \emph{encode-dependent}, hence do not cancel in the velocity phase difference (next part).
+\end{itemize}
+\Q{Identifiability of $(x,\theta)$ jointly: when is blind calibration of $\Phi$ from the data itself well-posed?}
+\end{frame}
+\fi

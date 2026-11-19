@@ -1,0 +1,10 @@
+=== ps_m4000000_c10_l10_o2: env [] --mode fwd --m 4000000 --ncb 10 --nseg 10 --order 2 --designs ps --check 800 --reps 5 (Thu Nov 19 11:32:12 AM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 2, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  ps: 4 candidates, compiled in 0.6 s
+    ps t [4, 4, 4] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  60736 regs 168:   638.04 ms
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  60736 regs 168:   598.80 ms
+    ps t [4, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  64064 regs 166:   607.11 ms
+    ps t [2, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  61888 regs 166:   629.36 ms
+  BEST ps: 599.69 ms Cfg { halo: 3, tt: 4, ch: 4, tps: 2, nt: 128, smax: 64, padc: 0, sb: 1, rx: 1, ty: 4, tz: 8 } items 79504 | 667 G cMAC/s, 6.3 % of FP32 FMA peak (4 FMA/MAC) | value loads 5.3 TB/s (L1/smem), halo staging 305 GB/s | rel err 9.67e-7 (max 4.76e-5 of rms 1.04e1) on 800 samples

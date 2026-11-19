@@ -261,6 +261,20 @@ impl<R: Real> NufftPlan<R> {
         self.bs
     }
 
+    /// Free the fine-grid scratch: for engines that use the plan only for point sorting, the window and the
+    /// deapodisation factors (the segmented NUFFT keeps its own channel grids; the scratch is one fine grid, 1.47 GB at
+    /// the 1 mm torso grid 800 × 480 × 480). Type 1 / type 2 return an error afterwards.
+    pub fn release_grid(&mut self, stream: &Arc<CudaStream>) -> Result<(), NufftError> {
+        self.grid = stream.alloc_zeros::<R::Complex>(1)?;
+        self.batch = 0;
+        Ok(())
+    }
+
+    /// whether the fine-grid scratch is allocated (not [`release_grid`](Self::release_grid)d)
+    pub fn has_grid(&self) -> bool {
+        self.batch > 0
+    }
+
     pub fn nmodes(&self) -> usize {
         self.modes.iter().product()
     }
@@ -600,6 +614,9 @@ impl<R: Real> NufftPlan<R> {
         let es = std::mem::size_of::<R::Complex>() as u64;
         let (cp, _g1) = c.device_ptr(stream);
         let (fp, _g2) = f.device_ptr_mut(stream);
+        if self.batch == 0 {
+            return Err(NufftError::Invalid("NufftPlan: fine grid released (release_grid); type 1 / type 2 need it".into()));
+        }
         let mut t0 = 0;
         while t0 < nt {
             let ntr = self.batch.min(nt - t0);
@@ -636,6 +653,9 @@ impl<R: Real> NufftPlan<R> {
         let es = std::mem::size_of::<R::Complex>() as u64;
         let (fp, _g1) = f.device_ptr(stream);
         let (cp, _g2) = c.device_ptr_mut(stream);
+        if self.batch == 0 {
+            return Err(NufftError::Invalid("NufftPlan: fine grid released (release_grid); type 1 / type 2 need it".into()));
+        }
         let mut t0 = 0;
         while t0 < nt {
             let ntr = self.batch.min(nt - t0);
@@ -674,6 +694,9 @@ impl<R: Real> NufftPlan<R> {
         let es = std::mem::size_of::<R::Complex>() as u64;
         let (cp, _g1) = c.device_ptr(stream);
         let (fp, _g2) = f.device_ptr_mut(stream);
+        if self.batch == 0 {
+            return Err(NufftError::Invalid("NufftPlan: fine grid released (release_grid); type 1 / type 2 need it".into()));
+        }
         let mut t0 = 0;
         while t0 < nt {
             let ntr = self.batch.min(nt - t0);
@@ -710,6 +733,9 @@ impl<R: Real> NufftPlan<R> {
         let es = std::mem::size_of::<R::Complex>() as u64;
         let (fp, _g1) = f.device_ptr(stream);
         let (cp, _g2) = c.device_ptr_mut(stream);
+        if self.batch == 0 {
+            return Err(NufftError::Invalid("NufftPlan: fine grid released (release_grid); type 1 / type 2 need it".into()));
+        }
         let mut t0 = 0;
         while t0 < nt {
             let ntr = self.batch.min(nt - t0);

@@ -1,0 +1,1203 @@
+// Prototype sample-side kernels of the segmented NUFFT (research/sample_kernels.md). NOT used by the engine: a
+// standalone microbenchmark target (hasty-bench `proto_gather`). Exact W^3 supports, no zero-weight MACs, no per-tile
+// atomics.
+//
+// Forward  y[c][j] = sum_l a_jl sum_{p in supp(j)} w_j(p) G[p][c * NSEG + l]          (a_jl includes e^{-i phi0_j})
+// Adjoint  G[p][c * NSEG + l] += sum_j conj(w_j(p)) conj(a_jl) y[c][j]
+// Grid: channel-interleaved, G[((z * nf1 + y) * nf0 + x) * NCH + ch], NCH = NCB * NSEG (as segnufft.cu).
+// Weights: CORR 0: real separable phi(zx) phi(zy) phi(zz); CORR 2: the second-order corrected complex weights of
+// segnufft.cu (stage_weights; same arithmetic).
+//
+// Home tile: sample j with support corner i0 = ceil(sc - W/2) (per axis, wrapped) belongs to tile floor(i0 / TT); its
+// support lies in the tile's halo box [TT * t, TT * t + HW), HW = TT + W - 1. Work item = (tile, first, count) over
+// samples sorted by home tile (count <= SMAX).
+//
+// Defines: W, BETA, CORR (0|2), NCB, NSEG, TT, CH (channels per chunk, divides NCH), TPS (threads per sample, divides
+// CH), NT (threads per block), SMAX (samples per item), HALO (forward: 1 = halo staged in shared memory, 0 = read the
+// grid through L1/L2), PADC (cx padding of the halo point stride).
+struct cx { float x, y; };
+__device__ __forceinline__ cx cmul(cx a, cx b) { return cx{a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x}; }
+__device__ __forceinline__ cx ldcx(const cx* p) { const float2 v = __ldg(reinterpret_cast<const float2*>(p)); return cx{v.x, v.y}; }
+
+#ifndef PADC
+#define PADC 0
+#endif
+#ifndef HALO
+#define HALO 1
+#endif
+#define NCH (NCB * NSEG)
+#define HW (TT + W - 1)
+#define FC (CH / TPS)
+#define CHS (CH + PADC)
+#ifndef SB
+#define SB 1
+#endif
+#ifndef RX
+#define RX 1
+#endif
+#define WX (W + RX - 1)
+#if HALO && TT % RX != 0
+#error "halo units need TT % RX == 0"
+#endif
+#if CH % TPS != 0
+#error "TPS must divide CH"
+#endif
+#if NCH % CH != 0
+#error "CH must divide NCH"
+#endif
+#if CORR >= 2
+#define NK 5
+#else
+#define NK 1
+#endif
+// one thread owns whole coils (all NSEG segments of its channels): plain stores, else one atomic per (sample, coil
+// piece)
+#define OWN ((FC % NSEG == 0) && (CH % NSEG == 0))
+
+// ES kernel and derivatives (copies of segnufft.cu es3 / es5)
+__device__ __forceinline__ void es5(float z, float* o) {
+  const float a = 1.f - z * z;
+  if (a <= 0.f) { o[0] = o[1] = o[2] = o[3] = o[4] = 0.f; return; }
+  const float s = sqrtf(a);
+  const float f = expf((float)BETA * (s - 1.f));
+  o[0] = f;
+  if (fabsf(z) > 0.98f) { o[1] = o[2] = o[3] = o[4] = 0.f; return; }
+  const float b = (float)BETA, ia = __frcp_rn(a), is = rsqrtf(a), is3 = is * ia, is5 = is3 * ia, is7 = is5 * ia;
+  const float u1 = -b * z * is, u2 = -b * is3, u3 = -3.f * b * z * is5, u4 = -3.f * b * (1.f + 4.f * z * z) * is7;
+  o[1] = u1 * f;
+  o[2] = (u2 + u1 * u1) * f;
+  o[3] = (u3 + 3.f * u1 * u2 + u1 * u1 * u1) * f;
+  o[4] = (u4 + 4.f * u1 * u3 + 3.f * u2 * u2 + 6.f * u1 * u1 * u2 + u1 * u1 * u1 * u1) * f;
+}
+__device__ __forceinline__ void kern(float z, float* o) {
+#if CORR >= 2
+  es5(z, o);
+#else
+  const float a = 1.f - z * z;
+  o[0] = a <= 0.f ? 0.f : expf((float)BETA * (sqrtf(a) - 1.f));
+#endif
+}
+
+struct Item { int tile, first, count, ufirst; };   // ufirst: first work unit (items[n] is a sentinel)
+struct Dims { int nf0, nf1, nf2; };
+
+// per-sample shared record, flat float words (stride SW odd: lanes of different samples on distinct banks)
+#define K_OFF 0
+#define O_OFF (3 * NK * W)
+#define D_OFF (O_OFF + 3)
+#define E_OFF (D_OFF + (CORR >= 2 ? 6 : 0))
+#define A_OFF (E_OFF + (CORR >= 2 ? 15 : 0))
+// PS_ACFG 1 (ps only): the segment coefficients stay in global memory (read once per (sample, segment) at the output),
+// shrinking the record by 2 NSEG words (more resident blocks when NSEG is large)
+#ifndef PS_ACFG
+#define PS_ACFG 0
+#endif
+#if defined(PS) && PS_ACFG
+#define SW0 A_OFF
+#else
+#define SW0 (A_OFF + 2 * NSEG)
+#endif
+#define SW (SW0 | 1)
+#define KX(P, ax, k, t) (P)[K_OFF + ((ax) * NK + (k)) * W + (t)]
+
+__device__ __forceinline__ int wrapi(int i, int n) { int r = i % n; return r < 0 ? r + n : r; }
+__device__ __forceinline__ void tile_org(int tile, const Dims& d, int& o0, int& o1, int& o2) {
+  const int ntx = (d.nf0 + TT - 1) / TT, nty = (d.nf1 + TT - 1) / TT;
+  o0 = (tile % ntx) * TT; o1 = ((tile / ntx) % nty) * TT; o2 = (tile / (ntx * nty)) * TT;
+}
+
+// stage the item's samples: kernel values per axis, support offsets (in the halo with HALO / USE_HALO, else wrapped
+// grid indices), ΔC terms, segment coefficients (conjugated for the adjoint)
+template <int CONJ, int REL>
+__device__ __forceinline__ void stage(float* S, const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf, int M,
+                                      const Item& it, int o0, int o1, int o2, const Dims& d) {
+  for (int q = threadIdx.x; q < it.count * 3 * W; q += NT) {
+    const int s = q / (3 * W), a = (q / W) % 3, t = q % W;
+    const float4 r = pos[it.first + s];
+    const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+    const int i0 = (int)ceilf(sc - (float)W * 0.5f);
+    const float z = ((float)(i0 + t) - sc) * (2.f / (float)W);
+    float o[5];
+    kern(z, o);
+    float* P = S + (size_t)s * SW;
+    #pragma unroll
+    for (int k = 0; k < NK; ++k) KX(P, a, k, t) = o[k];
+    if (t == 0) {
+      const int n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2), og = a == 0 ? o0 : (a == 1 ? o1 : o2);
+      const int wv = wrapi(i0, n);
+      reinterpret_cast<int*>(P)[O_OFF + a] = REL ? wv - og : wv;
+    }
+  }
+  for (int q = threadIdx.x; q < it.count * NSEG; q += NT) {
+    const int s = q / NSEG, l = q % NSEG;
+    const cx v = acf[(size_t)(it.first + s) * NSEG + l];
+    float* P = S + (size_t)s * SW;
+    P[A_OFF + 2 * l] = v.x; P[A_OFF + 2 * l + 1] = CONJ ? -v.y : v.y;
+  }
+#if CORR >= 2
+  for (int q = threadIdx.x; q < it.count; q += NT) {
+    float* P = S + (size_t)q * SW;
+    float dd[6];
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) { dd[p] = dco[(size_t)p * M + it.first + q]; P[D_OFF + p] = dd[p]; }
+    const int mx[6] = {2, 0, 0, 1, 1, 0}, my[6] = {0, 2, 0, 1, 0, 1};
+    float e[15];
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) e[k] = 0.f;
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) {
+      #pragma unroll
+      for (int pq = 0; pq < 6; ++pq) {
+        const int ea = mx[p] + mx[pq], eb = my[p] + my[pq];
+        e[ea * (11 - ea) / 2 + eb] = fmaf(-0.5f * dd[p], dd[pq], e[ea * (11 - ea) / 2 + eb]);
+      }
+    }
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) P[E_OFF + k] = e[k];
+  }
+#endif
+}
+
+// row factors of the weights of row (ty, tz): CORR 0 r[0] = phi_y phi_z; CORR 2 as segnufft.cu stage_weights
+struct Row { float R[NK]; float Q[CORR >= 2 ? 3 : 1]; };
+__device__ __forceinline__ void row_factors(const float* P, int ty, int tz, Row& r) {
+#if CORR >= 2
+  float wy[NK], wz[NK];
+  #pragma unroll
+  for (int k = 0; k < NK; ++k) { wy[k] = KX(P, 1, k, ty); wz[k] = KX(P, 2, k, tz); }
+  #pragma unroll
+  for (int a = 0; a < NK; ++a) r.R[a] = 0.f;
+  r.R[0] = wy[0] * wz[0];
+  const float* c = P + D_OFF;   // [xx, yy, zz, xy, xz, yz]
+  r.Q[0] = c[1] * wy[2] * wz[0] + c[2] * wy[0] * wz[2] + c[5] * wy[1] * wz[1];
+  r.Q[1] = c[3] * wy[1] * wz[0] + c[4] * wy[0] * wz[1];
+  r.Q[2] = c[0] * wy[0] * wz[0];
+  int idx = 0;
+  #pragma unroll
+  for (int a = 0; a <= 4; ++a) {
+    #pragma unroll
+    for (int b = 0; b <= 4 - a; ++b) { r.R[a] += P[E_OFF + idx] * wy[b] * wz[4 - a - b]; ++idx; }
+  }
+#else
+  r.R[0] = KX(P, 1, 0, ty) * KX(P, 2, 0, tz);
+  r.Q[0] = 0.f;
+#endif
+}
+
+#if HALO
+#define FWD_NAME pg_fwd_halo
+#else
+#define FWD_NAME pg_fwd_gm
+#endif
+
+// forward. Block = item; channel chunks of CH outer; thread = (sample, lane q of TPS) with FC channels
+// q * FC .. q * FC + FC - 1 of the chunk; samples s = tid / TPS, += NT / TPS.
+extern "C" __global__ void __launch_bounds__(NT) FWD_NAME(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+                                                          const unsigned int* __restrict__ perm, const Item* __restrict__ items, const unsigned int* __restrict__ units,
+                                                          const cx* __restrict__ grid, cx* __restrict__ y, int M, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];
+  float* S = reinterpret_cast<float*>(smem);
+  cx* halo = reinterpret_cast<cx*>(smem + (((size_t)SMAX * SW * 4 + 15) & ~(size_t)15));
+  const Item it = items[blockIdx.x];
+  int o0 = 0, o1 = 0, o2 = 0;
+#if HALO
+  tile_org(it.tile, d, o0, o1, o2);
+#endif
+  stage<0, HALO>(S, pos, dco, acf, M, it, o0, o1, o2, d);
+  const int q = threadIdx.x % TPS;
+  for (int ch0 = 0; ch0 < NCH; ch0 += CH) {
+#if HALO
+    __syncthreads();   // previous chunk's readers done (and the stage)
+    // halo [HW^3][CHS] <- grid, runs of CH channels per point (float4 = 2 channels when CH is even)
+#if CH % 2 == 0
+    for (int qq = threadIdx.x; qq < HW * HW * HW * (CH / 2); qq += NT) {
+      const int c2 = qq % (CH / 2), h = qq / (CH / 2);
+      const int hx = h % HW, hy = (h / HW) % HW, hz = h / (HW * HW);
+      int gx = o0 + hx, gy = o1 + hy, gz = o2 + hz;
+      gx -= gx >= d.nf0 ? d.nf0 : 0; gy -= gy >= d.nf1 ? d.nf1 : 0; gz -= gz >= d.nf2 ? d.nf2 : 0;
+      const float4 v = *reinterpret_cast<const float4*>(grid + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + ch0 + 2 * c2);
+      *reinterpret_cast<float4*>(halo + (size_t)h * CHS + 2 * c2) = v;
+    }
+#else
+    for (int qq = threadIdx.x; qq < HW * HW * HW * CH; qq += NT) {
+      const int c = qq % CH, h = qq / CH;
+      const int hx = h % HW, hy = (h / HW) % HW, hz = h / (HW * HW);
+      int gx = o0 + hx, gy = o1 + hy, gz = o2 + hz;
+      gx -= gx >= d.nf0 ? d.nf0 : 0; gy -= gy >= d.nf1 ? d.nf1 : 0; gz -= gz >= d.nf2 ? d.nf2 : 0;
+      halo[(size_t)h * CHS + c] = grid[(((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + ch0 + c];
+    }
+#endif
+#endif
+    __syncthreads();
+    // work units: up to SB samples with the same (j0, k0) support rows and i0 in one RX-wide bin (host-sorted,
+    // consecutive in the item); the unit loops over the union WX = W + RX - 1 of their x supports, every value load
+    // serves all SB samples (dummy slots past n carry zero weights)
+    const int nun = items[blockIdx.x + 1].ufirst - it.ufirst;
+    for (int un = threadIdx.x / TPS; un < nun; un += NT / TPS) {
+      const unsigned int ud = units[it.ufirst + un];
+      const int s0 = (int)(ud >> 8), n = (int)(ud & 255u);
+      const int* off0 = reinterpret_cast<const int*>(S + (size_t)s0 * SW) + O_OFF;
+      const int ox = off0[0] - off0[0] % RX, oy = off0[1], oz = off0[2];   // x origin: start of the RX bin
+      float kx[SB][NK][WX];
+      #pragma unroll
+      for (int b = 0; b < SB; ++b) {
+        const bool live = b < n;
+        const float* Pb = S + (size_t)(s0 + (live ? b : 0)) * SW;
+        const int db = live ? reinterpret_cast<const int*>(Pb)[O_OFF] - ox : 0;
+        #pragma unroll
+        for (int k = 0; k < NK; ++k) {
+          #pragma unroll
+          for (int t = 0; t < WX; ++t) {
+            const int tt = t - db;
+            kx[b][k][t] = (live && tt >= 0 && tt < W) ? KX(Pb, 0, k, tt) : 0.f;
+          }
+        }
+      }
+      cx acc[SB][FC];
+      #pragma unroll
+      for (int b = 0; b < SB; ++b) {
+        #pragma unroll
+        for (int f = 0; f < FC; ++f) acc[b][f] = cx{0.f, 0.f};
+      }
+#if !HALO
+      const bool xwrap = ox + WX > d.nf0;
+#endif
+      for (int tz = 0; tz < W; ++tz) {
+        for (int ty = 0; ty < W; ++ty) {
+          Row r[SB];
+          #pragma unroll
+          for (int b = 0; b < SB; ++b) row_factors(S + (size_t)(s0 + (b < n ? b : 0)) * SW, ty, tz, r[b]);
+#if HALO
+          const cx* hp = halo + ((size_t)((oz + tz) * HW + (oy + ty)) * HW + ox) * CHS + q * FC;
+#else
+          int gy = oy + ty, gz = oz + tz;
+          gy -= gy >= d.nf1 ? d.nf1 : 0; gz -= gz >= d.nf2 ? d.nf2 : 0;
+          const cx* rowp = grid + ((size_t)gz * d.nf1 + gy) * d.nf0 * NCH + ch0 + q * FC;
+#endif
+          #pragma unroll
+          for (int t = 0; t < WX; ++t) {
+#if HALO
+            const cx* vp = hp + t * CHS;
+#else
+            int gx = ox + t;
+            if (xwrap) gx -= gx >= d.nf0 ? d.nf0 : 0;
+            const cx* vp = rowp + (size_t)gx * NCH;
+#endif
+            cx v[FC];
+#if FC % 2 == 0
+            #pragma unroll
+            for (int f = 0; f < FC; f += 2) {
+#if HALO
+              const float4 u = *reinterpret_cast<const float4*>(vp + f);
+#else
+              const float4 u = __ldg(reinterpret_cast<const float4*>(vp + f));
+#endif
+              v[f] = cx{u.x, u.y}; v[f + 1] = cx{u.z, u.w};
+            }
+#else
+            #pragma unroll
+            for (int f = 0; f < FC; ++f) v[f] = vp[f];
+#endif
+            #pragma unroll
+            for (int b = 0; b < SB; ++b) {
+              float wr = 0.f, wi = 0.f;
+              #pragma unroll
+              for (int a = 0; a < NK; ++a) wr = fmaf(kx[b][a][t], r[b].R[a], wr);
+#if CORR >= 2
+              #pragma unroll
+              for (int a = 0; a < 3; ++a) wi = fmaf(kx[b][a][t], r[b].Q[a], wi);
+#endif
+              #pragma unroll
+              for (int f = 0; f < FC; ++f) {
+                acc[b][f].x = fmaf(wr, v[f].x, acc[b][f].x);
+                acc[b][f].y = fmaf(wr, v[f].y, acc[b][f].y);
+#if CORR >= 2
+                acc[b][f].x = fmaf(-wi, v[f].y, acc[b][f].x);
+                acc[b][f].y = fmaf(wi, v[f].x, acc[b][f].y);
+#endif
+              }
+            }
+          }
+        }
+      }
+      // segment combination and output
+      const int cfirst = ch0 + q * FC;
+      #pragma unroll
+      for (int b = 0; b < SB; ++b) {
+        if (b >= n) break;
+        const float* P = S + (size_t)(s0 + b) * SW;
+        const unsigned int j = perm[it.first + s0 + b];
+#if OWN
+        #pragma unroll
+        for (int cc = 0; cc < FC / NSEG; ++cc) {
+          cx o = cx{0.f, 0.f};
+          #pragma unroll
+          for (int l = 0; l < NSEG; ++l) {
+            const cx a = cx{P[A_OFF + 2 * l], P[A_OFF + 2 * l + 1]};
+            const cx v = cmul(a, acc[b][cc * NSEG + l]);
+            o.x += v.x; o.y += v.y;
+          }
+          y[(size_t)(cfirst / NSEG + cc) * M + j] = o;
+        }
+#else
+        int cur = cfirst / NSEG;
+        cx o = cx{0.f, 0.f};
+        #pragma unroll
+        for (int f = 0; f < FC; ++f) {
+          const int ch = cfirst + f, coil = ch / NSEG, l = ch % NSEG;
+          if (coil != cur) { cx* dst = y + (size_t)cur * M + j; atomicAdd(&dst->x, o.x); atomicAdd(&dst->y, o.y); o = cx{0.f, 0.f}; cur = coil; }
+          const cx a = cx{P[A_OFF + 2 * l], P[A_OFF + 2 * l + 1]};
+          const cx v = cmul(a, acc[b][f]);
+          o.x += v.x; o.y += v.y;
+        }
+        cx* dst = y + (size_t)cur * M + j; atomicAdd(&dst->x, o.x); atomicAdd(&dst->y, o.y);
+#endif
+      }
+    }
+  }
+}
+
+#if HALO
+// adjoint, shared-memory spreading (dual of the halo forward): per chunk the block spreads its samples into a
+// [HW^3][CHS] accumulator with shared atomics, then adds the halo to the grid with global atomics (grid zeroed first).
+extern "C" __global__ void __launch_bounds__(NT) pg_adj_sm(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+                                                           const unsigned int* __restrict__ perm, const Item* __restrict__ items,
+                                                           const cx* __restrict__ y, cx* __restrict__ grid, int M, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];
+  float* S = reinterpret_cast<float*>(smem);
+  cx* halo = reinterpret_cast<cx*>(smem + (((size_t)SMAX * SW * 4 + 15) & ~(size_t)15));
+  const Item it = items[blockIdx.x];
+  int o0, o1, o2;
+  tile_org(it.tile, d, o0, o1, o2);
+  stage<1, 1>(S, pos, dco, acf, M, it, o0, o1, o2, d);
+  const int q = threadIdx.x % TPS;
+  for (int ch0 = 0; ch0 < NCH; ch0 += CH) {
+    __syncthreads();
+    for (int qq = threadIdx.x; qq < HW * HW * HW * CHS; qq += NT) halo[qq] = cx{0.f, 0.f};
+    __syncthreads();
+    for (int s = threadIdx.x / TPS; s < it.count; s += NT / TPS) {
+      const float* P = S + (size_t)s * SW;
+      const int* off = reinterpret_cast<const int*>(P) + O_OFF;
+      const int ox = off[0], oy = off[1], oz = off[2];
+      const unsigned int j = perm[it.first + s];
+      cx u[FC];
+      #pragma unroll
+      for (int f = 0; f < FC; ++f) {
+        const int ch = ch0 + q * FC + f, coil = ch / NSEG, l = ch % NSEG;
+        u[f] = cmul(cx{P[A_OFF + 2 * l], P[A_OFF + 2 * l + 1]}, y[(size_t)coil * M + j]);
+      }
+      float kx[NK][W];
+      #pragma unroll
+      for (int k = 0; k < NK; ++k) {
+        #pragma unroll
+        for (int t = 0; t < W; ++t) kx[k][t] = KX(P, 0, k, t);
+      }
+      for (int tz = 0; tz < W; ++tz) {
+        for (int ty = 0; ty < W; ++ty) {
+          Row r;
+          row_factors(P, ty, tz, r);
+          cx* hp = halo + ((size_t)((oz + tz) * HW + (oy + ty)) * HW + ox) * CHS + q * FC;
+          #pragma unroll
+          for (int t = 0; t < W; ++t) {
+            float wr = 0.f, wi = 0.f;
+            #pragma unroll
+            for (int a = 0; a < NK; ++a) wr = fmaf(kx[a][t], r.R[a], wr);
+#if CORR >= 2
+            #pragma unroll
+            for (int a = 0; a < 3; ++a) wi = fmaf(kx[a][t], r.Q[a], wi);
+#endif
+            #pragma unroll
+            for (int f = 0; f < FC; ++f) {   // conj(w) u
+              atomicAdd(&hp[t * CHS + f].x, fmaf(wr, u[f].x, wi * u[f].y));
+              atomicAdd(&hp[t * CHS + f].y, fmaf(wr, u[f].y, -wi * u[f].x));
+            }
+          }
+        }
+      }
+    }
+    __syncthreads();
+    for (int qq = threadIdx.x; qq < HW * HW * HW * CH; qq += NT) {
+      const int c = qq % CH, h = qq / CH;
+      const int hx = h % HW, hy = (h / HW) % HW, hz = h / (HW * HW);
+      int gx = o0 + hx, gy = o1 + hy, gz = o2 + hz;
+      gx -= gx >= d.nf0 ? d.nf0 : 0; gy -= gy >= d.nf1 ? d.nf1 : 0; gz -= gz >= d.nf2 ? d.nf2 : 0;
+      const cx v = halo[(size_t)h * CHS + c];
+      cx* gp = grid + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + ch0 + c;
+      atomicAdd(&gp->x, v.x); atomicAdd(&gp->y, v.y);
+    }
+  }
+}
+#endif
+
+#ifdef PS
+// ---------------------------------------------------------------- design 5 `ps`: plane-streamed home tile
+// Home tile TX × TY × TZ (sample j belongs to the tile holding its wrapped support corner); the block streams the
+// (TZ + W − 1) halo z-planes of one channel chunk (CHP = NCG · FC channels) through a double-buffered shared plane of
+// (TX + W − 1)(TY + W − 1) points (register prefetch of the next plane, one barrier per plane). Lanes = (sample slot,
+// channel group), channel group fastest: a warp holds 32 / NCG slots of FSB samples each and the NCG groups' FC
+// contiguous channels, so every plane-value load (float4 = 2 channels) is broadcast to the warp's slots. Per sample the
+// x loop is the full halo row (unrolled HX, x weights in registers with zeros outside the support), the y loop the
+// warp's union of support rows, the z loop the planes where the sample is active; contraction separable: row partial
+// Σ_x φx v, then × φy φz. Accumulators stay in registers across the planes: one store per (sample, coil) (atomics only
+// when FC holds partial coils). Order 0 (real weights); CORR 2: the complex weights per point (row factors R, Q as
+// stage_weights).
+#define HXP (TX + W - 1)
+#define HYP (TY + W - 1)
+#define HZP (TZ + W - 1)
+#define NSL (NT / NCG)
+#define CHP (NCG * FC)
+#define PSMAX (NSL * FSB)
+#define PLN (HXP * HYP)
+#if FC % 2 != 0
+#error "ps: FC must be even (float4 loads)"
+#endif
+#if 32 % NCG != 0
+#error "ps: NCG must divide 32"
+#endif
+#define POWN (FC % NSEG == 0)
+// Timing-only ablation switches (wrong results; research/sample_kernels.md §11), each removes one part of the kernel:
+//   PS_NOLOAD   no global plane loads (the prefetch registers hold a per-thread constant; the shared stores and barriers
+//               stay, so the planes hold stale values)
+//   PS_NOSYNC   no per-plane __syncthreads (races; the chunk-start barrier stays)
+//   PS_NOMAC    no MAC block (plane loads, stores and barriers stay; accumulators stay zero)
+//   PS_NOSTORE  no final output store (accumulators kept live by a never-true compare)
+//   PS_FMAONLY  x loop reads its FC / 2 float4 once per row (at the row start) and reuses them for every x: the same FFMA
+//               count with HXP times fewer shared loads
+// Tunable PS_PFS (0 | 1): 0 = the next plane is prefetched whole into NPF float4 registers per thread, live across the
+// MAC loop; 1 = it is copied global -> shared one float4 at a time, interleaved with the warp's row loop (load at one
+// row, store at the next; leftovers after the loop), so only one float4 is live: fewer registers, more resident warps.
+// The barrier at the start of plane hz makes plane hz visible and frees buffer (hz + 1) & 1 for the copy of plane hz + 1.
+// (The ablation switches above apply to PS_PFS 0.)
+#ifndef PS_PFS
+#define PS_PFS 0
+#endif
+// Tunable PS_MINB: minimum resident blocks per SM asked of ptxas (__launch_bounds__ second argument; caps registers at
+// 64 K / (PS_MINB NT), may spill); 0 = none
+#ifndef PS_MINB
+#define PS_MINB 0
+#endif
+#if PS_MINB > 0
+#define PS_LB __launch_bounds__(NT, PS_MINB)
+#else
+#define PS_LB __launch_bounds__(NT)
+#endif
+extern "C" __global__ void PS_LB pg_fwd_ps(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+                                                           const unsigned int* __restrict__ perm, const Item* __restrict__ items, const unsigned int* __restrict__ units,
+                                                           const cx* __restrict__ grid, cx* __restrict__ y, int M, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];
+  float* S = reinterpret_cast<float*>(smem);
+  cx* pl = reinterpret_cast<cx*>(smem + (((size_t)PSMAX * SW * 4 + 15) & ~(size_t)15));
+  const Item it = items[blockIdx.x];
+  const int ntx = (d.nf0 + TX - 1) / TX, nty = (d.nf1 + TY - 1) / TY;
+  const int o0 = (it.tile % ntx) * TX, o1 = ((it.tile / ntx) % nty) * TY, o2 = (it.tile / (ntx * nty)) * TZ;
+  // stage: kernel values per axis, offsets relative to the tile origin (in [0, T)), coefficients
+  for (int q = threadIdx.x; q < it.count * 3 * W; q += NT) {
+    const int s = q / (3 * W), a = (q / W) % 3, t = q % W;
+    const float4 r = pos[it.first + s];
+    const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+    const int i0 = (int)ceilf(sc - (float)W * 0.5f);
+    const float z = ((float)(i0 + t) - sc) * (2.f / (float)W);
+    float o[5];
+    kern(z, o);
+    float* P = S + (size_t)s * SW;
+    #pragma unroll
+    for (int k = 0; k < NK; ++k) KX(P, a, k, t) = o[k];
+    if (t == 0) {
+      const int n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2), og = a == 0 ? o0 : (a == 1 ? o1 : o2);
+      reinterpret_cast<int*>(P)[O_OFF + a] = wrapi(i0, n) - og;
+    }
+  }
+#if !PS_ACFG
+  for (int q = threadIdx.x; q < it.count * NSEG; q += NT) {
+    const int s = q / NSEG, l = q % NSEG;
+    const cx v = acf[(size_t)(it.first + s) * NSEG + l];
+    float* P = S + (size_t)s * SW;
+    P[A_OFF + 2 * l] = v.x; P[A_OFF + 2 * l + 1] = v.y;
+  }
+#endif
+#if CORR >= 2
+  for (int q = threadIdx.x; q < it.count; q += NT) {
+    float* P = S + (size_t)q * SW;
+    float dd[6];
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) { dd[p] = dco[(size_t)p * M + it.first + q]; P[D_OFF + p] = dd[p]; }
+    const int mx[6] = {2, 0, 0, 1, 1, 0}, my[6] = {0, 2, 0, 1, 0, 1};
+    float e[15];
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) e[k] = 0.f;
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) {
+      #pragma unroll
+      for (int pq = 0; pq < 6; ++pq) {
+        const int ea = mx[p] + mx[pq], eb = my[p] + my[pq];
+        e[ea * (11 - ea) / 2 + eb] = fmaf(-0.5f * dd[p], dd[pq], e[ea * (11 - ea) / 2 + eb]);
+      }
+    }
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) P[E_OFF + k] = e[k];
+  }
+#endif
+  __syncthreads();
+  const int cg = threadIdx.x % NCG, slot = threadIdx.x / NCG;
+  // my samples slot · FSB + k: x weights over the halo row (zeros outside the support), y / z offsets
+  float kxh[FSB][NK][HXP];
+  int oy[FSB], oz[FSB];
+  bool live[FSB];
+  int ylo = 1 << 20, yhi = -1, zlo = 1 << 20, zhi = -1;
+  #pragma unroll
+  for (int k = 0; k < FSB; ++k) {
+    const int s = slot * FSB + k;
+    live[k] = s < it.count;
+    const float* P = S + (size_t)(live[k] ? s : 0) * SW;
+    const int* off = reinterpret_cast<const int*>(P) + O_OFF;
+    const int ox = live[k] ? off[0] : 0;
+    oy[k] = live[k] ? off[1] : 0; oz[k] = live[k] ? off[2] : 0;
+    #pragma unroll
+    for (int a = 0; a < NK; ++a) {
+      #pragma unroll
+      for (int t = 0; t < HXP; ++t) { const int tt = t - ox; kxh[k][a][t] = (live[k] && tt >= 0 && tt < W) ? KX(P, 0, a, tt) : 0.f; }
+    }
+    if (live[k]) { ylo = min(ylo, oy[k]); yhi = max(yhi, oy[k]); zlo = min(zlo, oz[k]); zhi = max(zhi, oz[k]); }
+  }
+  ylo = __reduce_min_sync(0xffffffffu, ylo); yhi = __reduce_max_sync(0xffffffffu, yhi);
+  zlo = __reduce_min_sync(0xffffffffu, zlo); zhi = __reduce_max_sync(0xffffffffu, zhi);
+  constexpr int NPF = (PLN * (CHP / 2) + NT - 1) / NT;   // float4 of a plane per thread
+  for (int ch0 = 0; ch0 < NCH; ch0 += CHP) {
+    cx acc[FSB][FC];
+    #pragma unroll
+    for (int k = 0; k < FSB; ++k) {
+      #pragma unroll
+      for (int f = 0; f < FC; ++f) acc[k][f] = cx{0.f, 0.f};
+    }
+#if PS_PFS
+    // in-plane offsets (float4 units, wrapped; -1 = no element) of this thread's NPF phases, and the plane base
+    int poff[NPF];
+    #pragma unroll
+    for (int r = 0; r < NPF; ++r) {
+      const int e = threadIdx.x + r * NT;
+      const int c2 = e % (CHP / 2), h = e / (CHP / 2), hx = h % HXP, hy = h / HXP;
+      int gx = o0 + hx, gy = o1 + hy;
+      gx -= gx >= d.nf0 ? d.nf0 : 0; gy -= gy >= d.nf1 ? d.nf1 : 0;
+      poff[r] = e < PLN * (CHP / 2) ? (gy * d.nf0 + gx) * (NCH / 2) + c2 : -1;
+    }
+    auto pbase = [&](int hz) -> const float4* {
+      int gz = o2 + hz; gz -= gz >= d.nf2 ? d.nf2 : 0;
+      return reinterpret_cast<const float4*>(grid + (size_t)gz * d.nf1 * d.nf0 * NCH + ch0);
+    };
+    __syncthreads();   // previous chunk's readers done with both buffers
+    {
+      float4* b0 = reinterpret_cast<float4*>(pl);
+      const float4* g0 = pbase(0);
+      #pragma unroll
+      for (int r = 0; r < NPF; ++r) if (poff[r] >= 0) b0[threadIdx.x + r * NT] = __ldg(g0 + poff[r]);
+    }
+    for (int hz = 0; hz < HZP; ++hz) {
+      float4* cur = reinterpret_cast<float4*>(pl + (size_t)(hz & 1) * PLN * CHP);
+      float4* nxt = reinterpret_cast<float4*>(pl + (size_t)((hz + 1) & 1) * PLN * CHP);
+      __syncthreads();
+      // copy of plane hz + 1: phase ph loaded next, pv pending store of phase ph - 1
+      const int nph = hz + 1 < HZP ? NPF : 0;
+      const float4* gn = pbase(hz + 1 < HZP ? hz + 1 : hz);
+      int ph = 0;
+      float4 pv = make_float4(0.f, 0.f, 0.f, 0.f);
+      bool pend = false;
+      auto step = [&]() {
+        if (pend) { nxt[threadIdx.x + (ph - 1) * NT] = pv; pend = false; }
+        if (ph < nph) {
+          #pragma unroll
+          for (int r = 0; r < NPF; ++r) if (r == ph && poff[r] >= 0) { pv = __ldg(gn + poff[r]); pend = true; }   // compile-time index
+          ++ph;
+        }
+      };
+#else
+    float4 pf[NPF];
+#endif
+#if !PS_PFS
+#ifdef PS_NOLOAD
+    #pragma unroll
+    for (int r = 0; r < NPF; ++r) pf[r] = make_float4(1e-3f * threadIdx.x, 1e-3f * r, -1e-3f * threadIdx.x, 0.5f);
+    auto load = [&](int hz) { (void)hz; };
+#else
+    auto load = [&](int hz) {
+      int gz = o2 + hz; gz -= gz >= d.nf2 ? d.nf2 : 0;
+      #pragma unroll
+      for (int r = 0; r < NPF; ++r) {
+        const int e = threadIdx.x + r * NT;
+        if (e < PLN * (CHP / 2)) {
+          const int c2 = e % (CHP / 2), h = e / (CHP / 2), hx = h % HXP, hy = h / HXP;
+          int gx = o0 + hx, gy = o1 + hy;
+          gx -= gx >= d.nf0 ? d.nf0 : 0; gy -= gy >= d.nf1 ? d.nf1 : 0;
+          pf[r] = __ldg(reinterpret_cast<const float4*>(grid + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + ch0) + c2);
+        }
+      }
+    };
+#endif
+    __syncthreads();   // previous chunk's readers done with both buffers
+    load(0);
+    for (int hz = 0; hz < HZP; ++hz) {
+      float4* cur = reinterpret_cast<float4*>(pl + (size_t)(hz & 1) * PLN * CHP);
+      #pragma unroll
+      for (int r = 0; r < NPF; ++r) { const int e = threadIdx.x + r * NT; if (e < PLN * (CHP / 2)) cur[e] = pf[r]; }
+#ifndef PS_NOSYNC
+      __syncthreads();
+#endif
+      if (hz + 1 < HZP) load(hz + 1);
+#endif
+#ifdef PS_NOMAC
+      if (false) {
+#else
+      if (hz >= zlo && hz < zhi + W) {   // warp-uniform: some sample of the warp is active in this plane
+#endif
+        float rz[FSB][NK];
+        #pragma unroll
+        for (int k = 0; k < FSB; ++k) {
+          const int tz = hz - oz[k];
+          const bool on = live[k] && tz >= 0 && tz < W;
+          const float* P = S + (size_t)(slot * FSB + k) * SW;
+          #pragma unroll
+          for (int a = 0; a < NK; ++a) rz[k][a] = on ? KX(P, 2, a, tz) : 0.f;
+        }
+        const cx* cp = reinterpret_cast<const cx*>(cur) + cg * FC;
+        for (int hy = ylo; hy < yhi + W; ++hy) {
+#if PS_PFS
+          step();
+#endif
+#if CORR >= 2
+          // complex weights per point: row factors R (5), Q (3) of the sample at (ty, tz)
+          float R[FSB][NK], Q[FSB][3];
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) {
+            const int ty = hy - oy[k];
+            const bool on = ty >= 0 && ty < W;
+            const float* P = S + (size_t)(slot * FSB + k) * SW;
+            float wy[NK];
+            #pragma unroll
+            for (int a = 0; a < NK; ++a) wy[a] = on ? KX(P, 1, a, ty) : 0.f;
+            const float* c = P + D_OFF;
+            R[k][0] = wy[0] * rz[k][0];
+            #pragma unroll
+            for (int a = 1; a < NK; ++a) R[k][a] = 0.f;
+            Q[k][0] = c[1] * wy[2] * rz[k][0] + c[2] * wy[0] * rz[k][2] + c[5] * wy[1] * rz[k][1];
+            Q[k][1] = c[3] * wy[1] * rz[k][0] + c[4] * wy[0] * rz[k][1];
+            Q[k][2] = c[0] * wy[0] * rz[k][0];
+            int idx = 0;
+            #pragma unroll
+            for (int a = 0; a <= 4; ++a) {
+              #pragma unroll
+              for (int b = 0; b <= 4 - a; ++b) { R[k][a] += P[E_OFF + idx] * wy[b] * rz[k][4 - a - b]; ++idx; }
+            }
+          }
+          const cx* rp = cp + (size_t)hy * HXP * CHP;
+          #pragma unroll
+          for (int t = 0; t < HXP; ++t) {
+            cx v[FC];
+            #pragma unroll
+            for (int f = 0; f < FC; f += 2) { const float4 u = *reinterpret_cast<const float4*>(rp + t * CHP + f); v[f] = cx{u.x, u.y}; v[f + 1] = cx{u.z, u.w}; }
+            #pragma unroll
+            for (int k = 0; k < FSB; ++k) {
+              float wr = 0.f, wi = 0.f;
+              #pragma unroll
+              for (int a = 0; a < NK; ++a) wr = fmaf(kxh[k][a][t], R[k][a], wr);
+              #pragma unroll
+              for (int a = 0; a < 3; ++a) wi = fmaf(kxh[k][a][t], Q[k][a], wi);
+              #pragma unroll
+              for (int f = 0; f < FC; ++f) {
+                acc[k][f].x = fmaf(wr, v[f].x, acc[k][f].x); acc[k][f].x = fmaf(-wi, v[f].y, acc[k][f].x);
+                acc[k][f].y = fmaf(wr, v[f].y, acc[k][f].y); acc[k][f].y = fmaf(wi, v[f].x, acc[k][f].y);
+              }
+            }
+          }
+#else
+          cx racc[FSB][FC];
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) {
+            #pragma unroll
+            for (int f = 0; f < FC; ++f) racc[k][f] = cx{0.f, 0.f};
+          }
+          const cx* rp = cp + (size_t)hy * HXP * CHP;
+#ifdef PS_FMAONLY
+          float4 ur[FC / 2];
+          #pragma unroll
+          for (int f = 0; f < FC; f += 2) ur[f / 2] = *reinterpret_cast<const float4*>(rp + f);
+#endif
+          #pragma unroll
+          for (int t = 0; t < HXP; ++t) {
+            #pragma unroll
+            for (int f = 0; f < FC; f += 2) {
+#ifdef PS_FMAONLY
+              const float4 u = ur[f / 2];
+#else
+              const float4 u = *reinterpret_cast<const float4*>(rp + t * CHP + f);
+#endif
+              #pragma unroll
+              for (int k = 0; k < FSB; ++k) {
+                racc[k][f].x = fmaf(kxh[k][0][t], u.x, racc[k][f].x); racc[k][f].y = fmaf(kxh[k][0][t], u.y, racc[k][f].y);
+                racc[k][f + 1].x = fmaf(kxh[k][0][t], u.z, racc[k][f + 1].x); racc[k][f + 1].y = fmaf(kxh[k][0][t], u.w, racc[k][f + 1].y);
+              }
+            }
+          }
+          #pragma unroll
+          for (int k = 0; k < FSB; ++k) {
+            const int ty = hy - oy[k];
+            const float* P = S + (size_t)(slot * FSB + k) * SW;
+            const float ryz = (ty >= 0 && ty < W) ? KX(P, 1, 0, ty) * rz[k][0] : 0.f;
+            #pragma unroll
+            for (int f = 0; f < FC; ++f) { acc[k][f].x = fmaf(ryz, racc[k][f].x, acc[k][f].x); acc[k][f].y = fmaf(ryz, racc[k][f].y, acc[k][f].y); }
+          }
+#endif
+        }
+      }
+#if PS_PFS
+      while (pend || ph < nph) step();   // rest of the copy (all of it in planes where the warp is idle)
+#endif
+    }
+    // segment combination and output
+    const int cfirst = ch0 + cg * FC;
+#ifdef PS_NOSTORE
+    {
+      float sacc = 0.f;
+      #pragma unroll
+      for (int k = 0; k < FSB; ++k) {
+        #pragma unroll
+        for (int f = 0; f < FC; ++f) sacc += acc[k][f].x + acc[k][f].y;
+      }
+      if (sacc == 1.2345e-30f) y[threadIdx.x] = cx{sacc, 0.f};   // never true: keeps the accumulators live
+      continue;
+    }
+#endif
+    #pragma unroll
+    for (int k = 0; k < FSB; ++k) {
+      if (!live[k]) continue;
+      const int s = slot * FSB + k;
+      const float* P = S + (size_t)s * SW;
+      const unsigned int j = perm[it.first + s];
+#if POWN
+      #pragma unroll
+      for (int cc = 0; cc < FC / NSEG; ++cc) {
+        cx o = cx{0.f, 0.f};
+        #pragma unroll
+        for (int l = 0; l < NSEG; ++l) {
+#if PS_ACFG
+          const cx v = cmul(ldcx(acf + (size_t)(it.first + s) * NSEG + l), acc[k][cc * NSEG + l]);
+#else
+          const cx v = cmul(cx{P[A_OFF + 2 * l], P[A_OFF + 2 * l + 1]}, acc[k][cc * NSEG + l]);
+#endif
+          o.x += v.x; o.y += v.y;
+        }
+        y[(size_t)(cfirst / NSEG + cc) * M + j] = o;
+      }
+#else
+      int cur = cfirst / NSEG;
+      cx o = cx{0.f, 0.f};
+      #pragma unroll
+      for (int f = 0; f < FC; ++f) {
+        const int ch = cfirst + f, coil = ch / NSEG, l = ch % NSEG;
+        if (coil != cur) { cx* dst = y + (size_t)cur * M + j; atomicAdd(&dst->x, o.x); atomicAdd(&dst->y, o.y); o = cx{0.f, 0.f}; cur = coil; }
+#if PS_ACFG
+        const cx v = cmul(ldcx(acf + (size_t)(it.first + s) * NSEG + l), acc[k][f]);
+#else
+        const cx v = cmul(cx{P[A_OFF + 2 * l], P[A_OFF + 2 * l + 1]}, acc[k][f]);
+#endif
+        o.x += v.x; o.y += v.y;
+      }
+      cx* dst = y + (size_t)cur * M + j; atomicAdd(&dst->x, o.x); atomicAdd(&dst->y, o.y);
+#endif
+    }
+  }
+}
+#endif
+
+#ifdef VS
+// ---------------------------------------------------------------- design 6 `vs`: value-stationary rows
+// (research/sample_kernels.md §12). Home tile TX × TY × TZ; item = <= SMAX samples of one tile (cut in z order), sorted
+// inside by class key (oy * TX + ox) then oz, so the samples of one class active in a plane form one contiguous range
+// (table tab[plane][class], built per item). Warp = 16 channel lanes × 2 row halves (lane = h * 16 + c): lane (h, c)
+// holds in registers, for channel c, the values of 5 grid rows × HXV = TX + W − 1 points of the current plane; half 0
+// rows st..st+4, half 1 rows st+5..st+9 of the window st = oy of the class being processed (the 10 support rows of
+// every sample of class oy). The window slides one row per step (row r in register slot r mod 5, static in the
+// unrolled st loop). Per sample (all lanes the same sample: weights are broadcast loads; the x shift ox is a
+// compile-time variant, VXPAD 1 = zero-padded weights over HXV instead): x contraction of the lane's 5 rows, y
+// combination, z scale; one SHFL combines the halves (half 0 keeps the real, half 1 the imaginary part) and the lane
+// read-modify-writes one float of the shared accumulator plane (acc re / im planes, [s][16]). Grid values come straight
+// from global memory (no staging, no barriers in the main loop). Warps: NWC channel groups (16 channels each, block
+// channel range blockIdx.y * NWC * 16 ...) × NWS splits of the window positions (different classes = different samples:
+// no races on the accumulator rows). Epilogue after one barrier: y[coil][j] = Σ_l a_jl acc (plain store when the
+// block holds the whole coil, else one atomic per (sample, coil piece)). CORR 2: the same body with x-moments: per
+// (sample, plane) E_ab = e_ab wz_{4−a−b}(tz) (+ wz0 for the leading term) and Q coefficients, per row R_a = Σ_b E_ab
+// wy_b, Q_a; per derivative a: m_a = Σ_t kx_a(t) v, r += (R_a + i Q_a) m_a.
+#define HXV (TX + W - 1)
+#define NCLS (TX * TY)
+#define NPLM (TZ + W - 1)
+#define NWV (NWC * NWS)
+#define NTV (NWV * 32)
+#ifndef VXPAD
+#define VXPAD 0
+#endif
+#if TY % NWS != 0
+#error "vs: NWS must divide TY"
+#endif
+#if CORR >= 2
+#define VK 5
+#else
+#define VK 1
+#endif
+#if VXPAD
+#define KXN HXV
+#else
+#define KXN W
+#endif
+#define KXS (((KXN + 2) + 3) / 4 * 4)   // x row stride: KXN weights, oz (int bits), o0: φy of row 4 of the half
+#define VR_KX 0
+#if CORR >= 2
+#define VR_WY (VK * KXS)                 // [h][28]: wy_b(5h + i) at i * 5 + b
+#define VR_WZ (VR_WY + 56)               // [tz][5] (+2 pad)
+#define VR_E (VR_WZ + 52)                // e[15], then d[6] (d0 = ev[15]); 16 B aligned
+#define VR_D (VR_E + 15)
+#define VSW0 (VR_D + 6)
+#else
+#define VR_Y4 (2 * KXS)                  // [h][4]: φy(5h .. 5h + 3); x row duplicated per half (+ φy(5h + 4))
+#define VR_WZ (VR_Y4 + 8)
+#define VSW0 (VR_WZ + 10)
+#endif
+#define VR_M VSW0                        // ox, oy (int)
+#define VSW ((VSW0 + 2 + 3) / 4 * 4)
+#define APL (SMAX * 16 + 16)             // accumulator plane stride (re / im planes 16 banks apart)
+#define NOXV (VXPAD ? 1 : TX)
+extern "C" __global__ void __launch_bounds__(NTV) pg_fwd_vs(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+                                                            const unsigned int* __restrict__ perm, const Item* __restrict__ items, const unsigned int* __restrict__ units,
+                                                            const cx* __restrict__ grid, cx* __restrict__ y, int M, Dims d) {
+  extern __shared__ __align__(16) unsigned char smem[];
+  float* S = reinterpret_cast<float*>(smem);
+  unsigned int* tab = reinterpret_cast<unsigned int*>(smem + (size_t)SMAX * VSW * 4);
+  float* accb = reinterpret_cast<float*>(smem + (size_t)SMAX * VSW * 4 + (((size_t)NPLM * NCLS * 4 + 15) & ~(size_t)15));
+  const Item it = items[blockIdx.x];
+  const int ntx = (d.nf0 + TX - 1) / TX, nty = (d.nf1 + TY - 1) / TY;
+  const int o0 = (it.tile % ntx) * TX, o1 = ((it.tile / ntx) % nty) * TY, o2 = (it.tile / (ntx * nty)) * TZ;
+  const int zlo = it.ufirst & 0xffff, npl = (it.ufirst >> 16) - zlo + W;
+  const int cnt = it.count;
+  // ---- stage the sample records
+  constexpr int WQ = KXN > W ? KXN : W;
+  for (int q = threadIdx.x; q < cnt * 3 * WQ; q += NTV) {
+    const int s = q / (3 * WQ), a = (q / WQ) % 3, t = q % WQ;
+    if (a != 0 && t >= W) continue;
+    const float4 r = pos[it.first + s];
+    const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+    const int i0 = (int)ceilf(sc - (float)W * 0.5f);
+    const int n = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2), og = a == 0 ? o0 : (a == 1 ? o1 : o2);
+    const int off = wrapi(i0, n) - og;
+    float* P = S + (size_t)s * VSW;
+    const int tt = (a == 0 && VXPAD) ? t - off : t;
+    float o[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+    if (tt >= 0 && tt < W) kern(((float)(i0 + tt) - sc) * (2.f / (float)W), o);
+    if (a == 0) {
+#if CORR >= 2
+      #pragma unroll
+      for (int k = 0; k < VK; ++k) P[VR_KX + k * KXS + t] = o[k];   // (oz at slot KXN: written by the z thread)
+#else
+      P[VR_KX + t] = o[0]; P[VR_KX + KXS + t] = o[0];
+#endif
+      if (t == 0) reinterpret_cast<int*>(P)[VR_M] = off;
+    } else if (a == 1) {
+      const int h = t / 5, i = t % 5;
+#if CORR >= 2
+      #pragma unroll
+      for (int k = 0; k < VK; ++k) P[VR_WY + h * 28 + i * 5 + k] = o[k];
+#else
+      if (i < 4) P[VR_Y4 + h * 4 + i] = o[0]; else P[VR_KX + h * KXS + KXN + 1] = o[0];
+#endif
+      if (t == 0) reinterpret_cast<int*>(P)[VR_M + 1] = off;
+    } else {
+#if CORR >= 2
+      #pragma unroll
+      for (int k = 0; k < VK; ++k) P[VR_WZ + t * 5 + k] = o[k];
+#else
+      P[VR_WZ + t] = o[0];
+#endif
+      if (t == 0) {
+        reinterpret_cast<int*>(P)[VR_KX + KXN] = off;
+#if CORR < 2
+        reinterpret_cast<int*>(P)[VR_KX + KXS + KXN] = off;
+#endif
+      }
+    }
+  }
+#if CORR >= 2
+  for (int q = threadIdx.x; q < cnt; q += NTV) {
+    float* P = S + (size_t)q * VSW;
+    float dd[6];
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) { dd[p] = dco[(size_t)p * M + it.first + q]; P[VR_D + p] = dd[p]; }
+    const int mx[6] = {2, 0, 0, 1, 1, 0}, my[6] = {0, 2, 0, 1, 0, 1};
+    float e[15];
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) e[k] = 0.f;
+    #pragma unroll
+    for (int p = 0; p < 6; ++p) {
+      #pragma unroll
+      for (int pq = 0; pq < 6; ++pq) {
+        const int ea = mx[p] + mx[pq], eb = my[p] + my[pq];
+        e[ea * (11 - ea) / 2 + eb] = fmaf(-0.5f * dd[p], dd[pq], e[ea * (11 - ea) / 2 + eb]);
+      }
+    }
+    #pragma unroll
+    for (int k = 0; k < 15; ++k) P[VR_E + k] = e[k];
+  }
+#endif
+  for (int q = threadIdx.x; q < NWC * 2 * APL; q += NTV) accb[q] = 0.f;
+  __syncthreads();
+  // ---- per-item table: active range of each class in each plane (samples sorted by (class key, oz))
+  if (threadIdx.x < NCLS) {
+    const int q = threadIdx.x;
+    auto key = [&](int s) { const int* m = reinterpret_cast<const int*>(S + (size_t)s * VSW) + VR_M; return m[1] * TX + m[0]; };
+    auto ozs = [&](int s) { return reinterpret_cast<const int*>(S + (size_t)s * VSW)[VR_KX + KXN]; };
+    int cb = 0;
+    while (cb < cnt && key(cb) < q) ++cb;
+    int ce = cb;
+    while (ce < cnt && key(ce) == q) ++ce;
+    int a = cb, b = cb;
+    for (int hz = 0; hz < npl; ++hz) {
+      const int z = zlo + hz;
+      while (b < ce && ozs(b) <= z) ++b;
+      while (a < b && ozs(a) < z - (W - 1)) ++a;
+      tab[hz * NCLS + q] = (unsigned)a | ((unsigned)b << 16);
+    }
+  }
+  __syncthreads();
+  // ---- main loop (per warp, no barriers)
+  const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  const int cg = warp % NWC, sp = warp / NWC;
+  const int h = lane >> 4, c = lane & 15;
+  const int ch = (blockIdx.y * NWC + cg) * 16 + c;
+  const bool valid = ch < NCH;
+  float* accm = accb + (size_t)(cg * 2 + h) * APL + c;   // half 0: real plane, half 1: imaginary plane
+  const int stb = NWS == 1 ? 0 : sp * (TY / NWS);
+  for (int hz = 0; hz < npl; ++hz) {
+    int gz = o2 + zlo + hz;
+    gz -= gz >= d.nf2 ? d.nf2 : 0;
+    const cx* gpl = grid + (size_t)gz * d.nf1 * d.nf0 * NCH + (valid ? ch : 0);
+    float2 V[5][HXV];
+    // zop: an opaque zero produced right before the loads of each window step, so that the (row, x) address offsets
+    // are computed per step instead of being hoisted out of the plane loop and kept live (they do not depend on the
+    // plane: 22 x 13 64-bit offsets, spills)
+    auto loadrow = [&](float2 (&Vr)[HXV], int yrel, int zop) {
+      int gy = o1 + yrel + zop;
+      gy -= gy >= d.nf1 ? d.nf1 : 0;
+      const cx* rp = gpl + (size_t)gy * d.nf0 * NCH;
+      #pragma unroll
+      for (int t = 0; t < HXV; ++t) {
+        int gx = o0 + t + zop;
+        gx -= gx >= d.nf0 ? d.nf0 : 0;
+        Vr[t] = valid ? __ldg(reinterpret_cast<const float2*>(rp + (size_t)gx * NCH)) : make_float2(0.f, 0.f);
+      }
+    };
+    #pragma unroll
+    for (int st = 0; st < TY; ++st) {
+      if (NWS > 1 && (st < stb || st >= stb + TY / NWS)) continue;
+      // compiler memory barrier: keeps the window loads of this step from being hoisted above the previous step's
+      // sample loops (else every step's rows are live at once: 255 registers and spills)
+      int zop;
+      asm volatile("mov.u32 %0, 0;" : "=r"(zop) :: "memory");
+      if (NWS == 1 ? st == 0 : st == stb) {
+        #pragma unroll
+        for (int i = 0; i < 5; ++i) loadrow(V[(st + i) % 5], st + 5 * h + i, zop);
+      } else {
+        loadrow(V[(st + 4) % 5], st + 4 + 5 * h, zop);
+      }
+      #pragma unroll
+      for (int oxv = 0; oxv < NOXV; ++oxv) {
+        const int xsh = VXPAD ? 0 : oxv;   // compile-time after unrolling
+        for (int ox = (VXPAD ? 0 : oxv); ox < (VXPAD ? TX : oxv + 1); ++ox) {
+          const unsigned rg = tab[hz * NCLS + st * TX + ox];
+          const int sa = (int)(rg & 0xffffu), sb = (int)(rg >> 16);
+          for (int s = sa; s < sb; ++s) {
+            const float* P = S + (size_t)s * VSW;
+            float pr = 0.f, pi = 0.f;
+#if CORR >= 2
+            const int oz = reinterpret_cast<const int*>(P)[VR_KX + KXN];
+            const int tz = zlo + hz - oz;
+            float wz[5];
+            #pragma unroll
+            for (int k = 0; k < 5; ++k) wz[k] = P[VR_WZ + tz * 5 + k];
+            float ev[16];
+            #pragma unroll
+            for (int k = 0; k < 4; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_E + 4 * k); ev[4 * k] = u.x; ev[4 * k + 1] = u.y; ev[4 * k + 2] = u.z; ev[4 * k + 3] = u.w; }
+            // ev[15] = d0 (VR_D = VR_E + 15)
+            float dv[6];
+            dv[0] = ev[15];
+            {
+              const float4 u = *reinterpret_cast<const float4*>(P + VR_D + 1);
+              dv[1] = u.x; dv[2] = u.y; dv[3] = u.z; dv[4] = u.w; dv[5] = P[VR_D + 5];
+            }
+            float E[5][5];
+            #pragma unroll
+            for (int a = 0; a < 5; ++a) {
+              #pragma unroll
+              for (int b = 0; b <= 4 - a; ++b) E[a][b] = ev[a * (11 - a) / 2 + b] * wz[4 - a - b];
+            }
+            E[0][0] += wz[0];
+            const float q00 = dv[2] * wz[2], q01 = dv[5] * wz[1], q02 = dv[1] * wz[0], q10 = dv[4] * wz[1], q11 = dv[3] * wz[0], q20 = dv[0] * wz[0];
+            float wyb[28];
+            #pragma unroll
+            for (int k = 0; k < 7; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_WY + h * 28 + 4 * k); wyb[4 * k] = u.x; wyb[4 * k + 1] = u.y; wyb[4 * k + 2] = u.z; wyb[4 * k + 3] = u.w; }
+            #pragma unroll
+            for (int a = 0; a < 5; ++a) {
+              float kx[KXS];
+              #pragma unroll
+              for (int k = 0; k < KXS / 4; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_KX + a * KXS + 4 * k); kx[4 * k] = u.x; kx[4 * k + 1] = u.y; kx[4 * k + 2] = u.z; kx[4 * k + 3] = u.w; }
+              #pragma unroll
+              for (int i = 0; i < 5; ++i) {
+                const int slot = (st + i) % 5;
+                float mr = 0.f, mi = 0.f;
+                #pragma unroll
+                for (int t = 0; t < KXN; ++t) { mr = fmaf(kx[t], V[slot][t + xsh].x, mr); mi = fmaf(kx[t], V[slot][t + xsh].y, mi); }
+                float R = 0.f;
+                #pragma unroll
+                for (int b = 0; b <= 4 - a; ++b) R = fmaf(E[a][b], wyb[i * 5 + b], R);
+                float Q = 0.f;
+                if (a == 0) Q = q00 * wyb[i * 5] + q01 * wyb[i * 5 + 1] + q02 * wyb[i * 5 + 2];
+                if (a == 1) Q = q10 * wyb[i * 5] + q11 * wyb[i * 5 + 1];
+                if (a == 2) Q = q20 * wyb[i * 5];
+                pr = fmaf(R, mr, pr); pi = fmaf(R, mi, pi);
+                if (a < 3) { pr = fmaf(-Q, mi, pr); pi = fmaf(Q, mr, pi); }
+              }
+            }
+            const float fz = 1.f;
+#else
+            float kx[KXS];
+            #pragma unroll
+            for (int k = 0; k < KXS / 4; ++k) { const float4 u = *reinterpret_cast<const float4*>(P + VR_KX + h * KXS + 4 * k); kx[4 * k] = u.x; kx[4 * k + 1] = u.y; kx[4 * k + 2] = u.z; kx[4 * k + 3] = u.w; }
+            const int oz = __float_as_int(kx[KXN]);
+            const float4 yv = *reinterpret_cast<const float4*>(P + VR_Y4 + 4 * h);
+            const float wy[5] = {yv.x, yv.y, yv.z, yv.w, kx[KXN + 1]};
+            const float fz = P[VR_WZ + zlo + hz - oz];
+            #pragma unroll
+            for (int i = 0; i < 5; ++i) {
+              const int slot = (st + i) % 5;
+              float mr = 0.f, mi = 0.f;
+              #pragma unroll
+              for (int t = 0; t < KXN; ++t) { mr = fmaf(kx[t], V[slot][t + xsh].x, mr); mi = fmaf(kx[t], V[slot][t + xsh].y, mi); }
+              pr = fmaf(wy[i], mr, pr); pi = fmaf(wy[i], mi, pi);
+            }
+#endif
+            const float snd = h ? pr : pi;
+            const float rcv = __shfl_xor_sync(0xffffffffu, snd, 16);
+            const float mine = (h ? pi : pr) + rcv;
+            if (valid) accm[s * 16] = fmaf(fz, mine, accm[s * 16]);
+          }
+        }
+      }
+    }
+  }
+  __syncthreads();
+  // ---- epilogue: y[coil][j] = Σ_l a_jl acc[ch]
+  const int base = blockIdx.y * NWC * 16;
+  const int bend = min(base + NWC * 16, NCH);
+  const int clo = base / NSEG, chi = (bend - 1) / NSEG, ncoil = chi - clo + 1;
+  for (int q = threadIdx.x; q < cnt * ncoil; q += NTV) {
+    const int s = q / ncoil, coil = clo + q % ncoil;
+    const unsigned int j = perm[it.first + s];
+    const int l0 = max(0, base - coil * NSEG), l1 = min(NSEG, bend - coil * NSEG);
+    cx o = cx{0.f, 0.f};
+    for (int l = l0; l < l1; ++l) {
+      const int k = coil * NSEG + l - base, g = k >> 4, cc = k & 15;
+      const float* ap = accb + (size_t)g * 2 * APL + s * 16 + cc;
+      const cx v = cmul(ldcx(acf + (size_t)(it.first + s) * NSEG + l), cx{ap[0], ap[APL]});
+      o.x += v.x; o.y += v.y;
+    }
+    cx* dst = y + (size_t)coil * M + j;
+    if (l0 == 0 && l1 == NSEG) *dst = o; else { atomicAdd(&dst->x, o.x); atomicAdd(&dst->y, o.y); }
+  }
+}
+#endif
+
+// deterministic grid values: hash of (point, channel) -> [-1, 1)^2 (the host reference uses the same function)
+__device__ __forceinline__ unsigned int hmix(unsigned int x) {
+  x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16; return x;
+}
+extern "C" __global__ void pg_fill(cx* __restrict__ grid, unsigned long long n) {
+  for (unsigned long long t = blockIdx.x * (unsigned long long)blockDim.x + threadIdx.x; t < n; t += (unsigned long long)gridDim.x * blockDim.x) {
+    const unsigned int a = hmix((unsigned int)t * 2u + 1u), b = hmix((unsigned int)t * 2u + 2u + (unsigned int)(t >> 32));
+    grid[t] = cx{(float)(a >> 8) * (1.f / 8388608.f) - 1.f, (float)(b >> 8) * (1.f / 8388608.f) - 1.f};
+  }
+}
+
+#ifdef LDSB
+// shared-load microbenchmark (research/sample_kernels.md §11): warp-wide LDS.128 where the 32 lanes read `ncg`
+// distinct consecutive float4 (lane % ncg), KF independent FFMA per loaded float4, 16 loads per unrolled step.
+// Measures the shared-memory cost of a broadcast float4 load as used by pg_fwd_ps (lanes = slot x channel group).
+#ifndef KF
+#define KF 0
+#endif
+#ifndef LDSW
+#define LDSW 4
+#endif
+#if LDSW != 4
+// LDSW 1 | 2: the same benchmark with LDS.32 / LDS.64 (lanes read `ncg` distinct consecutive words / float2; `ncg` 33
+// means every lane distinct and consecutive: lane i reads element i), KF FFMA per loaded word / float2 component
+extern "C" __global__ void __launch_bounds__(256) pg_lds_bench(float* __restrict__ out, int iters, int ncg) {
+  __shared__ float buf[8192];   // 16 phases x 16 loads: not hoistable into registers
+  for (int i = threadIdx.x; i < 8192; i += blockDim.x) buf[i] = 1e-3f * i;
+  __syncthreads();
+  const int lane = threadIdx.x & 31;
+  const int idx = ncg >= 32 ? lane : lane % ncg;
+  float acc[8];
+  #pragma unroll
+  for (int k = 0; k < 8; ++k) acc[k] = 0.f;
+  float wq = 1.f + 1e-7f * threadIdx.x;
+  for (int it = 0; it < iters; ++it) {
+    #pragma unroll
+    for (int u = 0; u < 16; ++u) {
+#if LDSW == 1
+      const float v = buf[idx + u * 64 + (it & 15) * 128];
+#if KF == 0
+      acc[u & 7] += v;
+#else
+      #pragma unroll
+      for (int q = 0; q < KF; ++q) acc[(u * KF + q) & 7] = fmaf(v, wq, acc[(u * KF + q) & 7]);
+#endif
+#else
+      const float2 v = reinterpret_cast<const float2*>(buf)[idx + u * 64 + (it & 15) * 128];
+#if KF == 0
+      acc[u & 7] += v.x + v.y;
+#else
+      #pragma unroll
+      for (int q = 0; q < KF; ++q) acc[(u * KF + q) & 7] = fmaf((q & 1) ? v.y : v.x, wq, acc[(u * KF + q) & 7]);
+#endif
+#endif
+    }
+  }
+  float s = 0.f;
+  #pragma unroll
+  for (int k = 0; k < 8; ++k) s += acc[k];
+  if (s == 1.2345e-30f) out[blockIdx.x * blockDim.x + threadIdx.x] = s;
+}
+#else
+extern "C" __global__ void __launch_bounds__(256) pg_lds_bench(float* __restrict__ out, int iters, int ncg) {
+  __shared__ float4 buf[1024];
+  for (int i = threadIdx.x; i < 1024; i += blockDim.x) buf[i] = make_float4(1e-3f * i, 1e-3f, 2e-3f, 3e-3f);
+  __syncthreads();
+  const int lane = threadIdx.x & 31;
+  const int idx = lane % ncg;
+  float acc[8];
+  #pragma unroll
+  for (int k = 0; k < 8; ++k) acc[k] = 0.f;
+  float wq = 1.f + 1e-7f * threadIdx.x;
+  for (int it = 0; it < iters; ++it) {
+    #pragma unroll
+    for (int u = 0; u < 16; ++u) {
+      const float4 v = buf[idx + u * 32 + (it & 1) * 512];   // < 1024
+#if KF == 0
+      acc[u & 7] += v.x + v.y + v.z + v.w;   // keep the load live (3 FADD + 1 FADD)
+#else
+      #pragma unroll
+      for (int q = 0; q < KF; ++q) acc[(u * KF + q) & 7] = fmaf((q & 3) == 0 ? v.x : (q & 3) == 1 ? v.y : (q & 3) == 2 ? v.z : v.w, wq, acc[(u * KF + q) & 7]);
+#endif
+    }
+  }
+  float s = 0.f;
+  #pragma unroll
+  for (int k = 0; k < 8; ++k) s += acc[k];
+  if (s == 1.2345e-30f) out[blockIdx.x * blockDim.x + threadIdx.x] = s;
+}
+#endif
+#endif

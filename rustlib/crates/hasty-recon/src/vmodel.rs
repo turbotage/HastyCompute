@@ -66,6 +66,11 @@ pub fn bspline_weights(k: usize, nf: usize, degree: u32) -> Vec<f64> {
     w
 }
 
+/// k × k identity (row-major)
+pub fn identity_weights(k: usize) -> Vec<f64> {
+    (0..k * k).map(|i| (i / k == i % k) as u8 as f64).collect()
+}
+
 /// Legendre exponent triples of total degree ≤ d (degree-ordered; (0,0,0) first)
 pub fn poly_exps(d: usize) -> Vec<[i32; 3]> {
     assert!(d <= 3, "residual-phase degree ≤ 3");
@@ -112,9 +117,54 @@ pub struct VelSpec {
     pub deg_v: u32,
     /// residual-phase total degree (None: no residual phase)
     pub poly: Option<usize>,
+    /// At-knots mode `[kr, mc]` (`VelSpec::at_knots`): the operator frames are the kr × mc knots of a respiratory ×
+    /// cardiac basis (knot k = r · mc + c, the layout of `SegNufft::new_temporal2d`), nf = kz = kv = kr · mc, identity
+    /// weights (frame f is node f). The operator interpolates the knot images to each sample's time. None: the
+    /// per-frame model above (B-spline weights from the nodes to the operator frames).
+    pub knots: Option<[usize; 2]>,
+    /// Parameter-spline mode (`VelSpec::splines`, research/velocity_model_sr.md §F): the parameters are (m, ψ, v) per
+    /// knot of the kr × mc basis (node chunk k = (m_k, ψ_k) packed as one complex, re = magnitude, im = phase), the
+    /// operator sees `fop` cardiac frames per respiratory knot ([`crate::vknot::OpFrames`]):
+    ///   x_e(r, f) = m · exp(i (ψ + φ_e − k'_e·v)), (m, ψ, v) = Σ_c w_c(f) (m, ψ, v)_{r,c},  k'_e = k_e − mean_e k_e
+    /// (centred encodes: the Gauss–Newton blocks of ψ and v decouple; the zero-moment phase is ψ0 = ψ + k̄·v).
+    pub op: Option<crate::vknot::OpFrames>,
 }
 
 impl VelSpec {
+    /// The model at the knots of a 2-D (respiratory kr × cardiac mc) knot operator: z_k, v_k per knot k = r · mc + c,
+    /// identity weights (one operator frame per knot)
+    pub fn at_knots(dims: [usize; 3], kenc: Vec<[f64; 3]>, kr: usize, mc: usize, poly: Option<usize>) -> Self {
+        let k = kr * mc;
+        assert!(k >= 1, "at_knots: kr · mc ≥ 1");
+        Self { dims, kenc, nf: k, kz: k, deg_z: 1, kv: k, deg_v: 1, poly, knots: Some([kr, mc]), op: None }
+    }
+    /// The parameter-spline model (§F): (m_k, ψ_k, v_k) per knot k = r · mc + c of the kr × mc basis, the operator frames
+    /// of `of`; one set per (encode, respiratory group), t = e · ng + g
+    pub fn splines(dims: [usize; 3], kenc: Vec<[f64; 3]>, of: crate::vknot::OpFrames, poly: Option<usize>) -> Self {
+        let k = of.k();
+        Self { dims, kenc, nf: k, kz: k, deg_z: 1, kv: k, deg_v: 1, poly, knots: Some([of.kr, of.mc]), op: Some(of) }
+    }
+    /// identity weights (at-knots mode): frame f uses node f only
+    pub fn identity(&self) -> bool {
+        self.knots.is_some() && self.op.is_none()
+    }
+    /// parameter-spline mode (§F)
+    pub fn spline(&self) -> bool {
+        self.op.is_some()
+    }
+    /// mean encode k̄ (spline mode's decoupling; zero otherwise)
+    pub fn kbar(&self) -> [f64; 3] {
+        if !self.spline() {
+            return [0.0; 3];
+        }
+        let n = self.kenc.len() as f64;
+        [0, 1, 2].map(|a| self.kenc.iter().map(|k| k[a]).sum::<f64>() / n)
+    }
+    /// the encodes as the model uses them: k_e, or (spline mode) the centred k_e − k̄
+    pub fn kenc_model(&self) -> Vec<[f64; 3]> {
+        let kb = self.kbar();
+        self.kenc.iter().map(|k| [k[0] - kb[0], k[1] - kb[1], k[2] - kb[2]]).collect()
+    }
     pub fn nv(&self) -> usize {
         self.dims.iter().product()
     }
@@ -145,9 +195,15 @@ impl VelSpec {
         self.kz + self.kv
     }
     pub fn wz(&self) -> Vec<f64> {
+        if self.identity() {
+            return identity_weights(self.kz);
+        }
         bspline_weights(self.kz, self.nf, self.deg_z)
     }
     pub fn wv(&self) -> Vec<f64> {
+        if self.identity() {
+            return identity_weights(self.kv);
+        }
         bspline_weights(self.kv, self.nf, self.deg_v)
     }
     /// bytes of one parameter stack
@@ -250,13 +306,89 @@ pub mod cpu {
         wz: Vec<f64>,
         wv: Vec<f64>,
         ex: Vec<[i32; 3]>,
+        /// spline mode: cardiac parameter weights per operator frame, the centred encodes
+        fw: Vec<Vec<(usize, f64)>>,
+        kem: Vec<[f64; 3]>,
     }
 
     impl Model {
         pub fn new(s: VelSpec) -> Self {
-            let (wz, wv) = (s.wz(), s.wv());
+            let (wz, wv) = if s.spline() { (vec![], vec![]) } else { (s.wz(), s.wv()) };
             let ex = s.poly.map(poly_exps).unwrap_or_default();
-            Self { s, wz, wv, ex }
+            let fw = s.op.as_ref().map_or(vec![], |o| (0..o.fop).map(|f| o.frame_weights(f)).collect());
+            let kem = s.kenc_model();
+            Self { s, wz, wv, ex, fw, kem }
+        }
+
+        // ── spline mode (§F): z[k] = (m_k, ψ_k) as (re, im), k = r · mc + c; frame (r, f) of operator frame f
+
+        fn sp_state(&self, th: &Theta, r: usize, f: usize, q: usize) -> (f64, f64, [f64; 3]) {
+            let mc = self.s.op.as_ref().unwrap().mc;
+            let (mut m, mut p, mut v) = (0.0, 0.0, [0.0; 3]);
+            for &(c, w) in &self.fw[f] {
+                let k = r * mc + c;
+                m += w * th.z[k][q].re;
+                p += w * th.z[k][q].im;
+                for a in 0..3 {
+                    v[a] += w * th.v[k][q][a];
+                }
+            }
+            (m, p, v)
+        }
+
+        fn sp_phase(&self, th: &Theta, e: usize, p: f64, v: &[f64; 3], q: usize) -> f64 {
+            let k = self.kem[e];
+            p + self.phi(&th.a, e, q) - (k[0] * v[0] + k[1] * v[1] + k[2] * v[2])
+        }
+
+        /// spline mode: x_e at operator frame f of respiratory knot r
+        pub fn eval_frame(&self, th: &Theta, e: usize, r: usize, f: usize) -> Vec<C> {
+            (0..self.s.nv())
+                .map(|q| {
+                    let (m, p, v) = self.sp_state(th, r, f, q);
+                    C::from_polar(1.0, self.sp_phase(th, e, p, &v, q)) * m
+                })
+                .collect()
+        }
+
+        /// spline mode: grad += Jᴴ g of frame (r, f) (df = Re⟨g, dx⟩)
+        pub fn vjp_frame(&self, th: &Theta, e: usize, r: usize, f: usize, g: &[C], grad: &mut Theta) {
+            let mc = self.s.op.as_ref().unwrap().mc;
+            let np = self.ex.len();
+            let ke = self.kem[e];
+            for q in 0..self.s.nv() {
+                let (m, p, v) = self.sp_state(th, r, f, q);
+                let u = C::from_polar(1.0, self.sp_phase(th, e, p, &v, q));
+                let x = u * m;
+                let re = (u.conj() * g[q]).re;
+                let im = (g[q].conj() * x).im;
+                for &(c, w) in &self.fw[f] {
+                    let k = r * mc + c;
+                    grad.z[k][q] += C::new(w * re, -w * im);
+                    for a in 0..3 {
+                        grad.v[k][q][a] += w * ke[a] * im;
+                    }
+                }
+                if e > 0 {
+                    for pp in 0..np {
+                        grad.a[(e - 1) * np + pp] -= poly_at(&self.ex[pp], q, self.s.dims) * im;
+                    }
+                }
+            }
+        }
+
+        /// spline mode: J d at frame (r, f)
+        pub fn jvp_frame(&self, th: &Theta, d: &Theta, e: usize, r: usize, f: usize) -> Vec<C> {
+            let ke = self.kem[e];
+            (0..self.s.nv())
+                .map(|q| {
+                    let (m, p, v) = self.sp_state(th, r, f, q);
+                    let u = C::from_polar(1.0, self.sp_phase(th, e, p, &v, q));
+                    let (dm, dp, dv) = self.sp_state(d, r, f, q);
+                    let dph = dp + self.phi(&d.a, e, q) - (ke[0] * dv[0] + ke[1] * dv[1] + ke[2] * dv[2]);
+                    u * dm + u * m * C::new(0.0, dph)
+                })
+                .collect()
         }
 
         fn phi(&self, a: &[f64], e: usize, r: usize) -> f64 {
@@ -268,10 +400,16 @@ pub mod cpu {
         }
 
         fn zf(&self, th: &Theta, f: usize, r: usize) -> C {
+            if self.s.identity() {
+                return th.z[f][r];
+            }
             (0..self.s.kz).map(|k| th.z[k][r] * self.wz[f * self.s.kz + k]).sum()
         }
 
         fn vf(&self, th: &Theta, f: usize, r: usize) -> [f64; 3] {
+            if self.s.identity() {
+                return th.v[f][r];
+            }
             let mut v = [0.0; 3];
             for k in 0..self.s.kv {
                 let w = self.wv[f * self.s.kv + k];
@@ -300,14 +438,21 @@ pub mod cpu {
                 let x = self.zf(th, f, r) * u;
                 let t = u.conj() * g[r];
                 let im = (g[r].conj() * x).im;
-                for k in 0..self.s.kz {
-                    grad.z[k][r] += t * self.wz[f * self.s.kz + k];
-                }
                 let ke = self.s.kenc[e];
-                for k in 0..self.s.kv {
-                    let w = self.wv[f * self.s.kv + k];
+                if self.s.identity() {
+                    grad.z[f][r] += t;
                     for c in 0..3 {
-                        grad.v[k][r][c] += w * ke[c] * im;
+                        grad.v[f][r][c] += ke[c] * im;
+                    }
+                } else {
+                    for k in 0..self.s.kz {
+                        grad.z[k][r] += t * self.wz[f * self.s.kz + k];
+                    }
+                    for k in 0..self.s.kv {
+                        let w = self.wv[f * self.s.kv + k];
+                        for c in 0..3 {
+                            grad.v[k][r][c] += w * ke[c] * im;
+                        }
                     }
                 }
                 if e > 0 {
@@ -342,6 +487,8 @@ pub struct VelModel {
     pub wv: Vec<f64>,
     wz_d: CudaSlice<f32>,
     wv_d: CudaSlice<f32>,
+    /// the single weight 1 of the at-knots mode (frame f = node f)
+    one_d: CudaSlice<f32>,
     ke_d: CudaSlice<f32>,
     ex_d: CudaSlice<i32>,
     f_eval: CudaFunction,
@@ -352,6 +499,29 @@ pub struct VelModel {
     f_mz: CudaFunction,
     f_mv: CudaFunction,
     f_anchor: CudaFunction,
+    f_absq: CudaFunction,
+    /// spline mode (§F): frame kernels and their tables (`vknot::frame_tables`), the cardiac interpolation filter
+    sp: Option<SplineK>,
+}
+
+struct SplineK {
+    f_eval: CudaFunction,
+    f_jvp: CudaFunction,
+    f_vjp: CudaFunction,
+    f_pre: CudaFunction,
+    f_mp: CudaFunction,
+    f_cf: CudaFunction,
+    f_cfa: CudaFunction,
+    fi: CudaSlice<i32>,
+    fw: CudaSlice<f32>,
+    nn: i32,
+    ki: CudaSlice<i32>,
+    kw: CudaSlice<f32>,
+    nkf: i32,
+    prim: CudaSlice<i32>,
+    pre: CudaSlice<f32>,
+    /// prefilter half-width (taps |n| ≤ T); 0: identity (linear operator frames)
+    pre_t: i32,
 }
 
 fn cfg(n: usize) -> LaunchConfig {
@@ -364,20 +534,57 @@ pub(crate) fn raw<T>(s: &CudaSlice<T>, st: &Arc<CudaStream>) -> u64 {
 
 const NB: usize = 256;
 
+/// device pointers of one frame's model state: z nodes, v nodes (pointer arrays) and the residual-phase chunk
+struct FramePtrs {
+    z: CudaSlice<u64>,
+    v: CudaSlice<u64>,
+    a: u64,
+}
+
 impl VelModel {
     pub fn new(dev: &Device, st: &Arc<CudaStream>, s: VelSpec) -> Result<Self, Error> {
-        assert!(s.kv <= 64, "K_v ≤ 64");
+        assert!(s.identity() || s.spline() || s.kv <= 64, "K_v ≤ 64");
         let m = dev.load_module("recon_vmodel", include_str!("vmodel.cu"), &CompileSettings::default())?;
         let (wz, wv) = (s.wz(), s.wv());
         let f32s = |v: &[f64]| v.iter().map(|&x| x as f32).collect::<Vec<f32>>();
-        let ke: Vec<f32> = s.kenc.iter().flat_map(|k| k.map(|x| x as f32)).collect();
+        // the encodes as the model uses them (spline mode: centred)
+        let ke: Vec<f32> = s.kenc_model().iter().flat_map(|k| k.map(|x| x as f32)).collect();
         let mut ex: Vec<i32> = s.poly.map(poly_exps).unwrap_or_default().iter().flatten().copied().collect();
         if ex.is_empty() {
             ex.push(0);
         }
+        // at-knots mode: the weight matrices are the identity and never read by the kernels (one weight 1 instead)
+        let (wzd, wvd) = if s.identity() || s.spline() { (vec![1f32], vec![1f32]) } else { (f32s(&wz), f32s(&wv)) };
+        let sp = match &s.op {
+            None => None,
+            Some(of) => {
+                let (fi, fw, nn, ki, kw, nkf, prim) = crate::vknot::frame_tables(of);
+                let pre = of.prefilter();
+                Some(SplineK {
+                    f_eval: m.load_function("vp_eval")?,
+                    f_jvp: m.load_function("vp_jvp")?,
+                    f_vjp: m.load_function("vp_vjp")?,
+                    f_pre: m.load_function("vp_prefilter")?,
+                    f_mp: m.load_function("vp_metric_mp")?,
+                    f_cf: m.load_function("vp_cframes")?,
+                    f_cfa: m.load_function("vp_cframes_adj")?,
+                    fi: st.clone_htod(&fi)?,
+                    fw: st.clone_htod(&fw)?,
+                    nn: nn as i32,
+                    ki: st.clone_htod(&ki)?,
+                    kw: st.clone_htod(&kw)?,
+                    nkf: nkf as i32,
+                    prim: st.clone_htod(&prim)?,
+                    pre: st.clone_htod(&pre.iter().map(|&x| x as f32).collect::<Vec<f32>>())?,
+                    pre_t: if of.odeg == 1 { 0 } else { 12 },
+                })
+            }
+        };
         Ok(Self {
-            wz_d: st.clone_htod(&f32s(&wz))?,
-            wv_d: st.clone_htod(&f32s(&wv))?,
+            sp,
+            wz_d: st.clone_htod(&wzd)?,
+            wv_d: st.clone_htod(&wvd)?,
+            one_d: st.clone_htod(&[1f32])?,
             ke_d: st.clone_htod(&ke)?,
             ex_d: st.clone_htod(&ex)?,
             f_eval: m.load_function("vm_eval")?,
@@ -388,6 +595,7 @@ impl VelModel {
             f_mz: m.load_function("vm_metric_z")?,
             f_mv: m.load_function("vm_metric_v")?,
             f_anchor: m.load_function("vm_anchor")?,
+            f_absq: m.load_function("vm_absq")?,
             wz,
             wv,
             s,
@@ -398,10 +606,138 @@ impl VelModel {
         self.s.lens()
     }
 
+    // ── spline mode (§F): one respiratory row at a time. `zrow[c]` / `vrow[c]`: device pointers of the (m, ψ) and v
+    // chunks of cardiac knot c of the row; `out` / `g`: the row's fop frames (frame-major, nv each).
+
+    fn sp(&self) -> &SplineK {
+        self.sp.as_ref().expect("spline mode (VelSpec::splines)")
+    }
+
+    fn row_cfg(&self, ny: usize) -> LaunchConfig {
+        LaunchConfig { grid_dim: ((self.s.nv() as u32).div_ceil(256).max(1), ny as u32, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 }
+    }
+
+    /// the row's fop frames of encode e into `out`
+    pub fn eval_row(&self, st: &Arc<CudaStream>, zrow: &[u64], vrow: &[u64], a: u64, e: usize, out: u64) -> Result<(), Error> {
+        let k = self.sp();
+        let (zp, vp) = (st.clone_htod(zrow)?, st.clone_htod(vrow)?);
+        let (nx, ny, nz, np) = self.dims_i();
+        let ei = e as i32;
+        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        let fop = self.s.op.as_ref().unwrap().fop;
+        unsafe {
+            st.launch_builder(&k.f_eval).arg(&zp).arg(&vp).arg(&k.fi).arg(&k.fw).arg(&k.nn).arg(&a).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&out).launch(self.row_cfg(fop))?;
+        }
+        Ok(())
+    }
+
+    /// the row's linearisation J d (d row pointers, residual-phase chunk `da`) into `out`
+    #[allow(clippy::too_many_arguments)]
+    pub fn jvp_row(&self, st: &Arc<CudaStream>, zrow: &[u64], vrow: &[u64], dzrow: &[u64], dvrow: &[u64], a: u64, da: u64, e: usize, out: u64) -> Result<(), Error> {
+        let k = self.sp();
+        let (zp, vp, dzp, dvp) = (st.clone_htod(zrow)?, st.clone_htod(vrow)?, st.clone_htod(dzrow)?, st.clone_htod(dvrow)?);
+        let (nx, ny, nz, np) = self.dims_i();
+        let ei = e as i32;
+        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        let fop = self.s.op.as_ref().unwrap().fop;
+        unsafe {
+            st.launch_builder(&k.f_jvp).arg(&zp).arg(&vp).arg(&dzp).arg(&dvp).arg(&k.fi).arg(&k.fw).arg(&k.nn).arg(&a).arg(&da).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&out).launch(self.row_cfg(fop))?;
+        }
+        Ok(())
+    }
+
+    /// (gz, gv) row += scale · Jᴴ g over the row's frames; `sacc` (0: none) += Im(conj(g) x) per voxel
+    #[allow(clippy::too_many_arguments)]
+    pub fn vjp_row(&self, st: &Arc<CudaStream>, zrow: &[u64], vrow: &[u64], a: u64, e: usize, g: u64, scale: f32, gzrow: &[u64], gvrow: &[u64], sacc: u64) -> Result<(), Error> {
+        let k = self.sp();
+        let (zp, vp, gzp, gvp) = (st.clone_htod(zrow)?, st.clone_htod(vrow)?, st.clone_htod(gzrow)?, st.clone_htod(gvrow)?);
+        let (nx, ny, nz, np) = self.dims_i();
+        let ei = e as i32;
+        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        let mc = self.s.op.as_ref().unwrap().mc;
+        unsafe {
+            st.launch_builder(&k.f_vjp).arg(&zp).arg(&vp).arg(&k.fi).arg(&k.fw).arg(&k.nn).arg(&k.ki).arg(&k.kw).arg(&k.nkf).arg(&k.prim).arg(&a).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&g).arg(&scale).arg(&gzp).arg(&gvp).arg(&sacc).launch(self.row_cfg(mc))?;
+        }
+        Ok(())
+    }
+
+    /// the cardiac interpolation filter in place on `rows` rows of fop frames at `x` (its own adjoint; no-op for linear
+    /// operator frames)
+    pub fn prefilter(&self, st: &Arc<CudaStream>, x: u64, rows: usize) -> Result<(), Error> {
+        let k = self.sp();
+        if k.pre_t == 0 || rows == 0 {
+            return Ok(());
+        }
+        let f = self.s.op.as_ref().unwrap().fop as i32;
+        let nv = self.s.nv() as i64;
+        unsafe {
+            st.launch_builder(&k.f_pre).arg(&x).arg(&f).arg(&k.pre).arg(&k.pre_t).arg(&nv).launch(self.row_cfg(rows))?;
+        }
+        Ok(())
+    }
+
+    /// complex knot images of one row (`crow[c]`: nv complex per cardiac knot) at the row's fop operator frames
+    pub fn cframes_row(&self, st: &Arc<CudaStream>, crow: &[u64], out: u64) -> Result<(), Error> {
+        let k = self.sp();
+        let cp = st.clone_htod(crow)?;
+        let nv = self.s.nv() as i64;
+        let fop = self.s.op.as_ref().unwrap().fop;
+        unsafe {
+            st.launch_builder(&k.f_cf).arg(&cp).arg(&k.fi).arg(&k.fw).arg(&k.nn).arg(&nv).arg(&out).launch(self.row_cfg(fop))?;
+        }
+        Ok(())
+    }
+
+    /// its adjoint, accumulated into the row's knot images: C_c += Σ_f w_fc g_f
+    pub fn cframes_adj_row(&self, st: &Arc<CudaStream>, g: u64, crow: &[u64]) -> Result<(), Error> {
+        let k = self.sp();
+        let cp = st.clone_htod(crow)?;
+        let nv = self.s.nv() as i64;
+        let mc = self.s.op.as_ref().unwrap().mc;
+        unsafe {
+            st.launch_builder(&k.f_cfa).arg(&g).arg(&k.ki).arg(&k.kw).arg(&k.nkf).arg(&nv).arg(&cp).launch(self.row_cfg(mc))?;
+        }
+        Ok(())
+    }
+
+    /// (m, ψ) chunk metric: re / (wm · c + dm), im / (we · (c · sig + dp)) (inverse: ·)
+    #[allow(clippy::too_many_arguments)]
+    pub fn metric_mp(&self, st: &Arc<CudaStream>, r: &CudaSlice<C32>, out: &mut CudaSlice<C32>, c: Option<&CudaSlice<f32>>, sig: u64, wm: f32, dm: f32, we: f32, dp: f32, inverse: bool) -> Result<(), Error> {
+        let k = self.sp();
+        let cp = c.map(|c| raw(c, st)).unwrap_or(0);
+        let (inv, nv) = (inverse as i32, self.s.nv() as i64);
+        unsafe {
+            st.launch_builder(&k.f_mp).arg(r).arg(out).arg(&cp).arg(&sig).arg(&wm).arg(&dm).arg(&we).arg(&dp).arg(&inv).arg(&nv).launch(cfg(self.s.nv()))?;
+        }
+        Ok(())
+    }
+
     fn ptrs(&self, st: &Arc<CudaStream>, th: &Stack) -> Result<(CudaSlice<u64>, CudaSlice<u64>, u64), Error> {
         let z: Vec<u64> = (0..self.s.kz).map(|k| raw(&th.v[self.s.chunk_z(k)], st)).collect();
         let v: Vec<u64> = (0..self.s.kv).map(|k| raw(&th.v[self.s.chunk_v(k)], st)).collect();
         Ok((st.clone_htod(&z)?, st.clone_htod(&v)?, raw(&th.v[self.s.chunk_a()], st)))
+    }
+
+    /// the model state frame f reads: all nodes, or (at-knots mode) node f only
+    fn frame_ptrs(&self, st: &Arc<CudaStream>, th: &Stack, f: usize) -> Result<FramePtrs, Error> {
+        if self.s.identity() {
+            return self.knot_ptrs(st, raw(&th.v[self.s.chunk_z(f)], st), raw(&th.v[self.s.chunk_v(f)], st), raw(&th.v[self.s.chunk_a()], st));
+        }
+        let (z, v, a) = self.ptrs(st, th)?;
+        Ok(FramePtrs { z, v, a })
+    }
+
+    fn knot_ptrs(&self, st: &Arc<CudaStream>, z: u64, v: u64, a: u64) -> Result<FramePtrs, Error> {
+        Ok(FramePtrs { z: st.clone_htod(&[z])?, v: st.clone_htod(&[v])?, a })
+    }
+
+    /// (wz row, kz, wv row, kv) of frame f as the kernels read them
+    fn frame_weights(&self, f: usize) -> (cudarc::driver::CudaView<'_, f32>, i32, cudarc::driver::CudaView<'_, f32>, i32) {
+        if self.s.identity() {
+            return (self.one_d.slice(0..1), 1, self.one_d.slice(0..1), 1);
+        }
+        let (kz, kv) = (self.s.kz, self.s.kv);
+        (self.wz_d.slice(f * kz..(f + 1) * kz), kz as i32, self.wv_d.slice(f * kv..(f + 1) * kv), kv as i32)
     }
 
     fn dims_i(&self) -> (i32, i32, i32, i32) {
@@ -409,50 +745,101 @@ impl VelModel {
         (nx as i32, ny as i32, nz as i32, self.s.np() as i32)
     }
 
-    /// x = x_{e,f}(θ)
-    pub fn eval(&self, st: &Arc<CudaStream>, th: &Stack, e: usize, f: usize, x: &mut CudaSlice<C32>) -> Result<(), Error> {
-        let (zp, vp, ap) = self.ptrs(st, th)?;
+    fn launch_eval(&self, st: &Arc<CudaStream>, p: &FramePtrs, e: usize, f: usize, x: u64) -> Result<(), Error> {
         let (nx, ny, nz, np) = self.dims_i();
-        let (kz, kv, ei) = (self.s.kz as i32, self.s.kv as i32, e as i32);
-        let wz = self.wz_d.slice(f * self.s.kz..(f + 1) * self.s.kz);
-        let wv = self.wv_d.slice(f * self.s.kv..(f + 1) * self.s.kv);
+        let (wz, kz, wv, kv) = self.frame_weights(f);
+        let ei = e as i32;
         let ke = self.ke_d.slice(3 * e..3 * e + 3);
         unsafe {
-            st.launch_builder(&self.f_eval).arg(&zp).arg(&wz).arg(&kz).arg(&vp).arg(&wv).arg(&kv).arg(&ap).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(x).launch(cfg(self.s.nv()))?;
+            st.launch_builder(&self.f_eval).arg(&p.z).arg(&wz).arg(&kz).arg(&p.v).arg(&wv).arg(&kv).arg(&p.a).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&x).launch(cfg(self.s.nv()))?;
         }
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn launch_vjp(&self, st: &Arc<CudaStream>, p: &FramePtrs, e: usize, f: usize, g: u64, scale: f32, gz: &CudaSlice<u64>, gv: &CudaSlice<u64>, sacc: u64) -> Result<(), Error> {
+        let (nx, ny, nz, np) = self.dims_i();
+        let (wz, kz, wv, kv) = self.frame_weights(f);
+        let ei = e as i32;
+        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        unsafe {
+            st.launch_builder(&self.f_vjp).arg(&p.z).arg(&wz).arg(&kz).arg(&p.v).arg(&wv).arg(&kv).arg(&p.a).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&g).arg(&scale).arg(gz).arg(gv).arg(&sacc).launch(cfg(self.s.nv()))?;
+        }
+        Ok(())
+    }
+
+    fn launch_jvp(&self, st: &Arc<CudaStream>, p: &FramePtrs, d: &FramePtrs, e: usize, f: usize, dx: u64) -> Result<(), Error> {
+        let (nx, ny, nz, np) = self.dims_i();
+        let (wz, kz, wv, kv) = self.frame_weights(f);
+        let ei = e as i32;
+        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        unsafe {
+            st.launch_builder(&self.f_jvp).arg(&p.z).arg(&wz).arg(&kz).arg(&p.v).arg(&wv).arg(&kv).arg(&p.a).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&d.z).arg(&d.v).arg(&d.a).arg(&dx).launch(cfg(self.s.nv()))?;
+        }
+        Ok(())
+    }
+
+    /// x = x_{e,f}(θ)
+    pub fn eval(&self, st: &Arc<CudaStream>, th: &Stack, e: usize, f: usize, x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        let p = self.frame_ptrs(st, th, f)?;
+        self.launch_eval(st, &p, e, f, raw(x, st))
     }
 
     /// grad += scale · Jᴴ g for (e, f); `sacc` (per-encode residual-phase accumulator, nv f32) += Im(conj(g) x)
     #[allow(clippy::too_many_arguments)]
     pub fn vjp(&self, st: &Arc<CudaStream>, th: &Stack, e: usize, f: usize, g: &CudaSlice<C32>, scale: f32, grad: &mut Stack, sacc: Option<&mut CudaSlice<f32>>) -> Result<(), Error> {
-        let (zp, vp, ap) = self.ptrs(st, th)?;
-        let gz: Vec<u64> = (0..self.s.kz).map(|k| raw(&grad.v[self.s.chunk_z(k)], st)).collect();
-        let gv: Vec<u64> = (0..self.s.kv).map(|k| raw(&grad.v[self.s.chunk_v(k)], st)).collect();
+        let p = self.frame_ptrs(st, th, f)?;
+        let (gz, gv): (Vec<u64>, Vec<u64>) = if self.s.identity() {
+            (vec![raw(&grad.v[self.s.chunk_z(f)], st)], vec![raw(&grad.v[self.s.chunk_v(f)], st)])
+        } else {
+            ((0..self.s.kz).map(|k| raw(&grad.v[self.s.chunk_z(k)], st)).collect(), (0..self.s.kv).map(|k| raw(&grad.v[self.s.chunk_v(k)], st)).collect())
+        };
         let (gz, gv) = (st.clone_htod(&gz)?, st.clone_htod(&gv)?);
         let sp: u64 = sacc.map(|s| raw(s, st)).unwrap_or(0);
-        let (nx, ny, nz, np) = self.dims_i();
-        let (kz, kv, ei) = (self.s.kz as i32, self.s.kv as i32, e as i32);
-        let wz = self.wz_d.slice(f * self.s.kz..(f + 1) * self.s.kz);
-        let wv = self.wv_d.slice(f * self.s.kv..(f + 1) * self.s.kv);
-        let ke = self.ke_d.slice(3 * e..3 * e + 3);
-        unsafe {
-            st.launch_builder(&self.f_vjp).arg(&zp).arg(&wz).arg(&kz).arg(&vp).arg(&wv).arg(&kv).arg(&ap).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(g).arg(&scale).arg(&gz).arg(&gv).arg(&sp).launch(cfg(self.s.nv()))?;
-        }
-        Ok(())
+        self.launch_vjp(st, &p, e, f, raw(g, st), scale, &gz, &gv, sp)
     }
 
     /// dx = J d at θ for (e, f)
     pub fn jvp(&self, st: &Arc<CudaStream>, th: &Stack, d: &Stack, e: usize, f: usize, dx: &mut CudaSlice<C32>) -> Result<(), Error> {
-        let (zp, vp, ap) = self.ptrs(st, th)?;
-        let (dzp, dvp, dap) = self.ptrs(st, d)?;
-        let (nx, ny, nz, np) = self.dims_i();
-        let (kz, kv, ei) = (self.s.kz as i32, self.s.kv as i32, e as i32);
-        let wz = self.wz_d.slice(f * self.s.kz..(f + 1) * self.s.kz);
-        let wv = self.wv_d.slice(f * self.s.kv..(f + 1) * self.s.kv);
-        let ke = self.ke_d.slice(3 * e..3 * e + 3);
+        let p = self.frame_ptrs(st, th, f)?;
+        let dp = self.frame_ptrs(st, d, f)?;
+        self.launch_jvp(st, &p, &dp, e, f, raw(dx, st))
+    }
+
+    // ── at-knots mode on single node chunks (θ streamed knot by knot from host memory, `vobj` host-resident state).
+    // Pointers: z = node chunk (nv complex), v = node chunk ([3][nv] f32 packed in pairs), a = residual-phase chunk;
+    // outputs / gradients by raw device pointer (e.g. the knot's part of a set image).
+
+    /// x = x_{e,k} from node chunks (at-knots mode)
+    pub fn eval_knot(&self, st: &Arc<CudaStream>, z: u64, v: u64, a: u64, e: usize, x: u64) -> Result<(), Error> {
+        assert!(self.s.identity(), "eval_knot: at-knots mode only");
+        let p = self.knot_ptrs(st, z, v, a)?;
+        self.launch_eval(st, &p, e, 0, x)
+    }
+
+    /// (gz, gv) += scale · J_{e,k}ᴴ g (at-knots mode); `sacc` += Im(conj(g) x) (0: none)
+    #[allow(clippy::too_many_arguments)]
+    pub fn vjp_knot(&self, st: &Arc<CudaStream>, z: u64, v: u64, a: u64, e: usize, g: u64, scale: f32, gz: u64, gv: u64, sacc: u64) -> Result<(), Error> {
+        assert!(self.s.identity(), "vjp_knot: at-knots mode only");
+        let p = self.knot_ptrs(st, z, v, a)?;
+        let (gzp, gvp) = (st.clone_htod(&[gz])?, st.clone_htod(&[gv])?);
+        self.launch_vjp(st, &p, e, 0, g, scale, &gzp, &gvp, sacc)
+    }
+
+    /// dx = J_{e,k} (dz, dv, da) at (z, v, a) (at-knots mode)
+    #[allow(clippy::too_many_arguments)]
+    pub fn jvp_knot(&self, st: &Arc<CudaStream>, z: u64, v: u64, a: u64, dz: u64, dv: u64, da: u64, e: usize, dx: u64) -> Result<(), Error> {
+        assert!(self.s.identity(), "jvp_knot: at-knots mode only");
+        let p = self.knot_ptrs(st, z, v, a)?;
+        let d = self.knot_ptrs(st, dz, dv, da)?;
+        self.launch_jvp(st, &p, &d, e, 0, dx)
+    }
+
+    /// out = w |z|² (out ≠ 0), acc += w |z|² (acc ≠ 0), per voxel of a node chunk
+    pub fn absq(&self, st: &Arc<CudaStream>, z: u64, w: f32, out: u64, acc: u64) -> Result<(), Error> {
+        let nv = self.s.nv() as i64;
         unsafe {
-            st.launch_builder(&self.f_jvp).arg(&zp).arg(&wz).arg(&kz).arg(&vp).arg(&wv).arg(&kv).arg(&ap).arg(&self.ex_d).arg(&np).arg(&ei).arg(&ke).arg(&nx).arg(&ny).arg(&nz).arg(&dzp).arg(&dvp).arg(&dap).arg(dx).launch(cfg(self.s.nv()))?;
+            st.launch_builder(&self.f_absq).arg(&z).arg(&nv).arg(&w).arg(&out).arg(&acc).launch(cfg(self.s.nv()))?;
         }
         Ok(())
     }
@@ -473,8 +860,18 @@ impl VelModel {
         Ok((0..np).map(|p| h[p * NB..(p + 1) * NB].iter().sum()).collect())
     }
 
-    /// Gauss–Newton weights: sig[k][r] = Σ_f Wv[f,k] |z_f(r)|², zz[r] = Σ_f |z_f(r)|²
+    /// Gauss–Newton weights: sig[k][r] = Σ_f Wv[f,k] |z_f(r)|², zz[r] = Σ_f |z_f(r)|² (at-knots mode: sig[k] = |z_k|²)
     pub fn sigma(&self, st: &Arc<CudaStream>, th: &Stack, sig: &mut CudaSlice<f32>, zz: &mut CudaSlice<f32>) -> Result<(), Error> {
+        if self.s.identity() {
+            st.memset_zeros(zz)?;
+            let (nv, zp) = (self.s.nv(), raw(zz, st));
+            let sp = raw(sig, st);
+            for k in 0..self.s.kz {
+                let out = if sig.len() >= self.s.kz * nv { sp + (k * nv * 4) as u64 } else { 0 };
+                self.absq(st, raw(&th.v[self.s.chunk_z(k)], st), 1.0, out, zp)?;
+            }
+            return Ok(());
+        }
         let (zp, _, _) = self.ptrs(st, th)?;
         let (kz, kv, nf, nv) = (self.s.kz as i32, self.s.kv as i32, self.s.nf as i32, self.s.nv() as i64);
         unsafe {
@@ -549,7 +946,7 @@ mod tests {
                 kenc.push(v);
             }
         }
-        VelSpec { dims: [7, 5, 3], kenc, nf: 6, kz: 3, deg_z: 1, kv: 4, deg_v: 3, poly: Some(2) }
+        VelSpec { dims: [7, 5, 3], kenc, nf: 6, kz: 3, deg_z: 1, kv: 4, deg_v: 3, poly: Some(2), knots: None, op: None }
     }
 
     fn random(s: &VelSpec, rng: &mut Rng, scale: f64) -> Theta {
@@ -686,5 +1083,315 @@ mod tests {
         let diff = gt.add(-1.0, &gc);
         let err = diff.dot(&diff).sqrt() / gc.dot(&gc).sqrt();
         assert!(err < 2e-6, "vjp: rel error {err:e}");
+    }
+
+
+    /// at-knots spec: kr 2 × mc 3 knots, 7 dual-VENC-like encodes, residual phase degree 1
+    fn knot_spec() -> VelSpec {
+        let s = spec();
+        VelSpec::at_knots([6, 5, 4], s.kenc, 2, 3, Some(1))
+    }
+
+    /// The at-knots forward model is x_{e,k} = z_k e^{i(φ_e − k_e·v_k)} (node k alone), and the gradient of the knot
+    /// objective f(θ) = ½ Σ_e ‖A_e [x_{e,0..K−1}(θ)] − y_e‖² through an explicit f64 knot operator (per sample: knot
+    /// weights w_k(j) of a respiratory-linear × cardiac-cubic basis times the DFT, the structure of the 2-D knot NUFFT)
+    /// matches central finite differences.
+    #[test]
+    fn knots_cpu_forward_and_objective_gradient() {
+        let s = knot_spec();
+        let [kr, mc] = s.knots.unwrap();
+        let (nv, ne, kk) = (s.nv(), s.ne(), s.kz);
+        assert_eq!((s.nf, s.kz, s.kv), (kk, kk, kk));
+        let m = Model::new(s.clone());
+        let mut rng = Rng(0x4b4e4f54);
+        let th = random(&s, &mut rng, 1.0);
+        let d = random(&s, &mut rng, 1.0);
+        // forward at the knots: node k alone
+        let ex = poly_exps(1);
+        for e in [0, 2, 5] {
+            for k in [0, kk / 2, kk - 1] {
+                let x = m.eval(&th, e, k);
+                for r in [0, nv / 3, nv - 1] {
+                    let phi: f64 = if e == 0 { 0.0 } else { (0..ex.len()).map(|p| th.a[(e - 1) * ex.len() + p] * poly_at(&ex[p], r, s.dims)).sum() };
+                    let kv: f64 = (0..3).map(|c| s.kenc[e][c] * th.v[k][r][c]).sum();
+                    let want = th.z[k][r] * C::from_polar(1.0, phi - kv);
+                    assert!((x[r] - want).norm() < 1e-12, "at-knots forward (e {e}, k {k}, r {r})");
+                }
+            }
+        }
+        // explicit knot operator per encode: samples j with k-space position κ_j (rad / voxel) and knot weights
+        let nsamp = 90;
+        let pos: Vec<[f64; 3]> = (0..nv).map(|r| [(r % 6) as f64, ((r / 6) % 5) as f64, (r / 30) as f64]).collect();
+        let ops: Vec<Vec<([f64; 3], Vec<(usize, f64)>)>> = (0..ne)
+            .map(|_| {
+                (0..nsamp)
+                    .map(|_| {
+                        let kap = [0, 1, 2].map(|_| 3.0 * rng.n());
+                        // respiratory linear hat between knots 0 and 1, periodic cubic cardiac weights
+                        let (u, tc) = (0.5 * (rng.n() + 1.0), 0.5 * (rng.n() + 1.0) * mc as f64);
+                        let mut w = vec![];
+                        for b in 0..mc {
+                            let mut c = 0.0;
+                            for j in -2i64..=2 {
+                                c += bspline(3, tc - b as f64 - (j * mc as i64) as f64);
+                            }
+                            for (ri, wr) in [(0usize, 1.0 - u), (1usize, u)] {
+                                if c * wr != 0.0 {
+                                    w.push((ri * mc + b, c * wr));
+                                }
+                            }
+                        }
+                        let _ = kr;
+                        (kap, w)
+                    })
+                    .collect()
+            })
+            .collect();
+        let fwd = |e: usize, xs: &[Vec<C>]| -> Vec<C> {
+            ops[e].iter().map(|(kap, w)| w.iter().map(|&(k, wk)| wk * (0..nv).map(|r| xs[k][r] * C::from_polar(1.0, -(kap[0] * pos[r][0] + kap[1] * pos[r][1] + kap[2] * pos[r][2]))).sum::<C>()).sum()).collect()
+        };
+        let adj = |e: usize, y: &[C]| -> Vec<Vec<C>> {
+            let mut g = vec![vec![C::new(0.0, 0.0); nv]; kk];
+            for (j, (kap, w)) in ops[e].iter().enumerate() {
+                for &(k, wk) in w {
+                    for r in 0..nv {
+                        g[k][r] += wk * y[j] * C::from_polar(1.0, kap[0] * pos[r][0] + kap[1] * pos[r][1] + kap[2] * pos[r][2]);
+                    }
+                }
+            }
+            g
+        };
+        let y: Vec<Vec<C>> = (0..ne).map(|_| (0..nsamp).map(|_| C::new(rng.n(), rng.n())).collect()).collect();
+        let images = |t: &Theta, e: usize| -> Vec<Vec<C>> { (0..kk).map(|k| m.eval(t, e, k)).collect() };
+        let f = |t: &Theta| -> f64 { (0..ne).map(|e| 0.5 * fwd(e, &images(t, e)).iter().zip(&y[e]).map(|(a, b)| (a - b).norm_sqr()).sum::<f64>()).sum() };
+        let mut g = Theta::zeros(&s);
+        for e in 0..ne {
+            let r: Vec<C> = fwd(e, &images(&th, e)).iter().zip(&y[e]).map(|(a, b)| a - b).collect();
+            let gx = adj(e, &r);
+            for k in 0..kk {
+                m.vjp(&th, e, k, &gx[k], &mut g);
+            }
+        }
+        let h = 1e-5;
+        let fd = (f(&th.add(h, &d)) - f(&th.add(-h, &d))) / (2.0 * h);
+        let an = g.dot(&d);
+        eprintln!("at-knots objective: directional derivative fd {fd:.12e} vs analytic {an:.12e} (rel {:.1e})", (fd - an).abs() / an.abs());
+        assert!((fd - an).abs() < 1e-7 * an.abs().max(1.0), "at-knots objective gradient: fd {fd:.10e} vs {an:.10e}");
+        // JVP and adjoint consistency per (encode, knot)
+        for (e, k) in [(0, 0), (3, kk - 1), (6, 2)] {
+            let fdx: Vec<C> = m.eval(&th.add(h, &d), e, k).iter().zip(m.eval(&th.add(-h, &d), e, k)).map(|(a, b)| (a - b) / (2.0 * h)).collect();
+            let err = fdx.iter().zip(&m.jvp(&th, &d, e, k)).map(|(a, b)| (a - b).norm()).fold(0.0, f64::max);
+            assert!(err < 1e-7, "at-knots jvp (e {e}, k {k}): {err:e}");
+            let gx: Vec<C> = (0..nv).map(|_| C::new(rng.n(), rng.n())).collect();
+            let mut jt = Theta::zeros(&s);
+            m.vjp(&th, e, k, &gx, &mut jt);
+            let lhs: f64 = m.jvp(&th, &d, e, k).iter().zip(&gx).map(|(a, b)| (a.conj() * b).re).sum();
+            assert!((lhs - jt.dot(&d)).abs() < 1e-10 * lhs.abs().max(1.0));
+            // the vjp of knot k touches node k only
+            for kk2 in (0..kk).filter(|&q| q != k) {
+                assert!(jt.z[kk2].iter().all(|c| c.norm() == 0.0) && jt.v[kk2].iter().all(|v| v.iter().all(|&x| x == 0.0)));
+            }
+        }
+    }
+
+    /// GPU at-knots kernels (stack form and the single-chunk streaming form) against the f64 reference
+    #[test]
+    fn gpu_matches_cpu_at_knots() {
+        let dev = Device::new(0).unwrap();
+        let st = dev.default_stream();
+        let s = knot_spec();
+        let kk = s.kz;
+        let cm = Model::new(s.clone());
+        let gm = VelModel::new(&dev, &st, s.clone()).unwrap();
+        let mut rng = Rng(0x2468);
+        let th = random(&s, &mut rng, 1.0);
+        let d = random(&s, &mut rng, 1.0);
+        let up = |t: &Theta| Stack { v: t.pack(&s).iter().map(|c| st.clone_htod(c).unwrap()).collect() };
+        let (tg, dg) = (up(&th), up(&d));
+        let nv = s.nv();
+        let mut x = st.alloc_zeros::<C32>(nv).unwrap();
+        let rel = |a: &[C32], b: &[C]| a.iter().zip(b).map(|(p, q)| (C::new(p.re as f64, p.im as f64) - q).norm()).fold(0.0, f64::max) / b.iter().map(|q| q.norm()).fold(0.0, f64::max);
+        for (e, f) in [(0, 0), (2, 3), (6, kk - 1)] {
+            gm.eval(&st, &tg, e, f, &mut x).unwrap();
+            assert!(rel(&st.clone_dtoh(&x).unwrap(), &cm.eval(&th, e, f)) < 2e-6, "eval ({e},{f})");
+            // single-chunk form
+            let (zc, vc, ac) = (raw(&tg.v[s.chunk_z(f)], &st), raw(&tg.v[s.chunk_v(f)], &st), raw(&tg.v[s.chunk_a()], &st));
+            gm.eval_knot(&st, zc, vc, ac, e, raw(&x, &st)).unwrap();
+            assert!(rel(&st.clone_dtoh(&x).unwrap(), &cm.eval(&th, e, f)) < 2e-6, "eval_knot ({e},{f})");
+            gm.jvp(&st, &tg, &dg, e, f, &mut x).unwrap();
+            assert!(rel(&st.clone_dtoh(&x).unwrap(), &cm.jvp(&th, &d, e, f)) < 2e-6, "jvp ({e},{f})");
+            let (dz, dv, da) = (raw(&dg.v[s.chunk_z(f)], &st), raw(&dg.v[s.chunk_v(f)], &st), raw(&dg.v[s.chunk_a()], &st));
+            gm.jvp_knot(&st, zc, vc, ac, dz, dv, da, e, raw(&x, &st)).unwrap();
+            assert!(rel(&st.clone_dtoh(&x).unwrap(), &cm.jvp(&th, &d, e, f)) < 2e-6, "jvp_knot ({e},{f})");
+        }
+        // vjp over all (e, k): stack form into one gradient, chunk form into another
+        let gx: Vec<Vec<C>> = (0..s.ne() * kk).map(|_| (0..nv).map(|_| C::new(rng.n(), rng.n())).collect()).collect();
+        let mut gc = Theta::zeros(&s);
+        let mut gg = Stack { v: s.lens().iter().map(|&n| st.alloc_zeros::<C32>(n).unwrap()).collect() };
+        let mut g2 = Stack { v: s.lens().iter().map(|&n| st.alloc_zeros::<C32>(n).unwrap()).collect() };
+        for e in 0..s.ne() {
+            for f in 0..kk {
+                let g = &gx[e * kk + f];
+                cm.vjp(&th, e, f, g, &mut gc);
+                let gd = st.clone_htod(&g.iter().map(|c| C32::new(c.re as f32, c.im as f32)).collect::<Vec<_>>()).unwrap();
+                gm.vjp(&st, &tg, e, f, &gd, 1.0, &mut gg, None).unwrap();
+                let (zc, vc, ac) = (raw(&tg.v[s.chunk_z(f)], &st), raw(&tg.v[s.chunk_v(f)], &st), raw(&tg.v[s.chunk_a()], &st));
+                gm.vjp_knot(&st, zc, vc, ac, e, raw(&gd, &st), 1.0, raw(&g2.v[s.chunk_z(f)], &st), raw(&g2.v[s.chunk_v(f)], &st), 0).unwrap();
+            }
+        }
+        let mut gc_noa = gc.clone();
+        gc_noa.a.iter_mut().for_each(|a| *a = 0.0);
+        for gs in [&gg, &g2] {
+            let host: Vec<Vec<C32>> = gs.v.iter().map(|c| st.clone_dtoh(c).unwrap()).collect();
+            let gt = Theta::unpack(&s, &host);
+            let diff = gt.add(-1.0, &gc_noa);
+            let err = diff.dot(&diff).sqrt() / gc_noa.dot(&gc_noa).sqrt();
+            assert!(err < 2e-6, "at-knots vjp: rel error {err:e}");
+        }
+        // Gauss–Newton weights: sig[k] = |z_k|², zz = Σ_k |z_k|²
+        let mut sig = st.alloc_zeros::<f32>(kk * nv).unwrap();
+        let mut zz = st.alloc_zeros::<f32>(nv).unwrap();
+        gm.sigma(&st, &tg, &mut sig, &mut zz).unwrap();
+        let (sh, zh) = (st.clone_dtoh(&sig).unwrap(), st.clone_dtoh(&zz).unwrap());
+        for r in [0, nv / 2, nv - 1] {
+            let want: f64 = (0..kk).map(|k| th.z[k][r].norm_sqr()).sum();
+            assert!((zh[r] as f64 - want).abs() < 1e-5 * want, "zz");
+            assert!((sh[3 * nv + r] as f64 - th.z[3][r].norm_sqr()).abs() < 1e-5 * want, "sig");
+        }
+    }
+
+    /// spline mode: 3 × 5 knots (cardiac cubic), 12 linear-interpolated... cubic operator frames, degree-1 residual phase
+    fn spline_spec() -> VelSpec {
+        let s = spec();
+        VelSpec::splines([6, 5, 4], s.kenc, crate::vknot::OpFrames::new(3, 5, 3, 12, 3), Some(1))
+    }
+
+    /// spline-mode kernels (row evaluation, linearisation, gradient, the cardiac interpolation filter) against the f64
+    /// reference; the reference's gradient against central differences of ½ Σ |x − y|² over the frames
+    #[test]
+    fn gpu_matches_cpu_splines() {
+        let s = spline_spec();
+        let of = s.op.clone().unwrap();
+        let (nv, mc, fop) = (s.nv(), of.mc, of.fop);
+        let cm = Model::new(s.clone());
+        let mut rng = Rng(0x5911);
+        let mut th = random(&s, &mut rng, 1.0);
+        let d = random(&s, &mut rng, 1.0);
+        // magnitudes around 1, phases within ±1.5 rad (any reals are valid; this keeps the FD step meaningful)
+        for z in th.z.iter_mut() {
+            for x in z.iter_mut() {
+                *x = C::new(1.0 + 0.4 * rng.n(), 1.5 * rng.n());
+            }
+        }
+        // reference gradient vs central differences
+        let y: Vec<Vec<C>> = (0..s.ne() * of.kr * fop).map(|_| (0..nv).map(|_| C::new(rng.n(), rng.n())).collect()).collect();
+        let f = |t: &Theta| -> f64 {
+            let mut acc = 0.0;
+            for e in 0..s.ne() {
+                for r in 0..of.kr {
+                    for ff in 0..fop {
+                        acc += 0.5 * cm.eval_frame(t, e, r, ff).iter().zip(&y[(e * of.kr + r) * fop + ff]).map(|(a, b)| (a - b).norm_sqr()).sum::<f64>();
+                    }
+                }
+            }
+            acc
+        };
+        let mut g = Theta::zeros(&s);
+        for e in 0..s.ne() {
+            for r in 0..of.kr {
+                for ff in 0..fop {
+                    let res: Vec<C> = cm.eval_frame(&th, e, r, ff).iter().zip(&y[(e * of.kr + r) * fop + ff]).map(|(a, b)| a - b).collect();
+                    cm.vjp_frame(&th, e, r, ff, &res, &mut g);
+                }
+            }
+        }
+        let h = 1e-5;
+        let fd = (f(&th.add(h, &d)) - f(&th.add(-h, &d))) / (2.0 * h);
+        let an = g.dot(&d);
+        assert!((fd - an).abs() < 1e-7 * an.abs().max(1.0), "spline reference gradient: fd {fd:.10e} vs {an:.10e}");
+        for (e, r, ff) in [(0, 0, 0), (3, 1, 7), (6, 2, 11)] {
+            let fdx: Vec<C> = cm.eval_frame(&th.add(h, &d), e, r, ff).iter().zip(cm.eval_frame(&th.add(-h, &d), e, r, ff)).map(|(a, b)| (a - b) / (2.0 * h)).collect();
+            let err = fdx.iter().zip(&cm.jvp_frame(&th, &d, e, r, ff)).map(|(a, b)| (a - b).norm()).fold(0.0, f64::max);
+            assert!(err < 1e-7, "spline jvp (e {e}, r {r}, f {ff}): {err:e}");
+        }
+        // GPU
+        let dev = Device::new(0).unwrap();
+        let st = dev.default_stream();
+        let gm = VelModel::new(&dev, &st, s.clone()).unwrap();
+        let up = |t: &Theta| Stack { v: t.pack(&s).iter().map(|c| st.clone_htod(c).unwrap()).collect() };
+        let (tg, dg) = (up(&th), up(&d));
+        let rowp = |x: &Stack, r: usize| -> (Vec<u64>, Vec<u64>) { ((0..mc).map(|c| raw(&x.v[s.chunk_z(r * mc + c)], &st)).collect(), (0..mc).map(|c| raw(&x.v[s.chunk_v(r * mc + c)], &st)).collect()) };
+        let mut out = st.alloc_zeros::<C32>(fop * nv).unwrap();
+        let rel = |a: &[C32], b: &[C]| a.iter().zip(b).map(|(p, q)| (C::new(p.re as f64, p.im as f64) - q).norm()).fold(0.0, f64::max) / b.iter().map(|q| q.norm()).fold(0.0, f64::max);
+        let (ap, dap) = (raw(&tg.v[s.chunk_a()], &st), raw(&dg.v[s.chunk_a()], &st));
+        for (e, r) in [(0, 0), (2, 1), (6, 2)] {
+            let (zr, vr) = rowp(&tg, r);
+            gm.eval_row(&st, &zr, &vr, ap, e, raw(&out, &st)).unwrap();
+            let h_out = st.clone_dtoh(&out).unwrap();
+            let want: Vec<C> = (0..fop).flat_map(|ff| cm.eval_frame(&th, e, r, ff)).collect();
+            assert!(rel(&h_out, &want) < 3e-6, "eval_row (e {e}, r {r}): {:e}", rel(&h_out, &want));
+            let (dzr, dvr) = rowp(&dg, r);
+            gm.jvp_row(&st, &zr, &vr, &dzr, &dvr, ap, dap, e, raw(&out, &st)).unwrap();
+            let want: Vec<C> = (0..fop).flat_map(|ff| cm.jvp_frame(&th, &d, e, r, ff)).collect();
+            let hj = st.clone_dtoh(&out).unwrap();
+            assert!(rel(&hj, &want) < 3e-6, "jvp_row (e {e}, r {r}): {:e}", rel(&hj, &want));
+        }
+        // vjp of whole rows: every (e, r) with random frame cotangents, into one gradient (+ the residual-phase sums)
+        let gx: Vec<Vec<C>> = (0..s.ne() * of.kr).map(|_| (0..fop * nv).map(|_| C::new(rng.n(), rng.n())).collect()).collect();
+        let mut gc = Theta::zeros(&s);
+        let mut gg = Stack { v: s.lens().iter().map(|&n| st.alloc_zeros::<C32>(n).unwrap()).collect() };
+        let mut sacc: Vec<CudaSlice<f32>> = (0..s.ne()).map(|_| st.alloc_zeros::<f32>(nv).unwrap()).collect();
+        for e in 0..s.ne() {
+            for r in 0..of.kr {
+                let gv = &gx[e * of.kr + r];
+                for ff in 0..fop {
+                    cm.vjp_frame(&th, e, r, ff, &gv[ff * nv..(ff + 1) * nv], &mut gc);
+                }
+                let gd = st.clone_htod(&gv.iter().map(|c| C32::new(c.re as f32, c.im as f32)).collect::<Vec<_>>()).unwrap();
+                let (zr, vr) = rowp(&tg, r);
+                let (gzr, gvr) = rowp(&gg, r);
+                gm.vjp_row(&st, &zr, &vr, ap, e, raw(&gd, &st), 1.0, &gzr, &gvr, raw(&sacc[e], &st)).unwrap();
+            }
+        }
+        let mut host: Vec<Vec<C32>> = gg.v.iter().map(|c| st.clone_dtoh(c).unwrap()).collect();
+        let np = s.np();
+        let mut af = vec![0f32; 2 * s.na().div_ceil(2)];
+        for e in 1..s.ne() {
+            let red = gm.poly_reduce(&st, &sacc[e], 1).unwrap();
+            for p in 0..np {
+                af[(e - 1) * np + p] = -red[p] as f32;
+            }
+        }
+        host[s.chunk_a()] = af.chunks(2).map(|p| C32::new(p[0], p[1])).collect();
+        let gt = Theta::unpack(&s, &host);
+        let diff = gt.add(-1.0, &gc);
+        let err = diff.dot(&diff).sqrt() / gc.dot(&gc).sqrt();
+        assert!(err < 3e-6, "vjp_row: rel error {err:e}");
+        // prefilter: 2 rows of fop frames against the dense circulant
+        let pre = of.prefilter();
+        let xr: Vec<C> = (0..2 * fop * nv).map(|_| C::new(rng.n(), rng.n())).collect();
+        let mut xd = st.clone_htod(&xr.iter().map(|c| C32::new(c.re as f32, c.im as f32)).collect::<Vec<_>>()).unwrap();
+        gm.prefilter(&st, raw(&xd, &st), 2).unwrap();
+        let hx = st.clone_dtoh(&xd).unwrap();
+        let mut want = vec![C::new(0.0, 0.0); 2 * fop * nv];
+        for row in 0..2 {
+            for ff in 0..fop {
+                for q in 0..nv {
+                    want[(row * fop + ff) * nv + q] = (0..fop).map(|n| xr[(row * fop + (ff + fop - n) % fop) * nv + q] * pre[n]).sum();
+                }
+            }
+        }
+        assert!(rel(&hx, &want) < 3e-6, "prefilter: {:e}", rel(&hx, &want));
+        let _ = &mut xd;
+        // the truncated filter (|n| ≤ 12 taps) at 40 frames against the dense circulant: ≤ 1e-6
+        let s40 = VelSpec::splines([6, 5, 4], s.kenc.clone(), crate::vknot::OpFrames::new(3, 5, 3, 40, 3), Some(1));
+        let gm40 = VelModel::new(&dev, &st, s40.clone()).unwrap();
+        let p40 = s40.op.as_ref().unwrap().prefilter();
+        let xr: Vec<C> = (0..40 * nv).map(|_| C::new(rng.n(), rng.n())).collect();
+        let xd = st.clone_htod(&xr.iter().map(|c| C32::new(c.re as f32, c.im as f32)).collect::<Vec<_>>()).unwrap();
+        gm40.prefilter(&st, raw(&xd, &st), 1).unwrap();
+        let hx = st.clone_dtoh(&xd).unwrap();
+        let want: Vec<C> = (0..40 * nv).map(|i| { let (ff, q) = (i / nv, i % nv); (0..40).map(|n| xr[((ff + 40 - n) % 40) * nv + q] * p40[n]).sum() }).collect();
+        assert!(rel(&hx, &want) < 2e-6, "truncated prefilter: {:e}", rel(&hx, &want));
     }
 }

@@ -1,0 +1,180 @@
+\section{Background: the MRI scanner in five minutes}
+
+\begin{frame}{What the scanner measures}
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+\begin{itemize}
+\item Strong static field $B_0\,(\approx3$\,T$)$ along $z$. Hydrogen nuclei (``spins'' in water, fat) precess at the \hl{Larmor frequency}
+$\omega_0=\gamma B_0$, with $\tfrac{\gamma}{2\pi}=42.58$\,MHz/T ($\approx128$\,MHz at 3\,T).
+\item A short radio-frequency (RF) pulse tips the net magnetisation into the transverse plane. It then rotates and decays.
+\item Receive coils (an array of $\sim$32 small antennas) record the induced voltage: the sum of all transverse magnetisation, as one \emph{complex} number per time sample.
+\end{itemize}
+\end{column}
+\begin{column}{0.42\textwidth}
+\small
+In the frame rotating at $\omega_0$, per position $r$:
+\[ m(r)=\rho(r)\,e^{\ii\varphi(r)}\in\CC \]
+$\rho$: proton density (the image), $\varphi$: accumulated phase.
+\medskip
+
+Measured signal from coil $c$:
+\[ s_c(t)=\int S_c(r)\,m(r,t)\,dr \]
+with $S_c$ the (smooth, unknown) \emph{coil sensitivity}.
+\end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{The scanner: three kinds of magnetic field}
+\centering
+\begin{tikzpicture}[scale=1.15,font=\small]
+ % axial view looking down the bore
+ \fill[gray!35] (0,0) circle (2.6);
+ \fill[blue!18] (0,0) circle (2.25);
+ \fill[green!18] (0,0) circle (1.9);
+ \fill[white] (0,0) circle (1.6);
+ \fill[orange!25] (-1.25,-1.0) rectangle (1.25,-0.8);
+ \fill[orange!45,rounded corners=8pt] (-0.9,-0.8) rectangle (0.9,0.35);
+ \draw[very thick,mLightBrown] (-0.8,0.38) .. controls (0,0.75) .. (0.8,0.38);
+ \node[red!70!black] at (0,-0.2) {$\odot\,B_0$};
+ \draw[gray] (2.4,1.1)--(3.2,1.7) node[right,align=left]{\textbf{superconducting magnet}\\ $B_0\approx3$\,T, static, along $z$};
+ \draw[gray] (2.05,0.5)--(3.2,0.5) node[right,align=left,blue!50!black]{\textbf{gradient coils}\\ $G_xx+G_yy+G_zz$, $\lesssim12$\,mT,\\ switched in $\mu$s--ms};
+ \draw[gray] (1.75,-0.4)--(3.2,-0.7) node[right,align=left,green!40!black]{\textbf{RF coil}\\ $B_1$: 128\,MHz, $\sim\mu$T};
+ \draw[gray] (0.1,0.62)--(-3.2,1.5) node[left,align=right,mLightBrown!90!black]{\textbf{receive array}\\ 32 small antennas};
+ \draw[gray] (-1.0,-0.95)--(-3.2,-1.2) node[left]{patient on table};
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Gradients: how the scanner makes space visible}
+\textbf{Gradient coils} add a small field that varies linearly in space, $B_z(r)=B_0+G\!\cdot\! r$, with $G(t)\in\RR^3$ (mT/m) under our control. Spins at different $r$ then precess at different frequencies,
+\[ \omega(r,t)=\gamma\,(B_0+G(t)\!\cdot\! r)\quad\Longrightarrow\quad \varphi(r,t)=\gamma\!\int_0^t G(s)\!\cdot\! r\,ds=2\pi\,k(t)\!\cdot\! r,\qquad k(t)=\tfrac{\gamma}{2\pi}\!\int_0^t G(s)\,ds. \]
+\pause
+\[ \boxed{\,s(t)=\int\rho(r)\,e^{-2\pi\ii\,k(t)\cdot r}\,dr\,}\qquad\text{the Fourier transform of }\rho\text{ at the point }k(t).\]
+\begin{itemize}
+\item \hl{The gradient waveform steers a point $k(t)$ through frequency space} (``$k$-space''). The scanner is a programmable Fourier sampler.
+\item Hardware limits: amplitude $\sim80$\,mT/m, slew rate $\sim200$\,T/m/s. So $k(t)$ moves at bounded speed and a full image takes many readouts.
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Picture: a gradient turns position into frequency}
+\begin{columns}[c]
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.9,font=\scriptsize]
+ \begin{axis}[width=6.2cm,height=4.2cm,xlabel={position $x$},ylabel={$B_z$},xmin=-1,xmax=1,ymin=0.55,ymax=1.45,
+   ytick={1},yticklabels={$B_0$},xtick=\empty,legend style={at={(0.03,0.97)},anchor=north west,font=\tiny}]
+ \addplot[thick,gray] coordinates {(-1,1)(1,1)};
+ \addplot[thick,mLightBrown] coordinates {(-1,0.6)(1,1.4)};
+ \legend{gradient off,gradient on: $B_0+G_xx$}
+ \end{axis}
+\end{tikzpicture}
+\end{column}
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=1.0,font=\scriptsize]
+ \foreach \i/\x/\a in {1/-1.8/-60,2/-0.6/-20,3/0.6/20,4/1.8/60}{
+   \draw[gray] (\x,0) circle (0.5);
+   \draw[->,thick,mLightBrown] (\x,0)--++(\a:0.5);
+   \node at (\x,-0.8) {$x_\i$};}
+ \draw[->] (-2.5,-1.1)--(2.5,-1.1) node[right]{$x$};
+ \node[align=center] at (0,1.05) {phase after time $t$:\\ $\varphi=\gamma G_x x\,t$};
+\end{tikzpicture}
+\end{column}
+\end{columns}
+\pause
+\small Spin at $x$ precesses at $\gamma(B_0+G_xx)$. After time $t$ its phasor has rotated by $\gamma G_xxt$: \hl{phase is a linear function of position}, so the received signal is a spatial Fourier transform with wavenumber $k=\gamma G_xt/2\pi$.
+\end{frame}
+
+\begin{frame}{Sampling $k$-space: resolution, time, undersampling}
+\begin{columns}[c]
+\begin{column}{0.5\textwidth}
+\begin{itemize}\small
+\item One \emph{readout} (a few ms) traces one curve through $k$-space, e.g.\ a spiral. Repeat after a repetition time TR ($\sim$ms) with a different curve.
+\item Resolution $\approx1/k_{\max}$; field of view $\approx1/\Delta k$. 1\,mm in 3-D means $\sim10^{8}$ samples to fill $k$-space.
+\item Fully sampling a moving heart is too slow, so we \hl{undersample} and use a prior to reconstruct (Part 3).
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.85]
+ \draw[->] (-2,0)--(2,0) node[right]{$k_x$}; \draw[->] (0,-2)--(0,2) node[above]{$k_y$};
+ \foreach \a in {0,60,120,180,240,300}{
+ \draw[thick,mLightBrown,domain=0:700,samples=100,smooth,variable=\t,rotate=\a]
+   plot ({1.8*\t/700*cos(\t)},{1.8*\t/700*sin(\t)});}
+\end{tikzpicture}\\[-1mm]
+{\scriptsize six spiral readouts (undersampled)}
+\end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Picture: static vs.\ moving spins under a bipolar gradient}
+\begin{tikzpicture}[font=\scriptsize]
+\begin{groupplot}[group style={group size=3 by 1,horizontal sep=1.2cm},width=4.9cm,height=4.2cm,xmin=0,xmax=2,xlabel={$t$},xtick={0,1,2},axis lines=left]
+ \nextgroupplot[title={gradient $G(t)$},ymin=-1.4,ymax=1.4,ytick=\empty]
+  \addplot[thick,mLightBrown,fill=mLightBrown!20] coordinates {(0,0)(0,1)(1,1)(1,0)} \closedcycle;
+  \addplot[thick,blue!60!black,fill=blue!15] coordinates {(1,0)(1,-1)(2,-1)(2,0)} \closedcycle;
+ \nextgroupplot[title={positions},ymin=0,ymax=1.5,ytick=\empty,legend style={at={(0.03,0.97)},anchor=north west,font=\tiny}]
+  \addplot[thick,gray] coordinates {(0,0.5)(2,0.5)};
+  \addplot[thick,red!70!black] coordinates {(0,0.5)(2,1.7)};
+  \legend{static,moving}
+ \nextgroupplot[title={accumulated phase $\varphi(t)$},ymin=-0.9,ymax=0.9,ytick=\empty]
+  \addplot[thick,gray,domain=0:1,samples=20] {0.5*x};
+  \addplot[thick,gray,domain=1:2,samples=20] {0.5*(2-x)};
+  \addplot[thick,red!70!black,domain=0:1,samples=30] {0.5*x+0.6*x*x/2};
+  \addplot[thick,red!70!black,domain=1:2,samples=30] {0.5*(2-x)+0.6*(1-x*x/2)};
+  \node[font=\tiny,gray] at (axis cs:1.55,0.12) {static: back to 0};
+  \node[font=\tiny,red!70!black] at (axis cs:1.45,-0.62) {moving: $\ne0$};
+\end{groupplot}
+\end{tikzpicture}
+
+\small Equal and opposite lobes: static spins un-do their phase ($M_0=0$). A spin that has moved between the lobes is in a different place when the second lobe acts, so the cancellation fails. The leftover phase is $\gamma M_1 v$, \hl{proportional to velocity}.
+\end{frame}
+
+\begin{frame}{Moments: gradients as probes of motion}
+Spins that \emph{move}, $r(t)=r_0+vt$, accumulate extra phase in the same gradient field:
+\[ \varphi=\gamma\!\int G(t)\!\cdot\!(r_0+vt)\,dt=\gamma\underbrace{M_0}_{\int G\,dt}\!\cdot r_0\;+\;\gamma\underbrace{M_1}_{\int G\,t\,dt}\!\cdot v,\qquad\text{$M_n$ = $n$th \emph{gradient moment}.} \]
+\pause
+\begin{columns}[c]
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzpicture}[scale=0.8]
+ \draw[->] (-0.2,0)--(5.4,0) node[right]{$t$}; \draw[->] (0,-1.5)--(0,1.7) node[above]{$G(t)$};
+ \fill[mLightBrown!40] (0.4,0)--(0.7,1)--(1.8,1)--(2.1,0)--cycle;
+ \fill[blue!30] (2.3,0)--(2.6,-1)--(3.7,-1)--(4.0,0)--cycle;
+ \draw[thick,mLightBrown] (0.4,0)--(0.7,1)--(1.8,1)--(2.1,0);
+ \draw[thick,blue!60!black] (2.3,0)--(2.6,-1)--(3.7,-1)--(4.0,0);
+\end{tikzpicture}\\[-1mm]
+{\scriptsize bipolar pulse: $M_0=0$ (areas cancel), $M_1\neq0$}
+\end{column}
+\begin{column}{0.5\textwidth}
+\small
+\begin{itemize}
+\item Bipolar gradient: static spins feel nothing ($M_0=0$), moving spins get phase $\gamma M_1\!\cdot v$: \hl{phase $\propto$ velocity}.
+\item Measure with several different $M_1$ (the \emph{encodes}) and decode $v$ from the phase differences. This is 4D flow MRI.
+\end{itemize}
+\end{column}
+\end{columns}
+\pause
+\smallskip
+\small Phase is only known modulo $2\pi$: speeds with $\gamma M_1\!\cdot v>\pi$ \emph{wrap}. The wrap limit is the \hl{VENC} $=\pi/(\gamma M_1)$. Small $M_1$: no wrap, noisy. Large $M_1$: precise, wraps. This is the whole tension of Part 2.
+\end{frame}
+
+\iflong
+\begin{frame}{Vocabulary used in the rest of the talk}
+\small
+\centering
+\begin{tabular}{@{}p{3.2cm}p{9.5cm}@{}}\toprule
+term & meaning\\\midrule
+$B_0$, off-resonance & static field and its spatial error $\omega_0(r)$; extra phase $\omega_0(r)t$\\
+$R_2^*$ & signal decay rate, $e^{-R_2^*t}$ (tissue and field dependent)\\
+gradient $G(t)$ & programmable linear field; its integral is the $k$-space position $k(t)$\\
+moment $M_n$ & $\int G\,t^n dt$; $M_1$ encodes velocity\\
+readout / TR & one trajectory through $k$-space / time between RF pulses\\
+coil sensitivity $S_c$ & spatial weighting of each receive antenna\\
+cardiac frame & image at one phase of the heartbeat (time is binned using ECG/pulse)\\
+concomitant field & unavoidable extra field terms from Maxwell's equations, $\propto G^2/B_0$\\
+\bottomrule\end{tabular}
+\end{frame}
+\fi

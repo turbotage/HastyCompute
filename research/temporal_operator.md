@@ -1199,3 +1199,298 @@ costs 0.2 % — but σ_eff is the minimum over axes, so raising accuracy needs a
   `seg_kernel::{kb_window_at_least_as_accurate_as_es, larger_grid_with_effective_sigma_is_not_less_accurate}`, kernel.rs
   `kb_poly_fits_and_derivatives`, `kb_poly_interpolation_errors`, `cheb_mono_roundtrip`.
 - Gate: `cargo test --release -j 4 -p hasty-fft -p hasty-nufft` — 82 passed, 0 failed, 3 ignored (seg_stream passed this run).
+
+## 21. Target config (2026-11-17)
+
+From now on, this is the config that experiments mean by "the reconstruction". Cheaper test-bench settings are allowed, but every run reports how it differs from this (the splinerecon header line `config: differs from target: …`). The driver defaults (`const TARGET` in splinerecon) follow this table.
+
+| knob | target | why |
+|---|---|---|
+| respiratory basis | 6 linear knots at the bellows-amplitude quantiles | lin4 ≈ lin6 (±0.002), both beat 8 bins (§16.3); 6 for lower model error |
+| cardiac basis | 16 periodic cubic knots | model error 0.121 vs 0.234 for 20 bins (§16 correction: cubic 12 ≈ 20 bins, 16 halves it) |
+| breathing coordinate | bellows (`physio.npy` col 3) | real-data rule: the phantom truth (`--resp truth`) is an oracle only |
+| coils | all 32, whitened, SV-compressed to ≥ 99.9 % energy (Gram of the whitened encode-0 data, ≤ 2·10⁵ samples) | recon realism; `--coils N` (truth-lumen subset) is legacy |
+| physics | B0 segments + concomitant (per-encode mean in the segments, per-sample residual φ0 / k-shift / ΔC) + GNL (maps, B0, monomials at the warped positions) | the full forward model |
+| concomitant fit under GNL | degree 4, degree-3/4 part per sample to first order in the kernel (correction order 3) | the quadratic fit at the warped positions leaves a floor (recon_p2np `--conc-fit deg4`: 4.8e-3 → 1.2e-3 forward) |
+| kernel | ES, σ = 1.25, W 8 (2 mm) / W 10 | NUFFT error ≪ physics error |
+| time segments | the count that reaches ≤ 1e-4 signal-weighted error after fitting the interpolants to the full ratemap (complex rate: off-resonance + T2 decay + fat spectrum), e.g. rule-based `--nseg auto`; not a fixed 10 | 2026-11-18: a first estimate (research/structured_normal_operator.md Q2: rank of the space–time matrix over object voxels, *not* signal-weighted) put the count at about 15–16 for 1e-4 without the decay and about 4 at 1e-2 with it. Fixed L = 10 may therefore be too few or plenty: [CHECK] with the signal-weighted fitted interpolants. Finding the interpolators efficiently (and rebuilding them during the recon) is the open problem |
+
+The knot count is 6 × 16 = 96 knots with 5 × 16 = 80 interval keys, under the 2-D tables' limit of 128. The knot preconditioner allows K ≤ 128.
+
+**Memory at 2 mm, full scan, 24 GB card (estimate).** Plain knot-preconditioned CGLS with everything on the device needs about 26 GiB, against 21 GiB free:
+
+| item | size |
+|---|---|
+| 3 knot stacks (96 × 4.17 M voxels × 8 B) | ≈ 9 GiB |
+| data r and q (≈ 16 virtual coils × 28.8 M samples, 2 vectors) | ≈ 6.9 GiB |
+| sample tables | ≈ 4.5 GiB |
+| knot preconditioner | ≈ 3.5 GiB |
+| maps, workspace | ≈ 2.3 GiB |
+
+The solver arms add 1–2 stacks plus about 6 GiB of device priors. The splinerecon ledger refuses such a plan rather than running out of memory. To run the target config:
+- With `--keep 2` it fits.
+- At full size it needs the streaming design of recon_p2np: host or compressed sample tables (KStore / staged SegPoints), the data staged per coil batch, and the image stacks resident.
+- This is one more reason to bring the knot basis into recon_p2np (next step, together with the magnitude/velocity/phase unknowns and the per-axis static lock).
+
+Legacy scripts pin their old config explicitly so that earlier results stay reproducible: convergence_p12/run_level.sh and spline2d/{run_arms, arms_v2, time_bases}.sh pass `--cknots 10 --resp truth --coils 8 --no-gnl --conc-fit quad`.
+
+## 22. 1 mm scale: timing and memory (2026-11-18)
+
+Goal: run the segmented NUFFT on 1 mm full-torso grids, measure what it costs, and use that to plan the box + pyramid
+dev runs and the 8-GPU final recon. Setup: RTX 4090 (450 W limit), W 10, σ 1.25, ES window, ball trajectory
+(`HASTY_BENCH_TRAJ=ball`), k-support pruning on, default tiles (`HASTY_BENCH_TUNE=0`), `segnufft_bench`. Logs are in the
+session scratchpad (`b_*.txt`).
+
+### 22.1 The 1 mm launch failure (fixed)
+
+`segnufft_bench 640 384 384 …` (fine grid 800 × 480 × 480) failed in `op.forward` with
+`Fft(Driver(CUDA_ERROR_INVALID_VALUE))`. Two things combined:
+- `PrunedChanFft3::new` refused a block with more than 65535 x lines (384 · 384 = 147 456). `GridFft::new` then
+  silently fell back to the unpruned `FftPlan::new_partial`.
+- That fallback's x pass is strided with 480 · 480 = 230 400 line groups. `AxisPlan` put the line-group count straight
+  into grid y, whose limit is 65535, so the launch failed.
+
+Indexing inside the kernels was already 64-bit (`long` line and element offsets, `size_t` in pad / crop / tile kernels).
+Only the launch shape was 32-bit and limited.
+
+**Fix (hasty-fft):**
+- `plan::launch_grid` folds the line groups into grid (y, z): b = z · gridDim.y + y, and the padding blocks return
+  (block-uniform, before any `__syncthreads`). The same change is in the generated strided kernels (plain, a-ranged and
+  Bluestein).
+- Grid x is checked against 2³¹ − 1.
+- The 65535 refusal in `PrunedChanFft3` is removed.
+
+The pruned transform now builds at 1 mm (`pruned FFT true` in the bench line).
+
+**Also (hasty-nufft):** `SegNufft` released the plain plan's one-channel scratch grid only at drop. It now calls
+`NufftPlan::release_grid` right after construction. That grid is 1.47 GB at 1 mm and was never used. Type 1 / type 2 on a
+released plan return an error.
+
+**Tests** (`hasty-fft/tests/large_grid.rs`):
+- `launch_grid_folds_line_groups`: CPU unit test of the launch shape, including the 1 mm torso x pass (40 channels,
+  480 · 480 groups) and the limits.
+- `strided_pass_many_groups`: GPU, more than 65535 line groups with padding blocks, mixed radix and Bluestein, against
+  rustfft. Error 6e-8 and 1.2e-7.
+- `pruned_many_x_lines`: pruned 263 × 263 × 4 × 2 channels with a 260 × 260 block (67 600 x lines) and the full
+  partial-axis plan, against rustfft. Error 2.4e-7.
+- `torso_1mm_grid_point_source` (`--ignored`, 3 GB): the real 800 × 480 × 480 × 2 pruned transform of point sources
+  against the analytic plane wave. Max error 1.5e-7.
+
+The last three fail on the old code: launch error, or construction refused. All hasty-fft tests pass. So do the
+hasty-nufft tests segnufft, seg_knot, seg_knot2d, seg_knot_hi, seg_multi, seg_stream, accuracy and seg_pruned.
+`seg_pruned::kpruned_grid_fft_matches_block_pruned` failed once in six runs: its threshold is 5× the run-to-run atomic
+spread. These sizes do not reach the code this change touched.
+
+**Bench (`segnufft_bench`):**
+- A memory plan before each case: the estimated bytes per component, printed and compared with free memory. Cases that
+  do not fit are skipped (`HASTY_BENCH_FORCE=1` runs them anyway). Allocation errors skip the case instead of aborting.
+- The measured pool growth of each stage is printed.
+- Order 3 uses `points_hi` / `points2d_hi` tables (`HASTY_BENCH_HI=0`: the old plain tables). Until now order 3 in the
+  bench timed the order-2 operator.
+- `HASTY_BENCH_REPS` sets the number of timed calls.
+
+### 22.2 Measured times (ms per call, all coils)
+
+Static engine unless noted. "cb" is the coil batch (`HASTY_BENCH_GRID_GB` 6, except where 12 is noted).
+
+| grid (fine) | coils (cb) | L | order | M | forward | adjoint |
+|---|---|---|---|---|---|---|
+| 2 mm 254×144×114 (320×180×144) | 30 (9) | 10 | 2 | 2 M / 8 M | 917 / 3234 | 584 / 1883 |
+| | | | 3 | 2 M / 8 M | 849 / 2767 | 677 / 2250 |
+| box 160³ at 1 mm (200³) | 30 (10) | 10 | 2 | 2 M / 8 M | 591 / 2056 | 543 / 1792 |
+| | | | 3 | 2 M / 8 M / 16 M / 24 M | 516 / 1776 / 3783 / 5766 | 593 / 1996 / 3912 / 5860 |
+| box, 2-D knots 2 lin × 4 cubic (8 images, s = 8) | 30 (10) | 10 | 2 | 2 M / 8 M total | 4253 / 14686 | 3969 / 12634 |
+| | | | 3 | 2 M / 8 M total | 5238 / 18022 | 4665 / 15381 |
+| torso 640×384×384 at 0.94 mm (800×480×480) | 2 (1) | 4 | 2 | 0.2 M / 8 M / 30 M | 115 / 390 / 1160 | 111 / 408 / 1242 |
+| | | | 3 | 0.2 M / 8 M / 30 M | 116 / 593 / 2071 | 114 / 627 / 2139 |
+| | 2 (1) | 6 | 2 | 0.2 M / 8 M | 159 / 480 | 152 / 497 |
+| | | | 3 | 8 M | 687 | 688 |
+| | 2 (2, 12 GiB) | 4 | 2 | 0.2 M / 8 M | 87 / 212 | 88 / 211 |
+| | | | 3 | 8 M | 284 | 291 |
+| | 1 (1) | 8 / 4 | 2 | 0.2 M | 98 / 57 | 92 / 56 |
+| torso, knot-major cubic 4 knots (s = 4) | 1 (1) | 4 | 3 | 2 M / 8 M total | 437 / 1207 | 471 / 1323 |
+
+- L 8 with 2 coils and L ≥ 10 with any coil count do not fit at the torso (§22.3); the memory plan skipped them.
+- Repeat runs agree within 0.2 %.
+- Autotune keeps the default tiles at the torso, yet the order-3 static forward runs at 443 ms instead of 592 after it.
+  The adjoint is unchanged. The multi-kernel path's configuration is probably involved [CHECK]. On the box 2-D knot
+  engine at order 3 (2 M), autotune (451 s) picked other tiles and changed nothing useful: forward 5225 vs 5238 ms,
+  adjoint 5053 vs 4665 ms. The projections below use the untuned numbers.
+
+### 22.3 Split: image side and sample side
+
+Image side means FFT + pad / crop per (coil, segment, image), per direction. At the torso it comes from the 0.2 M
+intercept, where the sample side is ≈ 3–7 %. At the box and at 2 mm it comes from the 2 M / 8 M linear fit. Sample side
+is per 10⁶ samples per coil, per static image.
+
+| grid | cb | image side, fwd / adj (ms per coil · segment) | sample side, fwd / adj (ms per 10⁶ · coil), order 2 | order 3 |
+|---|---|---|---|---|
+| 2 mm full FOV | 9 | 0.48 / 0.50 | 12.9 / 7.2 | 10.7 / 8.7 |
+| box 160³, 1 mm | 10 | 0.34 / 0.42 (order 3: 0.32 / 0.42; 2-D knots: 0.41 / 0.46) | 8.1 / 6.9 | 7.0 / 7.8 (at 24 M: 7.9 / 8.0) |
+| torso, nch = 4 (cb 1, L 4) | 1 | 13.5 / 12.9 | 17.5 / 19.0 | 32.8 / 34.0 |
+| torso, nch = 6 (cb 1, L 6) | 1 | 12.7 / 12.0 | 20.5 / 22.1 | 33.4 / 34.0 |
+| torso, nch = 8 (cb 1, L 8) | 1 | 11.7 / 11.0 | — | — |
+| torso, nch = 8 (cb 2, L 4) | 2 | 10.5 / 10.5 | 8.0 / 7.9 | 12.5 / 12.9 |
+| torso knot-major (cb 1, L 4) | 1 | 11.3 / 11.7 | | ×4.2 / ×4.3 static (s = 4) |
+
+Knot multiplier on the sample side, against static at the same grid:
+- box 2-D (s = 8): order 2 ×7.1 / ×6.9, order 3 ×10.1 / ×7.6;
+- torso 1-D cubic (s = 4): order 3 ×4.2 / ×4.3.
+
+So a sample costs ≈ 1.0–1.3 × s static gathers. The knot image side equals the static image side to within 1.2×
+(§10 confirmed at 1 mm).
+
+Reading:
+- **Image side ∝ fine-grid cells**: 0.33–0.42 ms per (coil, segment) at 8 M cells, ≈ 11 ms at 184 M cells (23×).
+  That is ≈ 1.47 GB of complex grid per channel: one pad write plus ≈ 2 pruned sweeps, near the 4090's bandwidth.
+  Small channel counts lose 20 %: the x pass coalesces over the channels only, so nch = 4 → 32 B runs.
+- **The sample side is dominated by per-pass cost, not per-coil cost.** A pass (one coil batch over all samples) costs
+  ≈ 25–31 ms per 10⁶ samples (forward, order 3) at the torso whether it carries 1 or 2 coils. At equal M (8 M), a coil
+  costs 12.5 at cb 2 instead of 30.7 at cb 1. At the box (cb 10, 100 channels) a coil costs 7–8. At 1 mm the coil batch is forced to 1, so the sample side
+  per coil is ≈ 4× the box's.
+- **Order 3 costs ≈ 2× order 2 per sample at cb 1** (torso) but ≈ 1× at cb 10 (box). The degree-3/4 terms are
+  per-sample, per-pass work.
+- **The 2 mm forward is 1.6× the box's per sample at equal cells.** The grid is anisotropic (320×180×144) and the tiles
+  are the defaults. Not investigated.
+
+### 22.4 Memory per component
+
+| component | formula | torso 640×384×384 (nv 94.4 M, fine 184 M) | box 160³ at 1 mm (nv 4.1 M, fine 8 M) |
+|---|---|---|---|
+| fine grid, one channel | ge · 8 B | 1.47 GB | 64 MB |
+| grid slot, knot-major (one slot) | cb · L · ge · 8 B | **14.7 GB** at cb 1, L 10 | 6.4 GB at cb 10 (measured 6.0 GiB) |
+| plain plan scratch | ge · 8 B | 1.47 GB → 0 (released now) | 64 MB → 0 |
+| segment diagonals | L · nv · 8 B | **7.6 GB** (L 10) | 0.33 GB (measured 0.31 GiB) |
+| coil maps | nc · nv · 8 B | **22.6 GB** (30 coils) | 0.98 GB (measured 0.91 GiB) |
+| one knot image | nv · 8 B | 0.76 GB | 33 MB |
+| knot stack, 96 knots | K · nv · 8 B | **72.5 GB** per vector | 3.1 GB |
+| sample tables, 30 M samples | ≈ 200 B per sample at build peak (measured 5.7 / 6.2 GiB at order 2 / 3), ≈ 70–110 B resident | 3–6 GB per encode | same |
+| data y, 30 M × 30 coils | M · nc · 8 B | 7.2 GB per encode | same |
+| forward coil-batch y | cb · M · 8 B | 0.24 GB | 2.4 GB |
+
+- **Torso, target config, on one card:** slot 14.7 + diagonals 7.6 + maps 22.6 + 2 knot images 1.5 + tables 3.3 +
+  y 7.2 ≈ 57 GB, against ≈ 22 GB free on the 4090 and 32 GB on a 5090. The CG vectors (3–4 knot stacks = 220–290 GB)
+  come on top, more than 8 × 32 GB.
+- **Torso, measured:** L 4 with 2 coils and 30 M samples peaks at 17.1 GiB.
+- **Box:** fits one 4090 with the data streamed per encode. Slot 6.4 at cb 10 (or 2.6 at cb 4), diagonals and maps
+  1.3, 3 knot stacks 9.3, table and data chunks ≈ 3: ≈ 20 GB.
+
+### 22.5 Options for the 1 mm torso memory (operator unchanged; expected cost)
+
+1. **Segment batching inside a coil** (Lb of the L segments per slot pass): slot Lb · 1.47 GB.
+   - The image side is unchanged: same (coil, segment) FFT count, plus one extra image / map read per extra batch,
+     ≈ 1 ms.
+   - The sample side is × L / Lb passes. A pass costs α + β · Lb, with α ≈ 56 and β ≈ 1.9 ms per 10⁶ samples per coil
+     (fwd + adj, from torso L 4 / L 6 at order 3).
+   - Lb = 5 → slot 7.4 GB and 1.75× the sample side (≈ +460 s per encode pass at 30 M samples, §22.6).
+   - Use it only if the slot alone does not fit.
+2. **Diagonals on the fly** from the field: store ω(v) (4 B) plus the GNL-warped position (12 B), 1.5 GB (or 0.4 GB
+   without warp), instead of 7.6 GB.
+   - Fixed-time diagonals (unit modulus, `build_segments`): one sincos per (voxel, segment) in pad / crop, < 1 ms per
+     coil pass, and it removes the 7.6 GB per coil-direction read (≈ 7 % of the image side). Net faster.
+   - SVD / complex diagonals (`build_segments_svd`): D_l(v) = Σ_i g(v, τ_i) V[i, l] costs ns · (sincos + L cmul) per
+     voxel per coil pass, ≈ 0.5 TFLOP at ns 64: ≈ +10 ms per coil-direction, +9 % image side [estimate]. A Chebyshev
+     fit in (ω, concomitant monomials) with a few terms would land in between.
+   - **Recommended:** it frees 6–7 GB at no time cost for fixed-time diagonals.
+3. **Host-resident diagonals:** 0 GB on the device, but 7.6 GB over PCIe per coil pass per direction.
+   - That is 0.30 s at 25 GB/s (PCIe 4) or 0.15 s (PCIe 5), against 0.11 s of image compute per coil-direction:
+     1.4–2.7× slower. It hides only at cb ≥ 3, impossible at 1 mm.
+   - A segment-major loop (upload P_l once for all coils) needs every coil's grid for one segment resident, which is
+     the same memory problem.
+   - **Reject for the torso; fine for the box** (0.33 GB anyway).
+4. **Coil maps** (22.6 GB), any of:
+   - stream from host per coil pass: 0.76 GB at 25 GB/s = 30 ms against 110 ms compute, hidden by double buffering,
+     1.5 GB on the device;
+   - coil-split across GPUs: 4 coils per GPU, 3 GB;
+   - store the smooth maps at 2 mm and interpolate in pad / crop: 2.8 GB.
+   - Maps as k-space kernels (§15.5) would also cut FFT channels from C · L to L. This is the only lever on the image
+     side, which is half the torso time.
+5. **Knot stacks:** host-resident (pinned). The knot-major operator needs only the current knot image and its adjoint
+   accumulator on the device: 2 × 0.76 GB per knot launch, 60 ms at 25 GB/s against ≈ 6.8 s of compute per knot.
+   The node needs ≥ 512 GB RAM for 3–4 stacks, or bf16 storage (accuracy study first).
+6. **Tables and data:** the existing streamed path (kload / Stager, per coil batch).
+
+With 2 + 4 + 5 + 6, a torso task holds slot 14.7 + diagonals ≤ 1.5 + 2 map buffers 1.5 + 2 knot images 1.5 + chunks
+≈ 2: ≈ 21 GB. That fits a 5090 (32 GB), and barely the 4090. With option 1 at Lb = 5 it is ≈ 14 GB, at a cost in time.
+
+### 22.6 Projected per-encode gradient pass (forward + adjoint), target config
+
+The target: 6 × 16 = 96 knots (s = 2 · 4 = 8 knots per sample), 30 virtual coils, L 10, order 3.
+
+Model: T = K · I + M · S.
+- Box (cb 10): I = 259 ms per knot image (measured, 2-D knot engine, 30 coils, L 10). S = s-multiplied static sample
+  cost at the dense end (24 M: 236 / 239 ms per 10⁶ for 30 coils) × knot multipliers 10.1 / 7.6 → 4.2 s per 10⁶ samples.
+  The purely measured 2 M–8 M knot slope gives 3.9 s.
+- Torso (cb 1): I = 300 (coil, segment) × ≈ 22.7 ms (fwd + adj) = 6.8 s per knot image. Measured at nch 8
+  (static L 8: 11.7 + 11.0; knot L 4: 11.3 + 11.7), applied to nch 10. S = 30 coils × (40.9 · 9.3 + 37.0 · 8.1) ms = 20.4 s per 10⁶ samples. Here 40.9 / 37.0 are the static
+  per-coil fwd / adj costs at L 10, extrapolated from L 4 / L 6. 9.3 / 8.1 are the knot multipliers for s = 8, the mean
+  of the torso s = 4 rate per knot and the box 2-D rate.
+
+| case | image side | sample side, 30 M samples | total, 30 M samples | total, 60 M (2× samples per readout) |
+|---|---|---|---|---|
+| (a) torso 1 mm, one 4090 (if memory allowed, §22.5) | 96 × 6.8 s = 651 s | 612 s | **≈ 1260 s (21 min)** | ≈ 1880 s (31 min) |
+| (b) box 160 mm at 1 mm, one 4090 | 96 × 0.26 s = 25 s | 117–127 s | **≈ 145 s** | ≈ 270 s |
+| 2 mm full FOV (caller's reference model: 27 s + 3.3 s per 10⁶) | 27 s | 99 s | 126 s | 225 s |
+
+What was measured vs extrapolated:
+- Measured: the image side per knot image at the box; the torso image side per (coil, segment) at nch ≤ 8; static and
+  knot sample costs up to 24 M samples (box) and 30 M (torso, L 4).
+- Extrapolated: L 10 at the torso (no L ≥ 10 case fits), 30 coils at the torso (measured 1–2, linear in coils at
+  cb 1: the passes are per coil), s = 8 at the torso, 30 M on the box knot engine (slope from 2–8 M; the static
+  per-sample cost rises 13 % from 8 M to 24 M, which is included).
+
+**8 × RTX 5090, per gradient (4 encodes):** T_grad = 4 · T_pass / (8 · 1.4).
+
+> **Correction (2026-11-18): the scan has 7 encodes, not 4.**
+> - The rule is T_grad = 7 · T_pass / (8 · 1.4) = 0.625 · T_pass, so every per-gradient number in this section is 7/4 too low.
+> - Corrected, 8× 5090:
+>   - torso 1 mm: 790 s per gradient at 30 M samples and 1175 s at 60 M (100 iterations: about 22 h / 33 h);
+>   - 160 mm box at 1 mm: 91 s per gradient at 30 M and 169 s at 60 M (100 iterations: about 2.5 h / 4.7 h).
+> - Box on one 4090: about 1015 s per gradient at 30 M.
+> - The pyramid table's per-gradient column (one 4090) is also ×7/4.
+
+Assumptions: 1.4× per GPU, and ideal splitting of (encode, knot batch) or (encode, coil) tasks across GPUs. That is
+≥ 120 tasks per gradient, so balance ≥ 97 % (§14). Communication is small next to the compute:
+- partial y sums within an encode: 7.2 GB, ≈ 0.3 s at 50 GB/s;
+- coil-split partial knot stacks: ≤ 72 GB, ≈ 1.5–3 s;
+- against ≈ 450 s of compute.
+
+No FFT is split across GPUs.
+
+| case | per gradient | 100 iterations |
+|---|---|---|
+| torso 1 mm, 30 M per encode | **≈ 450 s (7.5 min)** | ≈ 12.5 h |
+| torso 1 mm, 60 M per encode | ≈ 670 s (11 min) | ≈ 19 h |
+| box 160 mm, 30 M / 60 M | 52 s / 97 s | 1.4 h / 2.7 h |
+| box on one 4090, 30 M | 580 s (9.7 min) | 16 h |
+
+The torso is 2–3× over the 5–6 h budget (memory: recon_compute_budget). Where the time goes:
+- half is the image side, which only maps-as-kernels, fewer segments (shimming) or fewer knots reduce;
+- the rest is the per-pass sample cost at cb 1, which a staged-once-per-sample-for-all-coil-batches kernel would cut
+  ≈ 2.5×, judging by the cb 2 vs cb 1 measurement.
+
+### 22.7 Dev runs: box size and pyramid levels
+
+- **Box 160 mm at 1 mm costs about what 2 mm full FOV costs** (4.1 M vs 4.17 M voxels, same fine-grid cells). The box
+  time is 83 % sample side, which does not depend on the box size. A 128 mm box saves only ≈ 9 %, so choose the box for
+  the anatomy: heart plus ≥ 20 mm margin for motion, so 160 mm.
+- The box needs the out-of-box signal removed from the data: a coarse full-FOV estimate, forward-modelled once per
+  encode and subtracted. That costs one coarse full-FOV forward per encode (not measured).
+- **Pyramid** (box 160 mm; per level the image side ÷ 8 by cells, the sample side × the fraction of samples inside the
+  level's k-ball; extrapolated):
+
+| level | grid | image side (96 knots) | sample fraction: uniform ball / radial (∝ k⁻²) | per encode pass | per gradient (4 encodes, one 4090) |
+|---|---|---|---|---|---|
+| 4 mm | 40³ | ≈ 1–2 s | 1/64 / 1/4 | ≈ 3–34 s | 0.2–2.3 min |
+| 2 mm | 80³ | ≈ 3–5 s | 1/8 / 1/2 | ≈ 20–68 s | 1.3–4.5 min |
+| 1 mm | 160³ | 25 s | 1 | ≈ 145 s | 9.7 min |
+
+**Recommendation:**
+- Box 160 mm, pyramid 4 → 2 → 1 mm, with k-ball sample subsets per level and stochastic 8-of-30 coil subsets on the
+  coarse levels (× 0.27 on both sides).
+- Most iterations at 2 mm; finish with 10–20 iterations at 1 mm (≈ 1.6–3.2 h on one 4090, or minutes on the cluster).
+- With a centre-dense trajectory the coarse levels keep half the samples. Then coil subsets and temporal subsets
+  (fewer heartbeats) are the dev levers, not resolution.
+- The coarse levels may also need fewer segments: the samples inside a small k-ball come early in centre-out readouts,
+  so the τ range is shorter. Not measured.
+- Keep W 10 / σ 1.25 at every level (NUFFT accuracy rule).

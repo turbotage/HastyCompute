@@ -16,8 +16,8 @@
 #ifndef KM
 #define KM 1
 #endif
-#if ACB != 1 || FSB != 1
-#error "multi-image kernels: ACB = FSB = 1"
+#if ACB != 1 || FSB != 1 || FCB != 1
+#error "multi-image kernels: ACB = FSB = FCB = 1"
 #endif
 #define NH 25
 struct GridsM { cx* p[16]; };          // [k * NF + o]
@@ -183,8 +183,7 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_mt(const float4* 
     for (int sh = PPF * NF / 2; sh > 0; sh >>= 1) { o.x += __shfl_xor_sync(0xffffffffu, o.x, sh); o.y += __shfl_xor_sync(0xffffffffu, o.y, sh); }
     if (live && pp == 0 && fo == 0) {
       cx* dst = y + (size_t)(c0 + cg + cl) * M + sl[base + ss];
-      atomicAdd(&dst->x, o.x);
-      atomicAdd(&dst->y, o.y);
+      FWD_ATOMIC(dst, o);
     }
   }
 }

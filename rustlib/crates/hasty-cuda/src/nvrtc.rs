@@ -56,6 +56,12 @@ pub fn compile_cubin(
     for o in &settings.options {
         h = fnv64(h, o.as_bytes());
     }
+    // HASTY_NVRTC_LINEINFO=1: compile with -lineinfo (source attribution in Nsight Compute / compute-sanitizer); default
+    // off. Part of the cache key, so line-info cubins never replace the plain ones.
+    let lineinfo = std::env::var("HASTY_NVRTC_LINEINFO").map_or(false, |v| v == "1");
+    if lineinfo {
+        h = fnv64(h, b"-lineinfo");
+    }
     h = fnv64(h, format!("nvrtc{maj}.{min}").as_bytes());
     let hash = format!("{h:016x}");
 
@@ -87,6 +93,9 @@ pub fn compile_cubin(
     ];
     for o in &settings.options {
         opts.push(CString::new(o.as_str()).map_err(|_| err("option contains NUL".into()))?);
+    }
+    if lineinfo {
+        opts.push(CString::new("-lineinfo").unwrap());
     }
     let opt_ptrs: Vec<*const c_char> = opts.iter().map(|o| o.as_ptr()).collect();
 

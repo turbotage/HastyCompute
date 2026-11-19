@@ -1,0 +1,11 @@
+=== smoke_fwd_o2_sb: --mode fwd --m 200000 --ncb 4 --nseg 2 --order 2 --designs halo,gm --fixed 4,4,2,128,64,0,2,2 --check 300 --reps 2
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 8 (4 coils x 2 seg), order 2, M 200000
+trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  grid 0.48 GiB, y 0.01 GiB, 1600000000 useful complex MACs per pass
+  halo: 1 candidates, compiled in 0.6 s
+  gm: 1 candidates, compiled in 0.4 s
+
+thread 'main' (808488) panicked at crates/hasty-bench/src/bin/proto_gather.rs:470:45:
+called `Result::unwrap()` on an `Err` value: DriverError(CUDA_ERROR_INVALID_HANDLE, "invalid resource handle")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED rc=101

@@ -1,0 +1,29 @@
+{
+  "design_s": 0.045127266,
+  "designs": 1,
+  "dims": [
+    320,
+    320,
+    320
+  ],
+  "encode": 0,
+  "gate": {
+    "frob": 0.000011037161105344629,
+    "gram": 3.1729820064681404e-6,
+    "worst": 0.00004019242761470346
+  },
+  "kept": 750834,
+  "kscale": 1.0,
+  "landau": 1.5011746947103195,
+  "os": 1.35,
+  "q": 32,
+  "readouts": 177,
+  "reduction": 1.1176331918906177,
+  "roi": "ball r 160.0 mm",
+  "samples": 839157,
+  "scan": "data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan",
+  "stride": 8,
+  "table_gib": 0.0010113716125488281,
+  "upsample": 1,
+  "vox_mm": 1.0
+}

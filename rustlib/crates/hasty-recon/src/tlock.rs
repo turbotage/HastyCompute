@@ -197,7 +197,7 @@ pub fn blur(img: &[Cf], d: [usize; 3], sig: [f64; 3], tmp: &mut Vec<Cf>, out: &m
 }
 
 /// 1D Gaussian taps for σ voxels (a single tap below 0.3)
-fn gauss(s: f64) -> Vec<f64> {
+pub(crate) fn gauss(s: f64) -> Vec<f64> {
     if s < 0.3 {
         return vec![1.0];
     }
@@ -208,7 +208,7 @@ fn gauss(s: f64) -> Vec<f64> {
 }
 
 /// white-noise variance gain of the replicated-edge blur along one axis, per output index (the edges repeat samples)
-fn blur_gain_axis(n: usize, k: &[f64]) -> Vec<f64> {
+pub(crate) fn blur_gain_axis(n: usize, k: &[f64]) -> Vec<f64> {
     let r = (k.len() / 2) as isize;
     (0..n)
         .map(|i| {
@@ -222,7 +222,7 @@ fn blur_gain_axis(n: usize, k: &[f64]) -> Vec<f64> {
 }
 
 /// local robust level of a per-voxel noise estimate: medians over blocks of b voxels, trilinear between block centres
-fn block_median(v: &[f64], d: [usize; 3], b: [usize; 3]) -> Vec<f64> {
+pub(crate) fn block_median(v: &[f64], d: [usize; 3], b: [usize; 3]) -> Vec<f64> {
     let b = b.map(|x| x.max(2));
     let nb = [0, 1, 2].map(|a| d[a].div_ceil(b[a]));
     let med: Vec<f64> = (0..nb[0] * nb[1] * nb[2])
@@ -269,7 +269,7 @@ fn block_median(v: &[f64], d: [usize; 3], b: [usize; 3]) -> Vec<f64> {
 }
 
 /// separable min filter (cube of half-width r voxels per axis), in place
-fn erode(w: &mut [f32], d: [usize; 3], r: [usize; 3]) {
+pub(crate) fn erode(w: &mut [f32], d: [usize; 3], r: [usize; 3]) {
     let mut t = w.to_vec();
     for a in 0..3 {
         if r[a] == 0 {
@@ -288,7 +288,7 @@ fn erode(w: &mut [f32], d: [usize; 3], r: [usize; 3]) {
     w.copy_from_slice(&t);
 }
 
-fn median(mut v: Vec<f64>) -> f64 {
+pub(crate) fn median(mut v: Vec<f64>) -> f64 {
     if v.is_empty() {
         return 0.0;
     }

@@ -1,0 +1,42 @@
+output directory /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth/STOP to pause with a checkpoint)
+k-space data: 50.56 GiB raw coil data, 40.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [64, 36, 30] (native [254, 144, 114]), voxel [7.9, 8.0, 7.6] mm
+--keep 8: 6646 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+knot basis (bellows): 6 linear knots at [-0.054, 0.096, 0.348, 0.666, 0.943, 1.575] × 16 cardiac knots degree 3
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 7 sets (26517540 samples) in 0.8s
+calibration region [24, 24, 24]: 182261 samples of encode 0, 32 coils (1.8s)
+coil compression (whitened calibration region): 8 of 32 virtual coils (fixed 8), 68.859 % energy kept; σ²/Σσ²: [1.6e-1, 1.2e-1, 1.1e-1, 7.3e-2, 6.8e-2, 5.6e-2, 5.5e-2, 4.8e-2, 4.3e-2, 3.5e-2, 3.3e-2, 2.8e-2, 2.5e-2, 1.9e-2, 1.9e-2, 1.6e-2, 1.4e-2, 1.4e-2, 1.3e-2, 1.0e-2, 7.8e-3, 6.4e-3, 6.2e-3, 5.7e-3, 4.0e-3, 3.6e-3, 2.6e-3, 2.2e-3, 1.7e-3, 1.1e-3, 7.6e-4, 5.2e-4]
+R2*: truth (tissue PD-weighted 1/T2*; blood not in the truth map), median over signal voxels 29.3 1/s
+  k-space store: 7 / 7 sets (7s)
+k-space store built in 7.0s: dense in RAM: 7 sets × 8 coils, 1.58 GiB raw → 1.58 GiB stored (×1.00), 1.58 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 2033864 of 26517540 samples kept (7.67 %), ADC window 0..3989 of 3990 (1.600..9.578 ms), 270624 .. 300210 per set (0.0s)
+k-space crop: kept data 0.12 GiB read through a filtered view of the store
+device memory after loading and coil compression: 21.15 GiB free of 23.51 GiB
+7 sets (7 encodes x 6·16 knots (respiratory degree 1, cardiac degree 3)), 884..981 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 13.3s
+device memory after the data placement: 21.15 GiB free of 23.51 GiB
+warm start: 4 PCGLS iterations per encode (14s)
+device memory after the warm start: 20.93 GiB free of 23.51 GiB
+support 46336 voxels
+coil maps not masked (--coil-mask none): 69120 voxels; fit region 54141 voxels
+lumen 779 voxels: 357 in the support, 779 in the masked maps
+warm-start velocity in the lumen: mean ["0.009", "-0.012", "-0.014"] m/s, truth (time average) ["0.012", "0.003", "-0.014"], RMSE 1.194 m/s
+device memory before the segment operator: 20.93 GiB free of 23.51 GiB
+monomial quadratic fit over 54141 voxels: rms 3.4e-4 / max 1.6e-3 m² (z², x²+y², xz, yz: ["1.2e-3", "1.6e-3", "1.2e-3", "1.0e-3"])
+  [build timer] monomial fit done: 0.0s since the build start
+monomial degree-4 fit (--conc-fit deg4): rms 6.7e-5 / max 4.7e-4 m² (["4.3e-4", "3.7e-4", "4.7e-4", "3.6e-4"]); degree 3/4 part to first order in the kernel (order 3)
+  data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan/truth_fat_fraction.npy: 20 native-grid map(s) [254, 144, 114] resampled to the reconstruction grid [64, 36, 30] (at the true voxel positions)
+water + fat (--fat-model joint): known fat fraction (data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan/truth_fat_fraction.npy, per frame), 30381 voxels with ff > 5 %, six-peak spectrum at 3.00 T in the segments
+segment basis voxel weights: smoothed warm-start magnitude² × coil energy / median (18047 fit voxels)
+per-sample weights 1 + (E(n) + E_vol) / (C σ²), σ = 39.976: first 1.57e5, middle 3.94e1, last 2.38e4, mean 2.21e3; white floor E_vol / (C σ²) = 36.5
+segments (auto:noise): predicted data error × 1.5 ≤ 0.2 noise rms (relative weighted error ≤ 2.83e-3, ×47.1) → L = 15 (svdn basis)
+  [build timer] auto:noise segment rule done: 12.1s since the build start
+  [build timer] segment bases of all encodes done: 21.8s since the build start
+sample tables: 208 B/sample, 0.39 GiB for 7 sets → device
+  [build timer] sample tables (280 sets) done: 27.1s since the build start
+  [build timer] autotune done: 245.9s since the build start
+SegNufft: L = 15, order 3, frames/set 96, coil batch 8, kernels 1.2/1.5 ms (set 0), max phase left out by the degree-4 fit 4.74e-2 rad, built in 245.9s
+
+thread 'main' (815144) panicked at crates/hasty-bench/src/bin/recon_p2np.rs:2380:74:
+called `Result::unwrap()` on an `Err` value: Invalid("knot-major engine: the multi-image / fat paths are not available (order 3 runs in the knot kernels)")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

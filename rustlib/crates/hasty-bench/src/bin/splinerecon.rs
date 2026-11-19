@@ -1,16 +1,20 @@
-//! Respiratory × cardiac basis test (research/temporal_operator.md §16): per encode, a CGLS reconstruction of the
-//! knot images of a 2-D basis (`SegNufft::new_temporal2d`): respiratory bins (degree 0) or linear B-splines (degree 1)
-//! in the breathing coordinate × periodic B-splines in cardiac time, sample-level weights, B0 time segments, the true
-//! coil maps (strongest --coils), no regulariser (the arms differ only in the temporal basis). The knot images are
-//! evaluated at given breathing states r* and the 20 cardiac frame centres and written at the truth voxels of each
-//! state (frame_fit.py lumen form, FRAME_FIT_TRUTH=<truth npz>).
+//! Respiratory × cardiac knot reconstruction (research/temporal_operator.md §16 ff.): per encode, the knot images of a
+//! 2-D basis (`SegNufft::new_temporal2d`): respiratory bins (degree 0) or linear B-splines (degree 1) in the breathing
+//! coordinate × periodic B-splines in cardiac time, sample-level weights, B0 time segments + concomitant + GNL physics,
+//! SV-compressed coils; CGLS (optionally knot-preconditioned, warm-started) and the solver arms (--arms, smoothed
+//! wavelet + LLR priors). The knot images are evaluated at given breathing states r* and the 20 cardiac frame centres
+//! and written at the truth voxels of each state (frame_fit.py lumen form, FRAME_FIT_TRUTH=<truth npz>).
 //!
-//!   splinerecon <scan dir> --rknots K --rdeg 0|1 [--cknots 10] [--cdeg 3] [--iters 20] [--save-at 5,10,20]
-//!       [--coils 8] [--nseg 10] [--width 8] [--resp truth|bellows] --eval r1:idx1.npy,r2:idx2.npy,... --out <prefix>
+//!   splinerecon <scan dir> [--rknots 6] [--rdeg 0|1 (1)] [--cknots 16] [--cdeg 3] [--iters 20] [--save-at 5,10,20]
+//!       [--vcoils auto|n] [--coil-energy 0.999] [--coils N (legacy: N strongest physical coils)] [--nseg 10]
+//!       [--width 8] [--resp bellows|truth] [--phys conc|b0] [--no-gnl] [--conc-fit deg4|quad]
+//!       --eval r1:idx1.npy,r2:idx2.npy,... --out <prefix>
 //!
-//! Breathing coordinate: the sim's true state (resp.npy, default) or the bellows amplitude (physio.npy column 3).
+//! Defaults = the target config (const TARGET + SV coils, conc, GNL, deg4); the header prints every deviation.
+//! Breathing coordinate: the bellows amplitude (physio.npy column 3, default) or the sim's true state (resp.npy, oracle).
 //! Bins: equal-count amplitude bins (as recon_p2np --resp-bins); r* evaluates the bin whose amplitude range holds it.
 //! Linear: K knots at the amplitude quantiles 0, 1/(K−1), …, 1; r* evaluates the hat weights (clamped at the ends).
+//! Note: with --resp bellows, --eval r* values are in bellows-amplitude units (the knots sit at its quantiles).
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -59,38 +63,38 @@ impl LinOp for Op2d<'_> {
 
 /// The static image s through the 2-D operator: A(1 ⊗ s) = A_static s (the basis weights sum to 1 per sample), adjoint
 /// = the sum of the knot images of Aᴴ r. `big` is a knot-stack scratch buffer.
-struct WarmOp<'a, 'b> {
-    inner: &'a mut Op2d<'b>,
+struct WarmOp<'a> {
+    inner: &'a mut dyn LinOp,
     big: &'a mut CudaSlice<C32>,
     tmp: CudaSlice<C32>,
     nv: usize,
 }
 
-impl LinOp for WarmOp<'_, '_> {
+impl LinOp for WarmOp<'_> {
     fn len_x(&self) -> usize {
         self.nv
     }
     fn len_y(&self) -> usize {
-        self.inner.ny
+        self.inner.len_y()
     }
     fn kernels(&self) -> &Kernels {
-        &self.inner.kern
+        self.inner.kernels()
     }
     fn forward(&mut self, st: &Arc<CudaStream>, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
-        let nk = self.inner.nx / self.nv;
+        let nk = self.inner.len_x() / self.nv;
         for k in 0..nk {
             st.memcpy_dtod(x, &mut self.big.slice_mut(k * self.nv..(k + 1) * self.nv))?;
         }
         self.inner.forward(st, self.big, y)
     }
     fn adjoint(&mut self, st: &Arc<CudaStream>, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), Error> {
-        let nk = self.inner.nx / self.nv;
+        let nk = self.inner.len_x() / self.nv;
         self.inner.adjoint(st, y, self.big)?;
         st.memset_zeros(x)?;
         let one = num_complex::Complex64::new(1.0, 0.0);
         for k in 0..nk {
             st.memcpy_dtod(&self.big.slice(k * self.nv..(k + 1) * self.nv), &mut self.tmp)?;
-            self.inner.kern.axpby(st, one, &self.tmp, one, x)?;
+            self.inner.kernels().axpby(st, one, &self.tmp, one, x)?;
         }
         Ok(())
     }
@@ -122,25 +126,80 @@ fn bweight(t: f64, b: usize, m: usize, deg: u32) -> f64 {
     }
 }
 
+/// The target reconstruction config (research/temporal_operator.md § Target config); the drivers' defaults
+struct Target {
+    rknots: usize,
+    rdeg: u32,
+    cknots: usize,
+    cdeg: u32,
+    resp: &'static str,
+}
+const TARGET: Target = Target { rknots: 6, rdeg: 1, cknots: 16, cdeg: 3, resp: "bellows" };
+
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // flags without a value (before `take` borrows args)
+    let no_gnl = args.iter().position(|a| a == "--no-gnl").map(|i| { args.remove(i); true }).unwrap_or(false);
+    if let Some(i) = args.iter().position(|a| a == "--gnl") {
+        args.remove(i);
+    }
     let mut take = |name: &str| -> Option<String> { args.iter().position(|a| a == name).map(|i| { args.remove(i); args.remove(i) }) };
-    let kr: usize = take("--rknots").expect("--rknots K").parse().unwrap();
-    let rdeg: u32 = take("--rdeg").expect("--rdeg 0|1").parse().unwrap();
-    let mc: usize = take("--cknots").map_or(10, |v| v.parse().unwrap());
-    let cdeg: u32 = take("--cdeg").map_or(3, |v| v.parse().unwrap());
+    // defaults = the target reconstruction config (research/temporal_operator.md § Target config): 6 linear
+    // respiratory knots × 16 cubic cardiac knots, bellows breathing coordinate, SV coil compression (≥ 99.9 % energy),
+    // B0 + concomitant (degree-4 fit at the GNL positions) + GNL. Every deviation is printed in the header line.
+    let kr: usize = take("--rknots").map_or(TARGET.rknots, |v| v.parse().unwrap());
+    let rdeg: u32 = take("--rdeg").map_or(TARGET.rdeg, |v| v.parse().unwrap());
+    let mc: usize = take("--cknots").map_or(TARGET.cknots, |v| v.parse().unwrap());
+    let cdeg: u32 = take("--cdeg").map_or(TARGET.cdeg, |v| v.parse().unwrap());
     let iters: usize = take("--iters").map_or(20, |v| v.parse().unwrap());
     let save_at: Vec<usize> = take("--save-at").map_or(vec![iters], |s| s.split(',').map(|v| v.parse().unwrap()).collect());
-    let ncoil_sel: usize = take("--coils").map_or(8, |v| v.parse().unwrap());
-    let nseg: usize = take("--nseg").map_or(10, |v| v.parse().unwrap());
+    // coils: --coils N = the N strongest physical coils (legacy test bench, no compression); default: all coils,
+    // whitened and SV-compressed (--vcoils auto|n, --coil-energy, hasty_recon::coils, Gram of the whitened data)
+    let ncoil_sel: Option<usize> = take("--coils").map(|v| v.parse().unwrap());
+    let coil_energy: f64 = take("--coil-energy").map_or(hasty_recon::coils::CoilRule::DEFAULT_ENERGY, |v| v.parse().unwrap());
+    let coil_rule = hasty_recon::coils::CoilRule::parse(&take("--vcoils").unwrap_or("auto".into()), coil_energy).unwrap();
+    // --coil-gram data (default: the whitened encode-0 samples, ≤ 2·10⁵) | calib (the low-resolution calibration-region
+    // coil images of encode 0, density-neutral; as recon_p2np) | box[:MARGIN_MM] (those images inside the prescription
+    // box + margin, default 10 mm: virtual coils energy-ordered for the box, research/coil_cost_reduction.md §7.1); the
+    // box from --presc-box S|SX,SY,SZ[@CX,CY,CZ] (mm) or the scan metadata `presc_box`. Only the compression rows change.
+    let coil_gram = take("--coil-gram").unwrap_or_else(|| "data".into());
+    let coil_box_margin: Option<f64> = coil_gram.strip_prefix("box").map(|r| r.strip_prefix(':').map_or(10.0, |v| v.parse().expect("--coil-gram box[:MARGIN_MM]")) * 1e-3);
+    assert!(coil_gram == "data" || coil_gram == "calib" || coil_box_margin.is_some(), "--coil-gram data|calib|box[:MARGIN_MM]");
+    let presc_box_arg: Option<String> = take("--presc-box");
+    // time segments (research/coil_segment_compression.md, "Implementation and measured gains"): --seg-basis svdn
+    // (default: the rank-L basis of the signal-weighted time functions, noise-referenced time weights, as recon_p2np's
+    // knot modes) | svd (uniform time weights) | fixed (L uniform node times, equal-weight interpolators, 128-entry
+    // table: the previous default, unchanged); --nseg L | auto:err[:TOL] (default auto:err:1e-4: the smallest L whose
+    // relative signal-weighted model error of the operator's time function ≤ TOL, as recon_p2np --nseg auto:err)
+    let seg_basis = take("--seg-basis").unwrap_or_else(|| "svdn".into());
+    assert!(matches!(seg_basis.as_str(), "svdn" | "svd" | "fixed"), "--seg-basis svdn|svd|fixed");
+    // --nseg auto:noise[:R] (default, R = 0.2; research/segment_basis.md, research/pipeline_target.md error budget): the
+    // smallest L whose predicted data-space model error, × margin HASTY_SEG_MARGIN (1.5), is ≤ R noise rms, as
+    // recon_p2np --nseg auto:noise; auto:err[:TOL] keeps the relative-error rule (the earlier default, TOL 1e-4)
+    let nseg_spec = take("--nseg").unwrap_or_else(|| "auto:noise".into());
+    let seg_noise: Option<f64> = nseg_spec.strip_prefix("auto:noise").map(|r| r.strip_prefix(':').map_or(0.2, |v| v.parse().expect("--nseg auto:noise[:R]")));
+    let seg_tol: Option<f64> = nseg_spec.strip_prefix("auto:err").map(|r| r.strip_prefix(':').map_or(1e-4, |v| v.parse().expect("--nseg auto:err[:TOL]")));
+    let mut nseg: usize = if seg_tol.is_some() || seg_noise.is_some() { 0 } else { nseg_spec.parse().expect("--nseg L|auto:noise[:R]|auto:err[:TOL]") };
+    // fit voxels of the SVD basis: every N-th voxel of the coil-energy support (the fixed nodes keep every 13th)
+    let seg_fit_stride: usize = take("--seg-fit-stride").map_or(3, |v| v.parse().unwrap()).max(1);
     let width: usize = take("--width").map_or(8, |v| v.parse().unwrap());
     let sigma: f64 = take("--sigma").map_or(1.25, |v| v.parse().unwrap());
-    let resp_src = take("--resp").unwrap_or_else(|| "truth".into());
+    // --resp bellows (default, real data) | truth (the sim's true state: oracle / test bench only)
+    let resp_src = take("--resp").unwrap_or_else(|| TARGET.resp.into());
     // --phys b0 | conc (default): conc = recon_p2np's physics: per-encode mean concomitant phase in the segments and
-    // the per-sample residual (φ0, k-shift, ΔC, correction order 2; hasty_recon::segphys); --gnl: GNL-aware grid
+    // the per-sample residual (φ0, k-shift, ΔC; hasty_recon::segphys).
+    // GNL (default on, --no-gnl off; --gnl accepted): coil maps, B0 and the concomitant monomials at the true (warped)
+    // positions. --conc-fit deg4 (default with GNL and conc) | quad: the concomitant monomials at the GNL positions
+    // fitted to degree 4; the degree-3/4 part per sample to first order in the kernel (correction order 3, as
+    // recon_p2np --conc-fit deg4); quad = correction order 2 (leaves the quadratic fit's floor under GNL).
     let phys = take("--phys").unwrap_or_else(|| "conc".into());
     assert!(phys == "b0" || phys == "conc", "--phys b0|conc");
     let conc = phys == "conc";
+    let gnl = !no_gnl;
+    let conc_fit = take("--conc-fit").unwrap_or_else(|| if gnl && conc { "deg4".into() } else { "quad".into() });
+    assert!(conc_fit == "quad" || conc_fit == "deg4", "--conc-fit quad|deg4");
+    let conc_hi = conc_fit == "deg4";
+    assert!(!conc_hi || conc, "--conc-fit deg4 needs --phys conc");
     // --resp-keep NR:B: only the readouts of breathing bin B of NR equal-count bins (e.g. timing one bin of a layout
     // whose key count exceeds the tables' 127)
     let resp_keep: Option<(usize, usize)> = take("--resp-keep").map(|v| { let (a, b) = v.split_once(':').unwrap(); (a.parse().unwrap(), b.parse().unwrap()) });
@@ -151,6 +210,11 @@ fn main() {
     // --ho-every iterations; the iterate with the lowest held-out residual is also written (_itbest). 0: off
     let ho_n: usize = take("--heldout").map_or(0, |v| v.parse().unwrap());
     let ho_every: usize = take("--ho-every").map_or(2, |v| v.parse().unwrap());
+    // --rcompress off|auto[:OS]|ball[:OS[:R_MM]]|box[:OS]: exact per-readout sample compression of the data term
+    // (hasty_recon::rcompress, research/sample_compression.md): ROI = the grid box (one design per readout) or the
+    // ball enclosing it (one shared design); band = the operator's field map. auto: on when the estimated reduction
+    // is ≥ 1.2×. Held-out residuals stay exact (whole readouts; per-readout ‖y‖² kept)
+    let rc_mode = hasty_recon::rcompress::RcMode::parse(&take("--rcompress").unwrap_or_else(|| "off".into())).unwrap_or_else(|e| panic!("{e}"));
     // --precond knot | none: Kronecker preconditioner G⁻¹ ⊗ C⁻¹ (hasty_recon::knotsolve) for the knot CG
     let precond_knot = take("--precond").map_or(false, |v| v == "knot");
     // --keep N: keep a deterministic 1/N of the readouts (hash-spread over all strata: a shorter scan), before the
@@ -174,6 +238,10 @@ fn main() {
     let power_its: usize = take("--power").map_or(8, |v| v.parse().unwrap());
     let llr_budget: f64 = take("--llr-budget-gb").map_or(1.0, |v| v.parse().unwrap());
     let priors_sel = take("--priors").unwrap_or_else(|| "wav,llr".into());
+    // --prior-dev gpu|cpu: where the smoothed priors of the arms run (gpu: transforms, line search and LLR on the
+    // device stacks, knotncg device mode; cpu: the host path); --prior-chunk: knot images per wavelet scratch (gpu)
+    let prior_dev: hasty_recon::knotncg::PriorDev = take("--prior-dev").map_or(hasty_recon::knotncg::PriorDev::Gpu, |v| v.parse().unwrap());
+    let prior_chunk: usize = take("--prior-chunk").map_or(8, |v| v.parse().unwrap());
     let encodes: Option<Vec<usize>> = take("--encodes").map(|s| s.split(',').map(|v| v.parse().unwrap()).collect());
     let evals: Vec<(f64, PathBuf)> = take("--eval").expect("--eval r:idx.npy,...").split(',').map(|p| { let (r, f) = p.split_once(':').unwrap(); (r.parse().unwrap(), PathBuf::from(f)) }).collect();
     let out = take("--out").expect("--out prefix");
@@ -242,34 +310,206 @@ fn main() {
             (0..kr).map(|k| if k == i { 1.0 - v } else if k == i + 1 { v } else { 0.0 }).collect()
         });
     }
-    let gnl = args.iter().position(|a| a == "--gnl").map(|i| { args.remove(i); true }).unwrap_or(false);
     let w = sd.whitener();
     let grid = sd.physics_grid(gnl, &w);
-    // coils: the strongest by sensitivity energy in the lumen (as framerecon)
-    let lum = read_npy(&dir.join("truth_lumen_fraction.npy")).unwrap().f32s();
-    let lq: Vec<usize> = (0..nv).filter(|&q| lum[q] > 0.5).collect();
-    let en: Vec<f64> = (0..nc_all).map(|c| lq.iter().map(|&q| { let z = grid.smaps[c * nv + q]; (z.re * z.re + z.im * z.im) as f64 }).sum()).collect();
-    let mut order: Vec<usize> = (0..nc_all).collect();
-    order.sort_by(|&a, &b| en[b].partial_cmp(&en[a]).unwrap());
-    let nc = ncoil_sel.min(nc_all);
-    let keep = order[..nc].to_vec();
-    let smaps: Vec<C32> = keep.iter().flat_map(|&c| grid.smaps[c * nv..(c + 1) * nv].iter().cloned()).collect();
+    // coils. Default: SV compression of all whitened coils; Gram of the whitened data of encode 0 (every readout
+    // stride so that ≤ ~2·10⁵ samples enter; no labels). --coils N (legacy bench): the N strongest physical coils by
+    // sensitivity energy in the truth lumen (oracle selection), uncompressed.
+    let (nc, keep, cc_rows, coil_desc): (usize, Vec<usize>, Option<Vec<Vec<num_complex::Complex64>>>, String) = match ncoil_sel {
+        Some(n) => {
+            let lum = read_npy(&dir.join("truth_lumen_fraction.npy")).unwrap().f32s();
+            let lq: Vec<usize> = (0..nv).filter(|&q| lum[q] > 0.5).collect();
+            let en: Vec<f64> = (0..nc_all).map(|c| lq.iter().map(|&q| { let z = grid.smaps[c * nv + q]; (z.re * z.re + z.im * z.im) as f64 }).sum()).collect();
+            let mut order: Vec<usize> = (0..nc_all).collect();
+            order.sort_by(|&a, &b| en[b].partial_cmp(&en[a]).unwrap());
+            let nc = n.min(nc_all);
+            (nc, order[..nc].to_vec(), None, format!("{nc} strongest of {nc_all} (truth-lumen selection, uncompressed)"))
+        }
+        None if coil_gram != "data" => {
+            // calibration region of encode 0 (all readouts, the samples inside the low-resolution k box), low-res CG
+            let cal_dims = dims.map(|d| 24.min(d) & !1);
+            let in_box = |k: &[f32; 3]| (0..3).all(|a| (k[a] as f64 * dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6));
+            let s0 = sd.load_set(&sd.readouts_of(0, None), &hasty_recon::kload::LoadOpts { w: &w, cc: None, keep: Some(&in_box), data: true }).unwrap();
+            let dev0 = Device::new(0).unwrap();
+            let st0 = dev0.default_stream();
+            let kern0 = Kernels::new(&dev0).unwrap();
+            let (cal, used) = hasty_recon::espirit::calib_from_noncart(&dev0, &st0, &kern0, [&s0.coords[0], &s0.coords[1], &s0.coords[2]], &s0.y, nc_all, dims, cal_dims, 30, 1e-3).unwrap();
+            drop(s0);
+            let ncal: usize = cal_dims.iter().product();
+            let (g, what, mask) = match coil_box_margin {
+                None => {
+                    let mut g = hasty_recon::coils::CoilGram::new(nc_all);
+                    g.add(&cal, ncal, 1);
+                    (g, "calibration region".to_string(), None)
+                }
+                Some(margin) => {
+                    let pb = presc_box_arg.as_deref().map(|s| hasty_recon::coils::PrescBox::parse(s).unwrap()).or_else(|| hasty_recon::coils::PrescBox::from_meta(&sd.meta)).expect("--coil-gram box: needs --presc-box S|SX,SY,SZ[@CX,CY,CZ] (mm) or presc_box in the scan metadata");
+                    let fov = [0, 1, 2].map(|a| dims[a] as f64 * sd.vox[a]);
+                    let mk = pb.mask(cal_dims, fov, margin);
+                    let what = format!("calibration region inside the prescription box {:?} mm at {:?} mm + {:.0} mm ({} of {ncal} voxels)", pb.size.map(|v| v * 1e3), pb.center.map(|v| v * 1e3), margin * 1e3, mk.iter().filter(|&&v| v).count());
+                    (hasty_recon::coils::masked_gram(&cal, ncal, nc_all, &mk), what, Some(mk))
+                }
+            };
+            let ccx = hasty_recon::coils::CoilCompression::from_gram(&g, coil_rule);
+            let mut desc = format!("SV compression ({what}, {used} calibration samples): {}", ccx.report());
+            if let Some(mk) = &mask {
+                let (kin, p50, p99, mx) = hasty_recon::coils::masked_retention(&ccx, &cal, ncal, Some(mk));
+                let (kall, ..) = hasty_recon::coils::masked_retention(&ccx, &cal, ncal, None);
+                desc += &format!("; box energy kept {:.3} % (per-voxel loss p50 {p50:.1e}, p99 {p99:.1e}, max {mx:.1e}), whole calibration region {:.2} %", 100.0 * kin, 100.0 * kall);
+            }
+            (ccx.nvc(), vec![], Some(ccx.rows), desc)
+        }
+        None => {
+            let ros0 = sd.readouts_of(0, None);
+            let stride = (ros0.len() * sd.na / 200_000).max(1);
+            let sub: Vec<usize> = ros0.iter().step_by(stride).copied().collect();
+            let s0 = sd.load_set(&sub, &hasty_recon::kload::LoadOpts { w: &w, cc: None, keep: None, data: true }).unwrap();
+            let m0 = s0.tau.len();
+            let mut g = hasty_recon::coils::CoilGram::new(nc_all);
+            g.add(&s0.y, m0, 1);
+            let ccx = hasty_recon::coils::CoilCompression::from_gram(&g, coil_rule);
+            let desc = format!("SV compression: {}", ccx.report());
+            (ccx.nvc(), vec![], Some(ccx.rows), desc)
+        }
+    };
+    let smaps: Vec<C32> = match &cc_rows {
+        None => keep.iter().flat_map(|&c| grid.smaps[c * nv..(c + 1) * nv].iter().cloned()).collect(),
+        Some(rows) => hasty_recon::coils::CoilCompression { rows: rows.clone(), eig: vec![], retained: 1.0, rule: coil_rule }.apply(&grid.smaps, nv),
+    };
+    // deviations from the target config (research/temporal_operator.md § Target config), printed with the header
+    let mut dev_target: Vec<String> = vec![];
+    if kr != TARGET.rknots || rdeg != TARGET.rdeg {
+        dev_target.push(format!("respiratory {kr} knots degree {rdeg} (target {} degree {})", TARGET.rknots, TARGET.rdeg));
+    }
+    if mc != TARGET.cknots || cdeg != TARGET.cdeg {
+        dev_target.push(format!("cardiac {mc} knots degree {cdeg} (target {} degree {})", TARGET.cknots, TARGET.cdeg));
+    }
+    if resp_src != TARGET.resp {
+        dev_target.push(format!("breathing coordinate {resp_src} (target {}; truth = oracle)", TARGET.resp));
+    }
+    if ncoil_sel.is_some() {
+        dev_target.push("coil subset (target: SV compression of all coils)".into());
+    }
+    if ncoil_sel.is_none() && coil_gram != "data" {
+        dev_target.push(format!("coil Gram {coil_gram} (target: the whitened encode-0 data)"));
+    }
+    if !conc {
+        dev_target.push("phys b0 (target conc)".into());
+    }
+    if !gnl {
+        dev_target.push("no GNL (target GNL)".into());
+    }
+    if conc && gnl && !conc_hi {
+        dev_target.push("concomitant fit quad (target deg4 under GNL)".into());
+    }
+    if keep_n > 1 {
+        dev_target.push(format!("1/{keep_n} of the readouts (a shorter scan)"));
+    }
+    if seg_noise.is_none_or(|r| r > 0.2) || seg_basis != "svdn" {
+        dev_target.push(format!("time segments {nseg_spec}, {seg_basis} basis (target: auto:noise:0.2 on the svdn basis)"));
+    }
     // evaluation states: the truth voxels of each, the respiratory weights, the cardiac weights of the 20 frame centres
     let nfo = sd.n_frames;
     let ev: Vec<(f64, Vec<usize>, Vec<f64>)> = evals.iter().map(|(r, p)| (*r, read_npy(p).unwrap().f32s().iter().map(|&v| v as usize).collect(), resp_weights(*r))).collect();
     let cw: Vec<Vec<f64>> = (0..nfo).map(|f| { let t = ((f as f64 + 0.5) / nfo as f64) * mc as f64 - 0.5; (0..mc).map(|b| bweight(t, b, mc, cdeg)).collect() }).collect();
     println!(
-        "{}: grid {dims:?}, {ne} encodes, coils {nc} of {nc_all}, respiratory {} ({resp_src}): {knots_desc}; cardiac {mc} knots degree {cdeg}; {nseg} B0 segments, W {width}, {iters} CGLS iterations ({:.1}s)",
+        "{}: grid {dims:?}, {ne} encodes, coils {nc} of {nc_all}, respiratory {} ({resp_src}): {knots_desc}; cardiac {mc} knots degree {cdeg}; time segments {nseg_spec} ({seg_basis} basis), W {width}, {iters} CGLS iterations ({:.1}s)",
         dir.display(),
         if rdeg == 0 { format!("{kr} bins") } else { format!("{kr} linear knots") },
         t0.elapsed().as_secs_f64()
     );
+    println!("  coils: {coil_desc}");
+    println!("  physics: {}{}{}", if conc { "B0 + concomitant" } else { "B0" }, if gnl { " + GNL" } else { "" }, if conc { format!(" (concomitant fit {conc_fit}, correction order {})", if conc_hi { 3 } else { 2 }) } else { String::new() });
+    if dev_target.is_empty() {
+        println!("  config: target");
+    } else {
+        println!("  config: differs from target: {}", dev_target.join("; "));
+    }
     for (r, idx, g) in &ev {
         println!("  eval r* = {r}: {} voxels, respiratory weights {:?}", idx.len(), g.iter().map(|v| (v * 1000.0).round() / 1000.0).collect::<Vec<_>>());
     }
     let dev = Device::new(0).unwrap();
     let st = dev.default_stream();
     let kern = Arc::new(Kernels::new(&dev).unwrap());
+    // segment basis inputs (all data-derived), before the engine (whose nseg the rule sets):
+    // * voxel weights: signal energy ≈ |x̂|² / Σ_c|S_c|² with x̂ the smoothed magnitude of the SENSE adjoint of a readout
+    //   subset of the first encode (≈ ρ² Σ_c|S_c|²: the weight of the coil-common error, as Σ_c |S_c Δg|²);
+    // * time weights: 1 + (E(n) + E_vol) / (C σ²) per ADC sample (hasty_nufft::noise_time_weights) on seg_time_grid;
+    // * the count: --nseg auto:err from the weighted spectrum (svd) or by scanning L (fixed), on the first encode (the
+    //   encodes' mean concomitant phases differ by a constant: research/coil_segment_compression.md §2.6).
+    let seg_t = Instant::now();
+    let e_first = encodes.as_ref().map_or(0, |v| v[0]);
+    let cen: Vec<f64> = (0..nv).map(|q| (0..nc).map(|c| { let z = smaps[c * nv + q]; (z.re as f64).powi(2) + (z.im as f64).powi(2) }).sum()).collect();
+    let cmax = cen.iter().cloned().fold(0.0, f64::max);
+    let support: Vec<usize> = (0..nv).filter(|&q| cen[q] > 1e-3 * cmax).collect();
+    let fit_svd: Vec<usize> = support.iter().copied().step_by(seg_fit_stride).collect();
+    let (seg_w, seg_grid, tau_seg, tw_adc, tw_noise): (Vec<f64>, (Vec<f64>, Vec<f64>), Vec<f64>, Vec<f64>, Vec<f64>) = {
+        let ros_all = sd.readouts_of(e_first, None);
+        let ros_w: Vec<usize> = ros_all.iter().copied().step_by((ros_all.len() / 1500).max(1)).collect();
+        let sw = sd.load_set(&ros_w, &hasty_recon::kload::LoadOpts { w: &w, cc: cc_rows.as_deref(), keep: None, data: true }).unwrap();
+        let mw = sw.tau.len();
+        let naw = mw / ros_w.len();
+        let yw: Vec<C32> = match &cc_rows { Some(_) => sw.y.clone(), None => keep.iter().flat_map(|&c| sw.y[c * mw..(c + 1) * mw].iter().cloned()).collect() };
+        let mag = {
+            let mut op = hasty_recon::op::SenseOp::new(&dev, &st, kern.clone(), dims, [&sw.coords[0], &sw.coords[1], &sw.coords[2]], &smaps, nc, vec![], 1e-4).unwrap();
+            let yd = st.clone_htod(&yw).unwrap();
+            let mut xd = st.alloc_zeros::<C32>(nv).unwrap();
+            op.adjoint(&st, &yd, &mut xd).unwrap();
+            hasty_recon::segphys::smooth_magnitude(&st.clone_dtoh(&xd).unwrap(), dims, sd.vox, [8e-3, 8e-3, 2e-3])
+        };
+        let mut wv: Vec<f64> = fit_svd.iter().map(|&q| (mag[q] as f64).powi(2) / cen[q].max(1e-30)).collect();
+        let mut srt = wv.clone();
+        srt.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let med = srt[srt.len() / 2].max(1e-300);
+        wv.iter_mut().for_each(|v| *v /= med);
+        let tau_a: Vec<f64> = sw.tau[..naw].to_vec();
+        let ros_e: Vec<usize> = (0..nro).step_by(7).take(512).collect();
+        let e = sd.adc_energy_whitened(&ros_e, &w).unwrap();
+        let kap: Vec<f64> = (0..naw).map(|n| (0..3).map(|a| (sw.coords[a][n] as f64 / sd.vox[a]).powi(2)).sum::<f64>().sqrt()).collect();
+        let sigma: f64 = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0).or_else(|| sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0)).unwrap_or(1.0);
+        // noise-referenced per-ADC weights 1 + (E(n) + E_vol) / (C σ²): the svdn basis weights, and always the metric of
+        // the auto:noise rule and of the achieved-error print (so every basis is compared in the same metric)
+        let twn: Vec<f64> = hasty_nufft::noise_time_weights(&e[..naw], &kap, nc_all as f64 * sigma * sigma);
+        let tw: Vec<f64> = if seg_basis == "svdn" { twn.clone() } else { vec![1.0; naw] };
+        let grid_t = hasty_nufft::seg_time_grid(&tau_a, &tw, 96);
+        (wv, grid_t, tau_a, tw, twn)
+    };
+    // error voxels: ≤ 20 000 of the support with the same weights (as recon_p2np's achieved-error print)
+    let err_idx: Vec<usize> = (0..fit_svd.len()).step_by((fit_svd.len() / 20000).max(1)).collect();
+    let (err_vox, err_w): (Vec<usize>, Vec<f64>) = (err_idx.iter().map(|&i| fit_svd[i]).collect(), err_idx.iter().map(|&i| seg_w[i]).collect());
+    let fit13: Vec<usize> = support.iter().copied().step_by(13).collect();
+    let w13: Vec<f64> = { let pos: std::collections::HashMap<usize, usize> = fit_svd.iter().enumerate().map(|(i, &q)| (q, i)).collect(); fit13.iter().map(|&q| pos.get(&q).map_or_else(|| (cen[q] / cmax).max(1e-12), |&i| seg_w[i])).collect() };
+    // noise rule: relative weighted error ε(L) in the noise-weighted metric → data error ≈ ε(L) √(mean w) noise rms
+    let seg_margin: f64 = std::env::var("HASTY_SEG_MARGIN").ok().and_then(|v| v.parse().ok()).unwrap_or(1.5);
+    let noise_gain = (tw_noise.iter().sum::<f64>() / tw_noise.len().max(1) as f64).sqrt();
+    let noise_grid = hasty_nufft::seg_time_grid(&tau_seg, &tw_noise, 96);
+    let seg_rule: Option<(f64, bool)> = seg_noise.map(|r| (r / (noise_gain * seg_margin), true)).or(seg_tol.map(|t| (t, false)));
+    if let Some((tol, noise_rule)) = seg_rule {
+        let ros = sd.readouts_of(e_first, None);
+        let sub: Vec<usize> = ros.iter().copied().step_by((ros.len() / 400).max(1)).collect();
+        let s1 = sd.load_set(&sub, &hasty_recon::kload::LoadOpts { w: &w, cc: None, keep: None, data: false }).unwrap();
+        let na1 = s1.tau.len() / sub.len();
+        let wb = if conc { hasty_recon::segphys::mean_coefficients(&[&s1], na1) } else { vec![[0.0; 4]; na1] };
+        let psi = hasty_recon::segphys::segment_phase(&grid, &wb, &tau_seg, true);
+        let g = |v: usize, t: f64| num_complex::Complex64::from_polar(1.0, -psi(v, t));
+        // the noise rule predicts in the noise-weighted metric whatever the basis (for svd / fixed a lower bound /
+        // their own error in that metric); auto:err in the basis' own metric, as before
+        let (ts, tws) = if noise_rule { (&noise_grid.0, &noise_grid.1) } else { (&seg_grid.0, &seg_grid.1) };
+        nseg = if seg_basis == "fixed" {
+            let (t0, t1) = (tau_seg[0], tau_seg[tau_seg.len() - 1]);
+            (2..=64).find(|&l| { let tl: Vec<f64> = (0..l).map(|i| t0 + (t1 - t0) * i as f64 / (l - 1) as f64).collect(); hasty_nufft::nodes_weighted_error(&fit13, None, Some(&w13), ts, tws, &tl, &g) <= tol }).unwrap_or(64)
+        } else {
+            let ev = hasty_nufft::weighted_spectrum(&fit_svd, Some(&seg_w), ts, tws, &g);
+            // the whole predicted error curve, so a segment count can be chosen against the error budget afterwards
+            let te = hasty_nufft::tail_errors(&ev);
+            println!("  predicted {seg_basis} segment error by L: {}", (4..=20.min(te.len() - 1)).map(|l| format!("{l}: {:.1e}", te[l])).collect::<Vec<_>>().join(", "));
+            hasty_nufft::seg_count_for(&ev, tol, 2, 64)
+        };
+        if noise_rule {
+            println!("  segments (auto:noise:{}): predicted data error ≤ {} noise rms (margin {seg_margin}, √mean w = {noise_gain:.1}: relative tolerance {tol:.2e}) → L = {nseg}", seg_noise.unwrap(), seg_noise.unwrap());
+        }
+        println!("  segments ({nseg_spec}): relative signal-weighted model error ≤ {tol:.1e} (predicted on the {}-point time grid, {} time weights) → L = {nseg} ({seg_basis} basis, {:.1}s)", ts.len(), if seg_basis == "svdn" { "noise-referenced" } else { "uniform" }, seg_t.elapsed().as_secs_f64());
+    }
     // device memory ledger (research/memory_ledger.md), planned before any heavy work: CGLS image vectors (x, s, p +
     // one spare), data vectors (y, r, q), sample tables (records 48 B + ≈ 1.25 × W³/64 tile entries of 4 B per sample),
     // coil maps and segment diagonals, the grid slot; the grid budget shrinks to what is left, else stop here
@@ -280,14 +520,29 @@ fn main() {
     // ADMM 5, PCG 4)
     let arm_stacks = arms.iter().map(|a| if a == "zmshr1" { 6.0 } else if a == "pcg" { 4.0 } else { 5.0 }).fold(0.0f64, f64::max);
     let has_prior_arms = arms.iter().any(|a| a != "pcg");
+    // device mode of the priors: the largest prior footprint over the power iteration and the prior arms
+    // (knotncg::Priors::dev_bytes: wavelet chunk + engine, LLR scratch stack + block table, the solver's prior stacks)
+    let prior_dev_bytes = if has_prior_arms && prior_dev == hasty_recon::knotncg::PriorDev::Gpu {
+        use hasty_recon::knotncg::{DevSolver, Priors};
+        let npc: usize = hasty_recon::knotncg::WavHuber::new(dims, wlevels, 0.0, 1.0).p.iter().product();
+        let (hw, hl) = (priors_sel.contains("wav"), priors_sel.contains("llr"));
+        let mut sol: Vec<DevSolver> = arms.iter().filter(|a| *a != "pcg").map(|a| if a.starts_with("ncg") { DevSolver::Ncg } else if a == "fista" { DevSolver::Fista } else if a == "zmshr1" { DevSolver::Zmshr1 } else { DevSolver::Admm }).collect();
+        if arms.iter().any(|a| a == "fista" || a == "zmshr1") {
+            sol.push(DevSolver::Power);
+        }
+        sol.into_iter().map(|s| Priors::dev_bytes(s, kr * mc, nv, npc, hw, hl, prior_chunk)).max().unwrap_or(0) as f64
+    } else {
+        0.0
+    };
     let tiles_per_sample = 1.25 * ((width as f64 + 3.0) / 4.0).powi(3);
     let led: Vec<(&str, f64)> = vec![
         ("solver image vectors (CGLS x, s, p; arms: the largest arm; time-only 2)", if time_only { 2.0 } else if arms.is_empty() { 3.0 } else { arm_stacks - 1.0 } * (kr * mc * nv) as f64 * 8.0),
         ("CGLS data vectors (r, q: y becomes r; time-only 2)", 2.0 * (nc * m_max) as f64 * 8.0),
-        ("sample tables", m_max as f64 * (48.0 + 4.0 * tiles_per_sample)),
+        ("sample tables (+ 16 B Δw per sample at order 3)", m_max as f64 * (48.0 + 4.0 * tiles_per_sample + if conc_hi { 16.0 } else { 0.0 })),
         ("coil maps + segment diagonals", ((nc + nseg) * nv) as f64 * 8.0),
         ("knot preconditioner (CG z vector + 2 images + circulant)", if precond_knot { ((kr * mc + 2) * nv * 8) as f64 + 0.5 * gib } else { 0.0 }),
         ("prior-aware metric (3 nv f32 + plans) + LLR on GPU (batch budget + cuBLAS / cuSOLVER handles)", if has_prior_arms { hasty_recon::knotncg::PriorMetric::bytes(kr * mc, nv) as f64 + llr_budget * gib + 0.5 * gib } else { 0.0 }),
+        ("priors on the device (--prior-dev gpu: coefficient stacks, LLR stacks, wavelet scratch)", prior_dev_bytes),
         ("FFT / kernel workspace, margin", 1.5 * gib),
     ];
     let (free, total) = cudarc::driver::result::mem_get_info().unwrap();
@@ -300,19 +555,30 @@ fn main() {
     }
     println!("    grid slot budget: {:.2} GiB", grid_budget / gib);
     if grid_budget < 0.4 * gib {
-        eprintln!("splinerecon: the plan does not fit the device ({:.2} GiB fixed, {:.2} GiB free): fewer coils / knots or a host-resident solver", fixed / gib, free as f64 / gib);
+        eprintln!("splinerecon: the plan does not fit the device ({:.2} GiB fixed, {:.2} GiB free): fewer coils / knots, --prior-dev cpu ({:.2} GiB of device priors) or a host-resident solver", fixed / gib, free as f64 / gib, prior_dev_bytes / gib);
         std::process::exit(2);
     }
-    let opts = SegNufftOpts { sigma, width, nseg, order: if conc { 2 } else { 0 }, frames: mc, bspline: cdeg, max_grid_bytes: grid_budget as usize };
+    let opts = SegNufftOpts { sigma, width, nseg, order: if conc_hi { 3 } else if conc { 2 } else { 0 }, frames: mc, bspline: cdeg, max_grid_bytes: grid_budget as usize };
     let mut eng = SegNufft::new_temporal2d(&dev, dims, sd.vox, nc, opts, kr, rdeg).unwrap();
     eng.set_maps(&st, &smaps).unwrap();
     let eng = std::cell::RefCell::new(eng);
     let nx = kr * mc * nv;
     let ho_mask: Vec<bool> = if ho_n > 0 { hasty_recon::knotsolve::heldout_mask(nro, ho_n) } else { vec![false; nro] };
+    // --rcompress: the rate band of the operator's field map (coil-energy weighted 1e-4 quantiles, 2× margin, at least
+    // ±200 Hz; decay ≤ 300 1/s for the data's T2*), the mode decided at the first encode
+    let rc_band = {
+        let ce: Vec<f64> = (0..nv).map(|q| (0..nc).map(|c| { let z = smaps[c * nv + q]; (z.re * z.re + z.im * z.im) as f64 }).sum()).collect();
+        hasty_recon::rcompress::Band { r_max: 300.0, ..hasty_recon::rcompress::Band::from_ratemap(&grid.omega, None, &ce, 1e-4, 1.0, 200.0) }
+    };
+    let mut rc_comp: Option<hasty_recon::rcompress::Compressor> = None;
+    let mut rc_decided = rc_mode.is_off();
+    assert!(rc_mode.is_off() || arms.is_empty(), "--rcompress: not with --arms (the arms drive the operator directly)");
     let mut vals: Vec<Vec<Vec<C32>>> = (0..=save_at.len()).map(|_| ev.iter().map(|(_, idx, _)| vec![C32::new(0.0, 0.0); idx.len() * ne * nfo]).collect()).collect();
     let mut seg: Option<SegSegments> = None;
     let mut wbar_e: Option<Vec<[f64; 4]>> = None;
     let mut monofit: Option<hasty_recon::segphys::MonoFit> = None;
+    let mut monofit_hi: Option<hasty_recon::segphys::MonoFitHi> = None;
+    let mut htab: Option<Vec<f64>> = None;
     let enc_list: Vec<usize> = encodes.unwrap_or_else(|| (0..ne).collect());
     let cnt = std::cell::Cell::new((0usize, 0usize));
     // (arm, label) → per encode the compact lumen values per evaluation state
@@ -326,7 +592,7 @@ fn main() {
             let bins = hasty_recon::selfgate::amplitude_bins(&amp, nr);
             ros.retain(|&r| bins[r] == b);
         }
-        let set = sd.load_set(&ros, &hasty_recon::kload::LoadOpts { w: &w, cc: None, keep: None, data: true }).unwrap();
+        let set = sd.load_set(&ros, &hasty_recon::kload::LoadOpts { w: &w, cc: cc_rows.as_deref(), keep: None, data: true }).unwrap();
         let m = set.tau.len();
         let na = m / ros.len();
         assert_eq!(na * ros.len(), m, "fixed ADC count per readout expected");
@@ -339,10 +605,36 @@ fn main() {
             let wb = if conc { hasty_recon::segphys::mean_coefficients(&[&set], na) } else { vec![[0.0; 4]; na] };
             let (sp, at, s0, ds) = {
                 let psi = hasty_recon::segphys::segment_phase(&grid, &wb, &tau_adc, true);
-                build_segments(nv, nseg, tmin, tmax, 128, &fit, &psi)
+                let g = |v: usize, t: f64| num_complex::Complex64::from_polar(1.0, -psi(v, t));
+                let r = if seg_basis == "fixed" {
+                    // 128-entry interpolator table for an explicit --nseg L (the previous default, unchanged); one entry
+                    // per ADC sample when L comes from a rule: the 128-entry table has a 3–7e-4 floor of its own, which
+                    // the rule's prediction does not see (auto:err 1e-4 picked L = 18 and achieved 8.4e-4)
+                    build_segments(nv, nseg, tmin, tmax, if seg_rule.is_some() { na } else { 128 }, &fit, &psi)
+                } else {
+                    // one interpolator entry per ADC sample (as recon_p2np: a 128/256-entry table leaves a 3–7e-4 floor)
+                    hasty_nufft::build_segments_svd_grid(nv, nseg, tmin, tmax, na, &fit_svd, Some(&seg_w), &seg_grid.0, &seg_grid.1, &g)
+                };
+                // achieved error at the ADC times (every 16th, with the basis' time weights) over the error voxels
+                let tix: Vec<usize> = (0..na).step_by(16).collect();
+                let taus: Vec<f64> = tix.iter().map(|&n| tau_adc[n]).collect();
+                let tws: Vec<f64> = tix.iter().map(|&n| tw_adc[n.min(tw_adc.len() - 1)]).collect();
+                let err = hasty_nufft::segment_model_error(&r.0, &r.1, nseg, nv, r.2, r.3, &err_vox, Some(&err_w), &taus, &tws, &g);
+                // the same error in the noise-referenced metric for every basis, and as data error in noise rms
+                let twn: Vec<f64> = tix.iter().map(|&n| tw_noise[n.min(tw_noise.len() - 1)]).collect();
+                let err_n = hasty_nufft::segment_model_error(&r.0, &r.1, nseg, nv, r.2, r.3, &err_vox, Some(&err_w), &taus, &twn, &g);
+                println!("  segment model error of encode {e}, noise-referenced metric: relative {err_n:.2e} ≈ {:.3} noise rms", err_n * noise_gain);
+                println!("  segment model error of encode {e}: L = {nseg} ({seg_basis}), relative {err:.2e} (signal-weighted, {} time weights, {} voxels)", if seg_basis == "svdn" { "noise-referenced" } else { "uniform" }, err_vox.len());
+                r
             };
             wbar_e = Some(wb);
             if conc && monofit.is_none() {
+                if conc_hi {
+                    let f4 = hasty_recon::segphys::fit_monomials_hi(&sd, &grid, &fit);
+                    println!("  concomitant monomials at the {} positions: degree-4 fit rms {:.1e} / max {:.1e} m² (quadratic part), degree 3/4 to first order (order 3)", if gnl { "GNL" } else { "nominal" }, f4.quad.rms.iter().cloned().fold(0.0, f64::max), f4.quad.max.iter().cloned().fold(0.0, f64::max));
+                    htab = Some(hasty_recon::segphys::hi_table(&f4));
+                    monofit_hi = Some(f4);
+                }
                 monofit = Some(hasty_recon::segphys::fit_monomials(&sd, &grid, &fit));
             }
             seg = Some(eng.borrow().segments(&st, &sp, &at, s0, ds).unwrap());
@@ -364,39 +656,116 @@ fn main() {
         }
         assert!(ri.iter().all(|&i| (i as usize) < nri));
         // per-sample physics: the residual concomitant terms against the encode's mean (as recon_p2np), or none
-        let (coords, tau, phi0, dcv) = if conc {
-            let tab = hasty_recon::segphys::seg_tables(&sd, &set, monofit.as_ref().unwrap(), true, wbar_e.as_deref());
-            (tab.coords, tab.tau, tab.phi0, tab.dc)
+        // dwv: with --conc-fit deg4 the per-sample concomitant deviation Δw (4 × m SoA) for the degree-3/4 phase
+        let (coords, tau, phi0, dcv, dwv) = if conc {
+            match &monofit_hi {
+                Some(f4) => {
+                    let (tab, dw) = hasty_recon::segphys::seg_tables_hi(&sd, &set, f4, true, wbar_e.as_deref());
+                    (tab.coords, tab.tau, tab.phi0, tab.dc, dw)
+                }
+                None => {
+                    let tab = hasty_recon::segphys::seg_tables(&sd, &set, monofit.as_ref().unwrap(), true, wbar_e.as_deref());
+                    (tab.coords, tab.tau, tab.phi0, tab.dc, vec![])
+                }
+            }
         } else {
-            (set.coords.clone(), set.tau.iter().map(|&v| v as f32).collect(), vec![0f32; m], vec![])
+            (set.coords.clone(), set.tau.iter().map(|&v| v as f32).collect(), vec![0f32; m], vec![], vec![])
         };
-        let mut yh = vec![C32::new(0.0, 0.0); nc * m];
-        for (ci, &c) in keep.iter().enumerate() {
-            yh[ci * m..(ci + 1) * m].copy_from_slice(&set.y[c * m..(c + 1) * m]);
-        }
+        let yh = if cc_rows.is_some() {
+            // already compressed by load_set: nvc × m
+            set.y.clone()
+        } else {
+            let mut yh = vec![C32::new(0.0, 0.0); nc * m];
+            for (ci, &c) in keep.iter().enumerate() {
+                yh[ci * m..(ci + 1) * m].copy_from_slice(&set.y[c * m..(c + 1) * m]);
+            }
+            yh
+        };
+        assert_eq!(yh.len(), nc * m);
         drop(set);
         // held-out split (whole readouts): fit = the rest
-        let (coords, tau, phi0, dcv, t, ri, rv, yh, ho) = {
+        let (coords, tau, phi0, dcv, t, ri, rv, yh, dwv, ho) = {
             let hold: Vec<bool> = (0..m).map(|j| ho_mask[ros[j / na]]).collect();
             let (fi, hi): (Vec<usize>, Vec<usize>) = (0..m).partition(|&j| !hold[j]);
             let g32 = |v: &[f32], ix: &[usize]| -> Vec<f32> { ix.iter().map(|&j| v[j]).collect() };
             let gdc = |ix: &[usize]| -> Vec<f32> { if dcv.is_empty() { vec![] } else { (0..6).flat_map(|q| ix.iter().map(move |&j| q * m + j)).map(|k| dcv[k]).collect() } };
+            let gdw = |ix: &[usize]| -> Vec<f32> { if dwv.is_empty() { vec![] } else { (0..4).flat_map(|q| ix.iter().map(move |&j| q * m + j)).map(|k| dwv[k]).collect() } };
             let gy = |ix: &[usize]| -> Vec<C32> { (0..nc).flat_map(|c| ix.iter().map(move |&j| c * m + j)).map(|k| yh[k]).collect() };
-            let part = |ix: &[usize]| ([g32(&coords[0], ix), g32(&coords[1], ix), g32(&coords[2], ix)], g32(&tau, ix), g32(&phi0, ix), gdc(ix), g32(&t, ix), ix.iter().map(|&j| ri[j]).collect::<Vec<u32>>(), g32(&rv, ix), gy(ix));
+            let part = |ix: &[usize]| ([g32(&coords[0], ix), g32(&coords[1], ix), g32(&coords[2], ix)], g32(&tau, ix), g32(&phi0, ix), gdc(ix), g32(&t, ix), ix.iter().map(|&j| ri[j]).collect::<Vec<u32>>(), g32(&rv, ix), gy(ix), gdw(ix));
             if hi.is_empty() {
-                (coords, tau, phi0, dcv, t, ri, rv, yh, None)
+                (coords, tau, phi0, dcv, t, ri, rv, yh, dwv, None)
             } else {
                 let f = part(&fi);
                 let h = part(&hi);
-                (f.0, f.1, f.2, f.3, f.4, f.5, f.6, f.7, Some(h))
+                (f.0, f.1, f.2, f.3, f.4, f.5, f.6, f.7, f.8, Some(h))
             }
         };
         let m = tau.len();
+        // --rcompress: the fit and held-out parts compressed per readout (na samples each); the full fit samples stay
+        // for the preconditioners below (circulant metric, knot Gram: the original sample density)
+        if !rc_decided {
+            let ss = hasty_recon::data::SampleSet { readouts: vec![], coords: coords.clone(), y: vec![], tau: tau.iter().map(|&v| v as f64).collect(), wq: vec![] };
+            let (o, line) = hasty_recon::rcompress::decide(&rc_mode, dims, sd.vox, rc_band, &ss, &vec![na; m / na]);
+            println!("  rcompress: band {}; {line}", rc_band.describe());
+            rc_comp = o.map(hasty_recon::rcompress::Compressor::new);
+            rc_decided = true;
+        }
+        let rcz = rc_comp.as_mut().map(|comp| {
+            let tr = Instant::now();
+            let mut part = |c: &[Vec<f32>; 3], tau: &[f32], phi0: &[f32], dc: &[f32], t: &[f32], ri: &[u32], rv: &[f32], y: &[C32], dw: &[f32]| {
+                let mm = tau.len();
+                let ss = hasty_recon::data::SampleSet { readouts: vec![], coords: c.clone(), y: vec![], tau: tau.iter().map(|&v| v as f64).collect(), wq: vec![] };
+                let (sc, yc) = comp.compress_set(&ss, &vec![na; mm / na], sd.vox, y, nc);
+                let g = |v: &[f32]| hasty_recon::pyramid::gather(v, &sc.sel);
+                let out = ([g(&c[0]), g(&c[1]), g(&c[2])], g(tau), g(phi0), hasty_recon::rcompress::select_rows(dc, mm, &sc.sel), g(t), hasty_recon::pyramid::gather(ri, &sc.sel), g(rv), yc, hasty_recon::rcompress::select_rows(dw, mm, &sc.sel));
+                (out, sc)
+            };
+            let f = part(&coords, &tau, &phi0, &dcv, &t, &ri, &rv, &yh, &dwv);
+            let h = ho.as_ref().map(|h| part(&h.0, &h.1, &h.2, &h.3, &h.4, &h.5, &h.6, &h.7, &h.8));
+            if e == enc_list[0] {
+                // gate on two fit readouts (direct sums; cardiac knot envelope, no concomitant phase)
+                let mut gs = hasty_recon::rcompress::GateStats::default();
+                for r in [0, (m / na) / 2] {
+                    let k: Vec<[f64; 3]> = (r * na..(r + 1) * na).map(|j| [0, 1, 2].map(|a| coords[a][j] as f64 / sd.vox[a])).collect();
+                    let tt: Vec<f64> = (r * na..(r + 1) * na).map(|j| tau[j] as f64).collect();
+                    let kt: Vec<f64> = (r * na..(r + 1) * na).map(|j| t[j] as f64).collect();
+                    let d = hasty_recon::rcompress::Design::build(&k, &tt, &comp.opts);
+                    gs = gs.max(hasty_recon::rcompress::gate(&d, &k, &tt, None, Some(&kt), &comp.opts, 200, 3 + r as u64));
+                }
+                println!("  rcompress gate (2 readouts, 200 sources, half on the band edge): worst source {:.2e}, normal operator on the sources {:.2e}", gs.worst, gs.gram);
+            }
+            // dropped energy against its noise expectation (n − |S|) · coils · σ² (≫ 1: signal outside ROI × band)
+            let noise_exp = sd.lazy.as_ref().and_then(|l| l.sigma).map(|sg| (m - f.1.m()) as f64 * nc as f64 * sg * sg);
+            let cn: f64 = f.1.cnorm.iter().sum();
+            println!("  rcompress encode {e}: {} ({:.1}s): fit {} → {} samples ({:.3}×){}; dropped energy {:.3e}{}", comp.describe(), tr.elapsed().as_secs_f64(), m, f.1.m(), m as f64 / f.1.m().max(1) as f64, h.as_ref().map_or(String::new(), |h| format!(", held-out {} → {}", h.1.n_orig(), h.1.m())), cn, noise_exp.map_or(String::new(), |x| format!(" ({:.3}× the noise expectation)", cn / x.max(1e-300))));
+            (f, h)
+        });
         let mut pre = if warm > 0 { Some(hasty_recon::precond::CirculantPrecond::new(&dev, &st, kern.clone(), dims, [&coords[0], &coords[1], &coords[2]], &smaps, nc, 1e-3).unwrap()) } else { None };
-        let pts = eng.borrow_mut().points2d(&st, [&coords[0], &coords[1], &coords[2]], &tau, &phi0, &dcv, &t, &ri, &rv).unwrap();
-        let pts_ho = ho.as_ref().map(|h| eng.borrow_mut().points2d(&st, [&h.0[0], &h.0[1], &h.0[2]], &h.1, &h.2, &h.3, &h.4, &h.5, &h.6).unwrap());
-        let y_ho = ho.as_ref().map(|h| st.clone_htod(&h.7).unwrap());
-        let m_ho = ho.as_ref().map_or(0, |h| h.1.len());
+        // sample tables: correction order 3 attaches the degree-3/4 coefficients (points2d_hi)
+        let mk_pts = |e: &mut SegNufft, c: &[Vec<f32>; 3], tau: &[f32], phi0: &[f32], dc: &[f32], t: &[f32], ri: &[u32], rv: &[f32], dw: &[f32]| -> SegPoints {
+            match &htab {
+                Some(h) => e.points2d_hi(&st, [&c[0], &c[1], &c[2]], tau, phi0, dc, t, ri, rv, dw, h).unwrap(),
+                None => e.points2d(&st, [&c[0], &c[1], &c[2]], tau, phi0, dc, t, ri, rv).unwrap(),
+            }
+        };
+        let pts = match &rcz {
+            Some((f, _)) => { let p = &f.0; mk_pts(&mut eng.borrow_mut(), &p.0, &p.1, &p.2, &p.3, &p.4, &p.5, &p.6, &p.8) }
+            None => mk_pts(&mut eng.borrow_mut(), &coords, &tau, &phi0, &dcv, &t, &ri, &rv, &dwv),
+        };
+        let ho_src = match &rcz { Some((_, h)) => h.as_ref().map(|h| &h.0), None => ho.as_ref() };
+        let pts_ho = ho_src.map(|h| mk_pts(&mut eng.borrow_mut(), &h.0, &h.1, &h.2, &h.3, &h.4, &h.5, &h.6, &h.8));
+        let y_ho = ho_src.map(|h| st.clone_htod(&h.7).unwrap());
+        let m_ho = ho_src.map_or(0, |h| h.1.len());
+        // --rcompress: the R tables of the fit (set 0) and held-out (set 1) parts; the held-out constant Σ ‖y‖² − ‖ỹ‖²
+        // and the original held-out energy; the operator's data length; the fit data become the compressed ones
+        let rcd = rcz.as_ref().map(|(f, h)| {
+            let c = rc_comp.as_ref().unwrap();
+            let mask = hasty_recon::rcompress::roi_mask(&c.opts.roi, dims, sd.vox);
+            hasty_recon::rcompress::RcDev::new(&dev, &st, c, &[f.1.clone(), h.as_ref().map_or_else(Default::default, |h| h.1.clone())]).unwrap().with_mask(&st, mask.as_deref()).unwrap()
+        });
+        let (ho_const, ho_y2) = match &rcz { Some((_, Some(h))) => (h.1.cnorm.iter().sum::<f64>(), Some(h.1.ynorm.iter().sum::<f64>().max(1e-300))), _ => (0.0, None) };
+        let m_op = rcz.as_ref().map_or(m, |(f, _)| f.1.m());
+        let yh = match rcz { Some((f, _)) => f.0 .7, None => yh };
         drop(ho);
         // knot preconditioner: temporal Gram of the basis under the fit samples' times (every 7th sample)
         let mut kgram: Option<(Vec<f64>, Vec<f32>, Vec<f32>)> = None;
@@ -420,7 +789,7 @@ fn main() {
         } else {
             None
         };
-        drop((coords, tau, phi0, dcv, t, ri, rv));
+        drop((coords, tau, phi0, dcv, t, ri, rv, dwv));
         if timing.is_empty() && std::env::var("HASTY_SPLINE_NOTUNE").map_or(true, |v| v == "0") {
             let tt = Instant::now();
             let (kf, ka) = eng.borrow_mut().autotune(&st, seg, &pts).unwrap();
@@ -432,7 +801,7 @@ fn main() {
             let xr: Vec<C32> = (0..nx).map(|i| C32::new(((i * 7919) % 1000) as f32 * 1e-3, ((i * 104729) % 997) as f32 * 1e-3)).collect();
             let xd = st.clone_htod(&xr).unwrap();
             drop(xr);
-            let mut yy = st.alloc_zeros::<C32>(nc * m).unwrap();
+            let mut yy = st.alloc_zeros::<C32>(nc * m_op).unwrap();
             let mut xa = st.alloc_zeros::<C32>(nx).unwrap();
             let mut tf = vec![];
             for rep in 0..3 {
@@ -456,8 +825,10 @@ fn main() {
             let tw = Instant::now();
             let mut sx = st.alloc_zeros::<C32>(nv).unwrap();
             {
-                let mut op = Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m };
-                let mut wop = WarmOp { inner: &mut op, big: &mut x, tmp: st.alloc_zeros::<C32>(nv).unwrap(), nv };
+                let mut op = Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m_op };
+                let mut rop = rcd.as_ref().map(|d| hasty_recon::rcompress::RcLin::new(Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m_op }, d, 0));
+                let inner: &mut dyn LinOp = match rop.as_mut() { Some(r) => r, None => &mut op };
+                let mut wop = WarmOp { inner, big: &mut x, tmp: st.alloc_zeros::<C32>(nv).unwrap(), nv };
                 pcgls_cb(&mut wop, Some(pr), &st, &y, &mut sx, 0.0, warm, &mut |_, _| {}).unwrap();
             }
             for k in 0..kr * mc {
@@ -472,7 +843,7 @@ fn main() {
             let (gram, lam_eff, dinv) = kgram.take().unwrap();
             let evf = |h: &[C32]| lumen_compact(&ev, &cw, kr, mc, nv, nfo, h);
             let ac = ArmsCtx { eval: &evf, dev: &dev, st: &st, kern: &kern, eng: &eng, cnt: &cnt, seg, pts: &pts, pts_ho: pts_ho.as_ref(), y_ho: y_ho.as_ref(), m_ho, nc, m, nx, nv, kk: kr * mc, dims, out: &out, e };
-            let opts = ArmsOpts { arms: arms.clone(), prefix, budget, gamma_rel, wthr, kappa, block, wlevels, admm_inner, power_its, llr_budget, priors: priors_sel.clone(), save_at: save_at.clone() };
+            let opts = ArmsOpts { arms: arms.clone(), prefix, budget, gamma_rel, wthr, kappa, block, wlevels, admm_inner, power_its, llr_budget, priors: priors_sel.clone(), save_at: save_at.clone(), prior_dev, prior_chunk };
             let res = run_arms(&ac, &opts, kpre.take().unwrap(), gram, lam_eff, dinv, x, y, yh_keep.unwrap());
             for (name, snaps) in res {
                 for (lab, h) in snaps {
@@ -485,8 +856,11 @@ fn main() {
         }
         let tl = Instant::now();
         let mut snaps: Vec<(usize, Vec<C32>)> = vec![];
-        let mut op = Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m };
-        let ho_norm = y_ho.as_ref().map_or(1.0, |v| kern.dot(&st, v, v).unwrap().re.max(1e-300));
+        let mut op0 = Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m_op };
+        let mut rop = rcd.as_ref().map(|d| hasty_recon::rcompress::RcLin::new(Op2d { eng: &eng, cnt: &cnt, seg, pts: &pts, kern: kern.clone(), nx, ny: nc * m_op }, d, 0));
+        let mut op = hasty_recon::rcompress::DynLin(match rop.as_mut() { Some(r) => r, None => &mut op0 });
+        // held-out residual relative to the original held-out energy (compressed: ‖R A_S x − ỹ‖² + Σ (‖y‖² − ‖ỹ‖²))
+        let ho_norm = ho_y2.unwrap_or_else(|| y_ho.as_ref().map_or(1.0, |v| kern.dot(&st, v, v).unwrap().re.max(1e-300)));
         let mut ho_pred = (m_ho > 0).then(|| st.alloc_zeros::<C32>(nc * m_ho).unwrap());
         let mut ho_hist: Vec<(usize, f64)> = vec![];
         let mut best: Option<(usize, f64, Vec<C32>)> = None;
@@ -497,8 +871,11 @@ fn main() {
             if let (Some(ph), Some(yv), Some(pp)) = (pts_ho.as_ref(), y_ho.as_ref(), ho_pred.as_mut()) {
                 if k % ho_every == 0 || k == iters {
                     eng.borrow_mut().forward(&st, seg, ph, xd, pp).unwrap();
+                    if let Some(d) = rcd.as_ref() {
+                        d.apply(&st, 1, pp, false).unwrap();
+                    }
                     kern.axpby(&st, num_complex::Complex64::new(-1.0, 0.0), yv, num_complex::Complex64::new(1.0, 0.0), pp).unwrap();
-                    let r = kern.dot(&st, pp, pp).unwrap().re / ho_norm;
+                    let r = (kern.dot(&st, pp, pp).unwrap().re + ho_const) / ho_norm;
                     ho_hist.push((k, r));
                     if best.as_ref().is_none_or(|b| r < b.1) {
                         best = Some((k, r, st.clone_dtoh(xd).unwrap()));
@@ -756,6 +1133,8 @@ struct ArmsOpts {
     llr_budget: f64,
     priors: String,
     save_at: Vec<usize>,
+    prior_dev: hasty_recon::knotncg::PriorDev,
+    prior_chunk: usize,
 }
 
 /// held-out residual, snapshots at gradient counts and the per-iteration log of one arm
@@ -922,6 +1301,10 @@ fn run_arms(ac: &ArmsCtx, o: &ArmsOpts, mut kpre: hasty_recon::knotsolve::KnotPr
         println!("    wavelet curvature fractions (level, ε, frac): {}", fr.iter().map(|(l, e, f)| format!("{l}{}{}{}:{f:.3}", e[0], e[1], e[2])).collect::<Vec<_>>().join(" "));
         println!("    LLR discarded fraction ζ(ω) (ω in G-eigenvector order): {}", zs.zeta.iter().map(|z| format!("{z:.3}")).collect::<Vec<_>>().join(" "));
         let mut pri = Priors::new(k, nv, use_w.then_some(wav), use_l.then_some(lh));
+        if o.prior_dev == kn::PriorDev::Gpu {
+            pri.to_gpu(ac.dev, st, o.prior_chunk).unwrap();
+        }
+        println!("  arms e{e}: priors on the {:?} (wavelet chunk {} knots)", pri.dev(), o.prior_chunk);
         let set_metric = |pm: &mut PriorMetric, arm: &str| {
             pm.ident = (arm == "ncgI").then_some(bulk);
             if arm == "ncg0" || arm == "ncgI" {
@@ -1036,7 +1419,7 @@ fn run_arms(ac: &ArmsCtx, o: &ArmsOpts, mut kpre: hasty_recon::knotsolve::KnotPr
                 }
                 o => panic!("unknown arm {o} (pcg, ncg, ncg0, ncgcap, ncgI, ncgc, zmshr1, fista, admm<ρ/bulk>)"),
             }
-            println!("  arms e{e}: {arm} done ({:.0}s; priors {:.0}s: {} wavelet stack transforms, {} LLR sweeps; host RSS {:.1} GiB)", ta.elapsed().as_secs_f64(), pri.secs, pri.n_wt, pri.n_llr, rss_gib());
+            println!("  arms e{e}: {arm} done ({:.0}s; priors {:.0}s ({:?}): {} wavelet stack transforms, {} LLR sweeps; host RSS {:.1} GiB)", ta.elapsed().as_secs_f64(), pri.secs, pri.dev(), pri.n_wt, pri.n_llr, rss_gib());
             let (snaps, c) = tr.finish();
             csv += &c;
             results.push((arm.to_string(), snaps));

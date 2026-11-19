@@ -197,3 +197,183 @@ extern "C" __global__ void vm_anchor(const float* v, const float* w, float lam, 
     }
     if (threadIdx.x == 0 && part) part[blockIdx.x] = sh[0];
 }
+
+// at-knots mode: |z|^2 of one node chunk, out[r] = w |z|^2 (out != 0), acc[r] += w |z|^2 (acc != 0)
+extern "C" __global__ void vm_absq(const cx* z, long long nv, float w, float* out, float* acc)
+{
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (r >= nv) return;
+    cx v = z[r];
+    float m = w * (v.x * v.x + v.y * v.y);
+    if (out) out[r] = m;
+    if (acc) acc[r] += m;
+}
+
+// ─── parameter-spline mode (research/velocity_model_sr.md §F) ─────────────────────────────────────────────────────
+// Node chunk k = (m_k, psi_k) packed as cx (x = magnitude, y = phase), v_k [3][nv]. One respiratory row: zrow[c], vrow[c]
+// = the chunks of cardiac knots c = 0..mc. Operator frame f of the row reads the <= nn cardiac knots fi[f*nn + j]
+// (weights fw; fi < 0: unused):
+//   m = sum w m_c, psi = sum w psi_c, v = sum w v_c,  x_e = m exp(i (psi + phi_e - ke'.v))   (ke' = k_e - mean_e k_e)
+
+__device__ __forceinline__ void pstate(const u64* zrow, const u64* vrow, const int* fi, const float* fw, int nn,
+                                       const float* a, const int* ex, int np, int e, const float* ke,
+                                       long long r, long long nv, int nx, int ny, int nz, float* m, float* psi, float* v, float* ph)
+{
+    *m = 0.f; *psi = 0.f; v[0] = v[1] = v[2] = 0.f;
+    for (int j = 0; j < nn; j++) {
+        int c = fi[j];
+        if (c < 0) continue;
+        float w = fw[j];
+        cx z = ((const cx*)zrow[c])[r];
+        *m += w * z.x; *psi += w * z.y;
+        const float* vk = (const float*)vrow[c];
+        v[0] += w * vk[r]; v[1] += w * vk[nv + r]; v[2] += w * vk[2 * nv + r];
+    }
+    float p = *psi - (ke[0] * v[0] + ke[1] * v[1] + ke[2] * v[2]);
+    if (e > 0) for (int q = 0; q < np; q++) p += a[(e - 1) * np + q] * poly(ex, q, r, nx, ny, nz);
+    *ph = p;
+}
+
+// out[f * nv + r] = x_e at frame f (grid.y = frame)
+extern "C" __global__ void vp_eval(const u64* zrow, const u64* vrow, const int* fi, const float* fw, int nn,
+                                   const float* a, const int* ex, int np, int e, const float* ke,
+                                   int nx, int ny, int nz, cx* out)
+{
+    long long nv = (long long)nx * ny * nz;
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    int f = blockIdx.y;
+    if (r >= nv) return;
+    float m, psi, v[3], ph;
+    pstate(zrow, vrow, fi + f * nn, fw + f * nn, nn, a, ex, np, e, ke, r, nv, nx, ny, nz, &m, &psi, v, &ph);
+    float s, c;
+    sincosf(ph, &s, &c);
+    cx o; o.x = m * c; o.y = m * s;
+    out[(long long)f * nv + r] = o;
+}
+
+// linearised: dx = u dm + i x (dpsi + dphi_e - ke'.dv)
+extern "C" __global__ void vp_jvp(const u64* zrow, const u64* vrow, const u64* dzrow, const u64* dvrow, const int* fi, const float* fw, int nn,
+                                  const float* a, const float* da, const int* ex, int np, int e, const float* ke,
+                                  int nx, int ny, int nz, cx* out)
+{
+    long long nv = (long long)nx * ny * nz;
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    int f = blockIdx.y;
+    if (r >= nv) return;
+    float m, psi, v[3], ph, dm, dpsi, dv[3], dph;
+    pstate(zrow, vrow, fi + f * nn, fw + f * nn, nn, a, ex, np, e, ke, r, nv, nx, ny, nz, &m, &psi, v, &ph);
+    pstate(dzrow, dvrow, fi + f * nn, fw + f * nn, nn, da, ex, np, e, ke, r, nv, nx, ny, nz, &dm, &dpsi, dv, &dph);
+    float s, c;
+    sincosf(ph, &s, &c);
+    cx o;
+    o.x = dm * c - m * s * dph;
+    o.y = dm * s + m * c * dph;
+    out[(long long)f * nv + r] = o;
+}
+
+// gradient of one row from g = dF/dx* at the row's frames (g[f * nv + r]), one thread per (voxel, cardiac knot c =
+// blockIdx.y) over the frames that read c (ki / kw, <= nkf, -1 padded):
+//   G_m += w Re(conj(u) g), G_psi += -w Im(conj(g) x), G_v += w ke' Im(conj(g) x);
+// sacc[r] += Im(conj(g) x) of frame f by the thread of knot prim[f] (residual phase, reduced later with a minus sign)
+extern "C" __global__ void vp_vjp(const u64* zrow, const u64* vrow, const int* fi, const float* fw, int nn,
+                                  const int* ki, const float* kw, int nkf, const int* prim,
+                                  const float* a, const int* ex, int np, int e, const float* ke,
+                                  int nx, int ny, int nz, const cx* g, float scale, const u64* gzrow, const u64* gvrow, float* sacc)
+{
+    long long nv = (long long)nx * ny * nz;
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    int kc = blockIdx.y;
+    if (r >= nv) return;
+    float gm = 0.f, gp = 0.f, gv0 = 0.f, gv1 = 0.f, gv2 = 0.f, sa = 0.f;
+    for (int j = 0; j < nkf; j++) {
+        int f = ki[kc * nkf + j];
+        if (f < 0) break;
+        float w = kw[kc * nkf + j];
+        float m, psi, v[3], ph;
+        pstate(zrow, vrow, fi + f * nn, fw + f * nn, nn, a, ex, np, e, ke, r, nv, nx, ny, nz, &m, &psi, v, &ph);
+        float s, c;
+        sincosf(ph, &s, &c);
+        cx gr = g[(long long)f * nv + r]; gr.x *= scale; gr.y *= scale;
+        float re = c * gr.x + s * gr.y;                 // Re(conj(u) g)
+        float xx = m * c, xy = m * s;
+        float im = gr.x * xy - gr.y * xx;               // Im(conj(g) x)
+        gm += w * re; gp -= w * im;
+        gv0 += w * ke[0] * im; gv1 += w * ke[1] * im; gv2 += w * ke[2] * im;
+        if (prim[f] == kc) sa += im;
+    }
+    cx* G = (cx*)gzrow[kc];
+    cx o = G[r]; o.x += gm; o.y += gp; G[r] = o;
+    float* V = (float*)gvrow[kc];
+    V[r] += gv0; V[nv + r] += gv1; V[2 * nv + r] += gv2;
+    if (sacc && sa != 0.f) atomicAdd(&sacc[r], sa);
+}
+
+// periodic cardiac interpolation filter in place on `rows` rows of F frames (x[(row * F + f) * nv + r]):
+// c_f = sum_n C[n] x_{f-n}, taps |n| <= T (T >= F/2: all F offsets once); one thread per (voxel, row = blockIdx.y)
+extern "C" __global__ void vp_prefilter(cx* x, int F, const float* C, int T, long long nv)
+{
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (r >= nv) return;
+    cx* row = x + (long long)blockIdx.y * F * nv;
+    cx buf[128];
+    for (int f = 0; f < F; f++) buf[f] = row[(long long)f * nv + r];
+    bool full = 2 * T + 1 >= F;
+    for (int f = 0; f < F; f++) {
+        float ox = 0.f, oy = 0.f;
+        if (full) {
+            for (int n = 0; n < F; n++) { float w = C[n]; cx b = buf[(f - n + F) % F]; ox += w * b.x; oy += w * b.y; }
+        } else {
+            for (int n = -T; n <= T; n++) { float w = C[(n + F) % F]; cx b = buf[((f - n) % F + F) % F]; ox += w * b.x; oy += w * b.y; }
+        }
+        cx o; o.x = ox; o.y = oy;
+        row[(long long)f * nv + r] = o;
+    }
+}
+
+// (m, psi) chunk metric: re / (bm), im / (bp); bm = wm * c[r] + dm, bp = we * (c[r] * sig[r] + dp) (inverse: *)
+extern "C" __global__ void vp_metric_mp(const cx* r_, cx* out, const float* c, const float* sig, float wm, float dm, float we, float dp, int inverse, long long nv)
+{
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (r >= nv) return;
+    float cc = c ? c[r] : 1.f;
+    float bm = wm * cc + dm, bp = we * (cc * sig[r] + dp);
+    cx v = r_[r];
+    if (inverse) { v.x *= bm; v.y *= bp; } else { v.x /= bm; v.y /= bp; }
+    out[r] = v;
+}
+
+// complex knot images of one respiratory row at the operator frames (the robust start's linear model):
+// out[f * nv + r] = sum_j fw[f, j] C_{fi[f, j]}[r]   (grid.y = frame)
+extern "C" __global__ void vp_cframes(const u64* crow, const int* fi, const float* fw, int nn, long long nv, cx* out)
+{
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    int f = blockIdx.y;
+    if (r >= nv) return;
+    cx o; o.x = 0.f; o.y = 0.f;
+    for (int j = 0; j < nn; j++) {
+        int c = fi[f * nn + j];
+        if (c < 0) continue;
+        float w = fw[f * nn + j];
+        cx z = ((const cx*)crow[c])[r];
+        o.x += w * z.x; o.y += w * z.y;
+    }
+    out[(long long)f * nv + r] = o;
+}
+
+// its adjoint, accumulated: C_c[r] += sum_{f reading c} w g[f * nv + r]   (grid.y = cardiac knot c)
+extern "C" __global__ void vp_cframes_adj(const cx* g, const int* ki, const float* kw, int nkf, long long nv, const u64* crow)
+{
+    long long r = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    int c = blockIdx.y;
+    if (r >= nv) return;
+    float ox = 0.f, oy = 0.f;
+    for (int j = 0; j < nkf; j++) {
+        int f = ki[c * nkf + j];
+        if (f < 0) break;
+        float w = kw[c * nkf + j];
+        cx v = g[(long long)f * nv + r];
+        ox += w * v.x; oy += w * v.y;
+    }
+    cx* C = (cx*)crow[c];
+    cx o = C[r]; o.x += ox; o.y += oy; C[r] = o;
+}

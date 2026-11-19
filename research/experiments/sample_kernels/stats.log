@@ -1,0 +1,12 @@
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  x-bin 1: 1965256 groups, mean 2.04 samples/group, samples in groups >= 2: 0.79, >= 4: 0.27, >= 8: 0.05; union efficiency 1.00
+  x-bin 2: 1396454 groups, mean 2.86 samples/group, samples in groups >= 2: 0.91, >= 4: 0.52, >= 8: 0.12; union efficiency 0.91
+  x-bin 3: 1101078 groups, mean 3.63 samples/group, samples in groups >= 2: 0.95, >= 4: 0.67, >= 8: 0.21; union efficiency 0.83
+  x-bin 4: 897353 groups, mean 4.46 samples/group, samples in groups >= 2: 0.97, >= 4: 0.78, >= 8: 0.31; union efficiency 0.77
+  TT 4 tiles: 65894 occupied of 125000, samples/tile median 57, p90 88, max 12516
+trajectory: 1300000 samples of 326 readouts (encode 0, rotations from 3796), |k|max 1567.5 rad/m -> 0.98 π
+  x-bin 1: 786696 groups, mean 1.65 samples/group, samples in groups >= 2: 0.67, >= 4: 0.12, >= 8: 0.03; union efficiency 1.00
+  x-bin 2: 641944 groups, mean 2.03 samples/group, samples in groups >= 2: 0.79, >= 4: 0.25, >= 8: 0.05; union efficiency 0.91
+  x-bin 3: 569346 groups, mean 2.28 samples/group, samples in groups >= 2: 0.84, >= 4: 0.35, >= 8: 0.07; union efficiency 0.83
+  x-bin 4: 514648 groups, mean 2.53 samples/group, samples in groups >= 2: 0.87, >= 4: 0.42, >= 8: 0.10; union efficiency 0.77
+  TT 4 tiles: 63626 occupied of 125000, samples/tile median 18, p90 35, max 3996

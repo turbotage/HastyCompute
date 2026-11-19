@@ -225,6 +225,105 @@ impl CoilCompression {
     }
 }
 
+/// The prescription box (part of the scan prescription, never a phantom label): centre and edge lengths in metres, in
+/// the logical image frame relative to the FOV centre (the reconstruction grid's index i sits at (i − n/2) · voxel).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PrescBox {
+    pub center: [f64; 3],
+    pub size: [f64; 3],
+}
+
+impl PrescBox {
+    /// "S" or "SX,SY,SZ", optionally "@CX,CY,CZ" (millimetres; centre default = the FOV centre)
+    pub fn parse(s: &str) -> Result<Self, String> {
+        let (sz, ct) = s.split_once('@').map_or((s, None), |(a, b)| (a, Some(b)));
+        let num = |t: &str| -> Result<Vec<f64>, String> { t.split(',').map(|v| v.trim().parse::<f64>().map(|x| x * 1e-3).map_err(|_| format!("prescription box {s:?}: bad number {v:?}"))).collect() };
+        let a = num(sz)?;
+        let size = match a.len() {
+            1 => [a[0]; 3],
+            3 => [a[0], a[1], a[2]],
+            _ => return Err(format!("prescription box {s:?}: size S or SX,SY,SZ (mm)")),
+        };
+        let center = match ct {
+            None => [0.0; 3],
+            Some(c) => {
+                let c = num(c)?;
+                if c.len() != 3 {
+                    return Err(format!("prescription box {s:?}: centre CX,CY,CZ (mm)"));
+                }
+                [c[0], c[1], c[2]]
+            }
+        };
+        if size.iter().any(|&v| v <= 0.0) {
+            return Err(format!("prescription box {s:?}: positive sizes"));
+        }
+        Ok(Self { center, size })
+    }
+
+    /// scan metadata `presc_box` = {"center": [x, y, z], "size": [x, y, z]} (metres, logical frame), if present
+    pub fn from_meta(meta: &serde_json::Value) -> Option<Self> {
+        let b = meta.get("presc_box")?;
+        let v = |k: &str| -> Option<[f64; 3]> {
+            let a = b.get(k)?.as_array()?;
+            (a.len() == 3).then(|| [a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0), a[2].as_f64().unwrap_or(0.0)])
+        };
+        Some(Self { center: v("center").unwrap_or([0.0; 3]), size: v("size")? })
+    }
+
+    /// voxels of a grid `dims` spanning `fov` (m) whose centres lie in the box grown by `margin` (m) on every side
+    pub fn mask(&self, dims: [usize; 3], fov: [f64; 3], margin: f64) -> Vec<bool> {
+        let n: usize = dims.iter().product();
+        let inside = |a: usize, i: usize| {
+            let p = (i as f64 - (dims[a] / 2) as f64) * fov[a] / dims[a] as f64;
+            (p - self.center[a]).abs() <= 0.5 * self.size[a] + margin
+        };
+        (0..n).map(|q| inside(0, q % dims[0]) && inside(1, (q / dims[0]) % dims[1]) && inside(2, q / (dims[0] * dims[1]))).collect()
+    }
+}
+
+/// Gram of coil images x (coil-major nc × n) over the voxels of `mask` (e.g. the low-resolution calibration images
+/// inside the prescription box: `--coil-gram box`)
+pub fn masked_gram(x: &[C32], n: usize, nc: usize, mask: &[bool]) -> CoilGram {
+    assert!(x.len() >= nc * n && mask.len() == n);
+    let idx: Vec<usize> = (0..n).filter(|&q| mask[q]).collect();
+    let mut g = CoilGram::new(nc);
+    g.add_with(idx.len(), 1, &|c, j| { let z = x[c * n + idx[j]]; Complex64::new(z.re as f64, z.im as f64) });
+    g
+}
+
+/// Energy a compression keeps of coil images x (nc × n) over the voxels of `mask` (None: all), and the per-voxel loss
+/// 1 − ‖P y_v‖² / ‖y_v‖² at the energy-weighted median and 99th percentile and its maximum (voxels with energy above
+/// 1e-6 of the largest): (kept fraction, p50, p99, max)
+pub fn masked_retention(cc: &CoilCompression, x: &[C32], n: usize, mask: Option<&[bool]>) -> (f64, f64, f64, f64) {
+    let nc = cc.nc();
+    let per: Vec<(f64, f64)> = (0..n)
+        .into_par_iter()
+        .filter(|&q| mask.is_none_or(|m| m[q]))
+        .map(|q| {
+            let y: Vec<Complex64> = (0..nc).map(|c| { let z = x[c * n + q]; Complex64::new(z.re as f64, z.im as f64) }).collect();
+            let e: f64 = y.iter().map(|z| z.norm_sqr()).sum();
+            let k: f64 = cc.rows.iter().map(|r| r.iter().zip(&y).map(|(a, b)| a * b).sum::<Complex64>().norm_sqr()).sum();
+            (e, k)
+        })
+        .collect();
+    let (te, tk) = per.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
+    let emax = per.iter().map(|p| p.0).fold(0.0, f64::max);
+    let mut loss: Vec<(f64, f64)> = per.iter().filter(|p| p.0 > 1e-6 * emax).map(|p| ((1.0 - p.1 / p.0).max(0.0), p.0)).collect();
+    loss.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let tot: f64 = loss.iter().map(|p| p.1).sum();
+    let pct = |f: f64| {
+        let mut acc = 0.0;
+        for p in &loss {
+            acc += p.1;
+            if acc >= f * tot {
+                return p.0;
+            }
+        }
+        loss.last().map_or(0.0, |p| p.0)
+    };
+    (if te > 0.0 { tk / te } else { 1.0 }, pct(0.5), pct(0.99), loss.last().map_or(0.0, |p| p.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,5 +427,21 @@ mod tests {
         assert!(CoilRule::parse("x", 0.999).is_err());
         assert_eq!(count_for_energy(&[4.0, 3.0, 2.0, 1.0], 0.7), 2);
         assert_eq!(count_for_energy(&[4.0, 3.0, 2.0, 1.0], 0.71), 3);
+    }
+
+    #[test]
+    fn presc_box_parse_and_mask() {
+        let b = PrescBox::parse("160").unwrap();
+        assert_eq!(b.size, [0.16; 3]);
+        assert_eq!(b.center, [0.0; 3]);
+        let b2 = PrescBox::parse("100,120,140@10,-5,0").unwrap();
+        assert!((b2.center[0] - 0.01).abs() < 1e-12 && (b2.size[2] - 0.14).abs() < 1e-12);
+        // 10 voxels of 0.1 m per axis: centres at −0.5 … 0.4 m; a 0.25 m box keeps −0.1, 0, 0.1 (3 per axis)
+        let m = PrescBox::parse("250").unwrap().mask([10, 10, 10], [1.0; 3], 0.0);
+        assert_eq!(m.iter().filter(|&&v| v).count(), 27);
+        // margin 0.1 m: −0.2 … 0.2 → 5 per axis
+        let m = PrescBox::parse("250").unwrap().mask([10, 10, 10], [1.0; 3], 0.1);
+        assert_eq!(m.iter().filter(|&&v| v).count(), 125);
+        assert!(PrescBox::parse("0").is_err() && PrescBox::parse("1,2").is_err());
     }
 }

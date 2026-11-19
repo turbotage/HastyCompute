@@ -1,0 +1,33 @@
+{
+ "readouts": 3796,
+ "adc": 3990,
+ "turn_tau_ms": 5.580000579357147,
+ "kr_spread_over_readouts_rel_max": 4.4335166053679826e-08,
+ "monotone_out_back": [
+  true,
+  false
+ ],
+ "max_gap_out_back_ms": 7.9780004452914,
+ "conc": {
+  "torso": {
+   "max_phase_total_rad": 3.7956524230705084,
+   "max_phase_residual_rad": 1.14517441578772,
+   "p99_phase_residual_rad": 1.0571829927564396,
+   "rms_phase_residual_rad": 0.46629314537806427
+  },
+  "box160_heart": {
+   "max_phase_total_rad": 1.5094615029640348,
+   "max_phase_residual_rad": 0.4162559590185393,
+   "p99_phase_residual_rad": 0.36825569343203346,
+   "rms_phase_residual_rad": 0.16810380296679903
+  }
+ },
+ "dw_var_explained_by_kcell_half": [
+  0.5486660149414291,
+  0.5486660148528235,
+  0.5472281636715839,
+  0.5449465469864176
+ ],
+ "samples_per_occupied_cell": 4.006316557952038,
+ "dw_var_explained_random_cells": 0.24957458039833624
+}

@@ -1,0 +1,16 @@
+==PROF== Connected to process 840069 (/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/release/proto_gather)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 48 (48 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 2.86 GiB, y 1.43 GiB, 192000000000 useful complex MACs per pass
+  ps: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_ps": 0%
+==WARNING== Launching the workload is taking more time than expected. If this continues to hang, terminate the profile and re-try by profiling the range of all related launches using '--replay-mode range'. See https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay for more details.
+....50%....100% - 43 passes
+==PROF== Profiling "pg_fwd_ps": 0%....50%....100% - 43 passes
+    ps t [4, 4, 8] ch   8 tps  4 (fc  2) nt 256 smax 128 sb 2 rx 1 smem  39552 regs 127: 47407.34 ms
+  RES ps: regs 127, local 0 B, smem 39552 B, blocks/SM 2, warps/SM 16 of 48
+  WORK ps: useful/issued x-loop MAC slots 0.538 (x 0.769 = W/HXP; rows/warp 12.41, planes/warp 10.79, live slots 0.939); active (warp, plane) 0.452; block fill 0.669; FFMA-pipe use of issued work 33.6 %
+  BEST ps: 50.50 ms Cfg { halo: 3, tt: 4, ch: 8, tps: 4, nt: 256, smax: 128, padc: 0, sb: 2, rx: 1, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0 } items 46702 | 3802 G cMAC/s, 18.1 % of FP32 FMA peak (2 FMA/MAC) | value loads 30.4 TB/s (L1/smem), halo staging 1020 GB/s | rel err 6.35e-7 (max 5.67e-6 of rms 1.98e0) on 50 samples
+==PROF== Disconnected from process 840069
+==WARNING== No source files were imported. Check that the target application was compiled with -lineinfo.
+==PROF== Report: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/sample_kernels/out/ncu/ps_m4000000_c48_l1_o0.ncu-rep

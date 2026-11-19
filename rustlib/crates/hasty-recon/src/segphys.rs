@@ -8,6 +8,7 @@
 //!   * per sample: Σ_q Δw_jq m_q(ρ) ≈ φ0_j + b_j·ρ + ρᵀΔC_jρ from a least-squares quadratic fit of each m_q over the
 //!     object support → constant phase, k-space shift (exact) and the ΔC kernel correction.
 
+use rayon::prelude::*;
 use hasty_mrsim::Vec3;
 
 use crate::data::{PhysicsGrid, SampleSet, SimData};
@@ -406,4 +407,30 @@ pub fn absorb_field_poly_at(tab: &mut SegTables, vox: [f64; 3], poly: &FieldPoly
     }
     let qmax = positions.map(|p| (poly.eval(&p) - poly.eval_lin(&p)).abs()).fold(0.0f64, f64::max);
     qmax * dtmax
+}
+
+/// Smoothed magnitude |x| of an image (dims, x fastest; voxel size `vox` in m): three box passes per axis of radius
+/// `r_m[a]` (m, rounded to voxels). The data-derived signal weight of the segment basis (as recon_p2np's support
+/// magnitude: dark structures inside the body — lumen with flow dephasing, lungs — do not open holes).
+pub fn smooth_magnitude(x: &[hasty_cuda::C32], dims: [usize; 3], vox: [f64; 3], r_m: [f64; 3]) -> Vec<f32> {
+    let nv = dims[0] * dims[1] * dims[2];
+    assert!(x.len() >= nv);
+    let mut acc: Vec<f32> = x[..nv].iter().map(|z| (z.re * z.re + z.im * z.im).sqrt()).collect();
+    for axis in 0..3 {
+        let r = (r_m[axis] / vox[axis]).round() as usize;
+        if r == 0 {
+            continue;
+        }
+        let (n, stride) = (dims[axis], [1, dims[0], dims[0] * dims[1]][axis]);
+        for _ in 0..3 {
+            let src = acc.clone();
+            acc.par_iter_mut().enumerate().for_each(|(q, a)| {
+                let i = (q / stride) % n;
+                let (lo, hi) = (i.saturating_sub(r), (i + r).min(n - 1));
+                let base = q - i * stride;
+                *a = (lo..=hi).map(|k| src[base + k * stride]).sum::<f32>() / (hi - lo + 1) as f32;
+            });
+        }
+    }
+    acc
 }

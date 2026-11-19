@@ -1,0 +1,18 @@
+== 2-D knots 2x4 order 3, HASTY_SEG_FSB=1 HASTY_SEG_ACB=1 18:13:37
+time: dims [160, 160, 160] (4096000 voxels, 0.001 m), M = 1998990 (501 readouts × 3990), order 3, 2-D knots 2 (deg 1) × 4 (deg 3) = 8 knot images
+  samples built in 0.3 s
+  today C = 30 × L = 10 (300 channels, coil batch 10 → 3 passes; tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 } adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 5244.6 ms, adjoint 4666.4 ms, pass 9911.0 ms; free 12.7 GiB
+  today C = 96 × L = 1 (96 channels, coil batch 96 → 1 passes; tiles fwd TileCfg { tt: 4, cpba: 8, cpbf: 32, ppf: 2, chunk: 8, max_item: 1024, acb: 1, fsb: 1, kv: 1 } adj TileCfg { tt: 4, cpba: 8, cpbf: 32, ppf: 2, chunk: 8, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 7107.3 ms, adjoint 7777.7 ms, pass 14884.9 ms; free 10.2 GiB
+  joint C = 30, R = 190 (2 × 95, inner coil batch 95, tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 14410.5 ms, adjoint 14438.5 ms, pass 28849.0 ms; profiled pass: Φ 790.5 ms (2.7 %), inner 28042.8 ms (97.2 %), mixing 23.5 ms (0.1 %); free 7.6 GiB
+== 2-D knots 2x4 order 3, HASTY_SEG_FSB=4 HASTY_SEG_ACB=4 18:19:43
+time: dims [160, 160, 160] (4096000 voxels, 0.001 m), M = 1998990 (501 readouts × 3990), order 3, 2-D knots 2 (deg 1) × 4 (deg 3) = 8 knot images
+  samples built in 0.2 s
+  today C = 30 × L = 10 (300 channels, coil batch 10 → 3 passes; tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 } adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 5242.3 ms, adjoint 4667.3 ms, pass 9909.6 ms; free 12.7 GiB
+  today C = 96 × L = 1 (96 channels, coil batch 96 → 1 passes; tiles fwd TileCfg { tt: 4, cpba: 8, cpbf: 48, ppf: 2, chunk: 16, max_item: 1024, acb: 4, fsb: 4, kv: 0 } adj TileCfg { tt: 4, cpba: 8, cpbf: 48, ppf: 2, chunk: 16, max_item: 1024, acb: 4, fsb: 4, kv: 0 }): forward 8366.1 ms, adjoint 4732.0 ms, pass 13098.1 ms; free 10.2 GiB
+  joint C = 30, R = 190 (2 × 95, inner coil batch 95, tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 14425.6 ms, adjoint 14440.2 ms, pass 28865.7 ms; profiled pass: Φ 791.4 ms (2.7 %), inner 28049.9 ms (97.2 %), mixing 23.5 ms (0.1 %); free 7.6 GiB
+== 2-D knots 2x4 order 3, HASTY_SEG_FSB=2 HASTY_SEG_ACB=8 18:26:40
+time: dims [160, 160, 160] (4096000 voxels, 0.001 m), M = 1998990 (501 readouts × 3990), order 3, 2-D knots 2 (deg 1) × 4 (deg 3) = 8 knot images
+  samples built in 0.3 s
+  today C = 30 × L = 10 (300 channels, coil batch 10 → 3 passes; tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 } adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, kv: 1 }): forward 5240.6 ms, adjoint 4664.7 ms, pass 9905.3 ms; free 12.7 GiB
+  today C = 96 × L = 1 (96 channels, coil batch 96 → 1 passes; tiles fwd TileCfg { tt: 4, cpba: 8, cpbf: 32, ppf: 2, chunk: 16, max_item: 1024, acb: 8, fsb: 2, kv: 0 } adj TileCfg { tt: 4, cpba: 8, cpbf: 32, ppf: 2, chunk: 16, max_item: 1024, acb: 8, fsb: 2, kv: 0 }): forward 7246.4 ms, adjoint 5643.8 ms, pass 12890.2 ms; free 10.2 GiB
+  joint C = 30, R = 190 (2 × 95, inner coil batch 95, tiles fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 2, kv: 1 }): forward 15239.2 ms, adjoint 14439.7 ms, pass 29678.9 ms; profiled pass: Φ 792.1 ms (2.7 %), inner 28867.6 ms (97.3 %), mixing 23.5 ms (0.1 %); free 7.6 GiB

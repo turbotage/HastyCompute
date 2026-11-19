@@ -1,0 +1,2 @@
+=== base_m1300000_c48_l1_o0: --mode base --m 1300000 --ncb 48 --nseg 1 --order 0
+FAILED rc=124

@@ -141,8 +141,8 @@ impl<R: Real> PrunedChanFft3<R> {
         let cnt = |a: usize| keep[a].0 + keep[a].1;
         let gap = |a: usize| n[a] - cnt(a);
         let (sx, sy, sz) = (nch, n0 * nch, n1 * n0 * nch);
-        // tiles run over `la` (stride 1: channels, or channels × x × … where contiguous); the line count `lb` is a
-        // grid dimension (≤ 65535)
+        // tiles run over `la` (stride 1: channels, or channels × x × … where contiguous); the line count `lb` runs over
+        // grid (y, z)
         let addr = |la_cnt: usize, lb_cnt: usize, in_sn: usize, lb: usize| LineAddr { la_cnt, lb_cnt, in_la: 1, in_lb: lb, in_sn, out_la: 1, out_lb: lb, out_sn: in_sn };
         let spec = |len: usize, dir: Direction, scale: f64, ad: LineAddr, (n_in, n_in_tail): (usize, usize), (n_out, n_out_tail): (usize, usize)| AxisSpec {
             n: len,
@@ -167,9 +167,8 @@ impl<R: Real> PrunedChanFft3<R> {
         // z pass: (channels, x, y)
         let split_x = LineSplit { lb1_cnt: cnt(1), lb1_hi: keep[1].0, lb1_gap: gap(1), lb2_hi: keep[0].0, lb2_gap: gap(0), in_lb2: sz, out_lb2: sz };
         let split_y = LineSplit { lb1_cnt: cnt(0), lb1_hi: keep[0].0, lb1_gap: gap(0), lb2_hi: usize::MAX / 2, lb2_gap: 0, in_lb2: 0, out_lb2: 0 };
-        if cnt(1) * cnt(0) > 65535 {
-            return Err(FftError::Invalid(format!("pruned x pass: {} lines exceed the grid limit", cnt(1) * cnt(0))));
-        }
+        // the x pass has cnt(1) · cnt(0) line groups (384 · 384 at 1 mm full torso): more than 65535 fold into grid
+        // (y, z) (`plan::launch_grid`)
         let full = |a: usize| (n[a], 0usize);
         use Direction::*;
         // ranged: 0 = all lines, 1 = per-group line ranges, 2 / 3 = also per-line entry ranges read / written

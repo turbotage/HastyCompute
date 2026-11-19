@@ -395,6 +395,19 @@ extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r,
 #ifndef FSB
 #define FSB 1   // forward: samples per lane (one shared-memory tile-value load serves FSB samples)
 #endif
+#ifndef FCB
+#define FCB 1   // forward: coils per lane (one shared-memory weight load serves FCB coils × NSEG segments × FSB samples)
+#endif
+#if CPBF % FCB != 0
+#error "FCB must divide CPBF"
+#endif
+// forward output: one atomic add per (sample, coil, tile); PROF_NOATOMIC (timing ablation only, wrong results) keeps the
+// values live and stores (almost) nothing
+#ifdef PROF_NOATOMIC
+#define FWD_ATOMIC(dst, v) do { if ((v).x == 1.2345e-30f) atomicAdd(&(dst)->x, (v).x); } while (0)
+#else
+#define FWD_ATOMIC(dst, v) do { atomicAdd(&(dst)->x, (v).x); atomicAdd(&(dst)->y, (v).y); } while (0)
+#endif
 #define TT3 (TT * TT * TT)
 #define WTS (TT3 + PPF * NF)             // weight row stride (cx): conflict-free for both MAC layouts
 #define GN (NF * CPBF * NSEG)
@@ -591,45 +604,53 @@ __device__ __forceinline__ void adj_store(unsigned char* smem, const cx (&acc)[A
   }
 }
 #define NT_A (TT3 * NF * CPBA / ACB)
-#define NT_F (CHUNK * CPBF * PPF * NF / FSB)
+#define NT_F (CHUNK * CPBF * PPF * NF / (FSB * FCB))
 #define SGF (CHUNK / FSB)   // forward sample groups: lane group ss handles samples ss + k · SGF, k < FSB
-// forward MAC block of a staged chunk: lane (pp, fo, ss, cl) → o[k] = Σ_l aa · Σ_p wt · G for its FSB samples, reduced
-// over the PPF · NF lanes of a (sample, coil); tile values gt [p][(fo · CPBF + c) · NSEG + l] (stride GTS), slot fo.
-// Lanes whose samples are past nload compute on stale rows and discard. LIVE_OFF: sample offset of the record arrays.
+// forward MAC block of a staged chunk: lane (pp, fo, ss, cl) → o[k][a] = Σ_l aa · Σ_p wt · G for its FSB samples and
+// its FCB coils cl + a, reduced over the PPF · NF lanes of a (sample, coil group); tile values
+// gt [p][(fo · CPBF + c) · NSEG + l] (stride GTS), slot fo: the lane's FCB × NSEG values are contiguous. Coils past
+// ncb read zero tile values (masked at the store). Lanes whose samples are past nload compute on stale rows and
+// discard. LIVE_OFF: sample offset of the record arrays.
 #ifdef PROF_NOMAC
 #define FWD_LIVE false
 #else
 #define FWD_LIVE (ss < nload && cg + cl < ncb)
 #endif
 #define FWD_MAC(FO, GOFF)                                                                                              \
-    cx o[FSB];                                                                                                          \
-    _Pragma("unroll") for (int k = 0; k < FSB; ++k) o[k] = cx{0.f, 0.f};                                              \
+    cx o[FSB][FCB];                                                                                                     \
+    _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                   \
+      _Pragma("unroll") for (int a = 0; a < FCB; ++a) o[k][a] = cx{0.f, 0.f};                                           \
+    }                                                                                                                   \
     if (FWD_LIVE) {                                                                                                     \
-      cx acc[FSB][NSEG];                                                                                                \
+      cx acc[FSB][FCB * NSEG];                                                                                          \
       _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                 \
-        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) acc[k][l] = cx{0.f, 0.f};                                      \
+        _Pragma("unroll") for (int j = 0; j < FCB * NSEG; ++j) acc[k][j] = cx{0.f, 0.f};                                \
       }                                                                                                                 \
-      for (int p = pp; p < TT3; p += PPF) {   /* lanes of one (sample group, coil, offset) read the same tile values */ \
+      for (int p = pp; p < TT3; p += PPF) {   /* lanes of one (sample group, coil group, offset) read the same tile values */ \
         cx w[FSB];                                                                                                      \
         _Pragma("unroll") for (int k = 0; k < FSB; ++k) w[k] = S.wt[ss + k * SGF][p];                                  \
         const cx* gv = gt + p * GTS + ((FO) * CPBF + cl) * NSEG + (GOFF);                                              \
-        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) {                                                              \
-          const cx v = gv[l];                                                                                           \
+        _Pragma("unroll") for (int j = 0; j < FCB * NSEG; ++j) {   /* j = a · NSEG + l: coil cl + a, segment l */       \
+          const cx v = gv[j];                                                                                           \
           _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                             \
-            acc[k][l].x = fmaf(w[k].x, v.x, acc[k][l].x); acc[k][l].x = fmaf(-w[k].y, v.y, acc[k][l].x);               \
-            acc[k][l].y = fmaf(w[k].x, v.y, acc[k][l].y); acc[k][l].y = fmaf(w[k].y, v.x, acc[k][l].y);                \
+            acc[k][j].x = fmaf(w[k].x, v.x, acc[k][j].x); acc[k][j].x = fmaf(-w[k].y, v.y, acc[k][j].x);               \
+            acc[k][j].y = fmaf(w[k].x, v.y, acc[k][j].y); acc[k][j].y = fmaf(w[k].y, v.x, acc[k][j].y);                \
           }                                                                                                             \
         }                                                                                                               \
       }                                                                                                                 \
       _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                 \
-        _Pragma("unroll") for (int l = 0; l < NSEG; ++l) {                                                              \
-          const cx v = cmul(S.aa[ss + k * SGF][FO][l], acc[k][l]); o[k].x += v.x; o[k].y += v.y;                        \
+        _Pragma("unroll") for (int a = 0; a < FCB; ++a) {                                                               \
+          _Pragma("unroll") for (int l = 0; l < NSEG; ++l) {                                                            \
+            const cx v = cmul(S.aa[ss + k * SGF][FO][l], acc[k][a * NSEG + l]); o[k][a].x += v.x; o[k][a].y += v.y;    \
+          }                                                                                                             \
         }                                                                                                               \
       }                                                                                                                 \
     }                                                                                                                   \
     _Pragma("unroll") for (int k = 0; k < FSB; ++k) {                                                                   \
-      _Pragma("unroll") for (int sh = PPF * NF / 2; sh > 0; sh >>= 1) {                                                 \
-        o[k].x += __shfl_xor_sync(0xffffffffu, o[k].x, sh); o[k].y += __shfl_xor_sync(0xffffffffu, o[k].y, sh);       \
+      _Pragma("unroll") for (int a = 0; a < FCB; ++a) {                                                                 \
+        _Pragma("unroll") for (int sh = PPF * NF / 2; sh > 0; sh >>= 1) {                                               \
+          o[k][a].x += __shfl_xor_sync(0xffffffffu, o[k][a].x, sh); o[k][a].y += __shfl_xor_sync(0xffffffffu, o[k][a].y, sh); \
+        }                                                                                                               \
       }                                                                                                                 \
     }
 
@@ -773,8 +794,9 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
   };
   __syncthreads();
   prefetch(0);
-  // lanes: pp (tile-point stripe) fastest, then frame offset, then sample group, then coil; FSB samples per lane
-  const int pp = threadIdx.x % PPF, fo = (threadIdx.x / PPF) % NF, ss = (threadIdx.x / (PPF * NF)) % SGF, cl = threadIdx.x / (PPF * NF * SGF);
+  // lanes: pp (tile-point stripe) fastest, then frame offset, then sample group, then coil group; FSB samples and FCB
+  // coils (cl .. cl + FCB − 1) per lane
+  const int pp = threadIdx.x % PPF, fo = (threadIdx.x / PPF) % NF, ss = (threadIdx.x / (PPF * NF)) % SGF, cl = (threadIdx.x / (PPF * NF * SGF)) * FCB;
   for (int base = 0; base < it.count; base += CHUNK) {
     const int nload = min(CHUNK, it.count - base);
     __syncthreads();
@@ -793,9 +815,11 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
       #pragma unroll
       for (int k = 0; k < FSB; ++k) {
         if (ss + k * SGF < nload) {
-          cx* dst = y + (size_t)(c0 + cg + cl) * M + sl[base + ss + k * SGF];
-          atomicAdd(&dst->x, o[k].x);
-          atomicAdd(&dst->y, o[k].y);
+          const int j = sl[base + ss + k * SGF];
+          #pragma unroll
+          for (int a = 0; a < FCB; ++a) {
+            if (cg + cl + a < ncb) { cx* dst = y + (size_t)(c0 + cg + cl + a) * M + j; FWD_ATOMIC(dst, o[k][a]); }
+          }
         }
       }
     }

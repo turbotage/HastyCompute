@@ -11,6 +11,27 @@
 //!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
 //!              [--table-store auto|pinned|lz4|zstd|zstdN]   (env HASTY_KSTORE_DIR: k-space store directory, default <sim>/kstore)
 //!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]] [--seg-fit-stride N] [--seg-table-stride S]
+//!              [--vmodel knots [--knots2d RK:RDEG,CK:CDEG] [--resp bellows|truth] [--eval LABEL[@AMP]:idx.npy,..] [--eval-every N]] [--keep N]
+//! --vmodel knots: the velocity-parametrised model at the knots of the 2-D respiratory × cardiac knot operator
+//!   (hasty_recon::vmodel::VelSpec::at_knots, vobj at-knots mode, vknot): per knot k = r · CK + c a complex reference z_k
+//!   and a velocity v_k (+ the --vpoly residual phase), x_{e,k} = z_k e^{i(φ_e − k_e·v_k)}; one set per encode holding all
+//!   K = RK · CK knot images, interpolated per sample by SegNufft::new_temporal2d (respiratory degree RDEG 0 bins | 1
+//!   linear hats at the breathing-amplitude quantiles, cardiac periodic B-splines of degree CDEG; default 6:1,16:3 = the
+//!   target config, research/temporal_operator.md §21). Breathing coordinate --resp bellows (default; physio.npy column
+//!   3) | truth (oracle). The Gauss–Newton metric carries each knot's temporal-Gram weight. Memory: the knot ledger
+//!   (hasty_recon::vknot::plan) places state (device, or host with θ streamed knot by knot), data and tables before the
+//!   solver, honouring --state / --plan / --vram-budget, and refuses a plan that fits nowhere. Priors as --vmodel
+//!   (--vkappa LLR on z and |z̄|·v, --dfw on v), plus the per-axis knot lock --static-lock MU[:IT0[:EVERY]]
+//!   [--lock-coupling additive|nested] (hasty_recon::knotlock). Outputs: vel_<tag> / recon_<tag> at the 20 cardiac frame
+//!   centres and the median breathing amplitude, vparams_<tag>.hv + vknots_<tag>.json (the knot state; --init-from of a
+//!   finer pyramid level resamples it), --eval lumen files knots_<tag>_r<LABEL>_it<k>_lumen (frame_fit / score_pair form;
+//!   AMP: the breathing amplitude to evaluate, default LABEL). --keep N: 1/N of the readouts (as splinerecon --keep N).
+//!   That is the at-knots model, now `--vop knots`. Default `--vop frames:F[:DEG]` (F 16, DEG 3): the parameter-spline
+//!   model (VelSpec::splines, research/velocity_model_sr.md §F): m, ψ, v per knot, the operator sees F cardiac frames per
+//!   respiratory knot (cubic-spline interpolated), sets = encodes × respiratory groups; start --vinit cg:N[:λ] (default
+//!   15: complex knot CGLS + per-knot dual-VENC decode + spline fit; needs the device memory of a coarse level, then
+//!   --init-from) | warm; priors on by default: --vkappa 1, --dfw sure, --vmwav 1:3 (magnitude db4), --vpoly 1 with
+//!   --vanchor 1,auto, --static-lock 20:10:5, --vcont 10 (each: 0 | off to switch off).
 //! Coarse-to-fine pyramid (hasty_recon::pyramid, driver rustlib/tools/recon/pyramid.sh):
 //!   --kcrop [FRAC][:prefix]: keep only the samples a (coarse, --grid-scale) grid represents, the ball
 //!     Σ_a (k_a Δ_a)² ≤ (π·FRAC)² (default FRAC 1; ∩ the Nyquist box for FRAC > 1), applied to the sample records,
@@ -230,7 +251,13 @@ fn main() {
     // ≈ Σ_r ρ ρᴴ of the low-resolution coil images); data: the raw samples of set 0 (the previous default; centre-dense
     // trajectories weight it towards k = 0, i.e. towards one vector Σ_r S(r) ρ(r), so it keeps too few coils)
     let coil_gram = take("--coil-gram").unwrap_or("calib".into());
-    assert!(coil_gram == "calib" || coil_gram == "data", "--coil-gram calib|data");
+    // --coil-gram box[:MARGIN_MM]: the calibration-region coil images inside the prescription box (+ margin, default
+    // 10 mm), so the virtual coils are energy-ordered for the box (research/coil_cost_reduction.md §5, §7.1); the box
+    // from --presc-box S|SX,SY,SZ[@CX,CY,CZ] (mm, logical frame, centre relative to the FOV centre) or the scan
+    // metadata `presc_box`. The full-FOV operator and data stay: only the compression rows change.
+    let coil_box_margin: Option<f64> = coil_gram.strip_prefix("box").map(|r| r.strip_prefix(':').map_or(10.0, |v| v.parse().expect("--coil-gram box[:MARGIN_MM]")) * 1e-3);
+    assert!(coil_gram == "calib" || coil_gram == "data" || coil_box_margin.is_some(), "--coil-gram calib|data|box[:MARGIN_MM]");
+    let presc_box_arg: Option<String> = take("--presc-box");
     let warm_iters: usize = take("--warm").map(|s| s.parse().unwrap()).unwrap_or(0);
     // --warm-full n: after the plain-model warm start (which ignores B0, fat, R2*, concomitant fields and GNL: the
     // SENSE operator), n more pooled PCG iterations per encode through the full model operator (all frames of an encode
@@ -264,7 +291,11 @@ fn main() {
     // separable error (energy voxel weights, per-ADC-sample weights 1 + (E(n) + E_vol) / (C σ²)), is at most R noise rms
     // in the data (default R = 0.2); the plain `auto` rule above stays the default
     let nseg_spec: Option<String> = take("--nseg");
+    let nseg_given = nseg_spec.is_some();
     let seg_noise_rule: Option<f64> = nseg_spec.as_deref().and_then(|s| s.strip_prefix("auto:noise")).map(|r| r.strip_prefix(':').map_or(0.2, |v| v.parse().expect("--nseg auto:noise[:R]")));
+    // --nseg auto:err[:TOL]: the smallest L whose relative signal-weighted model error of the ratemap (the per-voxel
+    // phase / decay / fat model of the segments, after the interpolator fit) is ≤ TOL (default 1e-4)
+    let seg_err_rule: Option<f64> = nseg_spec.as_deref().and_then(|s| s.strip_prefix("auto:err")).map(|r| r.strip_prefix(':').map_or(1e-4, |v| v.parse().expect("--nseg auto:err[:TOL]")));
     let nseg_arg: Option<usize> = nseg_spec.and_then(|s| if s == "auto" || s.starts_with("auto:") { None } else { Some(s.parse().unwrap()) });
     let mut nseg: usize = nseg_arg.unwrap_or(if phys == "none" { 1 } else { 0 });
     let order: u32 = take("--order").map(|s| s.parse().unwrap()).unwrap_or(if phys == "full" { 2 } else { 0 });
@@ -281,19 +312,102 @@ fn main() {
     // *_lumen.npy form): per-frame scoring along the iterations without full stacks on disk
     let save_lumen: Option<Vec<usize>> = take("--save-lumen").map(|p| hasty_recon::data::read_npy(std::path::Path::new(&p)).expect("--save-lumen idx.npy").f32s().iter().map(|&v| v as usize).collect());
     // velocity-parametrised model (research/velocity_model_sr.md): --vmodel KZ,KV [--vdeg DZ,DV] [--vpoly d] [--vcont n]
-    let vmodel: Option<(usize, usize)> = take("--vmodel").map(|s| { let v: Vec<usize> = s.split(',').map(|x| x.parse().unwrap()).collect(); (v[0], v[1]) });
+    // --vmodel knots [--knots2d RK:RDEG,CK:CDEG]: the velocity model at the knots of the 2-D respiratory × cardiac knot
+    // operator (VelSpec::at_knots, research/velocity_model_sr.md, temporal_operator.md §16–§21): one set per encode
+    // with all K = RK · CK knot images x_{e,k} = z_k e^{i(φ_e − k_e·v_k)}, the operator interpolating them to every
+    // sample's (breathing, cardiac) time; respiratory knots RK of degree RDEG (0 bins, 1 linear hats at the --resp
+    // amplitude quantiles; bellows by default, truth = oracle), cardiac CK periodic B-spline knots of degree CDEG
+    // (default 6:1,16:3, the target config of temporal_operator.md §21)
+    let vmodel_arg = take("--vmodel");
+    let knots_mode = vmodel_arg.as_deref() == Some("knots");
+    let knots2d_arg = take("--knots2d");
+    assert!(knots2d_arg.is_none() || knots_mode, "--knots2d needs --vmodel knots (complex knot images: splinerecon)");
+    let knots2d: Option<(usize, u32, usize, u32)> = knots_mode.then(|| hasty_recon::vknot::KnotBasis::parse_spec(knots2d_arg.as_deref().unwrap_or("6:1,16:3")).unwrap_or_else(|e| panic!("{e}")));
+    // --vop frames:F[:DEG] (default frames:16:3) | knots (--vmodel knots): the parameter-spline model (research/
+    // velocity_model_sr.md §F: m, ψ, v in the knot basis, the operator sees F cardiac frames per respiratory knot, cubic-
+    // spline interpolated (DEG 3) or linear (1); one set per encode × respiratory group) or the at-knots model (§E:
+    // complex interpolation of the model's knot values, kept selectable)
+    let vop_arg = take("--vop");
+    assert!(vop_arg.is_none() || knots_mode, "--vop needs --vmodel knots");
+    let op_frames: Option<hasty_recon::vknot::OpFrames> = match (knots2d, vop_arg.as_deref()) {
+        (None, _) | (_, Some("knots")) => None,
+        (Some((kr, rdeg, mc, cdeg)), v) => {
+            let (f, d) = v.map_or(Ok((16, 3)), hasty_recon::vknot::OpFrames::parse_spec).unwrap_or_else(|e| panic!("{e}"));
+            assert!(rdeg == 1 && cdeg != 0, "--vop frames: linear respiratory knots and cardiac degree 1 or 3 (--knots2d RK:1,CK:1|3), or --vop knots");
+            Some(hasty_recon::vknot::OpFrames::new(kr, mc, cdeg, f, d))
+        }
+    };
+    // spline mode defaults: priors on (LLR κ 1, divergence-free wavelets, magnitude wavelets, residual phase degree 1 with
+    // the static anchor, per-axis knot lock), VENC continuation 10; every one can be switched off (… 0 | off)
+    let spline_defaults = op_frames.is_some();
+    // --vinit cg:N[:LAMBDA] | warm: spline mode's start when there is no --init-from: N CGLS iterations of complex
+    // parameter-basis knot images per encode (through the same operator), the dual-VENC decoder per knot, then m, ψ, v
+    // spline coefficients (default cg:15); warm = the time-averaged warm start in every knot
+    let vinit: Option<(usize, f64)> = match take("--vinit").as_deref() {
+        Some("warm") => None,
+        Some(v) => {
+            let it: Vec<&str> = v.split(':').collect();
+            assert!(it[0] == "cg" && it.len() >= 2, "--vinit cg:N[:LAMBDA] | warm");
+            Some((it[1].parse().expect("--vinit cg:N"), it.get(2).map_or(0.0, |x| x.parse().expect("--vinit cg:N:LAMBDA"))))
+        }
+        None => spline_defaults.then_some((15, 0.0)),
+    };
+    // spline-mode safeguards (research/velocity_model_sr.md §F.2):
+    // --vinit-snr S | design | off: the robust start decodes a knot's velocity only where its SNR (mean encode magnitude
+    //   over the per-voxel noise level from the encode-magnitude dispersion) reaches S, else the voxel's time-mean decode
+    //   (if that reaches S), else 0; design (default) = the sequence's SNR of a 1e-3 unwrap failure rate
+    //   (meta sequence.encoding.snr_unwrap_1e-3, 3 if absent); off = decode every knot (the old start)
+    // --vbox V | design | off: v coefficients projected onto |v_a| ≤ V after the prior (the indicator of the decoder's
+    //   unaliased range, part of the prior; the B-spline convex hull keeps the curve inside); default design
+    //   (meta sequence.encoding.unaliased, else the decoder range)
+    // --vtrust RHO | off: per (voxel, knot) trust region of the gradient step, max_e |k'_e·Δv| ≤ RHO rad (the region where
+    //   the phase linearisation of the Gauss–Newton metric holds); default 1
+    let vinit_snr_arg: Option<String> = take("--vinit-snr");
+    let vbox_arg: Option<String> = take("--vbox");
+    let vtrust: Option<f64> = match take("--vtrust").as_deref() {
+        Some("off") | Some("0") => None,
+        Some(v) => Some(v.parse().expect("--vtrust RHO | off")),
+        None => spline_defaults.then_some(1.0),
+    };
+    // --vmwav THR[:LEVELS] | off: spatial db4 wavelet shrinkage of the magnitude knots m_k (spline mode; τ = THR × the
+    // per-image MAD noise level; default 1.0:3)
+    let vmwav: Option<(f64, usize)> = match take("--vmwav").as_deref() {
+        Some("off") | Some("0") => None,
+        Some(v) => { let (a, b) = v.split_once(':').unwrap_or((v, "3")); Some((a.parse().expect("--vmwav THR[:LEVELS]"), b.parse().expect("--vmwav THR[:LEVELS]"))) }
+        None => spline_defaults.then_some((1.0, 3)),
+    };
+    // knot mode without --nseg: the noise-referenced error budget (auto:noise:0.2: the ratemap segment model's predicted
+    // data error ≤ 0.2 noise rms), on the noise-weighted SVD basis (svdn) with energy voxel weights unless --seg-basis /
+    // --seg-weight say otherwise. 1e-4 is the NUFFT's rule, not the segments' (research/pipeline_target.md §2);
+    // --nseg auto:err:TOL keeps a fixed relative tolerance when wanted
+    let seg_noise_rule = if knots_mode && !nseg_given { Some(0.2) } else { seg_noise_rule };
+    let vmodel: Option<(usize, usize)> = vmodel_arg.filter(|s| s != "knots").map(|s| { let v: Vec<usize> = s.split(',').map(|x| x.parse().expect("--vmodel KZ,KV | knots")).collect(); (v[0], v[1]) });
+    // --keep N: a deterministic 1/N of the readouts (hash-spread over all strata, the same subset as splinerecon
+    // --keep N: a shorter scan for dev runs); the others are in no set
+    let keep_n: usize = take("--keep").map_or(1, |v| v.parse().expect("--keep N"));
+    // knot mode: --eval LABEL[@AMP]:idx.npy,... evaluates the knot model at breathing amplitude AMP (default LABEL) and the
+    // cardiac frame centres at the native-grid voxels idx (frame_fit / score_pair lumen form, files
+    // <out>/knots_<tag>_r<LABEL>_it<k>_lumen), every --eval-every iterations and at the end
+    let eval_spec: Option<String> = take("--eval");
+    let eval_every: usize = take("--eval-every").map_or(10, |v| v.parse().expect("--eval-every N"));
+    // knot mode: power iterations of each stage's λ_max (default 12, as --vmodel)
+    let lam_iters: usize = take("--lam-iters").map_or(12, |v| v.parse().expect("--lam-iters N"));
     let vdeg: (u32, u32) = take("--vdeg").map(|s| { let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect(); (v[0], v[1]) }).unwrap_or((1, 1));
-    let vpoly: Option<usize> = take("--vpoly").map(|s| s.parse().unwrap());
-    let vcont: usize = take("--vcont").map(|s| s.parse().unwrap()).unwrap_or(0);
+    let vpoly: Option<usize> = match take("--vpoly").as_deref() { Some("off") => None, Some(s) => Some(s.parse().unwrap()), None => spline_defaults.then_some(1) };
+    let vcont: usize = take("--vcont").map(|s| s.parse().unwrap()).unwrap_or(if spline_defaults { 10 } else { 0 });
     // z warm-up: first n iterations update z only (v and the residual phase frozen): makes z consistent with the
     // operator (B0, coils, physics) before velocity moves, so encode-common phase errors cannot leak into v
     let vzwarm: usize = take("--vzwarm").map(|s| s.parse().unwrap()).unwrap_or(0);
     // velocity-model prior strengths (LLR on the z nodes and on p = |z̄|·v; 0 = no prior), one run each
-    let vkappas: Vec<f64> = take("--vkappa").unwrap_or("0".into()).split(',').map(|s| s.parse().unwrap()).collect();
+    let vkappas: Vec<f64> = take("--vkappa").unwrap_or(if spline_defaults { "1".into() } else { "0".into() }).split(',').map(|s| s.parse().unwrap()).collect();
     // memory planner (velocity path): device-usage cap (e.g. 8G; default: the whole card) and placement mode
     let vram_budget: Option<usize> = take("--vram-budget").map(|s| hasty_recon::plan::parse_bytes(&s).expect("--vram-budget e.g. 8G"));
     let plan_mode = take("--plan").unwrap_or("auto".into());
     let kstore_arg = take("--kstore").unwrap_or("auto".into());
+    // --rcompress off|auto[:OS]|ball[:OS[:R_MM]]|box[:OS]: exact per-readout sample compression of the data term
+    // (hasty_recon::rcompress, research/sample_compression.md; ROI = the grid box, one design per readout, or the ball
+    // enclosing it, one shared design; band = the operator's ratemap). auto: on when the estimated reduction ≥ 1.2×
+    let rc_mode = hasty_recon::rcompress::RcMode::parse(&take("--rcompress").unwrap_or_else(|| "off".into())).unwrap_or_else(|e| panic!("{e}"));
     // host form of the operator's sample tables when they leave the device: pinned (as before) or packed blocks
     let table_store = take("--table-store").unwrap_or("auto".into());
     let table_codec: Option<Option<hasty_value::Options>> = match table_store.as_str() {
@@ -311,13 +425,30 @@ fn main() {
     // truth_fat_fraction.npy of the sim directory (sim_truth.py), else a float32 npy on the reconstruction grid
     // --coil-mask auto|none|support (see the coil-map block): auto = none for --smaps truth, support otherwise
     let coil_mask_arg: Option<String> = take("--coil-mask").filter(|v| v != "auto");
-    let fat_fraction: Option<String> = take("--fat-fraction");
+    // --ratemap est:<recon_b0 run>[:bin]|truth: the whole ratemap in one flag — off-resonance (--field), decay (--r2s) and
+    // the fat fraction folded into the segment diagonals (--fat-fraction with --fat-model joint), all from the ratemap
+    // scan's maps (est, real-data path) or the phantom truth (oracle control). Explicit --field / --r2s /
+    // --fat-fraction / --fat-model override the corresponding part. research/pipeline_target.md §3 rows 1–2.
+    // --ratemap truth-bc: one TRUE ratemap per operator frame (oracle, research/mathematics_of_paper/
+    // forward_chain_section.tex eq. seg): the simulator's per-(breathing, cardiac)-state maps (scan/truth_ratemap_bc/,
+    // research/resp_field_sim.md) at each knot's state, each knot's image padded with its own segments (2-D knot
+    // engines, SegNufft::segments_frames). The static flags below stay as they are.
+    let ratemap_spec: Option<String> = take("--ratemap");
+    if let Some(r) = &ratemap_spec {
+        assert!(r == "truth" || r == "truth-bc" || r == "truth-bc:static" || r.starts_with("est:"), "--ratemap est:<recon_b0 run>[:bin]|truth|truth-bc[:static], got {r}");
+    }
+    // truth-bc:static: the same per-knot path and segment build, every knot given the data-weighted mean of the
+    // knots' true ratemaps (the best static ratemap): the one-factor control of truth-bc
+    let ratemap_static = ratemap_spec.as_deref() == Some("truth-bc:static");
+    let ratemap_frames = ratemap_spec.as_deref() == Some("truth-bc") || ratemap_static;
+    let ratemap_spec: Option<String> = ratemap_spec.filter(|r| !r.starts_with("truth-bc"));
+    let fat_fraction: Option<String> = take("--fat-fraction").or_else(|| ratemap_spec.clone());
     // measured instead of true fields / coil maps (the oracle-vs-estimate evaluation; defaults = the oracle as before):
     // --field truth|est:<recon_b0 run>[:bin]: off-resonance ω; --r2s off|truth|est:<run>[:bin]: T2* decay during the
     // readout folded into the B0 segments; --smaps truth|espirit[:eig_min]: ESPIRiT maps from the compressed data of
     // encode 0 (hasty_recon::espirit); --fat-fraction est:<run>[:bin] takes the fat fraction of the B0 scan
-    let field_spec = take("--field").unwrap_or("truth".into());
-    let r2s_spec = take("--r2s").unwrap_or("off".into());
+    let field_spec = take("--field").or_else(|| ratemap_spec.clone()).unwrap_or("truth".into());
+    let r2s_spec = take("--r2s").or_else(|| ratemap_spec.clone()).unwrap_or("off".into());
     let rate_spec: Option<String> = take("--rate");
     assert!(rate_spec.is_none() || r2s_spec == "off", "--rate carries R2*: use it without --r2s");
     let smaps_spec = take("--smaps").unwrap_or("truth".into());
@@ -387,7 +518,7 @@ fn main() {
     // frame, shrunk with the magnitude-weighted SURE / fixed thresholds (TDF for the divergence-free, TN for the
     // non-divergence-free coefficients), re-encoded as a phase change of each encode; velocity model — the v nodes.
     // β mixes x ← x + β (DFW(x) − x) (default 1).
-    let dfw_rule: Option<hasty_recon::dfwavelet::DfRule> = take("--dfw").map(|v| {
+    let dfw_rule: Option<hasty_recon::dfwavelet::DfRule> = take("--dfw").or_else(|| spline_defaults.then(|| "sure".to_string())).filter(|v| v != "off").map(|v| {
         use hasty_recon::dfwavelet::DfRule;
         let it: Vec<&str> = v.split(':').collect();
         let num = |i: usize, d: f64| it.get(i).map_or(d, |x| x.parse().expect("--dfw sure[:TDF:TN] | fixed:TDF:TN"));
@@ -420,7 +551,7 @@ fn main() {
     // --bin-group: every group of n_enc consecutive readouts (one rotation, all encodes) goes into the frame of its middle
     // readout, so all encodes of a frame share the same rotations (the same undersampling and aliasing); costs a
     // temporal footprint of one group (n_enc TRs) on top of the frame width
-    let static_lock: Option<(hasty_recon::tlock::LockOpts, usize, usize)> = take("--static-lock").map(|v| {
+    let static_lock: Option<(hasty_recon::tlock::LockOpts, usize, usize)> = take("--static-lock").or_else(|| spline_defaults.then(|| "20:10:5".to_string())).filter(|v| v != "off").map(|v| {
         let it: Vec<&str> = v.split(':').collect();
         let mut o = hasty_recon::tlock::LockOpts { mu: it[0].parse().expect("--static-lock MU[:IT0[:EVERY]]"), ..Default::default() };
         let it0 = it.get(1).map_or(5, |x| x.parse().expect("--static-lock MU[:IT0[:EVERY]]"));
@@ -442,6 +573,13 @@ fn main() {
         (o, it0, every)
     });
     let lock_tag = static_lock.as_ref().map_or(String::new(), |(o, it0, ev)| format!("_lock{}{}i{it0}e{ev}", if o.group { "g" } else { "q" }, o.mu));
+    // --lock-coupling additive|nested (--vmodel knots with --static-lock; hasty_recon::knotlock): additive (default) also
+    // locks the breathing-dependence of the cardiac curve; nested = tlock's decomposition
+    let lock_coupling = match take("--lock-coupling").as_deref() {
+        None | Some("additive") => hasty_recon::knotlock::Coupling::Additive,
+        Some("nested") => hasty_recon::knotlock::Coupling::Nested,
+        Some(o) => panic!("--lock-coupling additive|nested, got {o}"),
+    };
     // --air auto[:IT0[:EVERY]] | fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]:
     // air map from the iterate (hasty_recon::airmap; no labels): voxels reachable from the FOV boundary through
     // low-signal voxels (reference magnitude < T × the body level, default 0.05), with a safety margin of MM (default
@@ -481,12 +619,12 @@ fn main() {
     let resp_accept: f64 = take("--resp-accept").map_or(1.0, |v| v.parse().expect("--resp-accept FRAC"));
     assert!(resp_accept > 0.0 && resp_accept <= 1.0, "--resp-accept FRAC in (0, 1]");
     let ga_tag = if resp_accept < 1.0 { format!("_ga{resp_accept}") } else { String::new() };
-    let seg_basis_arg = take("--seg-basis").unwrap_or("fixed".into());
+    let seg_basis_arg = take("--seg-basis").unwrap_or(if knots_mode { "svdn".into() } else { "fixed".into() });
     // --seg-weight count|mass[:lo,hi]: voxel weights of the SVD basis, all data-derived (no labels): count = every voxel
     // of the warm-start support equally (default); mass = the smoothed warm-start magnitude relative to its median over
     // the support, clamped to [lo, hi] (default 0.3, 3): bright regions count more, dark tissue keeps a floor so the
     // basis is not biased away from it, air (outside the support) never counts
-    let seg_weight = take("--seg-weight").unwrap_or("count".into());
+    let seg_weight = take("--seg-weight").unwrap_or(if knots_mode { "energy".into() } else { "count".into() });
     // energy (research/segment_basis.md): the smoothed warm-start magnitude squared × the coil energy Σ_c |S_c|² relative
     // to its median over the support: the signal energy each voxel feeds into the data (no clamp)
     let seg_energy = seg_weight == "energy";
@@ -535,7 +673,7 @@ fn main() {
     assert!(field_spec == "truth" || field_spec.starts_with("est:"), "--field truth|est:<recon_b0 run>[:bin]");
     assert!(r2s_spec == "off" || r2s_spec == "truth" || r2s_spec.starts_with("est:"), "--r2s off|truth|est:<run>[:bin]");
     assert!(smaps_spec == "truth" || smaps_spec.starts_with("espirit"), "--smaps truth|espirit[:eig_min]");
-    let fat_model = take("--fat-model").unwrap_or("shared".into());
+    let fat_model = take("--fat-model").unwrap_or(if ratemap_spec.is_some() { "joint".into() } else { "shared".into() });
     assert!(matches!(fat_model.as_str(), "shared" | "separate" | "joint"), "--fat-model {fat_model}: shared, separate or joint");
     let fat_joint = fat_fraction.is_some() && fat_model == "joint";
     assert!(!fat_joint || model == "seg", "--fat-model joint needs --model seg");
@@ -552,7 +690,7 @@ fn main() {
     // static-tissue anchor for --vpoly: relative strength μ; mask from the simulator truth (outside the lumen band)
     // --vanchor μ[,auto|truth]: auto = static mask from the robust residual-phase fit (vinit), truth = simulator
     // auto refinement: pulsatile = temporal std of v over the nodes > mult × median (static mask), dilated by dil voxels
-    let vanchor: Option<(f64, String)> = take("--vanchor").map(|s| { let v: Vec<&str> = s.split(',').collect(); (v[0].parse().unwrap(), v.get(1).unwrap_or(&"auto").to_string()) });
+    let vanchor: Option<(f64, String)> = take("--vanchor").or_else(|| (spline_defaults && vpoly.is_some()).then(|| "1,auto".to_string())).filter(|v| v != "off").map(|s| { let v: Vec<&str> = s.split(',').collect(); (v[0].parse().unwrap(), v.get(1).unwrap_or(&"auto").to_string()) });
     let vanchor_refine: (f64, usize) = take("--vanchor-refine").map(|s| { let v: Vec<&str> = s.split(',').collect(); (v[0].parse().unwrap(), v.get(1).map_or(2, |d| d.parse().unwrap())) }).unwrap_or((1.5, 3));
     // learned prior (7-point dual-VENC data): export directory of tools/denoiser/export.py; κ mixes x + κ (D(x) − x)
     let learned_dir = take("--learned").map(PathBuf::from);
@@ -708,6 +846,39 @@ fn main() {
         }
         println!("--bin-group: every rotation's {ne_g} encodes in one frame ({}); {moved} of {n_ro} readouts moved ({:.1} %)", if bin_group_mid { "the middle readout's" } else { "the readout nearest the velocity time, hasty_recon::data::velocity_time" }, 100.0 * moved as f64 / n_ro as f64);
     }
+    if keep_n > 1 {
+        // the same subset as splinerecon --keep N (knotsolve::subset_mask, salt "KEEP")
+        let mask = hasty_recon::knotsolve::subset_mask(sd.n_readouts(), keep_n, 0x4B45_4550);
+        let mut kept = 0usize;
+        for (i, &k) in mask.iter().enumerate() {
+            if k {
+                kept += (sd.ro.frame[i] != usize::MAX) as usize;
+            } else {
+                sd.ro.frame[i] = usize::MAX;
+            }
+        }
+        println!("--keep {keep_n}: {kept} of {} readouts kept (a shorter scan; hash-spread over all strata)", sd.n_readouts());
+    }
+    // knot mode: the 2-D basis over the breathing amplitude of the readouts used (bellows by default, truth = oracle)
+    let knot_basis: Option<(hasty_recon::vknot::KnotBasis, Vec<(u32, f32)>, Vec<f64>)> = knots2d.map(|(kr, rdeg, mc, cdeg)| {
+        assert!(model == "seg" && temporal.is_none() && resp_bins == 1 && resp_accept == 1.0 && !bin_group, "--vmodel knots: --model seg, without --temporal / --resp-bins / --resp-accept / --bin-group (the knots are the time basis)");
+        let (file, col) = match resp_src.as_str() { "bellows" => ("physio.npy", 3), "truth" => ("resp.npy", 0), o => panic!("--resp bellows|truth, got {o}") };
+        let a = hasty_recon::data::read_npy(&dir.join(file)).unwrap_or_else(|e| panic!("{file}: {e:?}"));
+        let (w, v) = (a.shape[1], a.f64s());
+        let nro = sd.n_readouts();
+        assert_eq!(a.shape[0], nro, "{file}: one row per readout");
+        let amp: Vec<f64> = (0..nro).map(|i| v[i * w + col]).collect();
+        let used: Vec<usize> = (0..nro).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
+        let amp_used: Vec<f64> = used.iter().map(|&i| amp[i]).collect();
+        let b = hasty_recon::vknot::KnotBasis::from_amplitude(&amp_used, kr, rdeg, mc, cdeg);
+        // per readout (interval, fraction); bins by rank among the used readouts
+        let mut per = vec![(0u32, 0f32); nro];
+        for (j, x) in b.assign(&amp_used).into_iter().enumerate() {
+            per[used[j]] = x;
+        }
+        println!("knot basis ({resp_src}{}): {}", if resp_src == "truth" { ", ORACLE breathing coordinate" } else { "" }, b.describe());
+        (b, per, amp)
+    });
     let sd = sd;
     let (nv, nc, nf) = (sd.nv(), sd.nc, sd.n_frames);
     // encodes (4-point referenced / Hadamard, 7-point dual-VENC, ...) and their velocity decoder
@@ -770,16 +941,29 @@ fn main() {
     let st = dev.default_stream();
     let kern = std::sync::Arc::new(Kernels::new(&dev).unwrap());
     // sets: static t = frame·ne + encode (one frame each); temporal t = encode (all frames)
-    let fe: Vec<(Option<usize>, usize)> = if temporal.is_some() { (0..ne).map(|e| (None, e)).collect() } else { (0..nf).flat_map(|f| (0..ne).map(move |e| (Some(f), e))).collect() };
+    // spline mode (--vop frames): t = e · ng + g, (Some(g), e) = encode e, respiratory group g (vknot::OpFrames)
+    let fe: Vec<(Option<usize>, usize)> = if let Some(of) = &op_frames {
+        (0..ne).flat_map(|e| (0..of.ng()).map(move |g| (Some(g), e))).collect()
+    } else if temporal.is_some() || knots2d.is_some() { (0..ne).map(|e| (None, e)).collect() } else { (0..nf).flat_map(|f| (0..ne).map(move |e| (Some(f), e))).collect() };
+    // the readouts of a set (readouts in no set, frame usize::MAX: gated out or not kept by --keep, never enter);
+    // spline mode: the readouts of encode e whose respiratory interval lies in group g
+    let set_readouts = |f: Option<usize>, e: usize| -> Vec<usize> {
+        if let (Some(of), Some((_, per, _))) = (&op_frames, &knot_basis) {
+            let mut r = sd.readouts_of(e, None);
+            r.retain(|&i| sd.ro.frame[i] != usize::MAX && of.group_of(per[i].0).0 == f.unwrap());
+            return r;
+        }
+        let mut r = sd.readouts_of(e, f); r.retain(|&i| sd.ro.frame[i] != usize::MAX); r
+    };
     let enc_of = |t: usize| fe[t].1;
     let t_load = Instant::now();
     let mut host_sets: Vec<SampleSet> = if streamed {
         // coordinates, τ and concomitant coefficients now; the data after the coil compression is known
         let meta_only = LoadOpts { w: &w, cc: None, keep: None, data: false };
-        fe.iter().map(|&(f, e)| sd.load_set(&sd.readouts_of(e, f), &meta_only).unwrap()).collect()
+        fe.iter().map(|&(f, e)| sd.load_set(&set_readouts(f, e), &meta_only).unwrap()).collect()
     } else {
         std::thread::scope(|sc| {
-            let hs: Vec<_> = fe.iter().map(|&(f, e)| { let (sd, w) = (&sd, &w); sc.spawn(move || sd.sample_set(&sd.readouts_of(e, f), w)) }).collect();
+            let hs: Vec<_> = fe.iter().map(|&(f, e)| { let (sd, w, sr) = (&sd, &w, &set_readouts); sc.spawn(move || sd.sample_set(&sr(f, e), w)) }).collect();
             hs.into_iter().map(|h| h.join().unwrap()).collect()
         })
     };
@@ -823,7 +1007,7 @@ fn main() {
     // calibration region (whitened, all coils; encode 0, all frames, the samples inside the box) by a low-resolution CG
     // (hasty_recon::espirit::calib_from_noncart): the density-neutral coil Gram and the ESPIRiT input
     let cal_dims = sd.dims.map(|d| 24.min(d) & !1);
-    let calib_raw: Option<(Vec<C32>, usize)> = (coil_gram == "calib" || smaps_spec != "truth").then(|| {
+    let calib_raw: Option<(Vec<C32>, usize)> = (coil_gram == "calib" || coil_box_margin.is_some() || smaps_spec != "truth").then(|| {
         let t_c = std::time::Instant::now();
         let (mut kc, mut ky): ([Vec<f32>; 3], Vec<Vec<C32>>) = ([vec![], vec![], vec![]], vec![vec![]; nc]);
         let in_box = |k: &[f32; 3]| (0..3).all(|a| (k[a] as f64 * sd.dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6));
@@ -855,12 +1039,21 @@ fn main() {
         (cal, used)
     });
     let ncal = cal_dims[0] * cal_dims[1] * cal_dims[2];
-    let coil_info;
+    let mut coil_info;
     let cc = {
         let mut g = hasty_recon::coils::CoilGram::new(nc);
+        let mut box_mask: Option<Vec<bool>> = None;
         let what = if coil_gram == "calib" {
             g.add(&calib_raw.as_ref().unwrap().0, ncal, 1);
             "whitened calibration region"
+        } else if let Some(margin) = coil_box_margin {
+            let pb = presc_box_arg.as_deref().map(|s| hasty_recon::coils::PrescBox::parse(s).unwrap()).or_else(|| hasty_recon::coils::PrescBox::from_meta(&sd.meta)).expect("--coil-gram box: needs --presc-box S|SX,SY,SZ[@CX,CY,CZ] (mm) or presc_box in the scan metadata");
+            let fov = [0, 1, 2].map(|a| sd.dims[a] as f64 * sd.vox[a]);
+            let mk = pb.mask(cal_dims, fov, margin);
+            println!("coil Gram: prescription box {:?} mm at {:?} mm + {:.0} mm margin: {} of {ncal} calibration voxels", pb.size.map(|v| v * 1e3), pb.center.map(|v| v * 1e3), margin * 1e3, mk.iter().filter(|&&v| v).count());
+            g = hasty_recon::coils::masked_gram(&calib_raw.as_ref().unwrap().0, ncal, nc, &mk);
+            box_mask = Some(mk);
+            "whitened calibration region inside the prescription box"
         } else {
             // the whitened data of set 0 (≤ 20000 samples, as before)
             let m0 = host_sets[0].tau.len();
@@ -875,6 +1068,13 @@ fn main() {
         let ccx = hasty_recon::coils::CoilCompression::from_gram(&g, coil_rule);
         println!("coil compression ({what}): {}", ccx.report());
         coil_info = serde_json::json!({"gram": coil_gram, "rule": coil_rule.to_string(), "kept": ccx.nvc(), "of": nc, "retained": ccx.retained, "eig_rel": ccx.eig.iter().map(|v| v / ccx.eig.iter().sum::<f64>().max(1e-300)).collect::<Vec<_>>()});
+        if let (Some(mk), Some((cal, _))) = (&box_mask, &calib_raw) {
+            // what the box-ordered coils keep inside the box (per-voxel loss) and of the whole calibration region
+            let (kin, p50, p99, mx) = hasty_recon::coils::masked_retention(&ccx, cal, ncal, Some(mk));
+            let (kall, ..) = hasty_recon::coils::masked_retention(&ccx, cal, ncal, None);
+            println!("  box-ordered coils: {:.3} % of the box energy (per-voxel loss p50 {:.1e}, p99 {:.1e}, max {:.1e}), {:.2} % of the whole calibration region", 100.0 * kin, p50, p99, mx, 100.0 * kall);
+            coil_info["box"] = serde_json::json!({"kept_box": kin, "loss_p50": p50, "loss_p99": p99, "loss_max": mx, "kept_all": kall});
+        }
         ccx.rows
     };
     // k-space store key: the stored data are a function of the scan (canonical path: a relative and an absolute spelling
@@ -1220,7 +1420,7 @@ fn main() {
     println!(
         "{} sets ({}), {}..{} readouts per set, {} virtual coils, model {model}, physics {phys}{}, setup {:.1}s",
         fe.len(),
-        if temporal.is_some() { format!("{ne} encodes x {nf} frames, temporal B-spline {}", temporal.unwrap()) } else { format!("{nf} frames x {ne} encodes") },
+        if let Some((kr, rdeg, mc, cdeg)) = knots2d { format!("{ne} encodes x {kr}·{mc} knots (respiratory degree {rdeg}, cardiac degree {cdeg})") } else if temporal.is_some() { format!("{ne} encodes x {nf} frames, temporal B-spline {}", temporal.unwrap()) } else { format!("{nf} frames x {ne} encodes") },
         host_sets.iter().map(|s| s.readouts.len()).min().unwrap(),
         host_sets.iter().map(|s| s.readouts.len()).max().unwrap(),
         nvc,
@@ -1467,7 +1667,7 @@ fn main() {
     // (the velocity model uses its own Gauss–Newton metric: no circulant kernels, they would cost ~8 GB)
     let mut lag_tau: Option<f64> = None;
     let mut lag_info = serde_json::Value::Null;
-    let need_circ = vmodel.is_none() && preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.metric()));
+    let need_circ = vmodel.is_none() && knots2d.is_none() && preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.metric()));
     // --circ-share encode (default for frame-resolved sets): one circulant per encode from the pooled samples of all its
     // frames (the frames of an encode share the trajectory's density; per-set circulants would need 133 MB each at 2 mm,
     // ≈ 37 GB for 280 sets); set: one per set (the original, needed for --temporal block-diagonal metrics)
@@ -1539,10 +1739,121 @@ fn main() {
         save(&out.join("warm_vel.npy"), "<f4", &dims4(3), f4(wv));
         println!("warm-start velocity in the lumen: mean {:?} m/s, truth (time average) {:?}, RMSE {:.3} m/s", mr.map(|v| format!("{:.3}", v / n as f64)), mt.map(|v| format!("{:.3}", v / n as f64)), (e2 / n as f64).sqrt());
     }
+    // --rcompress: after the warm start and the circulant metric (both on the original samples: the metric needs the
+    // original sample density), before the segment operator. Per set: the kept samples S of every readout and the
+    // virtual data ỹ = R⁻ᴴ Eᴴ y (store / device / pinned copies replaced; per readout and coil ‖y‖² − ‖ỹ‖² kept), the
+    // sample records cropped to S (the whole records stay for the segment tables, as with --kcrop: crop_sel composed),
+    // the banded R between operator and data (RcSets, the outermost operator wrapper below)
+    let mut ys = ys;
+    let rc_state: Option<(hasty_recon::rcompress::Compressor, Vec<hasty_recon::rcompress::SetComp>)> = if rc_mode.is_off() {
+        None
+    } else {
+        assert!(model == "seg" && streamed && !synthetic, "--rcompress needs --model seg, the streamed data path and no --synthetic");
+        let t_rc = Instant::now();
+        let na = sd.na;
+        // readout layout per set: samples per readout (the kept ones with --kcrop; readouts without any dropped)
+        let lens: Vec<Vec<usize>> = (0..host_sets.len()).map(|t| match &crop_sel {
+            Some(cs) => {
+                let mut l = vec![0usize; host_sets[t].readouts.len()];
+                for &j in &cs[t] {
+                    l[j as usize / na] += 1;
+                }
+                l.into_iter().filter(|&x| x > 0).collect()
+            }
+            None => vec![na; host_sets[t].readouts.len()],
+        }).collect();
+        // band: the operator's ratemap (field incl. --rate, R2*; fat peaks with a fat model), coil-energy weighted
+        let ce: Vec<f64> = (0..nv).map(|q| (0..nvc).map(|c| { let z = smaps[c * nv + q]; (z.re * z.re + z.im * z.im) as f64 }).sum()).collect();
+        let mut band = hasty_recon::rcompress::Band::from_ratemap(&grid.omega, r2v.as_deref(), &ce, 1e-4, 1.0, 200.0);
+        band.r_max = band.r_max.max(300.0);
+        if fat_fraction.is_some() {
+            let fs = hasty_qfit::waterfat::FatSpectrum::six_peak();
+            let wf = 2.0 * std::f64::consts::PI * hasty_mrsim::GAMMA_BAR * sd.b0 * 1e-6;
+            let (lo, hi) = fs.ppm.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &p| (a.min(p * wf), b.max(p * wf)));
+            band = band.union(band.w_lo + lo.min(0.0), band.w_hi + hi.max(0.0));
+        }
+        let (opts, line) = hasty_recon::rcompress::decide(&rc_mode, sd.dims, sd.vox, band, &host_sets[0], &lens[0]);
+        println!("rcompress: band {}; {line}", band.describe());
+        opts.map(|o| {
+            // gate: direct sums on two readouts of set 0 (sources in the ROI × band, half on its edge; the readouts'
+            // concomitant coefficients)
+            {
+                let (s0, l0) = (&host_sets[0], &lens[0]);
+                let mut gs = hasty_recon::rcompress::GateStats::default();
+                for r in [0, l0.len() / 2] {
+                    let a0: usize = l0[..r].iter().sum();
+                    let rng = a0..a0 + l0[r];
+                    let k: Vec<[f64; 3]> = rng.clone().map(|j| [0, 1, 2].map(|a| s0.coords[a][j] as f64 / sd.vox[a])).collect();
+                    let d = hasty_recon::rcompress::Design::build(&k, &s0.tau[rng.clone()], &o);
+                    gs = gs.max(hasty_recon::rcompress::gate(&d, &k, &s0.tau[rng.clone()], Some(&s0.wq[rng]), None, &o, 200, 5 + r as u64));
+                }
+                println!("rcompress gate (2 readouts of set 0, 200 sources, half on the band edge): worst source {:.2e}, normal operator on the sources {:.2e}", gs.worst, gs.gram);
+                diag.insert("rcompress_gate".into(), serde_json::json!({"worst": gs.worst, "frob": gs.frob, "gram": gs.gram}));
+            }
+            let mut comp = hasty_recon::rcompress::Compressor::new(o);
+            let mut scs: Vec<hasty_recon::rcompress::SetComp> = Vec::with_capacity(host_sets.len());
+            let mut yc_all: Vec<Vec<C32>> = Vec::with_capacity(host_sets.len());
+            for t in 0..host_sets.len() {
+                let m_t = host_sets[t].tau.len();
+                let y: Vec<C32> = match &kstore {
+                    Some(k) => k.read_vec(t).unwrap(),
+                    None if early_host => ys_pin[t].as_slice().unwrap()[..m_t * nvc].to_vec(),
+                    None => st.clone_dtoh(&ys[t]).unwrap(),
+                };
+                let (sc, yc) = comp.compress_set(&host_sets[t], &lens[t], sd.vox, &y, nvc);
+                if staged {
+                    yc_all.push(yc);
+                } else if early_host {
+                    let mut h = unsafe { dev.ctx.alloc_pinned_with_flags::<C32>(yc.len().max(1), 0).unwrap() };
+                    h.as_mut_slice().unwrap()[..yc.len()].copy_from_slice(&yc);
+                    ys_pin[t] = h;
+                } else {
+                    ys[t] = st.clone_htod(&yc).unwrap();
+                }
+                scs.push(sc);
+            }
+            if staged {
+                let ks = KStore::create(KStoreSpec::dense(), nvc, scs.iter().map(|c| c.m()).collect(), None, &format!("{}|rcompress", kstore.as_ref().unwrap().tag())).unwrap();
+                for (t, yc) in yc_all.into_iter().enumerate() {
+                    ks.put_owned(t, yc).unwrap();
+                }
+                ks.finish().unwrap();
+                kstore = Some(std::sync::Arc::new(ks));
+            }
+            // records: cropped to S; the whole records (for the segment tables) and the composed selection
+            let pre: Vec<SampleSet> = host_sets.iter().zip(&scs).map(|(s, c)| hasty_recon::pyramid::crop_set(s, &c.sel)).collect();
+            let old = std::mem::replace(&mut host_sets, pre);
+            crop_sel = Some(match crop_sel.take() {
+                Some(cs) => cs.iter().zip(&scs).map(|(c, sc)| sc.sel.iter().map(|&i| c[i as usize]).collect()).collect(),
+                None => scs.iter().map(|c| c.sel.clone()).collect(),
+            });
+            if full_sets.is_empty() {
+                full_sets = old;
+                for s in full_sets.iter_mut() {
+                    s.y = Vec::new();
+                }
+            }
+            let (n0, n1) = (scs.iter().map(|c| c.n_orig()).sum::<usize>(), scs.iter().map(|c| c.m()).sum::<usize>());
+            let cn: f64 = scs.iter().map(|c| c.cnorm.iter().sum::<f64>()).sum();
+            let yn: f64 = scs.iter().map(|c| c.ynorm.iter().sum::<f64>()).sum();
+            // all signal inside ROI × band: the dropped energy is noise, E = (n − |S|) · coils · σ² (σ² per complex
+            // whitened sample); a ratio ≫ 1 flags signal outside the ROI or band (data-derived check)
+            let noise_exp = sd.lazy.as_ref().and_then(|l| l.sigma).map(|sg| (n0 - n1) as f64 * nvc as f64 * sg * sg);
+            println!("rcompress: {} ({:.1}s): {n0} → {n1} samples ({:.3}×), R tables {:.3} GiB; data constant Σ ‖y‖² − ‖ỹ‖² = {:.3e} of ‖y‖² {:.3e}{}", comp.describe(), t_rc.elapsed().as_secs_f64(), n0 as f64 / n1.max(1) as f64, comp.table_bytes() as f64 / GIB, cn, yn, noise_exp.map_or(String::new(), |e| format!(" ({:.3}× the noise expectation)", cn / e.max(1e-300))));
+            diag.insert("rcompress".into(), serde_json::json!({"mode": format!("{rc_mode:?}"), "roi": comp.opts.roi.describe(), "band": comp.opts.band.describe(), "os": comp.opts.os, "q": comp.opts.q, "designs": comp.designs.len(), "samples": n0, "kept": n1, "reduction": n0 as f64 / n1.max(1) as f64, "table_gib": comp.table_bytes() as f64 / GIB, "data_constant": cn, "data_energy": yn}));
+            (comp, scs)
+        })
+    };
+    // knot mode: the temporal Gram of the basis under the sample times (accumulated while the tables are built)
+    let nk_all = knots2d.map_or(0, |(kr, _, mc, _)| kr * mc);
+    let mut knot_gram_acc = vec![0.0f64; nk_all * nk_all];
+    let mut knot_gram_n = 0usize;
     // the operator stack
     let mut sense_sets;
     let mut seg_sets;
     let mut fat_joint_sets;
+    // joint water + fat with per-frame fat maps (FatJointSets); a static map is folded into the segment diagonals
+    let mut ff_per_frame = false;
     let sop: &mut dyn SetOp = if model == "sense" {
         sense_sets = SenseSets { op: &mut op, coords, ms: ms.clone(), maps, map_of_set: if conc_dc { (0..fe.len()).map(enc_of).collect() } else { vec![] } };
         &mut sense_sets
@@ -1621,7 +1932,7 @@ fn main() {
         // energy per sample (every 7th readout, at most 512) plus its k-space volume average, over the noise energy per
         // sample (σ: HASTY_NOISE_SIGMA, the sim's noise_sigma, else 1 = data whitened with the measured noise covariance)
         let noise_sigma: f64 = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0).or_else(|| sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0)).unwrap_or(1.0);
-        let snr_w: Option<Vec<f64>> = (seg_svdn || seg_noise_rule.is_some()).then(|| {
+        let snr_w: Option<Vec<f64>> = (seg_svdn || seg_noise_rule.is_some() || seg_err_rule.is_some()).then(|| {
             let ros: Vec<usize> = (0..sd.n_readouts()).step_by(7).take(512).collect();
             let e = sd.adc_energy_whitened(&ros, &sd.whitener()).unwrap();
             // |k| of every ADC sample (first readout of set 0; the shells of the white floor)
@@ -1636,14 +1947,15 @@ fn main() {
             let tau_a: Vec<f64> = (wa..=wb).map(|n| rec_sets[0].tau[n]).collect();
             hasty_nufft::seg_time_grid(&tau_a, w, 96)
         });
-        if let (Some(r_noise), Some((ts_n, tw_n)), Some(w)) = (seg_noise_rule, snr_grid.as_ref(), snr_w.as_ref()) {
+        if let (Some(r_noise), Some((ts_n, tw_n)), Some(w)) = (seg_noise_rule.or(seg_err_rule), snr_grid.as_ref(), snr_w.as_ref()) {
             // relative weighted error ε(L) → data error in noise rms ≈ ε(L) √(mean w) (w = 1 + (E(n) + E_vol) / (C σ²):
             // proportional to the sample's signal plus the white floor; research/segment_basis.md)
             // margin 1.5: the separable prediction was up to 1.3–2× optimistic against the exact data-space error at
             // L ≥ 9 on ph0001 (research/segment_basis.md §2–3); HASTY_SEG_MARGIN overrides
             let margin: f64 = std::env::var("HASTY_SEG_MARGIN").ok().and_then(|v| v.parse().ok()).unwrap_or(1.5);
             let gain = (w.iter().sum::<f64>() / w.len() as f64).sqrt();
-            let tol = r_noise / (gain * margin);
+            // auto:err: the tolerance is the relative weighted error itself
+            let tol = if seg_noise_rule.is_some() { r_noise / (gain * margin) } else { r_noise };
             let tau_a: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
             let (t0, t1) = (tau_a[wa], tau_a[wb]);
             let ffm: Option<Vec<f64>> = ff_joint.as_ref().map(|ff| ff[..nv].iter().map(|&f| f as f64).collect());
@@ -1690,7 +2002,11 @@ fn main() {
                 };
                 lsel = lsel.max(l_e);
             }
-            println!("segments (auto:noise): predicted data error × {margin} ≤ {r_noise} noise rms (relative weighted error ≤ {tol:.2e}, ×{gain:.1}) → L = {lsel} ({} basis)", seg_basis_arg);
+            if seg_noise_rule.is_some() {
+                println!("segments (auto:noise): predicted data error × {margin} ≤ {r_noise} noise rms (relative weighted error ≤ {tol:.2e}, ×{gain:.1}) → L = {lsel} ({} basis)", seg_basis_arg);
+            } else {
+                println!("segments (auto:err): relative signal-weighted model error of the ratemap ≤ {tol:.1e} (predicted on the time grid) → L = {lsel} ({} basis, {seg_weight} voxel weights)", seg_basis_arg);
+            }
             println!("  [build timer] auto:noise segment rule done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
             nseg = lsel;
         }
@@ -1716,8 +2032,24 @@ fn main() {
             nseg = ((1.3 * cyc + 3.5).ceil() as usize).max(2);
             println!("segments (auto): the field{} spans {cyc:.2} phase cycles over the {:.2} ms readout → L = {nseg}", if fat_joint { " with the main fat peak (joint water + fat)" } else { "" }, (t1 - t0) * 1e3);
         }
-        let seg_opts = |nseg: usize| SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: if temporal.is_some() { nf } else { 1 }, bspline: temporal.unwrap_or(1), max_grid_bytes: 6 << 30 };
-        let mut eng = SegNufft::new(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg)).unwrap();
+        // knot mode: the 2-D knot engine (cardiac knots × degree in frames / bspline), its fine-grid slot budgeted next
+        // to one encode's two knot stacks and data (the ledger checks the whole plan before the solver)
+        // spline mode: the engine's knots are (kre respiratory knots, linear) × (fop operator frames, degree odeg)
+        let eng_knots: Option<(usize, u32, usize, u32)> = match &op_frames { Some(of) => Some((of.kre, 1, of.fop, of.odeg)), None => knots2d };
+        let knot_grid_budget: usize = eng_knots.map_or(6 << 30, |(kr, _, mc, _)| {
+            let (free, _) = dev.ctx.mem_get_info().unwrap();
+            let m_max = host_sets.iter().map(|s| s.tau.len()).max().unwrap_or(0);
+            let work = kr * mc * nv * 8 + 2 * nvc * m_max * 8 + (3usize << 30);
+            (free.saturating_sub(work) / 3).clamp(256 << 20, 6 << 30)
+        });
+        let seg_opts = |nseg: usize| match eng_knots {
+            Some((_, _, mc, cdeg)) => SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: mc, bspline: cdeg, max_grid_bytes: knot_grid_budget },
+            None => SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: if temporal.is_some() { nf } else { 1 }, bspline: temporal.unwrap_or(1), max_grid_bytes: 6 << 30 },
+        };
+        let mut eng = match eng_knots {
+            Some((kr, rdeg, _, _)) => SegNufft::new_temporal2d(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg), kr, rdeg).unwrap(),
+            None => SegNufft::new(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg)).unwrap(),
+        };
         eng.set_maps(&st, &smaps).unwrap();
         // segments per encode from the encode-wide mean coefficients (all frames)
         let tau_adc: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
@@ -1762,9 +2094,110 @@ fn main() {
         let nodes_of = |nseg: usize| -> Vec<f64> { if seg_cheb { hasty_nufft::cheb_nodes(nseg, tw0, tw1) } else { (0..nseg).map(|l| if nseg == 1 { 0.5 * (tw0 + tw1) } else { tw0 + (tw1 - tw0) * l as f64 / (nseg - 1) as f64 }).collect() } };
         let seg_nodes_w = seg_cheb || seg_energy;
         let cheb_build = |nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| hasty_nufft::build_segments_nodes(nv, &nodes_of(nseg), tw0, tw1, ntab, &seg_fit, seg_vw.as_deref(), g);
+        // knot mode: the achieved segment-model error of the ratemap per encode (relative, voxel weights = smoothed warm
+        // magnitude² × coil energy over a fit-voxel subset, ADC-time weights = the per-sample SNR weights when computed, else uniform)
+        // (≤ ~20 000 voxels × every 16th ADC sample: seconds per encode)
+        let seg_err_vox: Vec<usize> = fit_vox.iter().copied().step_by((fit_vox.len() / 20000).max(9)).collect();
+        let seg_err_w: Vec<f64> = seg_err_vox.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
+        let seg_err = |e: usize, sp: &[C32], at: &[C32], ta: f64, dt: f64, nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| {
+            if knots2d.is_none() {
+                return;
+            }
+            let taus: Vec<f64> = (wa..=wb).step_by(16).map(|n| rec_sets[0].tau[n]).collect();
+            let tws: Vec<f64> = (wa..=wb).step_by(16).map(|n| snr_w.as_ref().map_or(1.0, |w| w[n - wa])).collect();
+            let err = hasty_nufft::segment_model_error(sp, at, nseg, nv, ta, dt, &seg_err_vox, Some(&seg_err_w), &taus, &tws, g);
+            println!("  segment model error of the ratemap, encode {e}: L = {nseg}, relative {err:.2e} ({} over ADC time, signal energy over {} fit voxels)", if snr_w.is_some() { "SNR-weighted" } else { "uniform" }, seg_err_vox.len());
+        };
+        // --ratemap truth-bc: the true ratemap of every knot's (breathing, cardiac) state, on the reconstruction grid
+        let rm_knots: Option<Vec<RateFrame>> = ratemap_frames.then(|| {
+            assert!(knots2d.is_some() && op_frames.is_none(), "--ratemap truth-bc: complex 2-D knots (--knots2d) for now; the velocity model's operator frames come next");
+            let (b, per, _) = knot_basis.as_ref().unwrap();
+            let t_ro: Vec<f32> = (0..sd.n_readouts()).map(|i| { let c = sd.ro.card[i]; (c.phase * nf as f64 - 0.5).rem_euclid(nf as f64) as f32 }).collect();
+            let used: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
+            let tf: Vec<f32> = used.iter().map(|&i| t_ro[i]).collect();
+            let (kt, ri, rv) = b.sample_coords(&tf, nf, per, &|j| used[j]);
+            let w: Vec<Vec<(usize, f64)>> = (0..used.len()).map(|j| b.sample_weights(kt[j] as f64, ri[j], rv[j])).collect();
+            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, b.nk(), &used, &w);
+            if ratemap_static {
+                // knot weights: the samples' basis weights summed per knot
+                let mut kw = vec![0.0f64; rm.len()];
+                for ws in &w {
+                    for &(b_, wb) in ws {
+                        kw[b_] += wb.abs();
+                    }
+                }
+                let nvr = rm[0].om.len();
+                let avg = |get: &dyn Fn(&RateFrame) -> &Vec<f32>| -> Vec<f32> {
+                    (0..nvr).map(|v| {
+                        let (mut s_, mut ws_) = (0.0f64, 0.0f64);
+                        for (f, &k) in rm.iter().zip(&kw) {
+                            let x = get(f)[v];
+                            if x.is_finite() && k > 0.0 { s_ += k * x as f64; ws_ += k; }
+                        }
+                        if ws_ > 0.0 { (s_ / ws_) as f32 } else { f32::NAN }
+                    }).collect()
+                };
+                let mean = RateFrame { om: avg(&|f| &f.om), rw: avg(&|f| &f.rw), rf: avg(&|f| &f.rf), ff: avg(&|f| &f.ff) };
+                println!("ratemap truth-bc:static: every knot gets the data-weighted mean of the {} knot ratemaps (control)", rm.len());
+                for f in rm.iter_mut() {
+                    *f = RateFrame { om: mean.om.clone(), rw: mean.rw.clone(), rf: mean.rf.clone(), ff: mean.ff.clone() };
+                }
+            }
+            // voxels without a source in a state: the static field (they carry no signal there)
+            for f in rm.iter_mut() {
+                for (v, x) in f.om.iter_mut().enumerate() {
+                    if !x.is_finite() {
+                        *x = grid.omega[v] as f32;
+                    }
+                }
+            }
+            // sign / unit check against the static field the rest of the operator uses (rad/s)
+            let (mut sxy, mut sxx, mut syy) = (0.0f64, 0.0f64, 0.0f64);
+            for &v in fit_vox.iter().step_by(13) {
+                let m: f64 = rm.iter().map(|f| f.om[v] as f64).sum::<f64>() / rm.len() as f64;
+                sxy += m * grid.omega[v];
+                sxx += m * m;
+                syy += grid.omega[v] * grid.omega[v];
+            }
+            println!("ratemap per frame (truth-bc, ORACLE): {} knots; knot-mean ω vs the static field: correlation {:.3}, rms {:.1} / {:.1} Hz", rm.len(), sxy / (sxx * syy).sqrt().max(1e-30), (sxx / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU, (syy / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU);
+            rm
+        });
         let make_segs = |eng: &SegNufft, nseg: usize| -> Vec<hasty_nufft::SegSegments> {
         (0..ne)
             .map(|e| {
+                if let Some(rm) = &rm_knots {
+                    // one ratemap per knot: g_b(v, τ) = [(1 − φ_b) e^{−R^w_b τ'} + φ_b e^{−R^f_b τ'} c(τ)] e^{−iψ_b(v, τ)},
+                    // ψ_b = ω_b τ + encode-mean concomitant phase (minus the absorbed static field polynomial)
+                    let conc0 = segment_phase(&grid, &wbar[e], &tau_adc, false);
+                    let t_seg = Instant::now();
+                    let mut sp_all: Vec<C32> = Vec::with_capacity(rm.len() * nseg * nv);
+                    let mut at_all: Vec<C32> = Vec::new();
+                    let (mut ta0, mut dt0) = (0.0, 0.0);
+                    for (kb, f) in rm.iter().enumerate() {
+                        let psi_raw = |v: usize, t: f64| conc0(v, t) + f.om[v] as f64 * t;
+                        let psi = field_poly.residual(&sd, &psi_raw);
+                        let ta = tau_adc[0];
+                        let g = |v: usize, t: f64| -> Complex64 {
+                            let ph = Complex64::from_polar(1.0, -psi(v, t));
+                            let ffv = f.ff[v] as f64;
+                            let wat = (1.0 - ffv) * (-(f.rw[v] as f64) * (t - ta)).exp();
+                            let fat = ffv * (-(f.rf[v] as f64) * (t - ta)).exp();
+                            ph * (Complex64::new(wat, 0.0) + fat * cfat(t))
+                        };
+                        let (sp, at, ta_, dt_) = if seg_svd { svd_build(nseg, &g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, &g) };
+                        if e == 0 && (kb == 0 || kb == rm.len() / 2) {
+                            seg_err(e, &sp, &at, ta_, dt_, nseg, &g);
+                        }
+                        ta0 = ta_;
+                        dt0 = dt_;
+                        sp_all.extend_from_slice(&sp);
+                        at_all.extend_from_slice(&at);
+                    }
+                    if e == 0 {
+                        println!("  per-frame ratemap segments: {} knots × L = {nseg}, encode 0 built in {:.1}s", rm.len(), t_seg.elapsed().as_secs_f64());
+                    }
+                    return eng.segments_frames(&st, &sp_all, &at_all, ta0, dt0).unwrap();
+                }
                 let psi_raw0 = segment_phase(&grid, &wbar[e], &tau_adc, with_b0);
                 let psi_raw = |v: usize, t: f64| psi_raw0(v, t) - rate_dw.as_ref().map_or(0.0, |d| d[v] * tau_adc[0]);
                 let psi = field_poly.residual(&sd, &psi_raw);
@@ -1776,6 +2209,7 @@ fn main() {
                         // joint, one map: folded into the diagonals, table fitted to g_v(τ) = [(1 − ff) + ff c(τ)] e^{−iψ}
                         let g = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t)) * (Complex64::new(1.0 - ff[v] as f64, 0.0) + ff[v] as f64 * cfat(t));
                         let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else if seg_nodes_w { cheb_build(nseg, &g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, &g) };
+                        seg_err(e, &sp, &at, ta, dt, nseg, &g);
                         return eng.segments(&st, &sp, &at, ta, dt).unwrap();
                     }
                     // joint, per-frame maps: water diagonals + an ff-independent table, maps applied by the operator
@@ -1808,6 +2242,7 @@ fn main() {
                 if r2v.is_some() {
                     let g = |v: usize, t: f64| Complex64::from_polar(dec(v, t), -psi(v, t));
                     let (sp, at, ta, dt) = if seg_svd { svd_build(nseg, &g) } else if seg_nodes_w { cheb_build(nseg, &g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, &g) };
+                    seg_err(e, &sp, &at, ta, dt, nseg, &g);
                     return eng.segments(&st, &sp, &at, ta, dt).unwrap();
                 }
                 let (sp, at, ta, dt) = if seg_svd {
@@ -1817,6 +2252,7 @@ fn main() {
                 } else {
                     build_segments(nv, nseg, tw0, tw1, ntab, &seg_fit, &psi)
                 };
+                seg_err(e, &sp, &at, ta, dt, nseg, &|v, t| Complex64::from_polar(1.0, -psi(v, t)));
                 eng.segments(&st, &sp, &at, ta, dt).unwrap()
             })
             .collect()
@@ -1833,18 +2269,60 @@ fn main() {
         let samples_all: usize = host_sets.iter().map(|s| s.tau.len()).sum();
         let pts: Vec<_> = (0..fe.len())
             .map(|t| {
+                // knot mode: per-sample knot coordinates (cardiac t in knot units from the tables' frame coordinate,
+                // respiratory interval / fraction of the sample's readout), on the whole records, then cropped
+                let mut knot_coords = |tf: &[f32]| -> Option<(Vec<f32>, Vec<u32>, Vec<f32>)> {
+                    let (b, per, _) = knot_basis.as_ref()?;
+                    let ros = &rec_sets[t].readouts;
+                    let na = sd.na;
+                    let (mut kt, mut ri, rv) = b.sample_coords(tf, nf, per, &|j| ros[j / na]);
+                    // temporal Gram of the basis under the sample times (every 7th sample; knot metric weights)
+                    for j in (0..kt.len()).step_by(7) {
+                        let w = b.sample_weights(kt[j] as f64, ri[j], rv[j]);
+                        for &(a, wa) in &w {
+                            for &(c, wc) in &w {
+                                knot_gram_acc[a * b.nk() + c] += wa * wc;
+                            }
+                        }
+                        knot_gram_n += 1;
+                    }
+                    // spline mode: the operator's coordinates (cardiac in frame units of fop, the interval local to
+                    // the set's respiratory group); the Gram above is the parameter basis'
+                    if let Some(of) = &op_frames {
+                        let g = fe[t].0.unwrap();
+                        let (mc, fop) = (b.mc as f64, of.fop as f64);
+                        for j in 0..kt.len() {
+                            kt[j] = (((kt[j] as f64 + 0.5) * fop / mc - 0.5).rem_euclid(fop)) as f32;
+                            let (gg, li) = of.group_of(ri[j]);
+                            assert_eq!(gg, g, "sample of set {t} in respiratory group {gg}");
+                            ri[j] = li;
+                        }
+                    }
+                    Some(match &crop_sel {
+                        Some(sel) => (hasty_recon::pyramid::gather(&kt, &sel[t]), hasty_recon::pyramid::gather(&ri, &sel[t]), hasty_recon::pyramid::gather(&rv, &sel[t])),
+                        None => (kt, ri, rv),
+                    })
+                };
                 let mut p = (|| {
                 if let (Some(f4), Some(h)) = (&fit4, &htab) {
                     let (mut tab, dw) = seg_tables_hi(&sd, &rec_sets[t], f4, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
                     absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
+                    let kc = knot_coords(&tab.t);
                     let (tab, dw) = match &crop_sel { Some(sel) => { let m = tab.tau.len(); (tab.select(&sel[t]), hasty_recon::pyramid::gather_rows(&dw, m, &sel[t])) } None => (tab, dw) };
                     resid = resid.max(tab.max_resid_phase);
+                    if let Some((kt, ri, rv)) = kc {
+                        return eng.points2d_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &kt, &ri, &rv, &dw, h).unwrap();
+                    }
                     return eng.points_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &dw, h, temporal.map(|_| &tab.t[..])).unwrap();
                 }
                 let mut tab = seg_tables(&sd, &rec_sets[t], &fit, with_conc, with_conc.then(|| &wbar[enc_of(t)][..]));
                 absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
+                let kc = knot_coords(&tab.t);
                 let tab = match &crop_sel { Some(sel) => tab.select(&sel[t]), None => tab };
                 resid = resid.max(tab.max_resid_phase);
+                if let Some((kt, ri, rv)) = kc {
+                    return eng.points2d(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &kt, &ri, &rv).unwrap();
+                }
                 eng.points(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, temporal.map(|_| &tab.t[..])).unwrap()
                 })();
                 let on_host = *tables_host.get_or_insert_with(|| {
@@ -1857,7 +2335,12 @@ fn main() {
                     let stack = (nf * ne * nv * 8) as f64;
                     // (residual buffers of the data size, unless the data are staged from the store)
                     let data_b = if staged { 0.0 } else { (samples_all * nvc * 8) as f64 };
-                    let reserve = if vmodel.is_some() { 3.0 * 1073741824.0 } else { data_b + (6.0 + if lagged.is_some() { 2.0 } else { 0.0 }) * stack + 1073741824.0 };
+                    let reserve = if let Some((kr, _, mc, _)) = eng_knots {
+                        // knot mode: one encode's set image + adjoint, the residual (and the set's data when staged) of
+                        // the largest set, the resident data otherwise; the ledger revisits the placement
+                        let m_max = host_sets.iter().map(|s| s.tau.len()).max().unwrap_or(0) as f64;
+                        (kr * mc * nv * 8) as f64 + 2.0 * nvc as f64 * m_max * 8.0 + data_b + 2.0 * 1073741824.0
+                    } else if vmodel.is_some() { 3.0 * 1073741824.0 } else { data_b + (6.0 + if lagged.is_some() { 2.0 } else { 0.0 }) * stack + 1073741824.0 };
                     let host = plan_mode == "host" || (plan_mode == "auto" && est > avail - reserve);
                     println!("sample tables: {:.0} B/sample, {:.2} GiB for {} sets → {}", bps, est / 1073741824.0, fe.len(), if host { "pinned host memory, streamed into two device slots" } else { "device" });
                     host
@@ -1919,6 +2402,7 @@ fn main() {
             ts.elapsed().as_secs_f64()
         );
         let joint_maps = ff_joint.as_ref().filter(|ff| ff.len() > nv).map(|ff| eng.fat_maps(&st, ff).unwrap());
+        ff_per_frame = joint_maps.is_some();
         if joint_maps.is_some() {
             // joint water + fat with per-frame maps: the single-image kernels of the multi path (forward_fat)
             let (mf, ma) = eng.autotune_multi(&st, &segs[0], &pts[0], 1).unwrap();
@@ -2126,6 +2610,19 @@ fn main() {
     } else {
         sop
     };
+    // --rcompress: the banded R between the operator (all wrappers above act on the kept samples) and the data
+    let mut rc_sets;
+    let sop: &mut dyn SetOp = match rc_state {
+        None => sop,
+        Some((comp, scs)) => {
+            // a ball ROI smaller than the grid: the unknowns outside it are excluded (mask before / after the operator)
+            let mask = hasty_recon::rcompress::roi_mask(&comp.opts.roi, sd.dims, sd.vox);
+            let rc = hasty_recon::rcompress::RcDev::new(&dev, &st, &comp, &scs).unwrap().with_mask(&st, mask.as_deref()).unwrap();
+            println!("rcompress: R tables on the device ({:.3} GiB, q {}){}", comp.table_bytes() as f64 / GIB, rc.q, mask.as_ref().map_or(String::new(), |m| format!("; unknowns restricted to the ROI ({} of {} voxels)", m.iter().filter(|&&v| v > 0.0).count(), m.len())));
+            rc_sets = hasty_recon::rcompress::RcSets::new(sop, rc);
+            &mut rc_sets
+        }
+    };
     // model-consistent test data: y_t = E_t x_true,t + noise (solver + prior test without simulator physics)
     let mut ys = ys;
     if synthetic && !staged {
@@ -2172,6 +2669,848 @@ fn main() {
         }
         println!("synthetic model-consistent data (noise sigma {:.2} per component)", sigma);
     }
+    // ───────────── velocity model at the knots of the 2-D respiratory × cardiac knot operator (--vmodel knots) ─────────────
+    // θ = (z_k, v_k per knot, residual phase), operator frames = the K knots (identity weights), one set per encode;
+    // state on the device or in host memory (θ streamed knot by knot), chosen by the knot ledger (vknot::plan)
+    if let Some((kb, _, amp_all)) = knot_basis.as_ref() {
+        use hasty_recon::hoststack::HostStack;
+        use hasty_recon::vmodel::{VelModel, VelSpec};
+        use hasty_recon::vobj::VelProblem;
+        use rayon::prelude::*;
+        assert!(!warm.is_empty(), "--vmodel knots needs --warm or --init-from (initialisation from the time-averaged reconstruction)");
+        assert!(!synthetic, "--vmodel knots: --synthetic not supported (model-consistent knot data: hasty-recon tests/vknot.rs)");
+        // fat: a static fat-fraction map with --fat-model joint is folded into the ratemap segment diagonals
+        // (g_v(τ) = [(1 − ff_v) + ff_v c(τ)] e^{−R_v(τ−τ0)} e^{−iψ_v(τ)}), the operator is unchanged; per-frame maps and the
+        // separate-fat-image model are not supported with knots
+        assert!(fat_fraction.is_none() || (fat_joint && !ff_per_frame), "--vmodel knots: --fat-fraction needs --fat-model joint with one static map (per-frame fat maps vs knots: not supported)");
+        assert!(air.is_none(), "--air: complex-image models only (not --vmodel)");
+        assert!(lagged.is_none(), "--vmodel knots: no --lagged");
+        assert!(learned.is_none(), "--vmodel knots: no --learned (7-point complex prior)");
+        let (kr, mc, nk) = (kb.kr, kb.mc, kb.nk());
+        let kenc: Vec<[f64; 3]> = sd.encode_m1.iter().map(|m| m.map(|x| hasty_mrsim::GAMMA * x)).collect();
+        let spec = match &op_frames {
+            Some(of) => VelSpec::splines(sd.dims, kenc.clone(), of.clone(), vpoly),
+            None => VelSpec::at_knots(sd.dims, kenc.clone(), kr, mc, vpoly),
+        };
+        let spline = spec.spline();
+        // safeguards of §F.2 (flags above): the velocity box and the robust start's SNR gate
+        let vbox: Option<f64> = if !spline { None } else {
+            match vbox_arg.as_deref() {
+                Some("off") | Some("0") => None,
+                None | Some("design") => Some(vext_design.unwrap_or(r_first)),
+                Some(v) => Some(v.parse().expect("--vbox V | design | off")),
+            }
+        };
+        let vinit_snr: Option<f64> = match vinit_snr_arg.as_deref() {
+            Some("off") | Some("0") => None,
+            None | Some("design") => Some(sd.meta["sequence"]["encoding"]["snr_unwrap_1e-3"].as_f64().unwrap_or(3.0)),
+            Some(v) => Some(v.parse().expect("--vinit-snr S | design | off")),
+        };
+        if spline {
+            println!("velocity safeguards: box {}, step trust region {}, start SNR gate {}", vbox.map_or("off".into(), |b| format!("|v_a| ≤ {b:.2} m/s")), vtrust.map_or("off".into(), |r| format!("max_e |k'_e·Δv| ≤ {r} rad")), vinit_snr.map_or("off".into(), |s| format!("{s:.2}")));
+        }
+        if let Some(of) = &op_frames {
+            println!("spline velocity model (research/velocity_model_sr.md §F): m, ψ, v in the {kr} × {mc} basis; {}; encodes centred (k̄ = {:?} rad/(m/s))", of.describe(), spec.kbar().map(|v| (v * 1000.0).round() / 1000.0));
+        }
+        let vm = VelModel::new(&dev, &st, spec.clone()).unwrap();
+        let lens = spec.lens();
+        let stack_b = spec.stack_bytes();
+        // the breathing amplitude of the outputs / in-driver scores: the median of the readouts used
+        let amp_med = {
+            let mut v: Vec<f64> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).map(|i| amp_all[i]).collect();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v[v.len() / 2]
+        };
+        // knot weights of the cardiac frame centres at that amplitude (the operator's interpolation)
+        let wfr: Vec<Vec<f64>> = (0..nf_card).map(|f| kb.weights(amp_med, (f as f64 + 0.5) / nf_card as f64)).collect();
+        let gn = knot_gram_n.max(1) as f64;
+        let gram: Vec<f64> = knot_gram_acc.iter().map(|v| v / gn).collect();
+        let gdiag: Vec<f64> = (0..nk).map(|k| gram[k * nk + k]).collect();
+        let gcond = hasty_recon::knotsolve::gram_condition(&gram, nk);
+        let gmean = gdiag.iter().sum::<f64>() / nk as f64;
+        println!("knot model: {kr} × {mc} = {nk} knots ({}), {} parameters per voxel, {:.2} GiB per parameter stack; temporal Gram of the samples: condition {gcond:.1}, diagonal {:.3}..{:.3} × mean (per-knot metric weights)", kb.describe(), 5 * nk, stack_b as f64 / GIB, gdiag.iter().cloned().fold(f64::INFINITY, f64::min) / gmean, gdiag.iter().cloned().fold(0.0, f64::max) / gmean);
+        // deviations from the target config (research/temporal_operator.md §21)
+        let mut dev_target: Vec<String> = vec![];
+        if (kr, kb.rdeg, mc, kb.cdeg) != (6, 1, 16, 3) {
+            dev_target.push(format!("knots {kr}:{},{mc}:{} (target 6:1,16:3)", kb.rdeg, kb.cdeg));
+        }
+        if resp_src != "bellows" {
+            dev_target.push(format!("breathing coordinate {resp_src} (target bellows; truth = oracle)"));
+        }
+        if !matches!(coil_rule.to_string().as_str(), s if s.starts_with("energy")) || coil_energy < 0.999 {
+            dev_target.push(format!("coils {coil_rule} (target SV compression ≥ 99.9 %)"));
+        }
+        if phys != "full" {
+            dev_target.push(format!("phys {phys} (target full)"));
+        }
+        if !gnl {
+            dev_target.push("no GNL (target --gnl)".into());
+        }
+        if !conc_hi {
+            dev_target.push("concomitant fit quad (target --conc-fit deg4)".into());
+        }
+        if keep_n > 1 {
+            dev_target.push(format!("--keep {keep_n}: 1/{keep_n} of the readouts"));
+        }
+        if grid_scale.is_some() || kcrop.is_some() {
+            dev_target.push(format!("pyramid level (grid {:?}, kcrop {})", sd.dims, kcrop.map_or("no".into(), |k| k.describe())));
+        }
+        let config_line = if dev_target.is_empty() { "config: target".to_string() } else { format!("config: differs from target: {}", dev_target.join("; ")) };
+        println!("{config_line}");
+        // --eval LABEL[@AMP]:idx.npy,...: (label, amplitude, native-grid voxels)
+        let evals: Vec<(String, f64, Vec<usize>)> = eval_spec.as_deref().map_or(vec![], |s| {
+            s.split(',').map(|p| {
+                let (lab, path) = p.split_once(':').expect("--eval LABEL[@AMP]:idx.npy");
+                let (lab, amp) = match lab.split_once('@') { Some((l, a)) => (l.to_string(), a.parse::<f64>().expect("--eval LABEL@AMP")), None => (lab.to_string(), lab.parse::<f64>().expect("--eval LABEL (a breathing amplitude)")) };
+                let idx: Vec<usize> = hasty_recon::data::read_npy(std::path::Path::new(path)).unwrap_or_else(|e| panic!("--eval {path}: {e:?}")).f32s().iter().map(|&v| v as usize).collect();
+                (lab, amp, idx)
+            }).collect()
+        });
+        assert!(evals.is_empty() || sd.native_grid(), "--eval: native-grid voxel indices (no --grid-scale)");
+        for (lab, amp, idx) in &evals {
+            println!("  eval {lab}: breathing amplitude {amp}, {} voxels, respiratory weights {:?}", idx.len(), kb.resp_weights(*amp).iter().map(|v| (v * 1000.0).round() / 1000.0).collect::<Vec<_>>());
+        }
+        // initial state: the time-averaged warm start (z from the reference encode, v by the decoder inside the support,
+        // the robust static-tissue residual phase) in every knot, or a previous knot run (--init-from) resampled
+        let warm64: Vec<Vec<Complex64>> = warm.iter().map(|w| w.iter().map(|c| Complex64::new(c.re as f64, c.im as f64)).collect()).collect();
+        let sfit = vpoly.map(|d| {
+            let f = hasty_recon::vinit::fit_static_phase(&warm64, &support, sd.dims, d, 0.05);
+            println!("residual-phase init (robust static fit, degree {d}): σ per encode {:?} rad, static mask {} voxels", f.sigma.iter().map(|s| (s * 1000.0).round() / 1000.0).collect::<Vec<_>>(), f.mask.iter().filter(|&&m| m > 0.0).count());
+            f
+        });
+        let mut h0 = HostStack::zeros(&lens);
+        let from_knots = init_from.as_ref().and_then(|p| knot_init(p, &spec, kb));
+        let have_init = from_knots.is_some();
+        match from_knots {
+            Some((src, chunks)) => {
+                println!("knot init: {} resampled {:?} → {:?}", src.display(), chunks.0, sd.dims);
+                for t in 0..lens.len() {
+                    h0.chunk_mut(t).copy_from_slice(&chunks.1[t]);
+                }
+            }
+            None => {
+                let warm_c = match &sfit { Some(f) => hasty_recon::vinit::remove_phase(&warm64, &f.a, sd.dims, vpoly.unwrap()), None => warm64.clone() };
+                let mut z0 = vec![C32::new(0.0, 0.0); nv];
+                let mut v0 = vec![0f32; 3 * nv];
+                for q in 0..nv {
+                    let z: Vec<Complex64> = (0..ne).map(|e| warm_c[e][q]).collect();
+                    let v = if support[q] { dec.velocity(&z) } else { [0.0; 3] };
+                    let zq = z[0] * Complex64::from_polar(1.0, kenc[0][0] * v[0] + kenc[0][1] * v[1] + kenc[0][2] * v[2]);
+                    z0[q] = C32::new(zq.re as f32, zq.im as f32);
+                    for a in 0..3 {
+                        v0[a * nv + q] = v[a] as f32;
+                    }
+                }
+                let vp = pack_f32(&v0, lens[spec.chunk_v(0)]);
+                if spline {
+                    // (m, ψ') = (|z0|, arg z0 − k̄·v): the zero-moment phase decoupled from v (VelSpec::splines)
+                    let kb_ = spec.kbar();
+                    for q in 0..nv {
+                        let z = z0[q];
+                        let ps = (z.im as f64).atan2(z.re as f64) - (0..3).map(|a| kb_[a] * v0[a * nv + q] as f64).sum::<f64>();
+                        z0[q] = C32::new((z.re * z.re + z.im * z.im).sqrt(), ps as f32);
+                    }
+                }
+                for k in 0..nk {
+                    h0.chunk_mut(spec.chunk_z(k)).copy_from_slice(&z0);
+                    h0.chunk_mut(spec.chunk_v(k)).copy_from_slice(&vp);
+                }
+                if let Some(f) = &sfit {
+                    let a: Vec<f32> = f.a.iter().map(|&x| x as f32).collect();
+                    let ca = spec.chunk_a();
+                    let l = lens[ca];
+                    h0.chunk_mut(ca).copy_from_slice(&pack_f32(&a, l));
+                }
+            }
+        }
+        drop(warm64);
+        let coil: Vec<f32> = (0..nv).map(|q| (0..nvc).map(|c| { let s = smaps[c * nv + q]; s.re * s.re + s.im * s.im }).sum()).collect();
+        let mut pr = VelProblem::new(&st, kern.clone(), sop, ys, vm, Some(coil)).unwrap();
+        if staged {
+            let sg = hasty_recon::kstage::Stager::new(&dev.ctx, kstore.clone().unwrap()).unwrap();
+            println!("data staged from the store: 2 pinned staging buffers of {:.2} GiB", sg.pinned_bytes() as f64 / 2.0 / GIB);
+            pr.data_from_store(sg);
+        }
+        if early_host {
+            pr.ys = std::mem::take(&mut ys_pin).into_iter().map(hasty_recon::vobj::YData::Host).collect();
+        }
+        pr.set_knot_weights(&gdiag);
+        pr.vtrust = vtrust;
+        // spline mode, robust start (--vinit cg:N, research/velocity_model_sr.md §F): complex parameter-basis knot images
+        // per encode (CGLS through the same operator, from the warm image), their values at the knot centres decoded per
+        // knot by the dual-VENC decoder (the robust residual phase removed first), then m, ψ, v as cardiac spline
+        // coefficients (the values' circulant inverse)
+        let mut init_desc = if have_init { "--init-from".to_string() } else { "warm (time-averaged)".to_string() };
+        if let (true, false, Some((cg_it, cg_lam))) = (spline, have_init, vinit) {
+            let need = (0..ne).map(|e| pr.complex_knots_bytes(e)).max().unwrap_or(0);
+            let (free, _) = dev.ctx.mem_get_info().unwrap();
+            if need + (1usize << 30) > free {
+                eprintln!("--vinit cg: the complex knot CGLS needs {:.2} GiB on the device, {:.2} GiB free: start from a coarser level (--init-from <run dir>) or --vinit warm", need as f64 / GIB, free as f64 / GIB);
+                std::process::exit(2);
+            }
+            let ti = Instant::now();
+            let (kre_, mcc) = (spec.kbar(), mc);
+            let mut cv: Vec<Vec<C32>> = Vec::with_capacity(ne);
+            for e in 0..ne {
+                let (c, hist) = pr.complex_knots(&st, e, &warm[e], cg_it, cg_lam).unwrap();
+                println!("  init encode {e}: {cg_it} CGLS iterations on {nk} complex knots, ‖s‖/‖s₀‖ → {:.3e} ({:.0}s)", hist.last().copied().unwrap_or(1.0), ti.elapsed().as_secs_f64());
+                cv.push(c);
+            }
+            // values at the knot centres (complex, per encode), the robust residual phase removed
+            let pexi = vpoly.map(hasty_recon::vmodel::poly_exps).unwrap_or_default();
+            let a_init: Vec<f64> = sfit.as_ref().map_or(vec![], |f| f.a.clone());
+            let npi = pexi.len();
+            let cdeg = kb.cdeg;
+            // per voxel (hasty_recon::vinit::SplineStart, tested on model-consistent data in vinit::tests): knot-centre
+            // values, the robust residual phase removed, SNR-gated dual-VENC decode, zero-moment phase, spline fit
+            let sstart = hasty_recon::vinit::SplineStart { dec: &dec, kenc: &kenc, kbar: kre_, kr, mc: mcc, cdeg, snr_gate: vinit_snr, vbox };
+            let per_voxel: Vec<(Vec<(f32, f32)>, Vec<[f32; 3]>, [usize; 3])> = (0..nv).into_par_iter().map(|q| {
+                let phi: Vec<f64> = (0..ne).map(|e| if e == 0 || npi == 0 { 0.0 } else { (0..npi).map(|p| a_init[(e - 1) * npi + p] * hasty_recon::vmodel::poly_at(&pexi[p], q, sd.dims)).sum() }).collect();
+                sstart.voxel(&|e, k| { let x = cv[e][k * nv + q]; Complex64::new(x.re as f64, x.im as f64) }, &phi, support[q])
+            }).collect();
+            drop(cv);
+            if let Some(smin) = vinit_snr {
+                let c = per_voxel.iter().fold([0usize; 3], |a, p| [a[0] + p.2[0], a[1] + p.2[1], a[2] + p.2[2]]);
+                let t = (c[0] + c[1] + c[2]).max(1) as f64;
+                println!("  start SNR gate {smin:.2}: support voxel-knots decoded per knot {:.1} %, from the voxel's time mean {:.1} %, v = 0 {:.1} %", 100.0 * c[0] as f64 / t, 100.0 * c[1] as f64 / t, 100.0 * c[2] as f64 / t);
+            }
+            let lv = lens[spec.chunk_v(0)];
+            for k in 0..nk {
+                let zc: Vec<C32> = per_voxel.iter().map(|p| C32::new(p.0[k].0, p.0[k].1)).collect();
+                h0.chunk_mut(spec.chunk_z(k)).copy_from_slice(&zc);
+                let mut vf = vec![0f32; 3 * nv];
+                for (q, p) in per_voxel.iter().enumerate() {
+                    for a in 0..3 {
+                        vf[a * nv + q] = p.1[k][a];
+                    }
+                }
+                h0.chunk_mut(spec.chunk_v(k)).copy_from_slice(&pack_f32(&vf, lv));
+            }
+            init_desc = format!("complex knot CGLS {cg_it} (λ {cg_lam}) + dual-VENC decode per knot + spline fit");
+            println!("spline init: {init_desc} ({:.0}s)", ti.elapsed().as_secs_f64());
+        }
+        // stochastic coil sampling (p2np::CoilSampling): the iteration's coil groups through VelProblem::begin_iteration
+        if let Some(cs) = &coil_sampling {
+            let ncs = pr.op.n_coils();
+            assert!(ncs > cs.keep, "--coil-sampling keep {} of {ncs} coils", cs.keep);
+            println!("coil sampling: keep {} + draw {} of the {} tail coils (hold {}, last {} full)", cs.keep, cs.draw, ncs - cs.keep, cs.hold, cs.full_last);
+            pr.sampling = Some(cs.clone());
+        }
+        if let Some((mu, mode)) = &vanchor {
+            let w: Vec<f32> = match (mode.as_str(), &sfit) {
+                ("truth", _) => (0..nv).map(|q| (dil[q] && sd.sample_log(&sd.truth_frac, 0, &grid.x_log[q]) < 1e-3) as u8 as f32).collect(),
+                (_, Some(f)) => f.mask.clone(),
+                _ => panic!("--vanchor auto needs --vpoly (the static mask comes from the residual-phase fit)"),
+            };
+            println!("static-tissue anchor μ {mu} ({mode}{}) on {} voxels", if mode == "truth" { ", ORACLE mask" } else { "" }, w.iter().filter(|&&x| x > 0.0).count());
+            pr.set_anchor(&st, &w, *mu).unwrap();
+        }
+        // memory ledger: placement of state, data and tables before anything large is allocated (research/memory_ledger.md)
+        let pb = hasty_recon::plan::probe(&dev.ctx, &st).unwrap();
+        let ns = pr.op.nsets();
+        let data_sets: Vec<usize> = pr.ys.iter().map(|y| y.len() * 8).collect();
+        let data_dev_now: usize = pr.ys.iter().map(|y| if let hasty_recon::vobj::YData::Dev(d) = y { d.len() * 8 } else { 0 }).sum();
+        let (tab_all, tab_max) = pr.op.table_bytes();
+        let tab_dev_now = if pr.op.tables_on_host() { 2 * tab_max } else { tab_all };
+        let quasi = preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.quasi()));
+        let lin = hasty_recon::vknot::LedgerIn {
+            nv,
+            nk,
+            img_frames: op_frames.as_ref().map_or(0, |o| o.set_frames()),
+            slots: if spline { pr.row_slot_bytes() } else { 0 },
+            stack: stack_b,
+            chunk_max: lens.iter().max().unwrap() * 8,
+            nsets: ns,
+            data_all: data_sets.iter().sum(),
+            data_max: data_sets.iter().copied().max().unwrap_or(0),
+            data_movable: !(staged || early_host),
+            tab_all,
+            tab_max,
+            fixed: (pb.total - pb.free).saturating_sub(data_dev_now + tab_dev_now),
+            dev_budget: vram_budget.unwrap_or(pb.total.saturating_sub(512 << 20)).min(pb.total),
+            host_avail: available_memory(),
+            quasi,
+            prior_dev: 0,
+            h2d: pb.h2d,
+            pageable: 0.4 * pb.h2d,
+        };
+        let force_state = match state_arg.as_str() { "host" => Some(true), "device" => Some(false), _ => None };
+        let force_data = if staged || early_host { Some(true) } else { match plan_mode.as_str() { "host" => Some(true), "device" => Some(false), _ => None } };
+        let force_tab = if tab_all == 0 { None } else { match plan_mode.as_str() { "host" => Some(true), "device" => Some(false), _ => None } };
+        let lp = hasty_recon::vknot::plan(&lin, force_state, force_data, force_tab).unwrap_or_else(|e| {
+            eprintln!("{e}");
+            eprintln!("refused before the solver (no OOM): fewer knots / coils, --keep N, a smaller grid (--grid-scale) or a box, or a larger card");
+            std::process::exit(2)
+        });
+        print!("{}", lp.describe());
+        if tab_all > 0 && lp.tables_on_host != pr.op.tables_on_host() {
+            let freed = pr.op.place_tables(&dev.ctx, &st, lp.tables_on_host).unwrap();
+            println!("sample tables moved to {} ({:+.2} GiB device)", if lp.tables_on_host { "pinned host memory (streamed)" } else { "the device" }, -(freed as f64) / GIB);
+        }
+        if lp.data_on_host && data_dev_now > 0 {
+            let freed = pr.data_to_host(&dev.ctx, &st).unwrap();
+            println!("k-space data moved to pinned host memory ({:.2} GiB freed)", freed as f64 / GIB);
+        }
+        let state_host = lp.state_on_host;
+        let sopts = hasty_recon::p2np::StateOpts { ctx: Some(dev.ctx.clone()), prev_on_host: lp.prev_on_host, w_mode: if lp.prev_on_host { hasty_recon::p2np::WMode::Host } else { hasty_recon::p2np::WMode::Device } };
+        // VENC continuation: the low-VENC encodes (all but the least sensitive group) are left out of the first stage
+        let kn: Vec<f64> = (0..ne).map(|e| (0..3).map(|a| (kenc[e][a] - kenc[0][a]).powi(2)).sum::<f64>().sqrt()).collect();
+        let kmin = kn.iter().copied().filter(|&x| x > 0.0).fold(f64::INFINITY, f64::min);
+        let low: Vec<bool> = kn.iter().map(|&x| x > kmin * (1.0 + 1e-6)).collect();
+        let vtag = |pc: &str, kap: f64| format!("{model}_{pc}_vk{kr}x{mc}_r{}c{}{}{}{}{}{dfw_tag}{lock_tag}{}", kb.rdeg, kb.cdeg, vpoly.map_or(String::new(), |d| format!("_p{d}")), if vcont > 0 { format!("_c{vcont}") } else { String::new() }, if vzwarm > 0 { format!("_z{vzwarm}") } else { String::new() }, if kap > 0.0 { format!("_llr{kap}") } else { String::new() }, if static_lock.is_some() && lock_coupling == hasty_recon::knotlock::Coupling::Nested { "n" } else { "" });
+        let runs: Vec<String> = preconds.iter().flat_map(|p| vkappas.iter().map(move |&k| (p, k))).map(|(p, k)| vtag(p, k)).collect();
+        // per-axis static lock on (z, v) (hasty_recon::knotlock): basis from the temporal Gram of the samples
+        let lock_basis = static_lock.as_ref().map(|_| hasty_recon::knotlock::KnotBasis::from_gram(&gram, kr, mc, true, hasty_recon::knotlock::NoiseModel::Auto));
+        let lock_opts = static_lock.as_ref().map(|(o, _, _)| hasty_recon::knotlock::KnotLockOpts { base: o.clone(), coupling: lock_coupling });
+        if let Some(b) = &lock_basis {
+            println!("knot lock (--static-lock {:?}, {lock_coupling:?}): from IT0 {} every {}; separable-metric mismatch {:.3}, G-norm bound {:.3}", lock_opts.as_ref().unwrap().base.mu, static_lock.as_ref().unwrap().1, static_lock.as_ref().unwrap().2, b.nonsep, b.metric_bound);
+        }
+        let mut info = serde_json::json!({
+            "cmdline": cmdline, "sim_dir": dir, "model": model, "phys": phys, "gnl": gnl, "conc_fit": conc_fit, "iters": iters, "warm_iters": warm_iters, "vcoils": nvc, "dims": sd.dims, "vox": sd.vox, "native_dims": sd.tdims,
+            "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "runs": runs, "keep": keep_n, "config": config_line,
+            "prior": if vkappas.iter().any(|&k| k > 0.0) { "llr(z, p)" } else { "none" }, "vkappas": vkappas,
+            "vknots": { "kr": kr, "rdeg": kb.rdeg, "mc": mc, "cdeg": kb.cdeg, "resp": resp_src, "rknots": kb.rknots, "amp_median": amp_med, "gram_condition": gcond, "gram_diag_rel": gdiag.iter().map(|v| v / gmean).collect::<Vec<_>>(), "poly": vpoly, "vcont": vcont, "low_venc_encodes": low, "anchor": vanchor.as_ref().map(|(m, s)| format!("{m},{s}")) },
+            "memory": { "state_on_host": lp.state_on_host, "prev_on_host": lp.prev_on_host, "data_on_host": lp.data_on_host, "tables_on_host": lp.tables_on_host, "device_peak": lp.device_peak, "host_peak": lp.host_peak, "stack_bytes": stack_b },
+            "coils": coil_info, "kstore": kstore_info, "setup_s": t0.elapsed().as_secs_f64(),
+        });
+        info["pyramid"] = pyr_info.clone();
+        info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight, "nseg": nseg });
+        info["vspline"] = match &op_frames {
+            Some(of) => serde_json::json!({ "param": "polar (m, ψ, v)", "fop": of.fop, "odeg": of.odeg, "kre": of.kre, "groups": of.r0, "images_per_encode": of.images_per_encode(), "kbar": spec.kbar(), "init": init_desc, "vmwav": vmwav.map(|(t, l)| format!("{t}:{l}")) }),
+            None => serde_json::json!({ "param": "complex z at the knots (--vop knots)" }),
+        };
+        info["prior_detail"] = serde_json::json!({ "dfw": dfw_rule.map(|r| serde_json::json!({ "rule": format!("{r:?}"), "levels": dfw_levels, "mix": dfw_mix })), "static_lock": static_lock.as_ref().map(|(o, it0, ev)| serde_json::json!({ "opts": format!("{o:?}"), "it0": it0, "every": ev, "coupling": format!("{lock_coupling:?}") })) });
+        std::fs::write(out.join("run.json"), serde_json::to_string_pretty(&info).unwrap()).unwrap();
+        let rt = transpose(&sd.rot);
+        // velocity (logical → physical, J⁻¹ with GNL) of knot values at voxel q
+        let vphys = |v: [f64; 3], q: usize| -> [f64; 3] { if gnl { mat_vec(&rt, &mat_vec(&inv3(&grid.jac[q]), &mat_vec(&sd.rot, &v))) } else { v } };
+        // the truth of the in-driver score: the 20 cardiac frames (scan-mean breathing state) at the lumen voxels
+        let truth_l: Vec<[f64; 3]> = (0..nf_card).flat_map(|f| lumen.iter().map(move |&q| (f, q))).map(|(f, q)| [0, 1, 2].map(|a| sd.sample_log(&sd.truth_vel, a + 3 * f, &grid.x_log[q]))).collect();
+        let nl = lumen.len();
+        let np = spec.np();
+        let pex = vpoly.map(hasty_recon::vmodel::poly_exps).unwrap_or_default();
+        // the initial state: kept for the next run only when there is one (host memory: one parameter stack)
+        let multi = runs.len() > 1;
+        let mut h0 = Some(h0);
+        for (pc, kap) in preconds.iter().flat_map(|p| vkappas.iter().map(move |&k| (p, k))) {
+            let tag = vtag(pc, kap);
+            let precond = Precond::parse(pc).unwrap_or(Precond::Zmshr1M);
+            let with_metric = precond.metric();
+            let resuming = std::fs::read_dir(&out).unwrap().flatten().any(|e| { let n = e.file_name().to_string_lossy().into_owned(); n.starts_with(&format!("state_{tag}_s")) || n.starts_with(&format!("vdone_{tag}_s")) });
+            if !resuming && hasty_value::store::exists_any(&out.join(format!("vel_{tag}.npy"))) {
+                println!("  {tag}: finished in an earlier run, skipped (--fresh to redo)");
+                continue;
+            }
+            // the state of this run (device stack or host stack)
+            let init_x = if multi { h0.as_ref().unwrap().clone() } else { h0.take().expect("initial state") };
+            let (mut xd, mut xh) = if state_host {
+                (Stack { v: vec![] }, init_x)
+            } else {
+                let mut d = Stack::zeros_lens(&st, &lens).unwrap();
+                for t in 0..lens.len() {
+                    st.memcpy_htod(init_x.chunk(t), &mut d.v[t]).unwrap();
+                }
+                (d, HostStack::default())
+            };
+            pr.reset();
+            let mut csv = std::fs::OpenOptions::new().create(true).append(true).open(out.join(format!("metrics_{tag}.csv"))).unwrap();
+            if !resuming {
+                use std::io::Write;
+                csv.set_len(0).unwrap();
+                writeln!(csv, "iter,f,rmse,rel,wrap_frac,seconds,{},rmse_dec,rel_dec", (0..nf_card).map(|f| format!("frame{f}")).collect::<Vec<_>>().join(",")).unwrap();
+            }
+            let tr = Instant::now();
+            let mut stages: Vec<(usize, bool)> = if vcont > 0 && low.iter().any(|&b| b) { vec![(vcont.min(iters), true), (iters.saturating_sub(vcont), false)] } else { vec![(iters, false)] };
+            let zstage = vzwarm > 0;
+            if zstage {
+                stages.insert(0, (vzwarm, false));
+            }
+            let mut k_off = 0;
+            let anchor_auto = matches!(&vanchor, Some((_, m)) if m == "auto") && stages.len() > 1;
+            let fit_mask: Option<Vec<f32>> = sfit.as_ref().map(|f| f.mask.clone());
+            // the knot lock's map (saved exactly with every refresh: a resumed run continues with it)
+            let (lmap_f, lmap_j) = (out.join(format!("knotlock_map_{tag}.npy")), out.join(format!("knotlock_map_{tag}.json")));
+            let mut lock_map: Option<hasty_recon::knotlock::KnotMap> = None;
+            if resuming && static_lock.is_some() && hasty_value::store::exists_any(&lmap_f) && lmap_j.exists() {
+                let j: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&lmap_j).unwrap()).unwrap();
+                let v = hasty_recon::data::read_npy(&lmap_f).unwrap().f32s();
+                let nm = [0, 1, 2].map(|i| j["noise_mix"][i].as_f64().unwrap_or(f64::INFINITY));
+                lock_map = Some(hasty_recon::knotlock::KnotMap::from_stacked(&v, nv, j["iteration"].as_u64().unwrap() as usize, nm));
+                println!("  knot lock map of iteration {} reloaded", j["iteration"]);
+            }
+            for (si, &(n_it, only_hi)) in stages.iter().enumerate() {
+                let stag = format!("{tag}_s{si}");
+                pr.freeze_v = zstage && si == 0;
+                let si = if zstage { si.saturating_sub(1) } else { si };
+                // host copies of the chunks of the current state
+                let chunk_of = |xd: &Stack, xh: &HostStack, t: usize| -> Vec<C32> { if state_host { xh.chunk(t).to_vec() } else { st.clone_dtoh(&xd.v[t]).unwrap() } };
+                if anchor_auto && si == 0 {
+                    pr.clear_anchor();
+                }
+                if anchor_auto && si == 1 {
+                    // static = accepted by the robust fit, low variation of v over the knots, not near a pulsatile voxel
+                    let vh: Vec<Vec<f32>> = (0..nk).map(|k| unpack_f32(&chunk_of(&xd, &xh, spec.chunk_v(k)), 3 * nv)).collect();
+                    let sd_v: Vec<f64> = (0..nv).map(|q| {
+                        let mean: [f64; 3] = [0, 1, 2].map(|a| (0..nk).map(|k| vh[k][a * nv + q] as f64).sum::<f64>() / nk as f64);
+                        ((0..nk).map(|k| (0..3).map(|a| (vh[k][a * nv + q] as f64 - mean[a]).powi(2)).sum::<f64>()).sum::<f64>() / nk as f64).sqrt()
+                    }).collect();
+                    let fm = fit_mask.as_ref().unwrap();
+                    let mut sv: Vec<f64> = (0..nv).filter(|&q| fm[q] > 0.0).map(|q| sd_v[q]).collect();
+                    sv.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    let tau = (vanchor_refine.0 * sv.get(sv.len() / 2).copied().unwrap_or(0.0)).max(0.02);
+                    let mut puls: Vec<bool> = (0..nv).map(|q| support[q] && sd_v[q] > tau).collect();
+                    let d = sd.dims;
+                    for _ in 0..vanchor_refine.1 {
+                        let prev = puls.clone();
+                        for q in 0..nv {
+                            if prev[q] {
+                                continue;
+                            }
+                            let (i, j, k) = (q % d[0], (q / d[0]) % d[1], q / (d[0] * d[1]));
+                            let nb = [(i > 0).then(|| q - 1), (i + 1 < d[0]).then(|| q + 1), (j > 0).then(|| q - d[0]), (j + 1 < d[1]).then(|| q + d[0]), (k > 0).then(|| q - d[0] * d[1]), (k + 1 < d[2]).then(|| q + d[0] * d[1])];
+                            puls[q] = nb.iter().flatten().any(|&n| prev[n]);
+                        }
+                    }
+                    let w: Vec<f32> = (0..nv).map(|q| (fm[q] > 0.0 && !puls[q]) as u8 as f32).collect();
+                    println!("  anchor refined by pulsatility (std of v over the knots > {tau:.3} m/s, dilated {}): {} voxels", vanchor_refine.1, w.iter().filter(|&&x| x > 0.0).count());
+                    pr.set_anchor(&st, &w, vanchor.as_ref().unwrap().0).unwrap();
+                }
+                let done = out.join(format!("vdone_{stag}"));
+                for t in 0..pr.weights.len() {
+                    pr.weights[t] = if only_hi && low[if spline { t / op_frames.as_ref().unwrap().ng() } else { t % ne }] { 0.0 } else { 1.0 };
+                }
+                if done.exists() {
+                    if let Some(v) = ctl.load(&format!("{stag}_final")).unwrap() {
+                        if state_host { xh.load_value(&v).unwrap() } else { xd = hasty_recon::checkpoint::value_stack(&st, &v, &lens).unwrap() }
+                    }
+                    k_off += n_it;
+                    continue;
+                }
+                let tl = Instant::now();
+                let mut lam = if state_host { pr.lambda_max_host(&st, &xh, with_metric, lam_iters).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, lam_iters).unwrap() };
+                if let Some(cs) = coil_sampling.clone() {
+                    // the step must be stable for every coil subset: α from the largest λ_max over a few draws
+                    let ncs = pr.op.n_coils();
+                    let mut ls = 0.0f64;
+                    for d in 0..3 {
+                        pr.cur_groups = cs.groups(ncs, d * cs.hold.max(1), usize::MAX);
+                        let l = if state_host { pr.lambda_max_host(&st, &xh, with_metric, 8).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, 8).unwrap() };
+                        ls = ls.max(l);
+                    }
+                    pr.cur_groups = None;
+                    println!("  coil sampling: λ_max(sampled) / λ_max(full) = {:.3} (3 draws)", ls / lam);
+                    lam = lam.max(ls);
+                }
+                st.synchronize().unwrap();
+                println!("  {tag} stage {si} ({}): {n_it} iterations, λ_max({}) = {lam:.3e} ({:.1}s, {:.1}s per Hessian-vector product)", if only_hi { "reference + high-VENC encodes" } else { "all encodes" }, if with_metric { "M H" } else { "H" }, tl.elapsed().as_secs_f64(), tl.elapsed().as_secs_f64() / lam_iters as f64);
+                if vanchor.is_some() {
+                    if anchor_auto && si == 0 {
+                        // --vanchor …,auto: no anchor in the first stage (its mask is refined by pulsatility after it)
+                        println!("    anchor off in this stage (auto: the static mask is refined by pulsatility after it; n̂ {:.3e})", pr.nhat);
+                    } else {
+                        println!("    anchor λ {:.3e} (n̂ {:.3e})", pr.anchor_lam, pr.nhat);
+                    }
+                }
+                // report: velocity of the knot interpolant at the 20 cardiac frames (median breathing amplitude) in the
+                // lumen against the frame truth; lumen evaluations (--eval) every --eval-every iterations
+                let mut report_core = |k: usize, chunk: &dyn Fn(usize) -> Vec<C32>, f: f64| {
+                    let k = if k == usize::MAX { k_off } else { k + 1 + k_off };
+                    let last = k == iters;
+                    if k % every != 0 && !last && k != 0 {
+                        return;
+                    }
+                    let vl: Vec<Vec<f32>> = (0..nk).map(|kk| { let v = unpack_f32(&chunk(spec.chunk_v(kk)), 3 * nv); lumen.iter().flat_map(|&q| [v[q], v[nv + q], v[2 * nv + q]]).collect() }).collect();
+                    let (mut e2, mut t2, mut n, mut wrap) = (0.0f64, 0.0f64, 0usize, 0usize);
+                    // split of the score (research/velocity_model_sr.md §F.2): the upper half of the lumen by the model
+                    // magnitude (inside the support), the components that are not wrapped, the voxels outside the support
+                    let mbar: Vec<f64> = {
+                        let mut s = vec![0.0f64; nl];
+                        for kk in 0..nk {
+                            let c = chunk(spec.chunk_z(kk));
+                            for (l, &q) in lumen.iter().enumerate() {
+                                s[l] += if spline { c[q].re.abs() as f64 } else { ((c[q].re * c[q].re + c[q].im * c[q].im) as f64).sqrt() };
+                            }
+                        }
+                        s
+                    };
+                    let mmed = { let mut v = mbar.clone(); v.sort_by(|a, b| a.partial_cmp(b).unwrap()); v.get(nl / 2).copied().unwrap_or(0.0) };
+                    let (mut sp_et, mut sp_tt, mut sp_vt, mut sp_t2a) = (0.0f64, 0.0f64, [0.0f64; 3], [0.0f64; 3]);
+                    let (mut sp_en, mut sp_tn, mut sp_eo, mut sp_to) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+                    let mut per_frame = Vec::with_capacity(nf_card);
+                    for fr in 0..nf_card {
+                        let (mut fe2, mut fn_) = (0.0, 0usize);
+                        for (l, &q) in lumen.iter().enumerate() {
+                            let mut v = [0.0f64; 3];
+                            for kk in 0..nk {
+                                let w = wfr[fr][kk];
+                                if w != 0.0 {
+                                    for a in 0..3 {
+                                        v[a] += w * vl[kk][3 * l + a] as f64;
+                                    }
+                                }
+                            }
+                            let v = vphys(v, q);
+                            for a in 0..3 {
+                                let t = truth_l[fr * nl + l][a];
+                                let dd = v[a] - t;
+                                e2 += dd * dd;
+                                t2 += t * t;
+                                fe2 += dd * dd;
+                                let wr = dd.abs() > 0.8 * sd.venc.min(dec.range()[a]);
+                                wrap += wr as usize;
+                                if !wr {
+                                    sp_en += dd * dd;
+                                    sp_tn += t * t;
+                                }
+                                if !support[q] {
+                                    sp_eo += dd * dd;
+                                    sp_to += t * t;
+                                } else if mbar[l] >= mmed {
+                                    sp_et += dd * dd;
+                                    sp_tt += t * t;
+                                    sp_vt[a] += v[a] * t;
+                                    sp_t2a[a] += t * t;
+                                }
+                            }
+                            n += 1;
+                            fn_ += 1;
+                        }
+                        per_frame.push((fe2 / fn_.max(1) as f64).sqrt());
+                    }
+                    let wf = wrap as f64 / (3 * n).max(1) as f64;
+                    // the same frames decoded from the interpolated complex model (what the operator represents between
+                    // knots; the knot velocities' interpolant above can differ, research/velocity_model_sr.md §E)
+                    let (ed2, td2) = {
+                        let a = unpack_f32(&chunk(spec.chunk_a()), spec.na());
+                        let xs = if spline { spline_lumen(chunk, &spec, kb, &a, &pex, &lumen, amp_med, nf_card) } else { knot_lumen(chunk, &spec, &a, &pex, &lumen, &wfr) };
+                        let (mut e, mut t) = (0.0f64, 0.0f64);
+                        for (l, &q) in lumen.iter().enumerate() {
+                            for fr in 0..nf_card {
+                                let z: Vec<Complex64> = (0..ne).map(|e| { let c = xs[(l * ne + e) * nf_card + fr]; Complex64::new(c.re as f64, c.im as f64) }).collect();
+                                let v = vphys(dec.velocity(&z), q);
+                                for a in 0..3 {
+                                    let tt = truth_l[fr * nl + l][a];
+                                    e += (v[a] - tt).powi(2);
+                                    t += tt * tt;
+                                }
+                            }
+                        }
+                        (e, t)
+                    };
+                    {
+                        use std::io::Write;
+                        writeln!(csv, "{k},{f:.6e},{:.5},{:.5},{wf:.5},{:.1},{},{:.5},{:.5}", (e2 / n as f64).sqrt(), (e2 / t2).sqrt(), tr.elapsed().as_secs_f64(), per_frame.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(","), (ed2 / n as f64).sqrt(), (ed2 / td2.max(1e-30)).sqrt()).unwrap();
+                    }
+                    // f is the data term + anchor at the iterate before this one (the gradient's value); the stage's
+                    // initial state has none (p2np reports NaN there: not evaluated, research/velocity_model_sr.md §F.2)
+                    let fs = if f.is_nan() { "— (initial state, not evaluated)".to_string() } else { format!("{f:.4e}") };
+                    println!("  {pc:<7} vk it {k:>3}: f(previous iterate) = {fs}, velocity RMSE {:.3} m/s (rel {:.3}; decoded from the interpolated model {:.3} / rel {:.3}), wrapped {:.2} %, frames {}, {:.0}s", (e2 / n as f64).sqrt(), (e2 / t2).sqrt(), (ed2 / n as f64).sqrt(), (ed2 / td2.max(1e-30)).sqrt(), 100.0 * wf, per_frame.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(" "), tr.elapsed().as_secs_f64());
+                    println!("    score split: upper-half magnitude (support) rel {:.3}, slope {:?}; unwrapped components rel {:.3}; outside the support rel {:.3}", (sp_et / sp_tt.max(1e-30)).sqrt(), [0, 1, 2].map(|a| (sp_vt[a] / sp_t2a[a].max(1e-30) * 1000.0).round() / 1000.0), (sp_en / sp_tn.max(1e-30)).sqrt(), (sp_eo / sp_to.max(1e-30)).sqrt());
+                    if spline && (k == k_off || last) {
+                        // the operator's view of the current model (frames + cubic interpolation) against the model itself
+                        let sub: Vec<usize> = lumen.iter().copied().step_by((lumen.len() / 2000).max(1)).collect();
+                        let a = unpack_f32(&chunk(spec.chunk_a()), spec.na());
+                        let (rel, p999) = op_frame_error(chunk, &spec, &a, &pex, &sub);
+                        println!("    operator-frame approximation error of the model ({} lumen voxels, all rows and encodes): relative {rel:.2e}, p99.9 per sample {p999:.2e}", sub.len());
+                    }
+                    if !evals.is_empty() && (k % eval_every == 0 || last) {
+                        let a = unpack_f32(&chunk(spec.chunk_a()), spec.na());
+                        for (lab, amp, idx) in &evals {
+                            let w: Vec<Vec<f64>> = (0..nf_card).map(|f| kb.weights(*amp, (f as f64 + 0.5) / nf_card as f64)).collect();
+                            let vals = if spline { spline_lumen(chunk, &spec, kb, &a, &pex, idx, *amp, nf_card) } else { knot_lumen(chunk, &spec, &a, &pex, idx, &w) };
+                            let p = out.join(format!("knots_{tag}_r{lab}_it{k}_lumen.npy"));
+                            hasty_value::store::save_bytes(&p, hasty_value::DType::C64, &[idx.len(), ne, nf_card], hasty_value::Order::C, &c8(&vals), &hasty_value::Save::image()).unwrap();
+                        }
+                    }
+                };
+                // prior: LLR on the knot z images and on p = |z̄|·v (3 K real images), then v = p / |z̄|; DFW on every v
+                // knot; then the per-axis static lock hook (below)
+                let (mut llr_z, mut llr_p) = (Llr::new(sd.dims, block, kap, support.clone()), Llr::new(sd.dims, block, kap, support.clone()));
+                let voff: Vec<usize> = (0..nk).map(|k| nk * nv + k * (3 * nv).div_ceil(2)).collect();
+                let mut dfw_v = dfw_rule.map(|r| hasty_recon::dfwavelet::DfWavelet::new(sd.dims, dfw_levels, sd.vox, r));
+                // spline mode: the priors act on the physical parameters (m, ψ0 = ψ' + k̄·v, v); converted at entry / exit
+                let kbar_d = spec.kbar();
+                let mut mwav = vmwav.map(|(t, l)| hasty_recon::wavelet::Wavelet::new(sd.dims, l, t));
+                let mut lock_sig: Option<(Vec<f32>, f64, Vec<f32>, f64)> = None;
+                // step diagnostics (spline mode, research/velocity_model_sr.md §F.2) on a support subsample
+                let dsub: Vec<usize> = { let s: Vec<usize> = (0..nv).filter(|&q| support[q]).collect(); let st_ = (s.len() / 20000).max(1); s.into_iter().step_by(st_).collect() };
+                let kmod = spec.kenc_model();
+                let dbox = vbox.unwrap_or(vext_design.unwrap_or(r_first));
+                let fpk = op_frames.as_ref().map_or(1.0, |o| o.fop as f64 / mc as f64);
+                let mut diag_prev: Option<Vec<(f32, [f32; 3])>> = None;
+                let mut den = |k: usize, h: &mut Vec<C32>| {
+                    let it = (k + k_off) as u64;
+                    let s_in = if spline { Some(vk_sample(h, &dsub, nk, nv, &voff)) } else { None };
+                    let lv = (3 * nv).div_ceil(2);
+                    let psi_shift = |h: &mut Vec<C32>, sign: f64| {
+                        for kk in 0..nk {
+                            let f = unpack_f32(&h[voff[kk]..voff[kk] + lv], 3 * nv);
+                            h[kk * nv..(kk + 1) * nv].par_iter_mut().enumerate().for_each(|(q, z)| {
+                                let d = kbar_d[0] * f[q] as f64 + kbar_d[1] * f[nv + q] as f64 + kbar_d[2] * f[2 * nv + q] as f64;
+                                z.im = (z.im as f64 + sign * d) as f32;
+                            });
+                        }
+                    };
+                    if spline {
+                        psi_shift(h, 1.0);
+                    }
+                    let zbar = |h: &[C32]| -> Vec<f32> { (0..nv).into_par_iter().map(|q| (0..nk).map(|kk| { let c = h[kk * nv + q]; if spline { c.re.abs() } else { (c.re * c.re + c.im * c.im).sqrt() } }).sum::<f32>() / nk as f32).collect() };
+                    // complex pseudo-images z = m e^{iψ0} of the spline parameters, and back by continuity of ψ0
+                    let to_z = |h: &[C32]| -> Vec<C32> { h[..nk * nv].par_iter().map(|c| { let (sn, cs) = (c.im).sin_cos(); C32::new(c.re * cs, c.re * sn) }).collect() };
+                    let from_z = |h: &mut [C32], z: &[C32]| {
+                        h[..nk * nv].par_iter_mut().zip(z.par_iter()).for_each(|(c, zn)| {
+                            let zo = Complex64::from_polar(c.re as f64, c.im as f64);
+                            let zn = Complex64::new(zn.re as f64, zn.im as f64);
+                            let ps = c.im as f64 + if zo.norm() > 0.0 { (zn * zo.conj()).arg() } else { 0.0 };
+                            let m = (zn * Complex64::from_polar(1.0, -ps)).re;
+                            *c = C32::new(m as f32, ps as f32);
+                        });
+                    };
+                    if kap > 0.0 {
+                        llr_z.set_iteration(it);
+                        if spline {
+                            let mut zc = to_z(h);
+                            llr_z.apply(&mut zc, nk);
+                            from_z(h, &zc);
+                        } else {
+                            llr_z.apply(&mut h[..nk * nv], nk);
+                        }
+                        let zb = zbar(h);
+                        let zmax = zb.iter().cloned().fold(0f32, f32::max);
+                        let mut pimg = vec![C32::new(0.0, 0.0); 3 * nk * nv];
+                        for kk in 0..nk {
+                            let f = unpack_f32(&h[voff[kk]..voff[kk] + (3 * nv).div_ceil(2)], 3 * nv);
+                            for c in 0..3 {
+                                for q in 0..nv {
+                                    pimg[(3 * kk + c) * nv + q] = C32::new(zb[q] * f[c * nv + q], 0.0);
+                                }
+                            }
+                        }
+                        llr_p.set_iteration(it);
+                        llr_p.apply(&mut pimg, 3 * nk);
+                        for kk in 0..nk {
+                            let mut f = unpack_f32(&h[voff[kk]..voff[kk] + (3 * nv).div_ceil(2)], 3 * nv);
+                            for c in 0..3 {
+                                for q in 0..nv {
+                                    if zb[q] > 1e-3 * zmax {
+                                        f[c * nv + q] = pimg[(3 * kk + c) * nv + q].re / zb[q];
+                                    }
+                                }
+                            }
+                            let l = (3 * nv).div_ceil(2);
+                            h[voff[kk]..voff[kk] + l].copy_from_slice(&pack_f32(&f, l));
+                        }
+                    }
+                    if let Some(dfw) = dfw_v.as_mut() {
+                        dfw.set_iteration(it);
+                        let zb = zbar(h);
+                        let b = dfw_mix as f32;
+                        for kk in 0..nk {
+                            let l = (3 * nv).div_ceil(2);
+                            let mut f = unpack_f32(&h[voff[kk]..voff[kk] + l], 3 * nv);
+                            let f0 = f.clone();
+                            dfw.apply(&mut f[..3 * nv], Some(&zb));
+                            for (a, a0) in f.iter_mut().zip(&f0) {
+                                *a = a0 + b * (*a - a0);
+                            }
+                            h[voff[kk]..voff[kk] + l].copy_from_slice(&pack_f32(&f, l));
+                        }
+                    }
+                    // spline mode: spatial db4 shrinkage of every magnitude knot (--vmwav)
+                    if let (true, Some(w)) = (spline, mwav.as_mut()) {
+                        w.set_iteration(it);
+                        let mut mi: Vec<C32> = h[..nk * nv].par_iter().map(|c| C32::new(c.re, 0.0)).collect();
+                        w.apply(&mut mi, nk);
+                        h[..nk * nv].par_iter_mut().zip(mi.par_iter()).for_each(|(c, m)| c.re = m.re);
+                    }
+                    // per-axis static lock on (z, v) (hasty_recon::knotlock, --static-lock MU[:IT0[:EVERY]]): the map from
+                    // the iterate from IT0, refreshed every EVERY iterations, the lock after the prior every iteration;
+                    // spline mode: the map from the pseudo-images m e^{iψ0}, the lock on m, ψ0 (own noise levels) and v
+                    if let (Some((_, it0, ev)), Some(lb), Some(lo)) = (&static_lock, &lock_basis, &lock_opts) {
+                        let kit = k + k_off;
+                        let lay = KnotLayout { dims: sd.dims, vox: sd.vox, kr, mc, nv, ne };
+                        let refresh = kit >= *it0 && (lock_map.is_none() || (kit - it0) % ev == 0);
+                        if refresh {
+                            let t = Instant::now();
+                            let zc = if spline { Some(to_z(h)) } else { None };
+                            let (zs, vs) = lay.split(h);
+                            let zr: Vec<&[C32]> = match &zc { Some(z) => z.chunks(nv).collect(), None => zs.iter().map(|s| &**s).collect() };
+                            let vr: Vec<&[f32]> = vs.iter().map(|s| &**s).collect();
+                            let m = hasty_recon::knotlock::estimate_vel(&zr, &vr, sd.dims, sd.vox, lb, lo, &dec, kit);
+                            save_exact(&lmap_f, "<f4", &[m.stacked().len()], f4(m.stacked()));
+                            std::fs::write(&lmap_j, serde_json::json!({ "iteration": m.iteration, "noise_mix": m.noise_mix }).to_string()).unwrap();
+                            println!("    knot lock map (it {kit}, {:.1}s): static over the cycle {:.3}, over breathing {:.3}, fully {:.3}, undetermined {:.3}", t.elapsed().as_secs_f64(), m.static_card, m.static_resp, m.static_full, m.undetermined);
+                            lock_map = Some(m);
+                        }
+                        if let Some(m) = &lock_map {
+                            if spline {
+                                let mut ms: Vec<Vec<f32>> = (0..nk).map(|kk| h[kk * nv..(kk + 1) * nv].iter().map(|c| c.re).collect()).collect();
+                                let mut ps: Vec<Vec<f32>> = (0..nk).map(|kk| h[kk * nv..(kk + 1) * nv].iter().map(|c| c.im).collect()).collect();
+                                if refresh || lock_sig.is_none() {
+                                    let mr: Vec<&[f32]> = ms.iter().map(|v| &v[..]).collect();
+                                    let pr_: Vec<&[f32]> = ps.iter().map(|v| &v[..]).collect();
+                                    let (sm, tm) = hasty_recon::knotlock::real_noise(&mr, sd.dims, sd.vox, lb, lo);
+                                    let (sp_, tp) = hasty_recon::knotlock::real_noise(&pr_, sd.dims, sd.vox, lb, lo);
+                                    lock_sig = Some((sm, tm, sp_, tp));
+                                }
+                                let (sm, tm, sp_, tp) = lock_sig.as_ref().unwrap();
+                                {
+                                    let mut mm: Vec<&mut [f32]> = ms.iter_mut().map(|v| &mut v[..]).collect();
+                                    hasty_recon::knotlock::apply_real(&mut mm, lb, m, lo, sm, *tm);
+                                    let mut pp: Vec<&mut [f32]> = ps.iter_mut().map(|v| &mut v[..]).collect();
+                                    hasty_recon::knotlock::apply_real(&mut pp, lb, m, lo, sp_, *tp);
+                                }
+                                for kk in 0..nk {
+                                    for q in 0..nv {
+                                        h[kk * nv + q] = C32::new(ms[kk][q], ps[kk][q]);
+                                    }
+                                }
+                                let (_, mut vs) = lay.split(h);
+                                hasty_recon::knotlock::apply_v(&mut vs, lb, m, lo);
+                            } else {
+                                let (mut zs, mut vs) = lay.split(h);
+                                hasty_recon::knotlock::apply_z(&mut zs, lb, m, lo);
+                                hasty_recon::knotlock::apply_v(&mut vs, lb, m, lo);
+                            }
+                        }
+                    }
+                    // --vbox: projection of the v coefficients onto the decoder's unaliased range (ψ0 kept)
+                    if let Some(b) = vbox {
+                        let b = b as f32;
+                        for kk in 0..nk {
+                            h[voff[kk]..voff[kk] + lv].par_iter_mut().for_each(|c| {
+                                c.re = c.re.clamp(-b, b);
+                                c.im = c.im.clamp(-b, b);
+                            });
+                        }
+                    }
+                    if spline {
+                        psi_shift(h, -1.0);
+                    }
+                    if let Some(si) = s_in {
+                        let so = vk_sample(h, &dsub, nk, nv, &voff);
+                        println!("    {}", vk_diag(diag_prev.as_deref(), &si, &so, &kmod, dbox, fpk, dsub.len(), mc, k + k_off));
+                        diag_prev = Some(so);
+                    }
+                };
+                let oc = if state_host {
+                    hasty_recon::hoststack::run_objective_host(&mut pr, &st, &mut xh, precond, 1.0 / lam, n_it, &mut den, &mut |k, xs: &HostStack, f| report_core(k, &|t| xs.chunk(t).to_vec(), f), Some((&ctl, &stag))).unwrap()
+                } else {
+                    hasty_recon::p2np::run_objective_with(&mut pr, &st, &mut xd, precond, 1.0 / lam, n_it, &mut den, &mut |k, xs: &Stack, f| report_core(k, &|t| st.clone_dtoh(&xs.v[t]).unwrap(), f), Some((&ctl, &stag)), &sopts).unwrap()
+                };
+                if let Outcome::Stopped(k) = oc {
+                    println!("stopped {stag} at iteration {k} / {n_it}: state saved in {}, rerun the same command to resume", out.display());
+                    std::process::exit(0);
+                }
+                let fin = if state_host { xh.to_value().unwrap() } else { hasty_recon::checkpoint::stack_value(&st, &xd).unwrap() };
+                ctl.save(&format!("{stag}_final"), &fin).unwrap();
+                std::fs::write(&done, b"").unwrap();
+                k_off += n_it;
+            }
+            // outputs: the knot parameters (vparams_<tag>.hv + vknots_<tag>.json: --init-from of a finer level), the
+            // velocity of the knot interpolant and (unless --no-full-save) the model images at the 20 cardiac frames
+            // at the median breathing amplitude (recon_<tag>.npy: X, Y, Z, E, F, the other modes' form)
+            let to = Instant::now();
+            let chunks: Vec<Vec<C32>> = (0..lens.len()).map(|t| if state_host { xh.chunk(t).to_vec() } else { st.clone_dtoh(&xd.v[t]).unwrap() }).collect();
+            drop(xd);
+            drop(xh);
+            {
+                let tens: Vec<hasty_value::Value> = chunks.iter().map(|h| hasty_value::Value::Tensor(hasty_value::Tensor::from_bytes(hasty_value::DType::C64, vec![h.len()], c32_bytes(h)).unwrap())).collect();
+                hasty_value::write(&hasty_value::Value::List(tens), &hasty_value::Options::default(), &mut std::io::BufWriter::new(std::fs::File::create(out.join(format!("vparams_{tag}.hv"))).unwrap())).unwrap();
+                let meta = serde_json::json!({ "tag": tag, "dims": sd.dims, "kr": kr, "rdeg": kb.rdeg, "mc": mc, "cdeg": kb.cdeg, "rknots": kb.rknots, "resp": resp_src, "poly": vpoly, "lens": lens, "params": format!("vparams_{tag}.hv"), "param": if spline { "polar" } else { "complex" }, "kbar": spec.kbar(), "fop": op_frames.as_ref().map(|o| o.fop) });
+                std::fs::write(out.join(format!("vknots_{tag}.json")), serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+            }
+            let vk: Vec<Vec<f32>> = (0..nk).map(|k| unpack_f32(&chunks[spec.chunk_v(k)], 3 * nv)).collect();
+            let mut vout = vec![0f32; nv * 3 * nf_card];
+            for fr in 0..nf_card {
+                for q in 0..nv {
+                    let mut v = [0.0f64; 3];
+                    for k in 0..nk {
+                        let w = wfr[fr][k];
+                        if w != 0.0 {
+                            for a in 0..3 {
+                                v[a] += w * vk[k][a * nv + q] as f64;
+                            }
+                        }
+                    }
+                    let v = vphys(v, q);
+                    for a in 0..3 {
+                        vout[q + nv * (a + 3 * fr)] = v[a] as f32;
+                    }
+                }
+            }
+            drop(vk);
+            save(&out.join(format!("vel_{tag}.npy")), "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 3, nf_card], f4(vout));
+            if !no_full_save && spline {
+                // the spline model's own signal at the 20 cardiac frames (median breathing amplitude), in voxel blocks
+                let a = unpack_f32(&chunks[spec.chunk_a()], spec.na());
+                let mut xout = vec![C32::new(0.0, 0.0); nv * ne * nf_card];
+                let blk = 1 << 18;
+                for q0 in (0..nv).step_by(blk) {
+                    let idx: Vec<usize> = (q0..(q0 + blk).min(nv)).collect();
+                    let vals = spline_lumen(&|t| chunks[t].clone(), &spec, kb, &a, &pex, &idx, amp_med, nf_card);
+                    for (i, &q) in idx.iter().enumerate() {
+                        for e in 0..ne {
+                            for fr in 0..nf_card {
+                                xout[q + nv * (e + ne * fr)] = vals[(i * ne + e) * nf_card + fr];
+                            }
+                        }
+                    }
+                }
+                save(&out.join(format!("recon_{tag}.npy")), "<c8", &[sd.dims[0], sd.dims[1], sd.dims[2], ne, nf_card], c8(&xout));
+            } else if !no_full_save {
+                // x_e(f) = Σ_k w_k(f) x_{e,k}: knot images on the device, accumulated per frame
+                let mut xout = vec![C32::new(0.0, 0.0); nv * ne * nf_card];
+                let (mut zs, mut vs) = (st.alloc_zeros::<C32>(lens[spec.chunk_z(0)]).unwrap(), st.alloc_zeros::<C32>(lens[spec.chunk_v(0)]).unwrap());
+                let ad = st.clone_htod(&chunks[spec.chunk_a()]).unwrap();
+                let xk = st.alloc_zeros::<C32>(nv).unwrap();
+                let mut acc: Vec<CudaSlice<C32>> = (0..nf_card).map(|_| st.alloc_zeros::<C32>(nv).unwrap()).collect();
+                for e in 0..ne {
+                    for a in acc.iter_mut() {
+                        st.memset_zeros(a).unwrap();
+                    }
+                    for k in 0..nk {
+                        st.memcpy_htod(&chunks[spec.chunk_z(k)], &mut zs).unwrap();
+                        st.memcpy_htod(&chunks[spec.chunk_v(k)], &mut vs).unwrap();
+                        use cudarc::driver::DevicePtr;
+                        let (zp, vp, ap, xp) = (zs.device_ptr(&st).0, vs.device_ptr(&st).0, ad.device_ptr(&st).0, xk.device_ptr(&st).0);
+                        pr.model.eval_knot(&st, zp, vp, ap, e, xp).unwrap();
+                        for fr in 0..nf_card {
+                            let w = wfr[fr][k];
+                            if w != 0.0 {
+                                kern.axpby(&st, Complex64::new(w, 0.0), &xk, Complex64::new(1.0, 0.0), &mut acc[fr]).unwrap();
+                            }
+                        }
+                    }
+                    for fr in 0..nf_card {
+                        st.memcpy_dtoh(&acc[fr], &mut xout[nv * (e + ne * fr)..nv * (e + ne * fr + 1)]).unwrap();
+                    }
+                }
+                save(&out.join(format!("recon_{tag}.npy")), "<c8", &[sd.dims[0], sd.dims[1], sd.dims[2], ne, nf_card], c8(&xout));
+            }
+            if np > 0 {
+                let af = unpack_f32(&chunks[spec.chunk_a()], spec.na());
+                let rec: Vec<Vec<f64>> = (1..ne).map(|e| (0..np).map(|p| (af[(e - 1) * np + p] as f64 * 1000.0).round() / 1000.0).collect()).collect();
+                println!("  recovered residual phase (rad, Legendre order of vmodel::poly_exps): {rec:?}");
+                if !injected.is_empty() && vpoly == Some(1) {
+                    let err: f64 = (1..ne).map(|e| (0..4).map(|p| (af[(e - 1) * np + p] as f64 - injected[e - 1][p]).powi(2)).sum::<f64>()).sum::<f64>().sqrt() / ((ne - 1) as f64 * 4.0).sqrt();
+                    println!("  residual-phase RMS error vs injected: {err:.4} rad");
+                }
+            }
+            println!("  {tag}: outputs written ({:.0}s): vel_{tag}, {}vparams_{tag}.hv + vknots_{tag}.json{}", to.elapsed().as_secs_f64(), if no_full_save { "" } else { "recon_<tag> (20 cardiac frames at the median breathing amplitude), " }, if evals.is_empty() { String::new() } else { format!(", knots_{tag}_r*_it*_lumen") });
+            for si in 0..stages.len() {
+                ctl.clear(&format!("{tag}_s{si}_final"));
+                let _ = std::fs::remove_file(out.join(format!("vdone_{tag}_s{si}")));
+            }
+        }
+        let tools = hasty_site::tool("figs/run_figs.py");
+        let py = hasty_site::python();
+        match std::process::Command::new(&py).arg("-I").arg(&tools).arg(&out).status() {
+            Ok(s) if s.success() => println!("figures: {}", out.join("figs").display()),
+            r => println!("figure script failed ({r:?}); run: {} -I {} {}", py.display(), tools.display(), out.display()),
+        }
+        return;
+    }
     if let Some((kz, kv)) = vmodel {
         assert!(!warm.is_empty(), "--vmodel needs --warm (initialisation from the time-averaged reconstruction)");
         use hasty_recon::vmodel::{cpu::Theta, VelModel, VelSpec};
@@ -2185,7 +3524,7 @@ fn main() {
         // (opt-in: centring makes z carry the velocity-dependent mean-encode phase, which breaks its temporal
         // smoothness: 7-point 0.138 → 0.174 m/s; the z warm-up below fixes the coupling instead)
         let kenc: Vec<[f64; 3]> = if std::env::var("HASTY_VM_CENTRED").is_err() { kraw.clone() } else { kraw.iter().map(|k| [0, 1, 2].map(|a| k[a] - kmean[a])).collect() };
-        let spec = VelSpec { dims: sd.dims, kenc: kenc.clone(), nf, kz, deg_z: vdeg.0, kv, deg_v: vdeg.1, poly: vpoly };
+        let spec = VelSpec { dims: sd.dims, kenc: kenc.clone(), nf, kz, deg_z: vdeg.0, kv, deg_v: vdeg.1, poly: vpoly, knots: None, op: None };
         let vm = VelModel::new(&dev, &st, spec.clone()).unwrap();
         // initialisation: time-averaged warm start, z from the reference encode, v by the hierarchical decoder (inside
         // the support), no residual phase
@@ -3537,4 +4876,409 @@ fn bin_group_readout(sd: &hasty_recon::data::SimData, g0: usize, g1: usize, mid:
     let m1: Vec<_> = (g0..g1).map(|i| sd.encode_m1[sd.ro.enc[i]]).collect();
     let tv = hasty_recon::data::velocity_time(&m1, &t);
     (g0..g1).min_by(|&a, &b| (t[a - g0] - tv).abs().partial_cmp(&(t[b - g0] - tv).abs()).unwrap()).unwrap()
+}
+
+/// f32 values packed in pairs into a complex chunk of `len` elements (the velocity-model chunk layout)
+fn pack_f32(v: &[f32], len: usize) -> Vec<C32> {
+    (0..len).map(|i| C32::new(*v.get(2 * i).unwrap_or(&0.0), *v.get(2 * i + 1).unwrap_or(&0.0))).collect()
+}
+
+/// (m, v) of every (knot, voxel) of the subsample `sub` (knot-major) from the host form of a spline-mode state
+fn vk_sample(h: &[C32], sub: &[usize], nk: usize, nv: usize, voff: &[usize]) -> Vec<(f32, [f32; 3])> {
+    let pf = |off: usize, i: usize| { let c = h[off + i / 2]; if i % 2 == 0 { c.re } else { c.im } };
+    (0..nk).flat_map(|kk| sub.iter().map(move |&q| (h[kk * nv + q].re, [0, 1, 2].map(|a| pf(voff[kk], a * nv + q))))).collect()
+}
+
+/// largest encode phase |k'_e · d| (rad) of a velocity change d
+fn kphase(km: &[[f64; 3]], d: [f32; 3]) -> f64 {
+    km.iter().map(|k| (k[0] * d[0] as f64 + k[1] * d[1] as f64 + k[2] * d[2] as f64).abs()).fold(0.0, f64::max)
+}
+
+/// one line of step diagnostics (research/velocity_model_sr.md §F.2): the gradient step's and the prior's encode phase
+/// per (voxel, knot), the velocity box of the decoder design, the phase per operator frame between cardiac knots
+#[allow(clippy::too_many_arguments)]
+fn vk_diag(prev: Option<&[(f32, [f32; 3])]>, si: &[(f32, [f32; 3])], so: &[(f32, [f32; 3])], km: &[[f64; 3]], vbox: f64, fpk: f64, ns: usize, mc: usize, it: usize) -> String {
+    let sub = |a: [f32; 3], b: [f32; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let mut mm: Vec<f32> = so.iter().map(|p| p.0.abs()).collect();
+    mm.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mmed = mm[mm.len() / 2].max(1e-30) as f64;
+    let n = so.len() as f64;
+    let pct = |v: &mut Vec<f64>, p: f64| { v.sort_by(|a, b| a.partial_cmp(b).unwrap()); v.get(((v.len() as f64 - 1.0) * p) as usize).copied().unwrap_or(0.0) };
+    let mut out = format!("step diag (it {it}):");
+    if let Some(pv) = prev {
+        let ph: Vec<f64> = si.iter().zip(pv).map(|(a, b)| kphase(km, sub(a.1, b.1))).collect();
+        let big: Vec<f64> = ph.iter().zip(si).filter(|p| *p.0 > std::f64::consts::PI).map(|p| p.1 .0.abs() as f64 / mmed).collect();
+        let mut bm = big.clone();
+        let mut phs = ph.clone();
+        out += &format!(" gradient step |k'Δv| p99 {:.2} max {:.2} rad, > 1 rad {:.2} %, > π {:.2} % (median m there {:.2} × median)", pct(&mut phs.clone(), 0.99), pct(&mut phs, 1.0), 100.0 * ph.iter().filter(|&&x| x > 1.0).count() as f64 / n, 100.0 * big.len() as f64 / n, pct(&mut bm, 0.5));
+    }
+    let mut pp: Vec<f64> = so.iter().zip(si).map(|(a, b)| kphase(km, sub(a.1, b.1))).collect();
+    let pbig = pp.iter().filter(|&&x| x > std::f64::consts::PI).count() as f64 / n;
+    out += &format!("; prior/lock |k'Δv| p99 {:.2} max {:.2}, > π {:.2} %", pct(&mut pp.clone(), 0.99), pct(&mut pp, 1.0), 100.0 * pbig);
+    let ob = so.iter().filter(|p| p.1.iter().any(|x| (x.abs() as f64) > vbox)).count() as f64 / n;
+    let nkr = so.len() / ns / mc;
+    let mut jp: Vec<f64> = Vec::with_capacity(so.len());
+    for r in 0..nkr {
+        for c in 0..mc {
+            let (k0, k1) = (r * mc + c, r * mc + (c + 1) % mc);
+            for i in 0..ns {
+                jp.push(kphase(km, sub(so[k1 * ns + i].1, so[k0 * ns + i].1)) / fpk);
+            }
+        }
+    }
+    out += &format!("; |v| > {vbox:.1} m/s {:.2} %; phase per operator frame p99.9 {:.2} max {:.2} rad", 100.0 * ob, pct(&mut jp.clone(), 0.999), pct(&mut jp, 1.0));
+    out
+}
+
+/// the first `n` f32 values of a packed chunk
+fn unpack_f32(c: &[C32], n: usize) -> Vec<f32> {
+    c.iter().flat_map(|q| [q.re, q.im]).take(n).collect()
+}
+
+/// Layout of the knot-mode state for the static-lock hook: h = [z_0 .. z_{K−1} (nv complex each), v_0 .. v_{K−1}
+/// ([3][nv] f32 packed in pairs), residual phase], knot k = r · mc + c (respiratory r, cardiac c)
+#[allow(dead_code)]
+struct KnotLayout {
+    dims: [usize; 3],
+    vox: [f64; 3],
+    kr: usize,
+    mc: usize,
+    nv: usize,
+    ne: usize,
+}
+
+#[allow(dead_code)]
+impl KnotLayout {
+    fn nk(&self) -> usize {
+        self.kr * self.mc
+    }
+    /// offset of z_k in h
+    fn z_off(&self, k: usize) -> usize {
+        k * self.nv
+    }
+    /// offset of v_k in h (packed f32 pairs, (3 nv).div_ceil(2) complex)
+    fn v_off(&self, k: usize) -> usize {
+        self.nk() * self.nv + k * (3 * self.nv).div_ceil(2)
+    }
+    /// h as the knots' z (nv complex each) and v (3 nv f32 each, component-major), in place
+    fn split<'a>(&self, h: &'a mut [C32]) -> (Vec<&'a mut [C32]>, Vec<&'a mut [f32]>) {
+        let (nk, nv) = (self.nk(), self.nv);
+        let lv = (3 * nv).div_ceil(2);
+        let (zh, rest) = h.split_at_mut(nk * nv);
+        let zs: Vec<&mut [C32]> = zh.chunks_mut(nv).collect();
+        let vs: Vec<&mut [f32]> = rest[..nk * lv]
+            .chunks_mut(lv)
+            // SAFETY: C32 is two f32 (repr C, no padding); the chunk's first 3 nv floats are v (component-major)
+            .map(|c| unsafe { std::slice::from_raw_parts_mut(c.as_mut_ptr() as *mut f32, 3 * nv) })
+            .collect();
+        (zs, vs)
+    }
+}
+
+
+/// The knot model at voxels `idx` for the frame weights `w` (per frame, K knot weights):
+/// x_e(q, f) = Σ_k w_k(f) z_k(q) e^{i(φ_e(q) − k_e·v_k(q))}, as complex64 (n, E, F) C order (frame_fit lumen form)
+fn knot_lumen(chunk: &dyn Fn(usize) -> Vec<C32>, spec: &hasty_recon::vmodel::VelSpec, a: &[f32], pex: &[[i32; 3]], idx: &[usize], w: &[Vec<f64>]) -> Vec<C32> {
+    let (nv, ne, nk, nf) = (spec.nv(), spec.ne(), spec.kz, w.len());
+    let n = idx.len();
+    let np = pex.len();
+    let zl: Vec<Vec<C32>> = (0..nk).map(|k| { let c = chunk(spec.chunk_z(k)); idx.iter().map(|&q| c[q]).collect() }).collect();
+    let vl: Vec<Vec<[f32; 3]>> = (0..nk).map(|k| { let v = unpack_f32(&chunk(spec.chunk_v(k)), 3 * nv); idx.iter().map(|&q| [v[q], v[nv + q], v[2 * nv + q]]).collect() }).collect();
+    let mut out = vec![C32::new(0.0, 0.0); n * ne * nf];
+    for (i, &q) in idx.iter().enumerate() {
+        for e in 0..ne {
+            let phi: f64 = if e == 0 || np == 0 { 0.0 } else { (0..np).map(|p| a[(e - 1) * np + p] as f64 * hasty_recon::vmodel::poly_at(&pex[p], q, spec.dims)).sum() };
+            let ke = spec.kenc[e];
+            let xk: Vec<Complex64> = (0..nk).map(|k| { let z = zl[k][i]; let v = vl[k][i]; Complex64::new(z.re as f64, z.im as f64) * Complex64::from_polar(1.0, phi - (ke[0] * v[0] as f64 + ke[1] * v[1] as f64 + ke[2] * v[2] as f64)) }).collect();
+            for f in 0..nf {
+                let x: Complex64 = (0..nk).filter(|&k| w[f][k] != 0.0).map(|k| xk[k] * w[f][k]).sum();
+                out[(i * ne + e) * nf + f] = C32::new(x.re as f32, x.im as f32);
+            }
+        }
+    }
+    out
+}
+
+/// --init-from a knot run (vknots_<tag>.json + vparams_<tag>.hv, newest; same knot counts and residual-phase degree):
+/// its parameters resampled band-limited to this grid (z keeps its Fourier coefficients — the values scale with the
+/// voxel volume as the other initial images; v is a physical velocity, rescaled back). None: no such run.
+fn knot_init(p: &std::path::Path, spec: &hasty_recon::vmodel::VelSpec, kb: &hasty_recon::vknot::KnotBasis) -> Option<(PathBuf, ([usize; 3], Vec<Vec<C32>>))> {
+    let dir = if p.is_dir() { p.to_path_buf() } else { p.parent()?.to_path_buf() };
+    let mut metas: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&dir).ok()?.flatten().filter(|e| { let n = e.file_name().to_string_lossy().into_owned(); n.starts_with("vknots_") && n.ends_with(".json") }).filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path()))).collect();
+    metas.sort();
+    let (_, mp) = metas.pop()?;
+    let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&mp).ok()?).ok()?;
+    let [kr, mc] = spec.knots?;
+    if m["kr"].as_u64()? as usize != kr || m["mc"].as_u64()? as usize != mc || m["rdeg"].as_u64()? as u32 != kb.rdeg || m["cdeg"].as_u64()? as u32 != kb.cdeg {
+        println!("knot init: {} has other knots, not used", mp.display());
+        return None;
+    }
+    let src: [usize; 3] = [0, 1, 2].map(|a| m["dims"][a].as_u64().unwrap() as usize);
+    let pf = dir.join(m["params"].as_str()?);
+    let v = hasty_value::read(&mut std::io::BufReader::new(std::fs::File::open(&pf).ok()?)).ok()?;
+    let hasty_value::Value::List(items) = v else { return None };
+    let nvs: usize = src.iter().product();
+    let nv = spec.nv();
+    let ratio = nvs as f64 / nv as f64;
+    let chunk = |i: usize| -> Vec<C32> {
+        let t = items[i].as_tensor().unwrap();
+        // SAFETY: complex64 tensor bytes
+        unsafe { std::slice::from_raw_parts(t.bytes().as_ptr() as *const C32, t.numel()) }.to_vec()
+    };
+    let lens = spec.lens();
+    let mut out: Vec<Vec<C32>> = lens.iter().map(|&l| vec![C32::new(0.0, 0.0); l]).collect();
+    let nk = kr * mc;
+    // spline runs store (m, ψ' = ψ0 − k̄·v): resampled as the physical complex z0 = m e^{iψ0} (band-limited like the
+    // complex models' z) and v; a spline target takes (m, ψ0) back from z0 with ψ0 unwrapped along the knots
+    let src_polar = m["param"].as_str() == Some("polar");
+    let kbs: [f64; 3] = [0, 1, 2].map(|a| m["kbar"][a].as_f64().unwrap_or(0.0));
+    for k in 0..nk {
+        let zc = chunk(k);
+        let z0: Vec<C32> = if src_polar {
+            let vs = unpack_f32(&chunk(nk + k), 3 * nvs);
+            zc.iter().enumerate().map(|(q, c)| { let ps = c.im as f64 + kbs[0] * vs[q] as f64 + kbs[1] * vs[nvs + q] as f64 + kbs[2] * vs[2 * nvs + q] as f64; let z = Complex64::from_polar(c.re as f64, ps); C32::new(z.re as f32, z.im as f32) }).collect()
+        } else {
+            zc
+        };
+        out[spec.chunk_z(k)] = hasty_recon::pyramid::resample_fourier(&z0, src, spec.dims);
+        let vs = unpack_f32(&chunk(nk + k), 3 * nvs);
+        let mut vd = vec![0f32; 3 * nv];
+        for a in 0..3 {
+            let c: Vec<C32> = vs[a * nvs..(a + 1) * nvs].iter().map(|&x| C32::new(x, 0.0)).collect();
+            let r = hasty_recon::pyramid::resample_fourier(&c, src, spec.dims);
+            for q in 0..nv {
+                vd[a * nv + q] = (r[q].re as f64 / ratio) as f32;
+            }
+        }
+        out[spec.chunk_v(k)] = pack_f32(&vd, lens[spec.chunk_v(k)]);
+    }
+    if spec.spline() {
+        let kb_t = spec.kbar();
+        let vk: Vec<Vec<f32>> = (0..nk).map(|k| unpack_f32(&out[spec.chunk_v(k)], 3 * nv)).collect();
+        let zk: Vec<Vec<C32>> = (0..nk).map(|k| out[spec.chunk_z(k)].clone()).collect();
+        for q in 0..nv {
+            let z: Vec<Complex64> = (0..nk).map(|k| Complex64::new(zk[k][q].re as f64, zk[k][q].im as f64)).collect();
+            for (k, (mm, ps)) in polar_of(&z).into_iter().enumerate() {
+                let d = kb_t[0] * vk[k][q] as f64 + kb_t[1] * vk[k][nv + q] as f64 + kb_t[2] * vk[k][2 * nv + q] as f64;
+                out[spec.chunk_z(k)][q] = C32::new(mm as f32, (ps - d) as f32);
+            }
+        }
+    }
+    if m["poly"] == serde_json::json!(spec.poly) && items.len() > 2 * nk {
+        let a = chunk(2 * nk);
+        let l = lens[spec.chunk_a()];
+        out[spec.chunk_a()] = a.into_iter().chain(std::iter::repeat(C32::new(0.0, 0.0))).take(l).collect();
+    }
+    Some((pf, (src, out)))
+}
+
+// ─── parameter-spline velocity model helpers (research/velocity_model_sr.md §F) ─────────────────────────────────────
+
+/// The spline model at voxels `idx`, breathing amplitude `amp` and the `nfr` cardiac frame centres (the model's own
+/// signal: the respiratory rows mixed complex-linearly, each row m e^{i(ψ + φ_e − k'_e·v)} with (m, ψ, v) the cardiac
+/// splines of the row), complex64 (n, E, F) C order (frame_fit lumen form)
+#[allow(clippy::too_many_arguments)]
+fn spline_lumen(chunk: &dyn Fn(usize) -> Vec<C32>, spec: &hasty_recon::vmodel::VelSpec, kb: &hasty_recon::vknot::KnotBasis, a: &[f32], pex: &[[i32; 3]], idx: &[usize], amp: f64, nfr: usize) -> Vec<C32> {
+    use rayon::prelude::*;
+    let (nv, ne, nk) = (spec.nv(), spec.ne(), spec.kz);
+    let (kr, mc) = (kb.kr, kb.mc);
+    let n = idx.len();
+    let np = pex.len();
+    let wr = kb.resp_weights(amp);
+    let wc: Vec<Vec<f64>> = (0..nfr).map(|f| kb.cardiac_weights(kb.cardiac_t((f as f64 + 0.5) / nfr as f64))).collect();
+    let rows: Vec<usize> = (0..kr).filter(|&r| wr[r] != 0.0).collect();
+    let zl: Vec<Vec<C32>> = (0..nk).map(|k| if rows.contains(&(k / mc)) { let c = chunk(spec.chunk_z(k)); idx.iter().map(|&q| c[q]).collect() } else { vec![] }).collect();
+    let vl: Vec<Vec<[f32; 3]>> = (0..nk).map(|k| if rows.contains(&(k / mc)) { let v = unpack_f32(&chunk(spec.chunk_v(k)), 3 * nv); idx.iter().map(|&q| [v[q], v[nv + q], v[2 * nv + q]]).collect() } else { vec![] }).collect();
+    let kem = spec.kenc_model();
+    let mut out = vec![C32::new(0.0, 0.0); n * ne * nfr];
+    out.par_chunks_mut(ne * nfr).enumerate().for_each(|(i, o)| {
+        let q = idx[i];
+        let phi: Vec<f64> = (0..ne).map(|e| if e == 0 || np == 0 { 0.0 } else { (0..np).map(|p| a[(e - 1) * np + p] as f64 * hasty_recon::vmodel::poly_at(&pex[p], q, spec.dims)).sum() }).collect();
+        for &r in &rows {
+            for f in 0..nfr {
+                let (mut m, mut ps, mut v) = (0.0f64, 0.0f64, [0.0f64; 3]);
+                for c in 0..mc {
+                    let w = wc[f][c];
+                    if w != 0.0 {
+                        let z = zl[r * mc + c][i];
+                        let vv = vl[r * mc + c][i];
+                        m += w * z.re as f64;
+                        ps += w * z.im as f64;
+                        for d in 0..3 {
+                            v[d] += w * vv[d] as f64;
+                        }
+                    }
+                }
+                for e in 0..ne {
+                    let k = kem[e];
+                    let x = Complex64::from_polar(wr[r] * m, ps + phi[e] - (k[0] * v[0] + k[1] * v[1] + k[2] * v[2]));
+                    let s = &mut o[e * nfr + f];
+                    *s = C32::new(s.re + x.re as f32, s.im + x.im as f32);
+                }
+            }
+        }
+    });
+    out
+}
+
+/// (m, ψ) knot values of complex zero-moment values (hasty_recon::vinit::polar_of)
+fn polar_of(z: &[Complex64]) -> Vec<(f64, f64)> {
+    hasty_recon::vinit::polar_of(z)
+}
+
+/// operator-frame approximation error of the spline model (research/velocity_model_sr.md §F) at the voxels `idx`: per
+/// respiratory row and encode, the cubic (or linear) interpolation through the fop frame values against the model at 8
+/// cardiac times per frame interval; (relative RMS over the signal, the 99.9th percentile of the per-sample relative error)
+fn op_frame_error(chunk: &dyn Fn(usize) -> Vec<C32>, spec: &hasty_recon::vmodel::VelSpec, a: &[f32], pex: &[[i32; 3]], idx: &[usize]) -> (f64, f64) {
+    use rayon::prelude::*;
+    let of = spec.op.as_ref().unwrap();
+    let (nv, ne, mc, fop) = (spec.nv(), spec.ne(), of.mc, of.fop);
+    let np = pex.len();
+    let kem = spec.kenc_model();
+    let pre = of.prefilter();
+    let nfine = 8 * fop;
+    let fw: Vec<Vec<(usize, f64)>> = (0..fop).map(|f| of.frame_weights(f)).collect();
+    let card = |t: f64| -> Vec<(usize, f64)> { (0..mc).map(|c| (c, hasty_recon::vknot::cardiac_weight(t, c, mc, of.cdeg))).filter(|p| p.1 != 0.0).collect() };
+    let fine_w: Vec<Vec<(usize, f64)>> = (0..nfine).map(|j| card(((j as f64 + 0.5) / nfine as f64 * mc as f64 - 0.5).rem_euclid(mc as f64))).collect();
+    let op_w: Vec<Vec<(usize, f64)>> = (0..nfine).map(|j| { let t = ((j as f64 + 0.5) / nfine as f64 * fop as f64 - 0.5).rem_euclid(fop as f64); (0..fop).map(|b| (b, hasty_recon::vknot::cardiac_weight(t, b, fop, of.odeg))).filter(|p| p.1 != 0.0).collect() }).collect();
+    let zs: Vec<Vec<C32>> = (0..spec.kz).map(|k| { let c = chunk(spec.chunk_z(k)); idx.iter().map(|&q| c[q]).collect() }).collect();
+    let vs: Vec<Vec<[f32; 3]>> = (0..spec.kz).map(|k| { let v = unpack_f32(&chunk(spec.chunk_v(k)), 3 * nv); idx.iter().map(|&q| [v[q], v[nv + q], v[2 * nv + q]]).collect() }).collect();
+    let res: Vec<(f64, f64, Vec<f64>)> = (0..idx.len()).into_par_iter().map(|i| {
+        let q = idx[i];
+        let (mut num, mut den, mut rel) = (0.0, 0.0, vec![]);
+        let eval = |r: usize, w: &[(usize, f64)], e: usize| -> Complex64 {
+            let (mut m, mut ps, mut v) = (0.0, 0.0, [0.0f64; 3]);
+            for &(c, x) in w {
+                let z = zs[r * mc + c][i];
+                let vv = vs[r * mc + c][i];
+                m += x * z.re as f64;
+                ps += x * z.im as f64;
+                for d in 0..3 {
+                    v[d] += x * vv[d] as f64;
+                }
+            }
+            let phi = if e == 0 || np == 0 { 0.0 } else { (0..np).map(|p| a[(e - 1) * np + p] as f64 * hasty_recon::vmodel::poly_at(&pex[p], q, spec.dims)).sum::<f64>() };
+            let k = kem[e];
+            Complex64::from_polar(m, ps + phi - (k[0] * v[0] + k[1] * v[1] + k[2] * v[2]))
+        };
+        for r in 0..of.kr {
+            for e in 0..ne {
+                let xf: Vec<Complex64> = (0..fop).map(|f| eval(r, &fw[f], e)).collect();
+                let cf: Vec<Complex64> = (0..fop).map(|f| (0..fop).map(|n| xf[(f + fop - n) % fop] * pre[n]).sum()).collect();
+                let scale = xf.iter().map(|x| x.norm()).fold(0.0, f64::max).max(1e-30);
+                for j in 0..nfine {
+                    let xm = eval(r, &fine_w[j], e);
+                    let xo: Complex64 = op_w[j].iter().map(|&(b, w)| cf[b] * w).sum();
+                    num += (xo - xm).norm_sqr();
+                    den += xm.norm_sqr();
+                    rel.push((xo - xm).norm() / scale);
+                }
+            }
+        }
+        (num, den, rel)
+    }).collect();
+    let (num, den) = res.iter().fold((0.0, 0.0), |a, r| (a.0 + r.0, a.1 + r.1));
+    let mut rel: Vec<f64> = res.into_iter().flat_map(|r| r.2).collect();
+    rel.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    ((num / den.max(1e-300)).sqrt(), rel.get((rel.len() as f64 * 0.999) as usize).copied().unwrap_or(0.0))
+}
+
+/// The true ratemap of one operator frame on the reconstruction grid (oracle): off-resonance ω (rad/s, the field the
+/// signal sees, no chemical shift), water / fat decay rates (1/s) and the fat fraction.
+struct RateFrame {
+    om: Vec<f32>,
+    rw: Vec<f32>,
+    rf: Vec<f32>,
+    ff: Vec<f32>,
+}
+
+/// `--ratemap truth-bc`: the simulator's per-state truth ratemap (scan/truth_ratemap_bc/, states s = q K + k on the
+/// grid r_k × c_q, research/resp_field_sim.md) at each knot's state. A knot's state is the basis-weighted mean of the
+/// true breathing r (resp.npy) and the true cardiac time (physio.npy ECG phase × period) over the used readouts (ORACLE
+/// coordinates: evaluation / development of the flow sequence only). Bilinear in (r, c), periodic in c; NaN corners
+/// (no source of that kind) are skipped, and voxels with none fall back to ω = the static field, rates 0, φ = 0.
+fn truth_ratemap_knots(dir: &std::path::Path, sd: &SimData, x_log: &[[f64; 3]], boxed: bool, nk: usize, used: &[usize], w: &[Vec<(usize, f64)>]) -> Vec<RateFrame> {
+    let td = dir.join("truth_ratemap_bc");
+    let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(td.join("meta.json")).unwrap_or_else(|e| panic!("--ratemap truth-bc: {}: {e}", td.display()))).unwrap();
+    let stv = &meta["states"];
+    let rk: Vec<f64> = stv["r"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect();
+    let cq: Vec<f64> = stv["c_s"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect();
+    let period = stv["period_s"].as_f64().unwrap();
+    let (kk, qq) = (rk.len(), cq.len());
+    let mask_a = hasty_recon::data::read_npy(&td.join("mask.npy")).unwrap();
+    // resp_field.py saves the mask as bool, F order (x fastest): file bytes are already in our linear order
+    assert!(mask_a.fortran || mask_a.shape.iter().filter(|&&n| n > 1).count() <= 1, "truth_ratemap_bc mask.npy: expected fortran_order (x fastest)");
+    let mask: Vec<bool> = mask_a.bools();
+    let mdims = [mask_a.shape[0], mask_a.shape[1], mask_a.shape[2]];
+    let idx: Vec<usize> = (0..mask.len()).filter(|&i| mask[i]).collect();
+    let load = |name: &str| -> Vec<f32> { hasty_recon::data::read_npy(&td.join(name)).unwrap_or_else(|e| panic!("{name}: {e:?}")).f32s() };
+    let (om_s, rw_s, rf_s, ff_s) = (load("omega_hz.npy"), load("r_water.npy"), load("r_fat.npy"), load("ff.npy"));
+    let nm = idx.len();
+    assert_eq!(om_s.len(), kk * qq * nm, "truth_ratemap_bc: {} values, {} states × {nm} mask voxels", om_s.len(), kk * qq);
+    // knot states (oracle): weighted mean r, circular mean cardiac time
+    let ra = hasty_recon::data::read_npy(&dir.join("resp.npy")).unwrap();
+    let (rw_, rv_) = (ra.shape[1], ra.f64s());
+    let pa = hasty_recon::data::read_npy(&dir.join("physio.npy")).unwrap();
+    let (pw_, pv_) = (pa.shape[1], pa.f64s());
+    let mut acc = vec![(0.0f64, 0.0f64, Complex64::new(0.0, 0.0)); nk];
+    for (j, &i) in used.iter().enumerate() {
+        let (r, ph) = (rv_[i * rw_], pv_[i * pw_ + 1]);
+        let z = Complex64::from_polar(1.0, std::f64::consts::TAU * ph);
+        for &(b, wb) in &w[j] {
+            acc[b].0 += wb;
+            acc[b].1 += wb * r;
+            acc[b].2 += wb * z;
+        }
+    }
+    let to_grid = |full: Vec<f32>| -> Vec<f32> {
+        if mdims == sd.dims || sd.native_grid() {
+            full
+        } else {
+            assert_eq!(mdims, sd.tdims, "truth_ratemap_bc grid {mdims:?} is neither the reconstruction grid {:?} nor the native {:?}", sd.dims, sd.tdims);
+            hasty_recon::pyramid::native_maps_to_grid(sd, &full, x_log, boxed)
+        }
+    };
+    let ntot = mask.len();
+    let mut out = Vec::with_capacity(nk);
+    for (b, &(wsum, wr, wz)) in acc.iter().enumerate() {
+        let r = if wsum > 0.0 { wr / wsum } else { 0.0 };
+        let c = (wz.arg() / std::f64::consts::TAU).rem_euclid(1.0) * period;
+        // bilinear corners: r on the (uniform) r_k grid, clamped; c periodic on the c_q grid
+        let ur = if kk > 1 { ((r - rk[0]) / (rk[kk - 1] - rk[0]) * (kk - 1) as f64).clamp(0.0, (kk - 1) as f64) } else { 0.0 };
+        let (k0, fr) = ((ur.floor() as usize).min(kk.saturating_sub(2)), 0.0f64);
+        let fr = if kk > 1 { ur - k0 as f64 } else { fr };
+        let uc = (c / period * qq as f64).rem_euclid(qq as f64);
+        let (q0, fc) = (uc.floor() as usize % qq, uc - uc.floor());
+        let q1 = (q0 + 1) % qq;
+        let k1 = (k0 + 1).min(kk - 1);
+        let corners = [(q0 * kk + k0, (1.0 - fr) * (1.0 - fc)), (q0 * kk + k1, fr * (1.0 - fc)), (q1 * kk + k0, (1.0 - fr) * fc), (q1 * kk + k1, fr * fc)];
+        let interp = |a: &[f32], fill: f32| -> Vec<f32> {
+            let mut full = vec![fill; ntot];
+            for (n, &vi) in idx.iter().enumerate() {
+                let (mut s, mut ws) = (0.0f64, 0.0f64);
+                for &(st, cw) in &corners {
+                    let x = a[st * nm + n];
+                    if cw > 0.0 && x.is_finite() {
+                        s += cw * x as f64;
+                        ws += cw;
+                    }
+                }
+                if ws > 0.0 {
+                    full[vi] = (s / ws) as f32;
+                }
+            }
+            full
+        };
+        let om_full = interp(&om_s, f32::NAN);
+        let om_g = to_grid(om_full);
+        let om: Vec<f32> = om_g.iter().map(|&x| if x.is_finite() { (x as f64 * std::f64::consts::TAU) as f32 } else { f32::NAN }).collect();
+        let rw = to_grid(interp(&rw_s, 0.0)).into_iter().map(|x| if x.is_finite() { x } else { 0.0 }).collect();
+        let rf = to_grid(interp(&rf_s, 0.0)).into_iter().map(|x| if x.is_finite() { x } else { 0.0 }).collect();
+        let ff = to_grid(interp(&ff_s, 0.0)).into_iter().map(|x| if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 }).collect();
+        if b == 0 || b == nk - 1 {
+            println!("  knot {b}: true state r = {r:.3}, cardiac time {c:.3} s (of {period:.3})");
+        }
+        out.push(RateFrame { om, rw, rf, ff });
+    }
+    out
 }

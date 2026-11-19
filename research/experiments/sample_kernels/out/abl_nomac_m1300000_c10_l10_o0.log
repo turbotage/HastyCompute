@@ -1,0 +1,5 @@
+=== abl_nomac_m1300000_c10_l10_o0: env [HASTY_SEG_DEFS=PROF_NOMAC] --mode base --m 1300000 --ncb 10 --nseg 10 --order 0 (Thu Nov 19 12:19:49 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 1300000
+trajectory: 1300000 samples of 326 readouts (encode 0, rotations from 3796), |k|max 1567.5 rad/m -> 0.98 π
+  engine points 1.1 s, grid [200, 200, 200]
+  base (today's tile kernels, autotuned 21 s): forward 21.84 ms TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 4, chunk: 24, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, adjoint 22.21 ms TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 4, chunk: 24, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 } (default TileCfg { tt: 4, cpba: 5, cpbf: 4, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 } / TileCfg { tt: 4, cpba: 5, cpbf: 4, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 })

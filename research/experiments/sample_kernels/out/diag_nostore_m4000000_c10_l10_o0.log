@@ -1,0 +1,9 @@
+=== diag_nostore_m4000000_c10_l10_o0: env [PG_DEFS=PS_NOSTORE] --mode fwd --m 4000000 --ncb 10 --nseg 10 --order 0 --designs ps --fixed 4,4,8,2,2,2,128 --reps 5 --check 50 (Thu Nov 19 01:07:14 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  ps: 1 candidates, compiled in 0.3 s
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 128 smax 128 sb 2 rx 1 smem  37952 regs 128:   120.96 ms
+  RES ps: regs 128, local 0 B, smem 37952 B, blocks/SM 2, warps/SM 8 of 48
+  WORK ps: useful/issued x-loop MAC slots 0.463 (x 0.769 = W/HXP; rows/warp 12.67, planes/warp 11.53, live slots 0.881); active (warp, plane) 0.515; block fill 0.669; FFMA-pipe use of issued work 33.8 %
+  BEST ps: 121.66 ms Cfg { halo: 3, tt: 4, ch: 4, tps: 2, nt: 128, smax: 128, padc: 0, sb: 2, rx: 1, ty: 4, tz: 8 } items 46702 | 3288 G cMAC/s, 15.6 % of FP32 FMA peak (2 FMA/MAC) | value loads 26.3 TB/s (L1/smem), halo staging 882 GB/s | rel err 1.00e0 (max 1.65e1 of rms 6.30e0) on 50 samples

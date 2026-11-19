@@ -1,0 +1,102 @@
+output directory /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth-bc (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth-bc/STOP to pause with a checkpoint)
+k-space data: 50.56 GiB raw coil data, 40.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [64, 36, 30] (native [254, 144, 114]), voxel [7.9, 8.0, 7.6] mm
+--keep 8: 6646 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+knot basis (bellows): 6 linear knots at [-0.054, 0.096, 0.348, 0.666, 0.943, 1.575] × 16 cardiac knots degree 3
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 7 sets (26517540 samples) in 0.8s
+calibration region [24, 24, 24]: 182261 samples of encode 0, 32 coils (1.7s)
+coil compression (whitened calibration region): 8 of 32 virtual coils (fixed 8), 68.854 % energy kept; σ²/Σσ²: [1.6e-1, 1.2e-1, 1.1e-1, 7.3e-2, 6.8e-2, 5.6e-2, 5.5e-2, 4.8e-2, 4.3e-2, 3.5e-2, 3.3e-2, 2.8e-2, 2.5e-2, 1.9e-2, 1.9e-2, 1.6e-2, 1.4e-2, 1.4e-2, 1.3e-2, 1.0e-2, 7.8e-3, 6.4e-3, 6.2e-3, 5.7e-3, 4.0e-3, 3.6e-3, 2.6e-3, 2.2e-3, 1.7e-3, 1.1e-3, 7.6e-4, 5.2e-4]
+  k-space store: 7 / 7 sets (7s)
+k-space store built in 6.9s: dense in RAM: 7 sets × 8 coils, 1.58 GiB raw → 1.58 GiB stored (×1.00), 1.58 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 2033864 of 26517540 samples kept (7.67 %), ADC window 0..3989 of 3990 (1.600..9.578 ms), 270624 .. 300210 per set (0.0s)
+k-space crop: kept data 0.12 GiB read through a filtered view of the store
+device memory after loading and coil compression: 21.15 GiB free of 23.51 GiB
+7 sets (7 encodes x 6·16 knots (respiratory degree 1, cardiac degree 3)), 884..981 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 13.1s
+device memory after the data placement: 21.15 GiB free of 23.51 GiB
+warm start: 4 PCGLS iterations per encode (14s)
+device memory after the warm start: 20.93 GiB free of 23.51 GiB
+support 46331 voxels
+coil maps not masked (--coil-mask none): 69120 voxels; fit region 54136 voxels
+lumen 779 voxels: 357 in the support, 779 in the masked maps
+warm-start velocity in the lumen: mean ["0.006", "-0.012", "-0.014"] m/s, truth (time average) ["0.012", "0.003", "-0.014"], RMSE 1.201 m/s
+device memory before the segment operator: 20.93 GiB free of 23.51 GiB
+monomial quadratic fit over 54136 voxels: rms 3.4e-4 / max 1.6e-3 m² (z², x²+y², xz, yz: ["1.2e-3", "1.6e-3", "1.2e-3", "1.0e-3"])
+  [build timer] monomial fit done: 0.0s since the build start
+monomial degree-4 fit (--conc-fit deg4): rms 6.7e-5 / max 4.7e-4 m² (["4.3e-4", "3.7e-4", "4.7e-4", "3.6e-4"]); degree 3/4 part to first order in the kernel (order 3)
+segment basis voxel weights: smoothed warm-start magnitude² × coil energy / median (18046 fit voxels)
+per-sample weights 1 + (E(n) + E_vol) / (C σ²), σ = 39.976: first 1.57e5, middle 3.94e1, last 2.38e4, mean 2.21e3; white floor E_vol / (C σ²) = 36.5
+segments (auto:noise): predicted data error × 1.5 ≤ 0.2 noise rms (relative weighted error ≤ 2.83e-3, ×47.1) → L = 9 (svdn basis)
+  [build timer] auto:noise segment rule done: 0.8s since the build start
+  knot 0: true state r = 0.029, cardiac time 0.026 s (of 0.853)
+  knot 95: true state r = 1.048, cardiac time 0.828 s (of 0.853)
+ratemap per frame (truth-bc, ORACLE): 96 knots; knot-mean ω vs the static field: correlation 0.992, rms 180.4 / 182.9 Hz
+  segment model error of the ratemap, encode 0: L = 9, relative 9.47e-3 (SNR-weighted over ADC time, signal energy over 6016 fit voxels)
+  segment model error of the ratemap, encode 0: L = 9, relative 1.04e-2 (SNR-weighted over ADC time, signal energy over 6016 fit voxels)
+  per-frame ratemap segments: 96 knots × L = 9, encode 0 built in 150.8s
+  [build timer] segment bases of all encodes done: 1069.8s since the build start
+sample tables: 208 B/sample, 0.39 GiB for 7 sets → device
+  [build timer] sample tables (280 sets) done: 1075.0s since the build start
+  [build timer] autotune done: 1286.2s since the build start
+SegNufft: L = 9, order 3, frames/set 96, coil batch 8, kernels 0.9/1.0 ms (set 0), max phase left out by the degree-4 fit 4.74e-2 rad, built in 1286.2s
+host sample records released: 1.38 GiB
+memory after setup: RSS 3.3 GiB → 2.5 GiB (malloc_trim)
+knot model: 6 × 16 = 96 knots (6 linear knots at [-0.054, 0.096, 0.348, 0.666, 0.943, 1.575] × 16 cardiac knots degree 3), 480 parameters per voxel, 0.12 GiB per parameter stack; temporal Gram of the samples: condition 314.5, diagonal 0.138..1.974 × mean (per-knot metric weights)
+config: differs from target: coils fixed 8 (target SV compression ≥ 99.9 %); --keep 8: 1/8 of the readouts; pyramid level (grid [64, 36, 30], kcrop ball |k·Δ| ≤ 1.000π)
+knot-mode memory plan: state device, data device, sample tables device; device peak 8.00 GiB, host 2.15 GiB, predicted transfers 0.0 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device    5.66 GiB  host    0.00 GiB
+    set image / its adjoint (96 images × 69120 voxels, one set)    device    0.05 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.02 GiB  host    0.00 GiB
+    k-space data, resident                                         device    0.12 GiB  host    0.00 GiB
+    sample tables, resident                                        device    0.39 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    0.01 GiB  host    0.02 GiB
+    parameter state: 6 stacks on the device (x, g, step, x_prev, g_prev, w) device    0.74 GiB  host    0.12 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
+knot lock (--static-lock 20.0, Additive): from IT0 2 every 1; separable-metric mismatch 0.077, G-norm bound 1.360
+  seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1 stage 0 (reference + high-VENC encodes): 2 iterations, λ_max(M H) = 1.182e6 (5.2s, 2.6s per Hessian-vector product)
+  zmshr1m vk it   0: f(previous iterate) = — (initial state, not evaluated), velocity RMSE 0.820 m/s (rel 1.885; decoded from the interpolated model 0.820 / rel 1.885), wrapped 7.15 %, frames 0.75 0.75 0.98 1.05 0.99 1.00 0.89 0.80 0.75 0.74 0.74 0.78 0.80 0.77 0.74 0.73 0.73 0.73 0.75 0.79, 5s
+    score split: upper-half magnitude (support) rel 1.594, slope [0.143, 0.266, 0.136]; unwrapped components rel 1.262; outside the support rel 1.000
+    step trust region (it 0): 3100857 elements shrunk
+  zmshr1m vk it   1: f(previous iterate) = 4.9526e14, velocity RMSE 0.896 m/s (rel 2.061; decoded from the interpolated model 0.894 / rel 2.056), wrapped 7.81 %, frames 0.83 0.83 1.05 1.11 1.06 1.07 0.97 0.88 0.84 0.83 0.82 0.86 0.87 0.84 0.82 0.82 0.82 0.81 0.82 0.86, 7s
+    score split: upper-half magnitude (support) rel 1.685, slope [0.006, 0.297, -0.004]; unwrapped components rel 1.583; outside the support rel 1.237
+    time it 0: gradient 1.4s, step 0.0s, prior 0.0s, report 0.2s
+    step trust region (it 1): 1724903 elements shrunk
+  zmshr1m vk it   2: f(previous iterate) = 3.2514e14, velocity RMSE 0.932 m/s (rel 2.143; decoded from the interpolated model 0.932 / rel 2.142), wrapped 7.96 %, frames 0.88 0.88 1.07 1.13 1.08 1.09 1.00 0.92 0.89 0.87 0.86 0.90 0.92 0.89 0.86 0.85 0.85 0.85 0.86 0.90, 9s
+    score split: upper-half magnitude (support) rel 1.764, slope [-0.05, 0.401, 0.03]; unwrapped components rel 1.662; outside the support rel 1.267
+    time it 1: gradient 1.4s, step 0.1s, prior 0.0s, report 0.2s
+  seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1 stage 1 (all encodes): 6 iterations, λ_max(M H) = 1.253e7 (4.9s, 2.4s per Hessian-vector product)
+  zmshr1m vk it   2: f(previous iterate) = — (initial state, not evaluated), velocity RMSE 0.932 m/s (rel 2.143; decoded from the interpolated model 0.932 / rel 2.142), wrapped 7.96 %, frames 0.88 0.88 1.07 1.13 1.08 1.09 1.00 0.92 0.89 0.87 0.86 0.90 0.92 0.89 0.86 0.85 0.85 0.85 0.86 0.90, 14s
+    score split: upper-half magnitude (support) rel 1.764, slope [-0.05, 0.401, 0.03]; unwrapped components rel 1.662; outside the support rel 1.267
+    step trust region (it 0): 731865 elements shrunk
+    knot lock map (it 2, 0.3s): static over the cycle 0.006, over breathing 0.001, fully 0.001, undetermined 0.791
+  zmshr1m vk it   3: f(previous iterate) = 4.7705e14, velocity RMSE 0.947 m/s (rel 2.177; decoded from the interpolated model 0.946 / rel 2.175), wrapped 8.03 %, frames 0.90 0.90 1.07 1.13 1.10 1.10 1.01 0.93 0.90 0.89 0.88 0.92 0.94 0.91 0.89 0.88 0.87 0.87 0.88 0.91, 17s
+    score split: upper-half magnitude (support) rel 1.779, slope [-0.08, 0.436, 0.025]; unwrapped components rel 1.723; outside the support rel 1.340
+    time it 0: gradient 2.4s, step 0.0s, prior 0.3s, report 0.2s
+    step trust region (it 1): 1060702 elements shrunk
+    knot lock map (it 3, 0.3s): static over the cycle 0.006, over breathing 0.002, fully 0.002, undetermined 0.810
+  zmshr1m vk it   4: f(previous iterate) = 4.5022e14, velocity RMSE 0.981 m/s (rel 2.255; decoded from the interpolated model 0.983 / rel 2.261), wrapped 8.58 %, frames 0.94 0.93 1.10 1.15 1.12 1.13 1.03 0.96 0.93 0.92 0.91 0.95 0.97 0.95 0.93 0.92 0.91 0.92 0.92 0.95, 20s
+    score split: upper-half magnitude (support) rel 1.845, slope [-0.093, 0.45, 0.018]; unwrapped components rel 1.846; outside the support rel 1.511
+    time it 1: gradient 2.4s, step 0.1s, prior 0.3s, report 0.2s
+    step trust region (it 2): 262512 elements shrunk
+    knot lock map (it 4, 0.2s): static over the cycle 0.011, over breathing 0.006, fully 0.006, undetermined 0.816
+  zmshr1m vk it   5: f(previous iterate) = 4.3171e14, velocity RMSE 0.987 m/s (rel 2.269; decoded from the interpolated model 0.988 / rel 2.271), wrapped 9.14 %, frames 0.94 0.93 1.10 1.16 1.14 1.14 1.04 0.96 0.93 0.92 0.91 0.96 0.98 0.96 0.94 0.92 0.92 0.93 0.93 0.95, 23s
+    score split: upper-half magnitude (support) rel 1.878, slope [-0.08, 0.43, 0.036]; unwrapped components rel 1.830; outside the support rel 1.557
+    time it 2: gradient 2.4s, step 0.1s, prior 0.3s, report 0.2s
+    step trust region (it 3): 1884722 elements shrunk
+    knot lock map (it 5, 0.3s): static over the cycle 0.013, over breathing 0.009, fully 0.009, undetermined 0.848
+  zmshr1m vk it   6: f(previous iterate) = 4.1571e14, velocity RMSE 1.014 m/s (rel 2.332; decoded from the interpolated model 1.017 / rel 2.338), wrapped 10.71 %, frames 0.97 0.96 1.12 1.19 1.18 1.16 1.05 0.98 0.95 0.94 0.93 0.99 1.01 0.99 0.97 0.95 0.95 0.96 0.97 0.99, 26s
+    score split: upper-half magnitude (support) rel 1.966, slope [-0.156, 0.366, 0.055]; unwrapped components rel 1.819; outside the support rel 1.680
+    time it 3: gradient 2.4s, step 0.1s, prior 0.3s, report 0.2s
+    step trust region (it 4): 3326914 elements shrunk
+    knot lock map (it 6, 0.3s): static over the cycle 0.025, over breathing 0.023, fully 0.023, undetermined 0.856
+  zmshr1m vk it   7: f(previous iterate) = 3.3366e14, velocity RMSE 1.106 m/s (rel 2.544; decoded from the interpolated model 1.123 / rel 2.581), wrapped 13.99 %, frames 1.07 1.06 1.20 1.26 1.26 1.24 1.13 1.07 1.04 1.03 1.03 1.09 1.10 1.09 1.07 1.04 1.05 1.07 1.08 1.10, 29s
+    score split: upper-half magnitude (support) rel 2.406, slope [-0.111, 0.276, 0.094]; unwrapped components rel 1.917; outside the support rel 1.975
+    time it 4: gradient 2.4s, step 0.1s, prior 0.3s, report 0.2s
+    step trust region (it 5): 3218092 elements shrunk
+    knot lock map (it 7, 0.3s): static over the cycle 0.044, over breathing 0.042, fully 0.042, undetermined 0.798
+  zmshr1m vk it   8: f(previous iterate) = 2.3731e14, velocity RMSE 1.193 m/s (rel 2.742; decoded from the interpolated model 1.223 / rel 2.811), wrapped 17.43 %, frames 1.16 1.15 1.28 1.35 1.34 1.31 1.21 1.15 1.13 1.12 1.13 1.18 1.18 1.18 1.16 1.12 1.13 1.15 1.18 1.19, 32s
+    score split: upper-half magnitude (support) rel 2.814, slope [-0.044, 0.072, 0.042]; unwrapped components rel 1.991; outside the support rel 2.227
+    time it 5: gradient 2.4s, step 0.1s, prior 0.3s, report 0.2s
+  seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1: outputs written (2s): vel_seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1, recon_<tag> (20 cardiac frames at the median breathing amplitude), vparams_seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1.hv + vknots_seg_zmshr1m_vk6x16_r1c3_c2_lockq20i2e1.json
+9 figures in /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth-bc/figs
+figures: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/ratemap_bc/ab_truth-bc/figs

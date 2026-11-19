@@ -32,6 +32,22 @@ struct Slot {
     c2z: CudaFunction,
     top: CudaFunction,
     scale: CudaFunction,
+    gather: CudaFunction,
+    scatter: CudaFunction,
+}
+
+/// where the Casorati blocks come from: the host stack, or a device stack with its block index table
+/// ([`LlrGpu::apply_dev`]: idx[b · R + row], u32::MAX = zero row; block j of the call is table block j)
+#[derive(Clone, Copy)]
+enum Src<'a> {
+    Host(&'a [C32]),
+    Dev(&'a CudaSlice<C32>, &'a CudaSlice<u32>),
+}
+
+/// where pass 2 writes: the host stack (address, length; blocks of all devices are disjoint) or the device stack
+enum Dst<'a> {
+    Host(usize, usize),
+    Dev(&'a mut CudaSlice<C32>, &'a CudaSlice<u32>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -105,7 +121,22 @@ impl Slot {
         let blas = CudaBlas::new(st.clone()).map_err(|e| Error::Format(format!("cuBLAS: {e:?}")))?;
         let dn = DnHandle::new(st.clone()).map_err(|e| Error::Format(format!("cuSOLVER: {e:?}")))?;
         let m = dev.load_module("llr_gpu", include_str!("llr_gpu.cu"), &CompileSettings::default())?;
-        Ok(Self { c2z: m.load_function("c2z")?, top: m.load_function("top_cols")?, scale: m.load_function("scale_cols")?, dev, st, blas, dn })
+        Ok(Self { c2z: m.load_function("c2z")?, top: m.load_function("top_cols")?, scale: m.load_function("scale_cols")?, gather: m.load_function("gather_blocks")?, scatter: m.load_function("scatter_blocks")?, dev, st, blas, dn })
+    }
+
+    /// batch buffer dc[j] ← device stack blocks b0 + j (j < nb)
+    fn gather_dev(&self, x: &CudaSlice<C32>, idx: &CudaSlice<u32>, dc: &mut CudaSlice<C32>, nv: usize, nt: usize, r: usize, b0: usize, nb: usize) -> Result<(), Error> {
+        let (ri, ti, nvi, b0i, nbi) = (r as i32, nt as i32, nv as i64, b0 as i64, nb as i64);
+        unsafe { self.st.launch_builder(&self.gather).arg(x).arg(idx).arg(&mut *dc).arg(&ri).arg(&ti).arg(&nvi).arg(&b0i).arg(&nbi).launch(cfg(nb * r * nt))? };
+        Ok(())
+    }
+
+    /// device stack blocks b0 + j ← dc[j] where ok[j] != 0
+    #[allow(clippy::too_many_arguments)]
+    fn scatter_dev(&self, dc: &CudaSlice<C32>, idx: &CudaSlice<u32>, ok: &CudaSlice<i32>, x: &mut CudaSlice<C32>, nv: usize, nt: usize, r: usize, b0: usize, nb: usize) -> Result<(), Error> {
+        let (ri, ti, nvi, b0i, nbi) = (r as i32, nt as i32, nv as i64, b0 as i64, nb as i64);
+        unsafe { self.st.launch_builder(&self.scatter).arg(dc).arg(idx).arg(ok).arg(&mut *x).arg(&ri).arg(&ti).arg(&nvi).arg(&b0i).arg(&nbi).launch(cfg(nb * r * nt))? };
+        Ok(())
     }
 
     /// wait for this slot's frees, then return the device pool's unused memory
@@ -140,7 +171,7 @@ impl Slot {
 
     /// Pass 1 over `blocks`: singular values per block (empty = eigensolver failure, block left unchanged) and the
     /// eigenvectors (f32, T × T column-major per block, ascending eigenvalues)
-    fn pass1(&self, x: &[C32], nv: usize, nt: usize, r: usize, blocks: &[Vec<usize>], budget: usize) -> Result<(Vec<Vec<f32>>, Vec<C32>), Error> {
+    fn pass1(&self, src: Src<'_>, nv: usize, nt: usize, r: usize, blocks: &[Vec<usize>], budget: usize) -> Result<(Vec<Vec<f32>>, Vec<C32>), Error> {
         self.dev.ctx.bind_to_thread()?;
         let st = &self.st;
         let n = blocks.len();
@@ -165,7 +196,10 @@ impl Slot {
             let dinfo = st.alloc_zeros::<i32>(nbat)?;
             let (dws, hws) = self.eig_workspace(params, &dg, &dw, nt, nbat)?;
             let dbuf = st.alloc_zeros::<u8>(dws.max(1))?;
-            let hc = unsafe { self.dev.ctx.alloc_pinned_with_flags::<C32>(nbat * r * nt, 0)? };
+            let hc = match src {
+                Src::Host(_) => Some(unsafe { self.dev.ctx.alloc_pinned_with_flags::<C32>(nbat * r * nt, 0)? }),
+                Src::Dev(..) => None,
+            };
             Ok((dc, dz, dg, dw, dv, dinfo, dws, hws, dbuf, hc))
         })?;
         let (mut dc, mut dz, mut dg, mut dw, mut dv, mut dinfo, dws, hws, mut dbuf, mut hc) = bufs;
@@ -175,8 +209,14 @@ impl Slot {
         for b0 in (0..n).step_by(nbat) {
             let bl = &blocks[b0..(b0 + nbat).min(n)];
             let nb = bl.len();
-            gather(x, nv, nt, r, bl, hc.as_mut_slice()?);
-            st.memcpy_htod(&hc.as_slice()?[..nb * r * nt], &mut dc.slice_mut(0..nb * r * nt))?;
+            match src {
+                Src::Host(x) => {
+                    let hc = hc.as_mut().unwrap();
+                    gather(x, nv, nt, r, bl, hc.as_mut_slice()?);
+                    st.memcpy_htod(&hc.as_slice()?[..nb * r * nt], &mut dc.slice_mut(0..nb * r * nt))?;
+                }
+                Src::Dev(xd, idx) => self.gather_dev(xd, idx, &mut dc, nv, nt, r, b0, nb)?,
+            }
             let ne = (nb * r * nt) as i64;
             unsafe { st.launch_builder(&self.c2z).arg(&dc).arg(&mut dz).arg(&ne).launch(cfg(nb * r * nt))? };
             unsafe {
@@ -217,12 +257,17 @@ impl Slot {
 
     /// Pass 2 over `blocks` (singular values `sv`, eigenvectors `vs` of pass 1), written into the stack at `xp`
     #[allow(clippy::too_many_arguments)]
-    fn pass2(&self, xp: usize, xlen: usize, nv: usize, nt: usize, r: usize, blocks: &[Vec<usize>], sv: &[Vec<f32>], vs: &[C32], thr: f32, rank: Option<usize>, hard: bool, budget: usize) -> Result<usize, Error> {
+    fn pass2(&self, mut dst: Dst<'_>, nv: usize, nt: usize, r: usize, blocks: &[Vec<usize>], sv: &[Vec<f32>], vs: &[C32], thr: f32, rank: Option<usize>, hard: bool, budget: usize) -> Result<usize, Error> {
         self.dev.ctx.bind_to_thread()?;
         let st = &self.st;
         let n = blocks.len();
+        let host = matches!(dst, Dst::Host(..));
         // SAFETY: the blocks of all devices are disjoint; x is only read here at this pass's own blocks
-        let x: &mut [C32] = unsafe { std::slice::from_raw_parts_mut(xp as *mut C32, xlen) };
+        let mut empty: [C32; 0] = [];
+        let x: &mut [C32] = match dst {
+            Dst::Host(xp, xlen) => unsafe { std::slice::from_raw_parts_mut(xp as *mut C32, xlen) },
+            Dst::Dev(..) => &mut empty,
+        };
         // per-block thresholds (κσ̂, raised by a rank cap)
         let tbs: Vec<f32> = sv.iter().map(|s| Llr::block_threshold(rank, s, thr)).collect();
         let kb: Vec<usize> = sv.iter().zip(&tbs).map(|(s, &tb)| s.iter().filter(|&&v| Llr::weight_rule(v, tb, hard) > 0.0).count()).collect();
@@ -235,10 +280,11 @@ impl Slot {
             let dvk = st.alloc_zeros::<C32>(nbat * nt * kmax.max(1))?;
             let dp = st.alloc_zeros::<C32>(nbat * r * kmax.max(1))?;
             let dwk = st.alloc_zeros::<f32>(nbat * kmax.max(1))?;
-            let hc = unsafe { self.dev.ctx.alloc_pinned_with_flags::<C32>(nbat * r * nt, 0)? };
-            Ok((dc, dvk, dp, dwk, hc))
+            let dok = st.alloc_zeros::<i32>(nbat)?;
+            let hc = if host { Some(unsafe { self.dev.ctx.alloc_pinned_with_flags::<C32>(nbat * r * nt, 0)? }) } else { None };
+            Ok((dc, dvk, dp, dwk, dok, hc))
         })?;
-        let (mut dc, mut dvk, mut dp, mut dwk, mut hc) = bufs;
+        let (mut dc, mut dvk, mut dp, mut dwk, mut dok, mut hc) = bufs;
         let mut hv = vec![C32::new(0.0, 0.0); nbat * nt * kmax.max(1)];
         let mut hw = vec![0f32; nbat * kmax.max(1)];
         for b0 in (0..n).step_by(nbat) {
@@ -246,6 +292,16 @@ impl Slot {
             let bl = &blocks[b0..b1];
             let nb = bl.len();
             let k = (b0..b1).filter(|&j| !sv[j].is_empty()).map(|j| kb[j]).max().unwrap_or(0);
+            if let Dst::Dev(xd, idx) = &mut dst {
+                // written back: the decomposed blocks (failed ones stay unchanged)
+                let ok: Vec<i32> = (b0..b1).map(|j| !sv[j].is_empty() as i32).collect();
+                st.memcpy_htod(&ok, &mut dok.slice_mut(0..nb))?;
+                if k == 0 {
+                    st.memset_zeros(&mut dc.slice_mut(0..nb * r * nt))?;
+                    self.scatter_dev(&dc, idx, &dok, xd, nv, nt, r, b0, nb)?;
+                    continue;
+                }
+            }
             if k == 0 {
                 // every eigenpair at or below the threshold: the decomposed blocks become zero (F = 0, as on the CPU)
                 for (j, idx) in bl.iter().enumerate() {
@@ -260,7 +316,10 @@ impl Slot {
                 continue;
             }
             k_used = k_used.max(k);
-            gather(x, nv, nt, r, bl, hc.as_mut_slice()?);
+            match &dst {
+                Dst::Host(..) => gather(x, nv, nt, r, bl, hc.as_mut().unwrap().as_mut_slice()?),
+                Dst::Dev(xd, idx) => self.gather_dev(xd, idx, &mut dc, nv, nt, r, b0, nb)?,
+            }
             // the last k eigenvectors (ascending eigenvalues) and their weights; failed blocks: zero (not written back)
             for j in 0..nb {
                 let (v, w) = (&mut hv[j * nt * k..(j + 1) * nt * k], &mut hw[j * k..(j + 1) * k]);
@@ -274,7 +333,9 @@ impl Slot {
                     w[c] = Llr::weight_rule(sv[b0 + j][nt - k + c], tbs[b0 + j], hard);
                 }
             }
-            st.memcpy_htod(&hc.as_slice()?[..nb * r * nt], &mut dc.slice_mut(0..nb * r * nt))?;
+            if let Some(hc) = hc.as_ref() {
+                st.memcpy_htod(&hc.as_slice()?[..nb * r * nt], &mut dc.slice_mut(0..nb * r * nt))?;
+            }
             st.memcpy_htod(&hv[..nb * nt * k], &mut dvk.slice_mut(0..nb * nt * k))?;
             st.memcpy_htod(&hw[..nb * k], &mut dwk.slice_mut(0..nb * k))?;
             unsafe {
@@ -299,6 +360,11 @@ impl Slot {
                     "Cgemm (P V_kᴴ)",
                 )?;
             }
+            if let Dst::Dev(xd, idx) = &mut dst {
+                self.scatter_dev(&dc, idx, &dok, xd, nv, nt, r, b0, nb)?;
+                continue;
+            }
+            let hc = hc.as_mut().unwrap();
             st.memcpy_dtoh(&dc.slice(0..nb * r * nt), &mut hc.as_mut_slice()?[..nb * r * nt])?;
             st.synchronize()?;
             let hs = hc.as_slice()?;
@@ -322,6 +388,79 @@ impl Slot {
 }
 
 impl LlrGpu {
+    /// σ̂ over all blocks of pass 1, the threshold κσ̂ (or the absolute one) and the sweep's statistics (`llr.last`)
+    fn threshold_stats(&mut self, res: &[(Vec<Vec<f32>>, Vec<C32>)], nt: usize) -> Option<f32> {
+        let sigma = Llr::sigma_hat(res.iter().flat_map(|(sv, _)| sv.iter().map(|s| s.as_slice())))?;
+        let thr = self.llr.threshold(sigma);
+        let rank = self.llr.rank;
+        let basis = self.llr.zeta_basis.as_deref();
+        let parts: Vec<_> = res
+            .iter()
+            .flat_map(|(svs, vs)| svs.iter().enumerate().map(move |(j, sv)| (sv, &vs[j * nt * nt..(j + 1) * nt * nt])))
+            .filter(|(sv, _)| !sv.is_empty())
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|(sv, v)| {
+                let tb = Llr::block_threshold(rank, sv, thr);
+                let (a, b, c, d) = crate::llr::block_stats(sv, tb, nt, basis, |c, t| { let z = v[c * nt + t]; num_complex::Complex32::new(z.re, z.im) });
+                (a, b, c, d, sv.len())
+            })
+            .collect();
+        self.llr.last = crate::llr::sum_stats(parts.into_iter(), nt, basis.is_some(), sigma, thr as f64);
+        Some(thr)
+    }
+
+    /// As [`LlrGpu::apply`] on a device-resident stack `x` ([t][v], t = 0..nt) of the stream `st` (same device): the
+    /// Casorati blocks are gathered from and scattered back to `x` by kernels through a per-sweep block index table
+    /// (4 B per voxel), so the stack never crosses the bus; only the per-block eigen data of pass 1 / pass 2 does (as
+    /// in [`LlrGpu::apply`]). Single device only: with several devices (or another device than `st`'s) the stack is
+    /// staged through the host and [`LlrGpu::apply`] runs.
+    pub fn apply_dev(&mut self, st: &Arc<CudaStream>, x: &mut CudaSlice<C32>, nt: usize) -> Result<(), Error> {
+        let nv = self.llr.dims.iter().product::<usize>();
+        assert_eq!(x.len(), nv * nt);
+        if self.slots.len() != 1 || self.slots[0].dev.ordinal != st.context().ordinal() || nv >= u32::MAX as usize {
+            let mut h = st.clone_dtoh(&*x)?;
+            self.apply(&mut h, nt)?;
+            st.memcpy_htod(&h, x)?;
+            return Ok(());
+        }
+        let t0 = Instant::now();
+        let r = self.llr.block.pow(3);
+        let blocks = self.llr.next_blocks();
+        if blocks.is_empty() {
+            return Ok(());
+        }
+        let mut idx = vec![u32::MAX; blocks.len() * r];
+        idx.par_chunks_mut(r).zip(blocks.par_iter()).for_each(|(o, b)| {
+            for (d, &q) in o.iter_mut().zip(b) {
+                *d = q as u32;
+            }
+        });
+        let budget = self.budget;
+        let slot = &self.slots[0];
+        slot.dev.ctx.bind_to_thread()?;
+        // x complete on the solver's stream before the slot's stream reads it
+        st.synchronize()?;
+        let idx_d = slot.st.clone_htod(&idx)?;
+        drop(idx);
+        let res = vec![slot.pass1(Src::Dev(&*x, &idx_d), nv, nt, r, &blocks, budget)?];
+        let t1 = t0.elapsed().as_secs_f64();
+        let skipped = res[0].0.iter().filter(|s| s.is_empty()).count();
+        let Some(thr) = self.threshold_stats(&res, nt) else {
+            return Ok(());
+        };
+        let (rank, hard) = (self.llr.rank, self.llr.hard);
+        let slot = &self.slots[0];
+        let k_max = slot.pass2(Dst::Dev(x, &idx_d), nv, nt, r, &blocks, &res[0].0, &res[0].1, thr, rank, hard, budget)?;
+        // written back before the solver's stream continues
+        slot.st.synchronize()?;
+        drop(idx_d);
+        slot.release()?;
+        let t2 = t0.elapsed().as_secs_f64();
+        self.last = LlrGpuStats { blocks: blocks.len(), skipped, k_max, secs: [t1, t2 - t1, t2] };
+        Ok(())
+    }
+
     /// `llr`: the operator (blocks, κ, support, shift seed); `devices`: CUDA ordinals sharing the work (a device may
     /// appear once; the solver's own device is the usual single entry)
     pub fn new(llr: Llr, devices: &[usize]) -> Result<Self, Error> {
@@ -356,37 +495,20 @@ impl LlrGpu {
         let xs: &[C32] = x;
         // pass 1 on every device
         let res: Vec<Result<(Vec<Vec<f32>>, Vec<C32>), Error>> = std::thread::scope(|sc| {
-            let hs: Vec<_> = parts.iter().zip(&self.slots).map(|(bl, slot)| sc.spawn(move || slot.pass1(xs, nv, nt, r, bl, budget))).collect();
+            let hs: Vec<_> = parts.iter().zip(&self.slots).map(|(bl, slot)| sc.spawn(move || slot.pass1(Src::Host(xs), nv, nt, r, bl, budget))).collect();
             hs.into_iter().map(|h| h.join().unwrap()).collect()
         });
         let res: Vec<(Vec<Vec<f32>>, Vec<C32>)> = res.into_iter().collect::<Result<_, _>>()?;
         let t1 = t0.elapsed().as_secs_f64();
         let skipped = res.iter().map(|(sv, _)| sv.iter().filter(|s| s.is_empty()).count()).sum();
-        let Some(sigma) = Llr::sigma_hat(res.iter().flat_map(|(sv, _)| sv.iter().map(|s| s.as_slice()))) else {
+        let Some(thr) = self.threshold_stats(&res, nt) else {
             return Ok(());
         };
-        let thr = self.llr.threshold(sigma);
         let (rank, hard) = (self.llr.rank, self.llr.hard);
-        {
-            let basis = self.llr.zeta_basis.as_deref();
-            let parts: Vec<_> = res
-                .iter()
-                .flat_map(|(svs, vs)| svs.iter().enumerate().map(move |(j, sv)| (sv, &vs[j * nt * nt..(j + 1) * nt * nt])))
-                .filter(|(sv, _)| !sv.is_empty())
-                .collect::<Vec<_>>()
-                .into_par_iter()
-                .map(|(sv, v)| {
-                    let tb = Llr::block_threshold(rank, sv, thr);
-                    let (a, b, c, d) = crate::llr::block_stats(sv, tb, nt, basis, |c, t| { let z = v[c * nt + t]; num_complex::Complex32::new(z.re, z.im) });
-                    (a, b, c, d, sv.len())
-                })
-                .collect();
-            self.llr.last = crate::llr::sum_stats(parts.into_iter(), nt, basis.is_some(), sigma, thr as f64);
-        }
         // pass 2 on every device, written back in place (disjoint blocks)
         let (xp, xlen) = (x.as_mut_ptr() as usize, x.len());
         let ks: Vec<Result<usize, Error>> = std::thread::scope(|sc| {
-            let hs: Vec<_> = parts.iter().zip(&self.slots).zip(&res).map(|((bl, slot), (sv, vs))| sc.spawn(move || slot.pass2(xp, xlen, nv, nt, r, bl, sv, vs, thr, rank, hard, budget))).collect();
+            let hs: Vec<_> = parts.iter().zip(&self.slots).zip(&res).map(|((bl, slot), (sv, vs))| sc.spawn(move || slot.pass2(Dst::Host(xp, xlen), nv, nt, r, bl, sv, vs, thr, rank, hard, budget))).collect();
             hs.into_iter().map(|h| h.join().unwrap()).collect()
         });
         let k_max = ks.into_iter().collect::<Result<Vec<_>, _>>()?.into_iter().max().unwrap_or(0);

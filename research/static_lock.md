@@ -193,6 +193,188 @@ Benchmark (`tests/wavelet_bench.rs`, i9-13900K, 32 threads, 3 levels):
    resp_motion.hv) sampled on the recon grid — to implement.
 4. Intracranial phantom (when available): expect > 90 % static.
 
+## 7. Per-axis lock on respiratory × cardiac knots (2026-11-18)
+
+Code: `hasty_recon::knotlock` (tests/knotlock.rs). The frame-stack lock (§2–§3) is unchanged.
+
+**Setting.** A voxel's signal on the 2-D knot basis (temporal_operator.md §16, §21) is
+x(t) = Σ_{k,b} ψ_k(r(t)) φ_b(c(t)) C[k, b]: respiratory knot k (linear hats at bellows quantiles, or bins), cardiac
+knot b (periodic B-splines), image κ = k · mc + b. Both bases are partitions of unity. So "constant along an axis" means
+"equal coefficients along that axis":
+- static over the cardiac cycle (moves with breathing): C[k, b] = a_k (subspace S_c);
+- static over breathing (moves with the heart): C[k, b] = d_b (S_r);
+- fully static: C = m (S_0).
+
+The subspaces are fixed by the basis. The metric decides the decomposition and therefore the prox.
+
+**Which metric.**
+- The data term's Hessian on knot stacks is ≈ G ⊗ AᴴA_static, with G_κκ′ = mean_j w_κ(j) w_κ′(j) the temporal Gram
+  under the sample times (knotsolve §19). P²nP's forward step x − αP∇f is averaged in the P⁻¹ = G ⊗ C norm.
+- The composition stays averaged only if the prior step is firmly non-expansive (FNE) in that same norm. A prox in
+  the metric M, argmin R(u) + ½‖u − y‖²_M, is FNE in M. A Euclidean prox is FNE only in the Euclidean norm.
+- In G, the orthogonal projection onto S_0 is the average weighted by each knot's **sample share** ω = G1/1ᵀG1 (the
+  mean basis weight of the knot over the samples).
+  - It is also the BLUE of the static value when the coefficient noise covariance is ∝ G⁻¹ (least-squares and
+    knot-preconditioned iterates).
+- The plain coefficient average is the special case of equal shares. Uniform periodic cardiac knots have equal
+  shares: there the two coincide.
+- With unequal shares, the plain average is an oblique projection in G, with G-operator norm √(ω_Eᵀ G_r⁻¹ ω_E) ≥ 1
+  (Cauchy–Schwarz; = 1 only for equal shares).
+- On sim_flow_10min (6 linear knots at the bellows quantiles, 16 cubic cardiac knots, from physio.npy):
+  - respiratory shares 0.091 / 0.217 / 0.192 / 0.195 / 0.256 / 0.049; cardiac shares 0.0625 ± 1e-4;
+  - plain-average breathing lock: G-operator norm **1.58**. It expands, so the plain average is wrong for breathing.
+- Projections onto S_c and S_r in the full G do not commute when breathing and heart phase are sampled dependently.
+  The four-piece decomposition below is then not orthogonal, and the additive prox has no closed form. The lock
+  therefore uses the separable **G_s = G_r ⊗ G_c**:
+  - G_r and G_c are the *exact* marginals of G: partial sums over the other axis, by partition of unity.
+  - In G_s, P_c, P_r and P_0 are share-weighted averages along each axis, and they commute.
+  - G and G_s differ by the dependence between breathing state and heart phase in the sampling. On sim_flow_10min:
+    - ‖G − G_s‖_F / ‖G‖_F = 0.048;
+    - √(λ_max / λ_min) of G_s⁻¹G = 1.12 with all encodes pooled, 1.36 for one encode's 7.6 k readouts. This is
+      mostly finite-sample noise: 53 k readouts against 96² Gram entries.
+  - A G_s-FNE map has G-Lipschitz constant ≤ that bound.
+  - **Recommendation:** build the knot preconditioner from G_s (`KnotBasis::gs_inverse` → `KnotPrecond::new`). The
+    solver metric is then G_s ⊗ C, in which the lock is exactly FNE (temporal part), at a cost of cond(G_s⁻¹G) ≤ 1.85
+    in the preconditioned temporal operator.
+- Spatial part: as in tlock, the lock acts per voxel and C is the circulant metric. Exactness would need C ≈ scalar,
+  or spatially constant weights. This is unchanged from the frame lock.
+
+**Decomposition and prox.** Per voxel (and per encode, or jointly over the three velocity components), with
+c̄_c[k] = Σ_b ω_c[b] C[k, b], c̄_r[b] = Σ_k ω_r[k] C[k, b] and m = Σ ω_r ω_c C:
+- the four pieces, G_s-orthogonal:
+  - m;
+  - R_k = c̄_c[k] − m: breathing only;
+  - Cd_b = c̄_r[b] − m: heart only;
+  - I = C − c̄_c − c̄_r + m: interaction.
+- Their noise dimensions under a covariance model M are n(Π) = tr(G_s Π M). For M = G_s⁻¹ they are the plain
+  dimensions: 1, kr − 1, mc − 1, (kr − 1)(mc − 1).
+- **quadratic:** the prox of (μ/2)[w_c‖(I − P_c)x‖² + w_r‖(P_c − P_0)x‖² + w_x‖(I − P_c)(I − P_r)x‖²]_{G_s}:
+  - R ÷ (1 + μ w_r);
+  - Cd ÷ (1 + μ w_c);
+  - I ÷ (1 + μ(w_c + w_x)).
+- **group:** block soft thresholds in the G_s norm, τ = μ w s √n:
+  - R with w_r;
+  - Cd with w_c;
+  - I with w_c + w_x.
+
+  For velocities the groups span the three components.
+- **Coupling.**
+  - `Nested` (= tlock): w_x = 0, and in group mode the cardiac group is R⊥ = Cd + I, per bin when G_r is diagonal.
+  - `Additive` (default): w_x locks the interaction, so "static over breathing" makes the whole cardiac curve
+    identical in every breathing state, not only the bin means.
+- Every map is a G_s-self-adjoint scaling with factors in [0, 1], or a block soft threshold on orthogonal pieces. Both
+  are FNE in G_s.
+- The mean m is never changed, so steady flow keeps its mean velocity.
+
+**Map: the noise is coloured differently on knots.**
+- The second difference of tlock assumes frame-independent errors. On B-spline coefficients the noise covariance is
+  ≈ G⁻¹, which for 16 cubic cardiac knots is strongly high-pass (G_c has condition ≈ 18.5, §13 of
+  temporal_operator.md).
+- Evaluating at frame centres first would make it low-pass instead (the frames are rank K, smoothed). It costs F > K
+  images and needs the same correction, so the map stays on the coefficients and normalises exactly:
+  - score² = (piece energy in G_s, blurred) / (s² n(Π));
+  - s² from the cardiac second differences D divided by Σ_terms (e_k ⊗ d_b)ᵀ M (e_k ⊗ d_b) (periodic wrap; tlock's
+    no-wrap for the frame basis);
+  - the detection-power "per-frame" noise is σ_t² = s² tr(G_s M) (the time-averaged noise of the evaluated signal);
+  - the respiratory-mean detection uses tr(G_s M) / n(P_c) "frames";
+  - air: |m̄| < 3 s √n(P_0);
+  - the flow noise uses n(P_0).
+
+  With G ∝ I these reduce exactly to tlock.
+- **The colour model matters.** For lin6 × cubic16, Σ_terms dᵀMd is 5.2× larger under M = G_s⁻¹ than under white
+  coefficients at equal piece noise. A wrong model scales the static score by about 2.2: it measured s ≈ 2.2 and
+  w_c ≈ 0.5 on static velocity-model tissue whose pseudo-image noise is white.
+- **`NoiseModel::Auto` (default for knots).** M = G_s⁻¹ + t·I.
+  - t is fitted per coefficient set from ρ = median(interaction energy) / median(D). Both are pure noise in static
+    voxels, the majority.
+  - n(Π) is linear in M, so this is one scalar equation.
+  - Measured in the tests: LS-coloured noise → t = 0 (check ratio 0.94–1.08); white noise → t ≈ 38 (blurred) / 200
+    (raw), static scores 1.01–1.06.
+  - Noise smoother than white (e.g. after a temporal low-rank prior) is outside the family: t clamps at White and
+    the static scores come out inflated. That locks less, which is the safe side.
+- Weights, as tlock:
+  - w_c = ramp(max(s_c, s_v)) · conf;
+  - w_r = ramp(max(s_r, s_v)) · conf_r;
+  - w_x = ramp(max(s_r, s_int, s_v)) · min(conf_r, conf);
+  - min filter over `dilate_mm`.
+- s_v (flow of the mean images) still unlocks both axes. A flowing voxel is never locked, even when its flow does not
+  change with breathing.
+
+**Velocity model (z_κ, v_κ).**
+- `estimate_vel` scores the pseudo-images z_κ exp(iφ_e(v_κ)). They are streamed per encode, so no 7 × K stack is
+  held.
+- `sigma_raw` is z's own noise level and `sigma_v` is v's (both block medians of their raw second differences, each
+  with its own fitted t).
+- `apply_z` is the image lock. `apply_v` locks the 3-vector's temporal deviations: constant velocity along locked axes,
+  mean kept.
+- The static-tissue anchor v ≈ 0 stays in vobj; the lock does not duplicate it.
+
+**Tests** (tests/knotlock.rs, CPU, all pass):
+- `metric_shares_and_noise_dimensions`: LS noise dimensions exact to 1e-8; plain-average G-norm 1.009 on a synthetic
+  breathing distribution (1.58 on the real one); `gs_inverse` exact; a breathing-dependent heart-phase density
+  raises nonsep 0.011 → 0.35 (metric bound 2.4).
+- `prox_is_firmly_nonexpansive_in_the_gs_metric`: ‖Dx − Dy‖² ≤ ⟨Dx − Dy, x − y⟩ in G_s to 1e-5 relative, for every
+  mode (quadratic / group × nested / additive × μ 0.7 / 20, random or binary weights), on lin6 × cubic16 and on bins.
+- `fixed_points_and_group_threshold`:
+  - a static voxel is unchanged (every mode);
+  - a voxel constant over the cardiac cycle is unchanged under w_c alone;
+  - a voxel constant over breathing is unchanged under w_r = w_x = 1 (additive);
+  - a hard additive breathing lock makes a dynamic voxel constant along breathing;
+  - group: a heart-only voxel's deviation drops by exactly τ, and the mean is unchanged.
+- `map_classifies_static_cardiac_resp_dynamic_voxels`:
+  - Setup: 24³, 6 × 16 knots, 4 encodes. Noise: LS-coloured, white plus spatially correlated "aliasing" with a ×3
+    amplitude gradient over the FOV.
+  - Background: w_c 0.995, w_r 0.984, w_x 0.980; median static s_c 0.95.
+  - heart-only: (w_c, w_r, w_x) = (0, 1, 1);
+  - breathing-only: (1, 0, ·);
+  - both: (0, 0, 0);
+  - cardiac curve modulated by breathing: w_x = 0 (s_int 7.5);
+  - steady flow: (0, 0, 0) (s_v 345).
+  - A hard lock freezes the background and removes the heart-only voxel's breathing spread (0.22 → 3e-7) while it
+    keeps its cardiac curve.
+- `detection_power_and_noise_model`:
+  - Variation ≥ detect_ok (std/mean 0.1) is never locked, and 0.05 is detected too (s ≈ 10).
+  - Static strips: w 1.00, s 1.01 (LS) / 1.06 (white, via Auto).
+  - Under heavy noise (σ_t 0.5): tissue w 0 (undetermined 83 %), air w > 0.9.
+- `frames_basis_reproduces_tlock` (tlock's 2 × 10 × 4 phantom, `KnotBasis::frames`, Nested):
+  - lock identical to 5e-7 (quadratic μ 20 / 1e6; group μ 3 / 0.5);
+  - s_flow and σ_raw/√K identical to 3e-7;
+  - s_card within 0.25 %, s_resp within 9 % at static voxels. This comes from tlock's f32 Σx² − |Σx|²/n cancellation:
+    where s > 3 they agree to 2e-4 / 3e-3;
+  - weights within 0.009.
+- `velocity_model_lock`:
+  - static tissue w 1.0;
+  - pulsatile and steady flow unlocked (s_v);
+  - fitted t: z 2.2e3, v 1.1e2 (white, as injected);
+  - v lock: mean velocity kept to 1.5e-8, static spread 0.078 → 5e-8, a breathing-locked pulsatile curve keeps its
+    cardiac range (0.51 → 0.50) and loses its breathing spread (0.081 → 9e-8);
+  - the z group lock makes static z exactly constant.
+
+**Cost (host, rayon; measured 64³ × 96 knots on 10 threads, scaled to 2 mm: 4.17 M voxels × 96 knots × 7 encodes):**
+
+| step | time | memory |
+|---|---|---|
+| lock, quadratic | ≈ 2.0 s (≈ 19 GB/s, memory-bound) | 2048-voxel chunk buffers |
+| lock, group | ≈ 4.2 s | 2048-voxel chunk buffers |
+| map (blur-dominated) | ≈ 23 s | one encode's K blurred images (3.2 GB) + ≈ 0.5 GB of per-voxel accumulators and means |
+| velocity-model lock (z + v) | ≈ 1 s (estimate) | — |
+| velocity-model map | ≈ map time + one sincos per voxel, knot and encode (estimate, not measured) | — |
+
+The map runs only at refreshes. A GPU port is straightforward (per-voxel K-vector work), but it is not needed at this
+cost.
+
+**Open issues.**
+- The full-G vs G_s mismatch (bound 1.12–1.36) remains unless the preconditioner uses `gs_inverse`. That needs a
+  measurement of the preconditioner quality with G_s against G.
+- The model check assumes a static majority (each ρ is a global median). In a thoracic box mostly made of moving
+  tissue, inspect `model_check` / `noise_mix` in the log.
+- Temporal low-rank priors (LLR across knots) make the noise smoother than white. Auto then clamps at White, which is
+  conservative. An empirical per-piece calibration would be the next step if real iterates show static scores ≫ 1.
+- The s_v rule unlocks flowing voxels on both axes. Locking flow over breathing (the v-curve the same in every
+  breathing state) would need a flow-specific breathing criterion; not done.
+- Group thresholds for v use v's own second-difference noise. Where |z| is small, v is noise and gets locked if the
+  map says static. That is harmless (vobj's anchor handles v there), but it is not velocity-SNR weighted.
+
 ## Sources
 
 - Deriaz & Perrier, Divergence-free and curl-free wavelets in 2D and 3D, application to turbulent flows, J. Turbulence 7 (2006); Orthogonal Helmholtz decomposition in arbitrary dimension using divergence-free and curl-free wavelets, ACHA 26 (2009)

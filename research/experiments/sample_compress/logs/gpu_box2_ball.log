@@ -1,0 +1,9 @@
+data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: encode 0, 7592 readouts (stride 1), 30292080 samples in the grid band of 30292080 per encode before the crop; grid [80, 80, 80] at 2 mm, k × 1, dwell / 1; ROI ball r 140.3 mm, band [-1500, 1500] Hz, decay ≤ 300 1/s, os 1.35, q 32 (6.2s)
+design: ball r 140.3 mm, band [-1500, 1500] Hz, decay ≤ 300 1/s, os 1.35, q 32, 1 design(s) (rotation check: 0 misses, max residual 3.2e-7) in 1.0s; reduction 1.605× (30292080 → 18873712 samples), Landau bound n / ∫B dt = 2.275; R tables 0.001 GiB
+gate (0 readouts, 240 sources each, half on the band edge; 0.0s): worst source 0.00e0, Frobenius 0.00e0, Gram (normal operator on the sources) 0.00e0
+gpu lock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock taken after 795s
+memory plan: 12.55 GiB (grid slot 1.19, maps 0.06, diagonals 0.04, tables (build peak) 6.55, y 3.61, x, x0, adjoint out 1.10, R tables 0.00) of 21.31 GiB free
+GPU (96 knot images (6 × 16), 16 coils, coil batch 16, L 10, order 3, W 10, σ 1.25): all samples fwd 40256.7 + adj 30047.7 = 70304.4 ms; kept fwd 25584.9 + adj 19078.0 = 44662.9 ms; R step 32.80 + 58.52 ms; pass speed-up 1.571× (tables 27.5s / 17.5s; data compression 5.3s on the CPU)
+accuracy, compressed vs all samples (both W 10, σ 1.25): normal operator 1.10e-4, gradient at 0.6 x_true 1.08e-4, objective 3.68e-8 (data constant 2.974e8 of ‖y‖² 2.056e12)
+accuracy against the reference (all samples, W 12, σ 2): normal operator all samples 7.90e-5 / compressed 1.08e-4; gradient 8.03e-5 / 1.08e-4; objective 2.56e-11 / 3.68e-8
+done (1558s)

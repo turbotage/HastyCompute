@@ -1,0 +1,281 @@
+% =============================================================================
+% Paper section: the whole forward chain in one go, its approximations, and the
+% cost of one gradient in terms of every effect.
+%
+% Companion to reconstruction_operator_section.tex. The notation is the same
+% where the two overlap; the terms are defined once in Section 1 below.
+% Standalone-compilable (pdflatex).
+%
+% Status tags: [implemented] = used by recon_p2np's knot path and tested;
+%   [built] = in the code but off by default or not verified end to end;
+%   [missing] = not in the code. [measured] = our runs; else derived.
+% =============================================================================
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs,tabularx}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\newcommand{\rr}{\bm r}
+\newcommand{\pp}{\bm\rho}
+\newcommand{\kk}{\bm k}
+\newcommand{\uu}{\bm u}
+\newcommand{\vv}{\bm v}
+\newcommand{\ii}{\mathrm i}
+\newcommand{\ee}{\mathrm e}
+\newcommand{\dd}{\mathrm d}
+\newcommand{\herm}{\mathsf H}
+\newcommand{\CC}{\mathbb C}
+\newcommand{\RR}{\mathbb R}
+\newcommand{\Fs}{\mathcal F_\sigma}
+\newcommand{\Imag}{\operatorname{Im}}
+\newcommand{\Real}{\operatorname{Re}}
+\newcommand{\st}[1]{\textsf{\small[#1]}}
+
+\begin{document}
+
+% ========================== BEGIN SECTION ====================================
+\section{The forward chain in one go}
+\label{sec:chain}
+
+This section writes the whole forward model at once:
+\begin{itemize}
+  \item the spline velocity model in respiratory and cardiac time;
+  \item gradient nonlinearity (GNL) and the concomitant field of the full gradient history;
+  \item the breathing-dependent ratemap (off-resonance, decay and fat);
+  \item motion during the readout;
+  \item the coil maps;
+  \item the discretisation (time segments, operator frames, stencils, coil and sample compression).
+\end{itemize}
+It ends with the cost of one gradient in terms of all of these.
+
+% -----------------------------------------------------------------------------
+\subsection{Terms}
+\label{sec:terms}
+
+Each term below has one meaning in this section.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+term & meaning\\
+\midrule
+sample $j$ & one complex ADC value of one coil. It has an ADC time $\tau_j$ (time since its excitation), a nominal $k$-space position $\kk_j$, and a readout.\\
+readout & one ADC window after one excitation (one spiral interleaf). Each readout has one encode $e$, one respiratory amplitude $b$ and one cardiac phase $c$, all taken at its centre.\\
+encode $e$ & one of $E$ flow-encoding gradient settings (first moment $\bm M_{1,e}$, $\bm k_e=\gamma\bm M_{1,e}$). Target: $E=7$, dual-VENC.\\
+respiratory amplitude $b_j\in[0,1]$ & from the bellows signal (0 = end-expiration), constant over a readout.\\
+cardiac phase $c_j\in[0,1)$ & time since the last PPG trigger over the RR interval, constant over a readout.\\
+knot & one coefficient position of the temporal B-spline basis on $(b,c)$. A knot is the pair $\kappa=(p,q)$, with $p=1..K_r$ respiratory knots (linear, $\beta^r_p(b)$) and $q=1..K_c$ cardiac knots (periodic cubic, $\beta^c_q(c)$). The basis function is $B_\kappa(b,c)=\beta^r_p(b)\beta^c_q(c)$. Target: $K_r\times K_c=6\times16=96$ knots. The \emph{unknowns} live at the knots.\\
+parameter images & per knot and voxel: magnitude $m_\kappa$, phase $\psi_\kappa$ and velocity $\vv_\kappa\in\RR^3$ (velocity model), or one complex image $x_{e\kappa}$ per encode (complex model).\\
+operator frame $f$ & a point $(b_f,c_f)$ of a regular grid in $(b,c)$ at which the \emph{operator} holds a complex image $X_{ef}$ and grids it. There are $R$ respiratory rows times $F$ cardiac frames. For the complex model the operator frames are the knots ($X_{e\kappa}=x_{e\kappa}$, exact). For the velocity model, $X_{ef}$ are prefiltered samples of the nonlinear model, needed because the model is not linear in the parameter images.\\
+operator weights $w_f(b,c)$ & the B-spline weights by which a sample combines operator-frame images: linear in $b$ and cubic in $c$, so $s=2\cdot4=8$ images per sample.\\
+set & the samples of one operator call: one encode and one respiratory group (the rows a group of readouts touches). Sets exist for memory and table limits only; the model does not depend on them.\\
+ratemap & per voxel and per state $(b,c)$: the readout-time signal factor of B0, T2 and fat together, $g_{\pp}(\tau;b,c)$ (\cref{eq:ratemap}). Its ingredients are the off-resonance $\omega$, the water and fat decay rates $R^{\rm w}=1/T_2^{\rm w}$, $R^{\rm f}$, and the fat fraction $\phi$ with the six-peak spectrum $(\alpha_p,\Delta f_p)$. There is one ratemap per operator frame: $g_{\pp,f}=g_{\pp}(\cdot;b_f,c_f)$.\\
+time segment $\ell$ & one term of the low-rank separation of the readout-time behaviour: per operator frame $f$, a spatial diagonal $D_{\ell f}(\pp)$ and an interpolator $a_{\ell f}(\tau)$, $\ell=1..L$.\\
+virtual coil & one of $C_v$ orthonormal combinations of the $C$ whitened receive channels.\\
+channel & one (virtual coil, segment) pair of one image: the unit of one oversampled FFT.\\
+stencil $\Gamma_j$ & the interpolation taps of sample $j$ on the oversampled grid, including its per-sample concomitant chirp. Coil- and segment-free.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% -----------------------------------------------------------------------------
+\subsection{The physical model}
+\label{sec:phys}
+
+Positions: $\rr$ is the true scanner position. The gradient fields are $B_z=\sum_aG_a(t)h_a(\rr)$, so the encoding sees the \emph{apparent} position $\pp=u(\rr)$, $u=(h_a)_a$. The reconstruction grid is the apparent grid $\pp\in\Omega$, and every per-voxel quantity is evaluated at $\rr(\pp)$. The volume factor $|\det J_u|^{-1}$ is absorbed into the image.
+
+Sample $j$ of whitened coil $c$, readout at $(e,b,c)=(e_j,b_j,c_j)$, ADC time $\tau_j$:
+\begin{equation}
+\boxed{\begin{aligned}
+y_{cj}=&\sum_{\pp\in\Omega}
+\underbrace{S_c(\rr(\pp);b_j)}_{\text{coil}}\;
+\underbrace{X_{e}(\pp;b_j,c_j)}_{\text{spline velocity model}}\;
+\underbrace{g_{\pp}(\tau_j;b_j,c_j)}_{\text{ratemap}}\\
+&\qquad\cdot\underbrace{\ee^{-\ii\gamma\,\delta\bm m_{1j}(\tau_j)\cdot\vv(\pp;b_j,c_j)}}_{\text{readout motion, per readout}}\;
+\underbrace{\ee^{-\ii\Phi^{\rm conc}_j(\rr(\pp))}}_{\text{concomitant}}\;
+\ee^{-\ii\kk_j\cdot\pp}
++n_{cj}
+\end{aligned}}
+\label{eq:chain}
+\end{equation}
+with $n\sim\mathcal{CN}(0,I)$. The factors are the following.
+
+\paragraph{Spline velocity model.}
+\begin{equation}
+\begin{gathered}
+X_e(\pp;b,c)=m(\pp;b,c)\,\ee^{\ii(\psi(\pp;b,c)+\varphi_e(\pp)-\bm k_e\cdot\vv(\pp;b,c))},\\
+(m,\psi,\vv)(\pp;b,c)=\sum_\kappa B_\kappa(b,c)\,(m_\kappa,\psi_\kappa,\vv_\kappa)(\pp).
+\end{gathered}
+\label{eq:vm}
+\end{equation}
+$\varphi_e$ is a low-order residual phase per encode (eddy currents), as Legendre polynomials. The velocity on the apparent grid is corrected afterwards: $\vv_{\rm true}=J_u^{-1}\vv$.
+Magnitude effects of flow and breathing (inflow, saturation, partial volume of moving tissue) live in $m(\pp;b,c)$; the tissue phase of moving tissue lives in $\psi$. The complex model replaces \cref{eq:vm} by $X_e=\sum_\kappa B_\kappa x_{e\kappa}$.
+
+\paragraph{Ratemap.} The signal of a voxel during the readout is the sum of its water and fat contributions. Each is a complex exponential with its own complex rate. With $\tau'=\tau-\tau_0$:
+\begin{equation}
+\begin{gathered}
+g_{\pp}(\tau;b,c)=\Bigl[\bigl(1-\phi\bigr)\,\ee^{-z^{\rm w}\tau'}+\phi\sum_{p=1}^{6}\alpha_p\,\ee^{-z^{\rm f}_p\tau'}\Bigr]\,
+\ee^{-\ii\sum_q\bar w_{eq}(\tau)\,\mu_q(\rr(\pp))}\,\ee^{-\ii\gamma\bar{\bm m}_{1e}(\tau)\cdot\vv},\\
+z^{\rm w}=\underbrace{R^{\rm w}}_{T_2}+\ii\underbrace{\omega}_{B_0},\qquad
+z^{\rm f}_p=\underbrace{R^{\rm f}}_{T_2}+\ii\bigl(\underbrace{\omega}_{B_0}+\underbrace{2\pi\Delta f_p}_{\text{fat}}\bigr),
+\end{gathered}
+\label{eq:ratemap}
+\end{equation}
+where $\omega,R^{\rm w},R^{\rm f},\phi$ and $\vv$ are all evaluated at $(\pp;b,c)$, and $\sum_p\alpha_p=1$. The ratemap is therefore the pair of complex rates $z(\pp;b,c)=(z^{\rm w},z^{\rm f}_{1..6})$ with the fat fraction.
+
+All of it depends on the state $(b,c)$:
+\begin{itemize}
+  \item $\omega$ changes in the lab frame because the susceptibility geometry changes. Breathing moves the air in the lungs, and the heart moves against the lung border.
+  \item $\phi$, $R^{\rm w}$ and $R^{\rm f}$ at a fixed voxel change because tissue (and the epicardial fat around the coronaries) moves through it.
+\end{itemize}
+The operator therefore uses one ratemap per operator frame (\cref{sec:approx}). The second factor is the encode-mean concomitant phase. It is $\bar w_{eq}(\tau)$, the mean over the encode's readouts of the concomitant coefficients $w_{jq}$ of the monomials $\mu=(z^2,x^2{+}y^2,xz,yz)$, evaluated at the true positions. The last factor is the encode-mean part of the readout motion (below), $\bar{\bm m}_{1e}$ being the mean of $\bm m_{1j}$ over the encode's readouts. It depends on the state through $\vv(\pp;b,c)$, so it belongs to the per-frame ratemap.
+
+\paragraph{Concomitant field.} $\Phi^{\rm conc}_j=\sum_q\Delta w_{jq}\mu_q(\rr(\pp))$ with $\Delta w_{jq}=w_{jq}-\bar w_{eq}(\tau_j)$. This is the per-readout deviation from the encode mean (rotation and blip dependence of the gradient history $\int_0^{t_j}\bm G\bm G^\top\dd t$).
+
+\paragraph{Readout motion.} The first moment of the readout gradient about the encoding reference, $\bm m_{1j}(\tau)$, gives a velocity-dependent phase. Its encode mean is part of $g$; the factor in \cref{eq:chain} is the per-readout rest $\delta\bm m_{1j}=\bm m_{1j}-\bar{\bm m}_{1e}$. It depends on the readout (the interleaf rotation) and on $\tau$. On the 10-min yarn scan $\gamma|\bm m_1|$ reaches 0.9, 2.3 and 6.1 rad per m/s at 2.6, 3.6 and 5.5 ms, and 7.0 rad per m/s on the return [measured]. For comparison, the velocity encoding is 2.1 rad per m/s.
+
+\paragraph{Coil maps.} The sensitivities move with the anterior coil and the chest, $S_c(\rr;b)$.
+
+% -----------------------------------------------------------------------------
+\subsection{The approximations that make it computable}
+\label{sec:approx}
+
+\Cref{eq:chain} costs $|\Omega|$ operations per sample. Five separations turn it into FFTs and short per-sample stencils. Each has its own error, named $\varepsilon_\bullet$ and measured as a signal-weighted relative error of the data.
+
+\begin{enumerate}
+\item \textbf{Operator frames} ($\varepsilon_{\rm fr}$). $X_e(\pp;b,c)\approx\sum_fw_f(b,c)X_{ef}(\pp)$. For the complex model this is exact ($X_{ef}=x_{e\kappa}$). For the velocity model, the cubic frames are prefiltered model values at $F$ cardiac frames per respiratory row. At the 16 cubic knots the model's own error against the truth signal is $4.3\cdot10^{-2}$. The frame error is $9.3/4.4/1.8\cdot10^{-2}$ and $1.4\cdot10^{-3}$ at $F=12/16/24/48$ [measured, ph0001].
+\item \textbf{Ratemap per operator frame, then time segments} ($\varepsilon_{\rm seg}$). The state dependence of the ratemap is carried by the frames, $g_{\pp}(\tau;b_j,c_j)X_e(\pp;b_j,c_j)\approx\sum_fw_f(b_j,c_j)\,g_{\pp,f}(\tau)X_{ef}(\pp)$. Its readout-time dependence is separated per frame:
+\begin{equation}
+g_{\pp,f}(\tau)\approx\sum_{\ell=1}^LD_{\ell f}(\pp)\,a_{\ell f}(\tau),
+\label{eq:seg}
+\end{equation}
+the truncated SVD of frame $f$'s signal-weighted matrix with rows $\pp$ and columns $\tau_i$. Row weights are the expected signal energy of the voxel at that frame; column weights are the per-sample data energy over noise.
+
+Each frame image is gridded once per channel anyway, so frame-specific diagonals and interpolators cost no FFT. Each frame's segments only need to span one state's ratemap, so $L$ is set by the spread of $g_{\pp,f}$ over the signal voxels of one frame, not over all states. More frames therefore do not raise $L$ and may lower it.
+
+Not every spread shrinks with more frames. The per-readout concomitant deviation $\Delta w_j$ and the readout-motion rest $\delta\bm m_{1j}$ depend on the interleaf rotation, and every frame contains all rotations unless the ordering correlates them with $(b,c)$.
+
+Memory: $L|\Omega|$ diagonals per frame, or the ratemap (about 16 B per voxel and frame) with the diagonals formed on the fly in the pad step at fixed node times.
+\item \textbf{Stencils} ($\varepsilon_{\rm st}$, $\varepsilon_{\rm NUFFT}$). $\Phi^{\rm conc}_j$ is fitted in $\pp$ to degree 4. The constant and linear parts become a sample phase $\phi_{0j}$ and a shift $\kk_j'$. The quadratic and degree-3/4 parts become derivative terms of the window (correction order 3), giving a per-sample stencil $\Gamma_j$ on the $\sigma$-oversampled grid with a $W$-wide window. The NUFFT itself ($\sigma=1.25$, $W=10$) must stay at $\le10^{-4}$. This is the only fixed tolerance in the chain.
+\item \textbf{Readout motion} ($\varepsilon_{\rm rm}$). The encode mean $\bar{\bm m}_{1e}(\tau)\cdot\vv^{(k)}_f$ is part of the per-frame ratemap, lagged in the current iterate $\vv^{(k)}$ and refreshed with it. The rotation-dependent rest $\delta\bm m_{1j}\cdot\vv$ is separable, rank 3 in (sample weight) $\times$ (voxel map). To first order it is three extra images $v_aX_{ef}$ per frame with per-sample weights $-\ii\gamma\,\delta m_{1j,a}$ on the shared-gridding path. Only lumen voxels carry it, so these images can be restricted to the heart box.
+\item \textbf{Compression} ($\varepsilon_{\rm cc}$, $\varepsilon_{\rm rc}$). Virtual coils keep $\ge99.9\,\%$ of the energy of the prescription box, $C\to C_v$. Optionally, per-readout sample compression keeps an exact subset $\mathcal S$ with a banded metric for a box or support ROI.
+\end{enumerate}
+
+\paragraph{The operator.} With $\Fs$ the $\sigma$-oversampled FFT and $\hat\varphi$ the window apodisation:
+\begin{equation}
+\boxed{\begin{gathered}
+(A\theta)_{cj}=\ee^{-\ii\phi_{0j}}\sum_{\uu}\Gamma_j(\uu)\sum_{f\in\mathcal F(j)}w_f(b_j,c_j)\sum_{\ell=1}^La_{\ell f}(\tau_j)\,G_{c\ell ef}(\uu),\\
+G_{c\ell ef}=\Fs\Bigl[\hat\varphi^{-1}S_{cf}\,D_{\ell f}\,X_{ef}(\theta)\Bigr]
+\end{gathered}}
+\label{eq:op}
+\end{equation}
+where $D_{\ell f}$ and $a_{\ell f}$ are frame $f$'s segments of its ratemap $g_{\pp,f}$ (water, fat, decay, field, concomitant mean, readout-motion mean), and $S_{cf}$ is the coil map at frame $f$'s state. $\mathcal F(j)$ are the $s=8$ frames sample $j$ touches. The adjoint is the exact transpose. The total model error is bounded by $\varepsilon_{\rm fr}+\varepsilon_{\rm seg}+\varepsilon_{\rm st}+\varepsilon_{\rm rm}+\varepsilon_{\rm cc}+\varepsilon_{\rm rc}$ (triangle inequality on the data residual).
+
+\paragraph{Error budget.} Only $\varepsilon_{\rm NUFFT}\le10^{-4}$ is a fixed rule. The other terms are set at each pyramid level relative to the largest unavoidable error at that level: the basis error of the knots, the noise in the data, or the estimation error of the ratemap. They start at about the same size and tighten towards $10^{-4}$ in the last levels. The default for $L$ is the noise-referenced rule: predicted data error $\le0.2$ noise rms.
+
+% -----------------------------------------------------------------------------
+\subsection{Gradient}
+\label{sec:chaingrad}
+
+Let $f(\theta)=\tfrac12\sum_{c,j}|(A\theta)_{cj}-y_{cj}|^2$ and $\Xi_{ef}=\sum_c\overline{S_{cf}}\hat\varphi^{-1}\sum_\ell\overline{D_{\ell f}}\,\Fs^\herm\bigl[\sum_j\overline{\Gamma_j}\,\overline{w_f(b_j,c_j)}\,\overline{a_{\ell f}(\tau_j)}\,\ee^{\ii\phi_{0j}}r_{cj}\bigr]$, with $r=A\theta-y$. This is the adjoint of the residual for operator frame $f$: one FFT per channel, as in the forward. Back through the frames (for the velocity model, the transpose of the prefilter $P$ and of the frame sampling $T_f$) to the knot-time model $X_e(\cdot;b_f,c_f)$, and then pointwise through \cref{eq:vm}:
+\begin{equation}
+\begin{aligned}
+\nabla_{m_\kappa}f&=\sum_{e,f}\tilde B_{\kappa f}\,\Real\bigl(\overline{\tilde\Xi_{ef}}\,\ee^{\ii\vartheta_{ef}}\bigr),\qquad
+\nabla_{\psi_\kappa}f=\sum_{e,f}\tilde B_{\kappa f}\,\Imag\bigl(\overline{\tilde\Xi_{ef}}\,X_{ef}\bigr)\cdot(-1),\\
+\nabla_{\vv_\kappa}f&=\sum_{e,f}\tilde B_{\kappa f}\,\bm k_e\,\Imag\bigl(\overline{\tilde\Xi_{ef}}\,X_{ef}\bigr),
+\end{aligned}
+\label{eq:chaingrad}
+\end{equation}
+with $\vartheta_{ef}=\psi+\varphi_e-\bm k_e\cdot\vv$ at frame $f$ (so $X_{ef}=m_f\ee^{\ii\vartheta_{ef}}$ before prefiltering), $\tilde\Xi=P^\top\Xi$ (frames to model samples) and $\tilde B_{\kappa f}=B_\kappa(b_f,c_f)$. The ratemap, the stencils and the coils sit entirely inside $A$. They cost FFTs and gathers but no extra pointwise work. The lagged readout-motion term adds $\bm k$-like contributions with $\gamma\bar{\bm m}_1$ when it is refreshed.
+
+% -----------------------------------------------------------------------------
+\subsection{Cost of one gradient}
+\label{sec:chaincost}
+
+Symbols:
+\begin{itemize}
+  \item $|\Omega|$ voxels and $\sigma^3|\Omega|$ fine-grid cells;
+  \item $E$ encodes, $C_v$ virtual coils, $L$ segments;
+  \item $N_{\rm img}$ operator images per encode: $K_rK_c$ for the complex model, $RF$ for the velocity model;
+  \item $M_e$ samples per coil and encode, $s=8$ frames per sample, $W$ window width, $n_\gamma\le35$ stencil terms;
+  \item $B$ channels per grid pass, $B\le(\text{free memory})/(8\sigma^3|\Omega|)$.
+\end{itemize}
+\begin{equation}
+\begin{aligned}
+T_\nabla\approx\sum_{e=1}^{E}\Bigl[\;&\underbrace{2\,C_vL\,N_{\rm img}\,t_{\rm grid}(\sigma^3|\Omega|)}_{\text{image side: pad, FFT, crop}}
++\underbrace{\Bigl\lceil\tfrac{C_vL}{B}\Bigr\rceil M_e\,s\,\bigl(\alpha+\beta B\bigr)}_{\text{sample side: gather / scatter}}
++\underbrace{M_e\,s\,W^3n_\gamma t_{\rm mac}}_{\text{stencils, shared}}\Bigr]\\
+&+\underbrace{O(E\,N_{\rm img}|\Omega|)}_{\text{model + frames}}+T_{\rm prior}+T_{\rm io}.
+\end{aligned}
+\label{eq:chaincost}
+\end{equation}
+In this formula:
+\begin{itemize}
+  \item \emph{Ratemap} (field, decay, fat, breathing, the lagged readout motion) enters only through $L$.
+  \item \emph{Concomitant + GNL} enter only through $n_\gamma$ and the per-sample tables (16 B per sample at order 3).
+  \item \emph{Cardiac + respiratory motion between and within readouts} enters through $N_{\rm img}$ (image side) and $s$ (sample side). Motion during the readout is handled by each sample's own weights, because $b_j,c_j$ and $\tau_j$ are per sample.
+  \item \emph{Coils} enter through $C_v$ on both sides.
+  \item \emph{The grid} enters through $t_{\rm grid}$, which is proportional to $\sigma^3|\Omega|$ and memory-bandwidth bound.
+  \item \emph{The rotation-dependent readout motion}, if modelled to first order, multiplies the image side of the heart box by 4.
+\end{itemize}
+
+Measured constants (RTX 4090, order 3, $\sigma=1.25$, $W=10$):
+\begin{itemize}
+  \item $2t_{\rm grid}$ per (coil, segment, image), forward and adjoint: 1.0 ms at 2 mm full FOV ($8.3\cdot10^6$ cells), 0.76 ms in the 160 mm box at 1 mm ($8\cdot10^6$), 23 ms on the 1 mm torso ($1.84\cdot10^8$). The head grids at $400^3$ ($6.4\cdot10^7$) are estimated at about 8 ms.
+  \item Sample side: about $3.3$ s per $10^6$ samples per encode pass at 2 mm with 30 coils and 96 knots. At 1 mm the grid forces $B$ down to one coil, which raises the per-sample cost about $4\times$.
+\end{itemize}
+Image side per encode pass ($C_v=30$, $L=10$):
+\begin{center}\small
+\begin{tabular}{lccccc}
+\toprule
+grid & per image & complex knots (96) & velocity, $F=16$ & $F=24$ & $F=48$\\
+\midrule
+2 mm full FOV & 0.30 s & 29 s & 43 s & 65 s & 130 s\\
+head $320^3$ at 1 mm (est.) & 2.4 s & 230 s & 345 s & 520 s & 1040 s\\
+torso $640{\times}384{\times}384$ at 1 mm & 6.9 s & 660 s & 990 s & 1490 s & 2980 s\\
+\bottomrule
+\end{tabular}
+\end{center}
+For the velocity model the image counts are $RF$ with $R=9$ rows, a segnufft table-key limit. Widening the key gives $R=6$, i.e.\ $\times2/3$. The sample side adds about 100 s at 2 mm and about 500 s at the torso, independent of $F$. A gradient is $E=7$ encode passes plus the prior.
+Levers, all multiplicative:
+\begin{itemize}
+  \item fewer coils by heart-region compression ($1.4$--$1.7\times$);
+  \item fewer segments, through the budget and a realistic phantom field;
+  \item fewer images, through a frame pyramid and box-restricted frame corrections. The box FFT is about $23\times$ cheaper per image than the torso's;
+  \item fewer samples, by sample compression for box ROIs only ($1.4$--$2.6\times$; about $1\times$ at full FOV, where the readouts are at Nyquist);
+  \item more GPUs (8, per encode or per set).
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+\subsection{Status of every factor}
+\label{sec:chainstatus}
+
+The table covers each factor at three stages: the simulator (does the test data contain it), the estimation (is it obtained from data), and the reconstruction operator.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+factor & simulator & estimation from data & operator \cref{eq:op}\\
+\midrule
+spline velocity model & -- & -- & \st{built}: $F=16$ frames default; the smoke run fails (NaN at stage starts, poor initial guess); being fixed\\
+GNL & \st{implemented} & from the scanner's coefficients & \st{implemented}\\
+concomitant, encode mean & \st{implemented} & from the sequence & \st{implemented}, in the segments\\
+concomitant, per readout & \st{implemented} & from the sequence & \st{implemented}, order-3 stencils\\
+ratemap per state $(b,c)$ (\cref{eq:ratemap}) & $\omega$ static per source and advected; $R^{\rm w},R^{\rm f},\phi$ advected. \st{missing}: $\omega$ recomputed from the deformed susceptibility per $(b,c)$ (being added), and truth ratemaps per $(b,c)$ for oracle use & shelved while the flow sequence is developed; the reconstruction uses the \emph{true} ratemaps. (\texttt{recon\_b0}'s static estimate on ph0001: 193 Hz rms, 37\,\% of the signal voxels off by $>150$ Hz) & \st{built}: one static map (\texttt{--ratemap}). \st{missing}: one ratemap per operator frame ($D_{\ell f},a_{\ell f}$), being added\\
+readout motion, encode mean & \st{implemented} & from the sequence and the current $\vv$ & \st{missing}: in the per-frame ratemap, lagged\\
+readout motion, per readout & \st{implemented} & same & \st{missing}: three box images to first order\\
+coil maps $S_c$ & static & ESPIRiT \st{built} & static \st{implemented}; per frame $S_{cf}$ \st{missing}\\
+coil compression & -- & box Gram \st{built} & \st{built}\\
+sample compression & -- & -- & \st{built} (box ROIs)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{How the operator's accuracy is measured.} A full-chain check compares \cref{eq:op} with an f64 direct sum of \cref{eq:chain} on a sample subset, at the true parameters. It switches on one factor at a time: that factor's model in the direct sum, with and without its approximation in the operator. Each row then gives (i) the size of the factor's physics in the data and (ii) the error of its approximation. With the noise level, this places every $\varepsilon_\bullet$ in the budget. The check needs the simulator to contain each factor, so the breathing-dependent field has to enter the simulator first.
+% ========================== END SECTION ======================================
+
+\end{document}

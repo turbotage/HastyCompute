@@ -1,0 +1,21 @@
+/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: grid [254, 144, 114], 7 encodes, coils 30 of 32, respiratory 6 linear knots (bellows): linear knots at [-0.054, 0.097, 0.347, 0.668, 0.94, 1.577]; cardiac 16 knots degree 3; time segments 10 (fixed basis), W 8, 20 CGLS iterations (37.8s)
+  coils: SV compression: 30 of 32 virtual coils (energy ≥ 99.900 %), 99.945 % energy kept; σ²/Σσ²: [3.2e-1, 1.4e-1, 8.6e-2, 7.4e-2, 6.1e-2, 5.2e-2, 4.2e-2, 3.8e-2, 3.2e-2, 2.6e-2, 1.9e-2, 1.7e-2, 1.4e-2, 1.3e-2, 1.0e-2, 9.0e-3, 7.8e-3, 6.3e-3, 5.5e-3, 5.0e-3, 3.9e-3, 3.2e-3, 2.8e-3, 2.3e-3, 1.8e-3, 1.6e-3, 1.2e-3, 8.8e-4, 8.0e-4, 4.9e-4, 2.9e-4, 2.6e-4]
+  physics: B0 + concomitant + GNL (concomitant fit deg4, correction order 3)
+  config: differs from target: 1/8 of the readouts (a shorter scan); time segments 10, fixed basis (target: auto:err ≤ 1e-4 on the signal-weighted basis)
+  eval r* = 0.5: 1023475 voxels, respiratory weights [0.0, 0.0, 0.524, 0.476, 0.0, 0.0]
+  device ledger (12.3 of 23.5 GiB free):
+    solver image vectors (CGLS x, s, p; arms: the largest arm; time-only 2): 5.96 GiB
+    CGLS data vectors (r, q: y becomes r; time-only 2): 1.75 GiB
+    sample tables (+ 16 B Δw per sample at order 3): 0.61 GiB
+    coil maps + segment diagonals: 1.24 GiB
+    knot preconditioner (CG z vector + 2 images + circulant): 0.00 GiB
+    prior-aware metric (3 nv f32 + plans) + LLR on GPU (batch budget + cuBLAS / cuSOLVER handles): 0.00 GiB
+    priors on the device (--prior-dev gpu: coefficient stacks, LLR stacks, wavelet scratch): 0.00 GiB
+    FFT / kernel workspace, margin: 1.50 GiB
+    grid slot budget: 0.84 GiB
+  segment model error of encode 0: L = 10 (fixed), relative 4.88e-3 (signal-weighted, uniform time weights, 20095 voxels)
+  concomitant monomials at the GNL positions: degree-4 fit rms 4.4e-5 / max 3.4e-4 m² (quadratic part), degree 3/4 to first order (order 3)
+  segments: 10 over τ ∈ [1.60, 9.58] ms, 153028 fit voxels
+  autotune 27.5s: tile kernels 3.9 / 5.2 ms (knot 0, one coil batch of 1; fwd TileCfg { tt: 4, cpba: 1, cpbf: 1, ppf: 4, chunk: 32, max_item: 1024, acb: 1, fsb: 1, kv: 1 }, adj TileCfg { tt: 4, cpba: 1, cpbf: 1, ppf: 4, chunk: 32, max_item: 1024, acb: 1, fsb: 1, kv: 1 })
+  time-only encode 0: forward 27.49s + adjoint 35.92s = 63.41s per gradient pass (96 knots, 3527160 samples, coil batch 1)
+done spline_fixed10

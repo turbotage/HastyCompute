@@ -170,7 +170,39 @@ fn choose_shape(
     (lpb, tpl)
 }
 
+/// grid y / z limit of a CUDA launch
+pub const GRID_YZ_MAX: usize = 65535;
+/// grid x limit of a CUDA launch
+pub const GRID_X_MAX: usize = (1 << 31) - 1;
+
+/// Launch grid of an axis pass with `la_cnt × lb_cnt` lines and `lpb` lines per block. Contiguous passes run all
+/// lines over grid x. Strided passes tile `a` over grid x and run the line groups `b` over grid y, folded into
+/// `(y, z)` when there are more than [`GRID_YZ_MAX`] of them (`b = z · gridDim.y + y`; the kernels return from the
+/// `gy · gz − lb_cnt` padding blocks): a 1 mm torso fine grid has 480 · 480 x lines per channel.
+pub fn launch_grid(contiguous: bool, la_cnt: usize, lb_cnt: usize, lpb: usize) -> Result<(u32, u32, u32), FftError> {
+    let lpb = lpb.max(1);
+    let gx = if contiguous { (la_cnt * lb_cnt).div_ceil(lpb) } else { la_cnt.div_ceil(lpb) }.max(1);
+    if gx > GRID_X_MAX {
+        return Err(FftError::Invalid(format!("axis pass: {gx} blocks exceed the grid x limit ({la_cnt} × {lb_cnt} lines, {lpb} per block)")));
+    }
+    if contiguous {
+        return Ok((gx as u32, 1, 1));
+    }
+    let lb = lb_cnt.max(1);
+    let gz = lb.div_ceil(GRID_YZ_MAX);
+    let gy = lb.div_ceil(gz);
+    if gz > GRID_YZ_MAX {
+        return Err(FftError::Invalid(format!("axis pass: {lb} line groups exceed the grid y · z limit")));
+    }
+    Ok((gx as u32, gy as u32, gz as u32))
+}
+
 impl<R: Real> AxisPlan<R> {
+    /// Launch grid of the pass (see [`launch_grid`]).
+    pub fn grid(&self) -> (u32, u32, u32) {
+        self.grid
+    }
+
     /// Plain batched 1-D FFT of the axis in a `(outer, n, inner)` layout (`inner == 1` is the contiguous case).
     pub fn new(
         dev: &Device,
@@ -276,7 +308,7 @@ impl<R: Real> AxisPlan<R> {
         let flat: Vec<i32> = ranges.iter().flat_map(|&(h, t)| [h as i32, t as i32]).collect();
         self.arange = Some(stream.clone_htod(&flat)?);
         let longest = ranges.iter().map(|&(h, t)| h + t).max().unwrap_or(0);
-        self.grid.0 = (longest.div_ceil(self.cfg.lpb) as u32).max(1);
+        self.grid.0 = u32::try_from(longest.div_ceil(self.cfg.lpb).max(1)).map_err(|_| FftError::Invalid(format!("set_arange: {longest} lines exceed the grid x limit")))?;
         Ok(())
     }
 
@@ -407,11 +439,7 @@ impl<R: Real> AxisPlan<R> {
             None
         };
         let a = spec.addr;
-        let grid = if spec.contiguous {
-            ((a.la_cnt * a.lb_cnt).div_ceil(lpb) as u32, 1, 1)
-        } else {
-            (a.la_cnt.div_ceil(lpb) as u32, a.lb_cnt as u32, 1)
-        };
+        let grid = launch_grid(spec.contiguous, a.la_cnt, a.lb_cnt, lpb)?;
         Ok(Self {
             func,
             tw_m,

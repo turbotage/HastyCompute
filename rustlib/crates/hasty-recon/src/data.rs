@@ -62,6 +62,14 @@ impl NpyArray {
         assert_eq!(self.descr, "<f4");
         self.bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
     }
+    /// bool ('|b1') or float32 arrays as a mask (non-zero = true), bytes in file order
+    pub fn bools(&self) -> Vec<bool> {
+        match self.descr.as_str() {
+            "|b1" | "|u1" => self.bytes.iter().map(|&b| b != 0).collect(),
+            "<f4" => self.f32s().iter().map(|&v| v != 0.0).collect(),
+            d => panic!("bools: unsupported dtype {d}"),
+        }
+    }
     pub fn f64s(&self) -> Vec<f64> {
         assert_eq!(self.descr, "<f8");
         self.bytes.chunks_exact(8).map(|b| f64::from_le_bytes(b.try_into().unwrap())).collect()

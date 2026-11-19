@@ -143,9 +143,200 @@ pub fn decode(x: &[Vec<C>], object: &[bool], dec: &FlowDecoder) -> Vec<[f64; 3]>
     (0..object.len()).map(|r| if object[r] { dec.velocity(&x.iter().map(|xe| xe[r]).collect::<Vec<_>>()) } else { [0.0; 3] }).collect()
 }
 
+/// (m, ψ) knot values of complex zero-moment values z_k (one voxel, K knots): m = |z|, ψ unwrapped along the knots as
+/// arg z̄ + arg(z_k z̄*) (z̄ the mean phasor: continuous as long as the phase stays within ±π of its mean)
+pub fn polar_of(z: &[C]) -> Vec<(f64, f64)> {
+    let zb: C = z.iter().sum();
+    let a0 = if zb.norm() > 0.0 { zb.arg() } else { 0.0 };
+    z.iter().map(|c| (c.norm(), a0 + if zb.norm() > 0.0 { (c * zb.conj()).arg() } else { c.arg() })).collect()
+}
+
+/// cardiac B-spline coefficients ↔ values at the knot centres, per respiratory row, in place over K = kr · mc entries
+/// (degree 3: values = (1/6, 2/3, 1/6) ⊛ coefficients; inverse by the periodic circulant inverse; degree 1: identity)
+pub fn cardiac_values(x: &mut [f64], kr: usize, mc: usize, cdeg: u32, to_values: bool) {
+    if cdeg != 3 {
+        return;
+    }
+    let inv = crate::vknot::OpFrames::with_kre(2, mc, 3, mc, 3, 2).prefilter();
+    for r in 0..kr {
+        let row: Vec<f64> = x[r * mc..(r + 1) * mc].to_vec();
+        for c in 0..mc {
+            x[r * mc + c] = if to_values { (2.0 / 3.0) * row[c] + (row[(c + 1) % mc] + row[(c + mc - 1) % mc]) / 6.0 } else { (0..mc).map(|n| inv[n] * row[(c + mc - n) % mc]).sum() };
+        }
+    }
+}
+
+/// The spline-mode robust start of one voxel (research/velocity_model_sr.md §F, safeguards §F.2): from complex
+/// parameter-basis knot coefficients per encode to the (m, ψ', v) cardiac spline coefficients of the velocity model
+/// x_e = m e^{i(ψ' + φ_e − k'_e·v)}, k' = k − k̄.
+pub struct SplineStart<'a> {
+    pub dec: &'a FlowDecoder,
+    /// encode sensitivities k_e = γ M1_e (rad per m/s), uncentred
+    pub kenc: &'a [[f64; 3]],
+    /// the centring k̄ (VelSpec::kbar)
+    pub kbar: [f64; 3],
+    pub kr: usize,
+    pub mc: usize,
+    pub cdeg: u32,
+    /// decode a knot only at SNR ≥ this (else the voxel's time-mean decode, else 0); None = every knot
+    pub snr_gate: Option<f64>,
+    /// |v_a| ≤ this for the decoded values and the coefficients; None = no box
+    pub vbox: Option<f64>,
+}
+
+impl SplineStart<'_> {
+    /// `coef(e, k)`: the complex knot coefficient of encode e, knot k = r · mc + c; `phi[e]`: the residual phase to
+    /// remove (0 for the reference). Returns (m, ψ') and v coefficients per knot and the counts [decoded per knot,
+    /// time-mean fallback, zero] (support voxels; outside the support v = 0 and nothing is counted).
+    pub fn voxel(&self, coef: &dyn Fn(usize, usize) -> C, phi: &[f64], in_support: bool) -> (Vec<(f32, f32)>, Vec<[f32; 3]>, [usize; 3]) {
+        let (kr, mc, cdeg) = (self.kr, self.mc, self.cdeg);
+        let nk = kr * mc;
+        let ne = self.kenc.len();
+        // values at the knot centres (cubic: (1/6, 2/3, 1/6) along the cardiac knots), residual phase removed
+        let val = |e: usize, k: usize| -> C {
+            let (r, c) = (k / mc, k % mc);
+            let at = |cc: usize| coef(e, r * mc + cc);
+            let v = if cdeg == 3 { at(c) * (2.0 / 3.0) + (at((c + 1) % mc) + at((c + mc - 1) % mc)) / 6.0 } else { at(c) };
+            v * C::from_polar(1.0, -phi[e])
+        };
+        let zs: Vec<Vec<C>> = (0..nk).map(|k| (0..ne).map(|e| val(e, k)).collect()).collect();
+        // SNR gate: the noise per real component from the dispersion of the encode magnitudes (every encode sees the
+        // same m; var|z_e| ≈ σ² per component), the median over the knots over the χ²_{ne−1}/(ne−1) median
+        // (Wilson–Hilferty); the time mean's noise taken as σ/√K
+        let mean_mag = |z: &[C]| z.iter().map(|c| c.norm()).sum::<f64>() / ne as f64;
+        let (sig, vbar, use_bar) = match self.snr_gate {
+            Some(smin) if in_support && ne > 2 => {
+                let mut var: Vec<f64> = zs.iter().map(|z| { let mu = mean_mag(z); z.iter().map(|c| (c.norm() - mu).powi(2)).sum::<f64>() / (ne - 1) as f64 }).collect();
+                var.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let d = (ne - 1) as f64;
+                let sig = (var[nk / 2] / (1.0 - 2.0 / (9.0 * d)).powi(3)).sqrt().max(1e-30);
+                let zb: Vec<C> = (0..ne).map(|e| zs.iter().map(|z| z[e]).sum::<C>() / nk as f64).collect();
+                let ok = mean_mag(&zb) * (nk as f64).sqrt() / sig >= smin;
+                (sig, if ok { self.dec.velocity(&zb) } else { [0.0; 3] }, ok)
+            }
+            _ => (0.0, [0.0; 3], false),
+        };
+        let mut cnt = [0usize; 3];
+        let mut z0 = vec![C::new(0.0, 0.0); nk];
+        let mut vv = vec![[0.0f64; 3]; nk];
+        let k0 = self.kenc[0];
+        for k in 0..nk {
+            let z = &zs[k];
+            let v = if !in_support {
+                [0.0; 3]
+            } else if self.snr_gate.is_none_or(|smin| mean_mag(z) / sig >= smin) {
+                cnt[0] += 1;
+                self.dec.velocity(z)
+            } else if use_bar {
+                cnt[1] += 1;
+                vbar
+            } else {
+                cnt[2] += 1;
+                [0.0; 3]
+            };
+            let v = self.vbox.map_or(v, |b| v.map(|x| x.clamp(-b, b)));
+            // zero-moment value: the reference encode with its velocity phase −k_0·v undone
+            z0[k] = z[0] * C::from_polar(1.0, k0[0] * v[0] + k0[1] * v[1] + k0[2] * v[2]);
+            vv[k] = v;
+        }
+        let (mut m, mut ps): (Vec<f64>, Vec<f64>) = polar_of(&z0).into_iter().unzip();
+        cardiac_values(&mut m, kr, mc, cdeg, false);
+        cardiac_values(&mut ps, kr, mc, cdeg, false);
+        let mut vc: Vec<[f32; 3]> = vec![[0.0; 3]; nk];
+        for a in 0..3 {
+            let mut x: Vec<f64> = vv.iter().map(|v| v[a]).collect();
+            cardiac_values(&mut x, kr, mc, cdeg, false);
+            for k in 0..nk {
+                // coefficients inside the box too (the circulant inverse can overshoot the values)
+                vc[k][a] = self.vbox.map_or(x[k], |b| x[k].clamp(-b, b)) as f32;
+            }
+        }
+        let kb = self.kbar;
+        let zp: Vec<(f32, f32)> = (0..nk).map(|k| (m[k] as f32, (ps[k] - (0..3).map(|a| kb[a] * vc[k][a] as f64).sum::<f64>()) as f32)).collect();
+        (zp, vc, cnt)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// the spline-mode start (§F, §F.2) on model-consistent knot values of the coprime-7 dual-VENC design (VENC 1.0 /
+    /// 1.5 m/s, unaliased ±3 m/s): the decoder's sign / VENC convention, the zero-moment phase, the centring and the
+    /// cardiac circulant inverse give back the model's (m, ψ' = ψ0 − k̄·v, v) coefficients, and x_e = m e^{i(ψ' + φ_e −
+    /// k'_e·v)} reproduces the encode values; the SNR gate falls back to the time mean at low SNR
+    #[test]
+    fn spline_start_recovers_model_coefficients() {
+        let (lo, hi, r) = (5.871648784821618e-09, 1.957216261607207e-09, -5.871648784821618e-09);
+        let mut m1: Vec<[f64; 3]> = vec![[r; 3]];
+        for a in 0..3 {
+            for x in [lo, hi] {
+                let mut e = [r; 3];
+                e[a] = x;
+                m1.push(e);
+            }
+        }
+        let dec = FlowDecoder::new(&m1).with_alias_search(crate::flow::AliasSearch { vext: 3.0, margin: 1.0 });
+        let kenc: Vec<[f64; 3]> = m1.iter().map(|m| m.map(|x| hasty_mrsim::GAMMA * x)).collect();
+        let ne = kenc.len();
+        let kbar = [0, 1, 2].map(|a| kenc.iter().map(|k| k[a]).sum::<f64>() / ne as f64);
+        let (kr, mc, cdeg) = (2usize, 16usize, 3u32);
+        let nk = kr * mc;
+        let tw = |c: usize| 2.0 * std::f64::consts::PI * c as f64 / mc as f64;
+        // truth coefficients (smooth, |v| up to 2.2 m/s: beyond the 1.5 m/s first stage, inside the design range)
+        let mt: Vec<f64> = (0..nk).map(|k| 2.0 + 0.4 * tw(k % mc).cos() + 0.1 * (k / mc) as f64).collect();
+        let pt: Vec<f64> = (0..nk).map(|k| 0.6 + 0.5 * tw(k % mc).sin()).collect();
+        let vt: Vec<[f64; 3]> = (0..nk).map(|k| [0, 1, 2].map(|a| [1.6, -2.2, 0.9][a] * (tw(k % mc) + a as f64).sin() + 0.1 * (k / mc) as f64)).collect();
+        let vals = |x: &[f64]| { let mut y = x.to_vec(); cardiac_values(&mut y, kr, mc, cdeg, true); y };
+        let (mv, pv) = (vals(&mt), vals(&pt));
+        let vv: Vec<Vec<f64>> = (0..3).map(|a| vals(&vt.iter().map(|v| v[a]).collect::<Vec<_>>())).collect();
+        let phi = [0.0, 0.3, -0.2, 0.15, 0.05, -0.4, 0.25];
+        // complex encode values at the knot centres (residual phase included), then complex coefficients
+        let coefs = |noise: &dyn Fn(usize, usize) -> C| -> Vec<Vec<C>> {
+            (0..ne).map(|e| {
+                let z: Vec<C> = (0..nk).map(|k| C::from_polar(mv[k], pv[k] + phi[e] - (0..3).map(|a| kenc[e][a] * vv[a][k]).sum::<f64>()) + noise(e, k)).collect();
+                let (mut re, mut im): (Vec<f64>, Vec<f64>) = z.iter().map(|c| (c.re, c.im)).unzip();
+                cardiac_values(&mut re, kr, mc, cdeg, false);
+                cardiac_values(&mut im, kr, mc, cdeg, false);
+                re.into_iter().zip(im).map(|(a, b)| C::new(a, b)).collect()
+            }).collect()
+        };
+        let ss = SplineStart { dec: &dec, kenc: &kenc, kbar, kr, mc, cdeg, snr_gate: Some(3.28), vbox: Some(3.0) };
+        let cf = coefs(&|_, _| C::new(0.0, 0.0));
+        let (zp, vc, cnt) = ss.voxel(&|e, k| cf[e][k], &phi, true);
+        assert_eq!(cnt, [nk, 0, 0], "noise-free: every knot decoded");
+        for k in 0..nk {
+            for a in 0..3 {
+                assert!((vc[k][a] as f64 - vt[k][a]).abs() < 1e-4, "v coefficient {k} {a}: {} vs {}", vc[k][a], vt[k][a]);
+            }
+            assert!((zp[k].0 as f64 - mt[k]).abs() < 1e-4, "m coefficient {k}");
+            let psi_c = pt[k] - (0..3).map(|a| kbar[a] * vt[k][a]).sum::<f64>();
+            assert!((zp[k].1 as f64 - psi_c).abs() < 1e-4, "ψ' coefficient {k}: {} vs {psi_c}", zp[k].1);
+        }
+        // the model's forward form at the knot centres (VelSpec::kenc_model = k − k̄) gives the encode values back
+        let m_s = vals(&zp.iter().map(|p| p.0 as f64).collect::<Vec<_>>());
+        let p_s = vals(&zp.iter().map(|p| p.1 as f64).collect::<Vec<_>>());
+        let v_s: Vec<Vec<f64>> = (0..3).map(|a| vals(&vc.iter().map(|v| v[a] as f64).collect::<Vec<_>>())).collect();
+        for e in 0..ne {
+            for k in 0..nk {
+                let ph = p_s[k] + phi[e] - (0..3).map(|a| (kenc[e][a] - kbar[a]) * v_s[a][k]).sum::<f64>();
+                let want = C::from_polar(mv[k], pv[k] + phi[e] - (0..3).map(|a| kenc[e][a] * vv[a][k]).sum::<f64>());
+                assert!((C::from_polar(m_s[k], ph) - want).norm() < 1e-4, "encode {e} knot {k}");
+            }
+        }
+        // low SNR (σ = m per component): no knot passes; the time mean (σ/√K) does
+        let mut sgen = 0x2545F4914F6CDD1Du64;
+        let mut rnd = move || { sgen ^= sgen << 13; sgen ^= sgen >> 7; sgen ^= sgen << 17; (sgen >> 11) as f64 / (1u64 << 53) as f64 };
+        let nz: Vec<C> = (0..ne * nk).map(|_| { let (u, w) = (rnd().max(1e-12), rnd()); let r = 2.0 * (-2.0 * u.ln()).sqrt(); C::new(r * (6.283185307 * w).cos(), r * (6.283185307 * w).sin()) }).collect();
+        let cf = coefs(&|e, k| nz[e * nk + k]);
+        let (_, vc, cnt) = ss.voxel(&|e, k| cf[e][k], &phi, true);
+        assert!(cnt[0] <= nk / 8 && cnt[0] + cnt[1] + cnt[2] == nk, "low SNR gated: {cnt:?}");
+        assert!(vc.iter().all(|v| v.iter().all(|x| x.abs() <= 3.0)), "inside the box");
+        // outside the support: v = 0, nothing counted
+        let (_, vc, cnt) = ss.voxel(&|e, k| cf[e][k], &phi, false);
+        assert_eq!(cnt, [0, 0, 0]);
+        assert!(vc.iter().all(|v| *v == [0.0; 3]));
+    }
 
     #[test]
     fn robust_fit_recovers_phase_and_rejects_the_vessel() {

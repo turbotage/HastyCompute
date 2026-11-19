@@ -1,0 +1,8 @@
+
+running 1 test
+per-frame segments, 3×6 frames (cardiac degree 3), order 2, 4000 samples: vs Σ_b shared reference forward 4.2e-7, adjoint 0.0e0, adjointness 6.9e-8
+per-frame segments, 2×4 frames (cardiac degree 1), order 2, 3000 samples: vs Σ_b shared reference forward 3.6e-7, adjoint 0.0e0, adjointness 6.4e-8
+test per_frame_segments_match_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+

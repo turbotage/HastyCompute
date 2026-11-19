@@ -35,3 +35,31 @@ extern "C" __global__ void scale_cols(cx* __restrict__ p, const float* __restric
     p[i].x *= s;
     p[i].y *= s;
 }
+
+// Device-resident stack (LlrGpu::apply_dev): idx[b][row] = voxel of row `row` of block b (0xffffffff: zero row).
+// dc[j][row + R t] = x[t nv + idx[b0 + j][row]], j < nb
+extern "C" __global__ void gather_blocks(const cx* __restrict__ x, const unsigned* __restrict__ idx, cx* __restrict__ dc, int r, int t, long long nv, long long b0, long long nb)
+{
+    long long i = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    long long per = (long long)r * t;
+    if (i >= per * nb) return;
+    long long j = i / per, e = i % per;
+    int tt = (int)(e / r), row = (int)(e % r);
+    unsigned q = idx[(b0 + j) * r + row];
+    cx o; o.x = 0.f; o.y = 0.f;
+    if (q != 0xffffffffu) o = x[tt * nv + q];
+    dc[i] = o;
+}
+
+// x[t nv + idx[b0 + j][row]] = dc[j][row + R t] for blocks with ok[j] != 0
+extern "C" __global__ void scatter_blocks(const cx* __restrict__ dc, const unsigned* __restrict__ idx, const int* __restrict__ ok, cx* __restrict__ x, int r, int t, long long nv, long long b0, long long nb)
+{
+    long long i = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    long long per = (long long)r * t;
+    if (i >= per * nb) return;
+    long long j = i / per, e = i % per;
+    if (!ok[j]) return;
+    int tt = (int)(e / r), row = (int)(e % r);
+    unsigned q = idx[(b0 + j) * r + row];
+    if (q != 0xffffffffu) x[tt * nv + q] = dc[i];
+}

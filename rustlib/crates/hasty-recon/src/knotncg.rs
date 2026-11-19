@@ -40,6 +40,7 @@ use crate::llr::{Llr, LlrStats};
 use crate::llr_gpu::LlrGpu;
 use crate::sepwt::{forward, inverse, Bank};
 use crate::setop::LinOp;
+use crate::wavgpu::WavGpu;
 use crate::Error;
 
 const SRC: &str = r#"
@@ -580,6 +581,18 @@ impl LlrBackend {
             LlrBackend::Gpu(g) => g.apply(x, nt),
         }
     }
+    /// in place on a device stack (GPU: [`LlrGpu::apply_dev`]; CPU: staged through the host)
+    pub fn apply_dev(&mut self, st: &Arc<CudaStream>, x: &mut CudaSlice<C32>, nt: usize) -> Result<(), Error> {
+        match self {
+            LlrBackend::Cpu(l) => {
+                let mut h = st.clone_dtoh(&*x)?;
+                l.apply(&mut h, nt);
+                st.memcpy_htod(&h, x)?;
+                Ok(())
+            }
+            LlrBackend::Gpu(g) => g.apply_dev(st, x, nt),
+        }
+    }
 }
 
 /// Moreau envelope of λ Σ_b ‖C_b‖_* with θ = λγ on a fixed block partition (iteration `shift` of the LLR shift sequence)
@@ -613,6 +626,62 @@ impl LlrHuber {
         });
         Ok(((hdot(z, z) - s.s2_above) * 0.5 + s.lin) / self.gamma)
     }
+
+    /// [`LlrHuber::svt`] on a device stack
+    pub fn svt_dev(&mut self, st: &Arc<CudaStream>, z: &mut CudaSlice<C32>, nt: usize, thr: f64) -> Result<LlrStats, Error> {
+        let shift = self.shift;
+        let l = self.be.llr();
+        l.thr_abs = Some(thr);
+        l.set_iteration(shift);
+        self.be.apply_dev(st, z, nt)?;
+        Ok(self.be.llr().last.clone())
+    }
+
+    /// [`LlrHuber::eval`] at the point z = x + a d (d = None: z = x) on the device: the gradient (z − SVT_θ(z)) / γ into
+    /// `g` (no copy of z kept: z is re-formed from x and d), returns the value
+    #[allow(clippy::too_many_arguments)]
+    pub fn eval_dev(&mut self, kern: &Kernels, st: &Arc<CudaStream>, x: &CudaSlice<C32>, d: Option<(&CudaSlice<C32>, f64)>, g: &mut CudaSlice<C32>, nt: usize) -> Result<f64, Error> {
+        st.memcpy_dtod(x, g)?;
+        if let Some((dv, a)) = d {
+            kern.axpby(st, re(a), dv, re(1.0), g)?;
+        }
+        let zz = kern.dot(st, g, g)?.re;
+        let s = self.svt_dev(st, g, nt, self.theta)?;
+        let ig = 1.0 / self.gamma;
+        kern.axpby(st, re(ig), x, re(-ig), g)?;
+        if let Some((dv, a)) = d {
+            kern.axpby(st, re(a * ig), dv, re(1.0), g)?;
+        }
+        Ok(((zz - s.s2_above) * 0.5 + s.lin) / self.gamma)
+    }
+}
+
+/// Where the priors run: host (`Cpu`, the original path: x and the prior gradient cross the bus per evaluation, the
+/// transforms and line sums on the CPU) or the device ([`Priors::to_gpu`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PriorDev {
+    Cpu,
+    Gpu,
+}
+
+impl std::str::FromStr for PriorDev {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "cpu" => Ok(PriorDev::Cpu),
+            "gpu" => Ok(PriorDev::Gpu),
+            o => Err(format!("prior device {o}: cpu | gpu")),
+        }
+    }
+}
+
+/// Device state of the priors (device mode): the wavelet engine, a scratch of `chunk` coefficient images (the wavelet
+/// gradient of a stack streams through it in knot chunks) and one knot stack of LLR scratch, both allocated at first use
+pub struct PriorsGpu {
+    pub wg: Option<WavGpu>,
+    pub chunk: usize,
+    scr: Option<CudaSlice<C32>>,
+    tmp: Option<CudaSlice<C32>>,
 }
 
 /// The smoothed priors of a knot stack (k images of nv voxels) and their evaluation counts
@@ -625,18 +694,129 @@ pub struct Priors {
     pub n_wt: usize,
     pub n_llr: usize,
     pub secs: f64,
+    /// Some: device mode (every solver keeps x, the direction and the coefficient stacks on the device)
+    pub gpu: Option<PriorsGpu>,
     tmp: Vec<C32>,
     cbuf: Vec<f32>,
     pbuf: Vec<f32>,
 }
 
+/// device stacks a solver adds in device mode (beyond its own image vectors), see [`Priors::dev_bytes`]
+#[derive(Clone, Copy, Debug)]
+pub enum DevSolver {
+    Ncg,
+    Fista,
+    Zmshr1,
+    Admm,
+    Power,
+}
+
 impl Priors {
     pub fn new(k: usize, nv: usize, wav: Option<WavHuber>, llr: Option<LlrHuber>) -> Self {
-        Self { k, nv, wav, llr, n_wt: 0, n_llr: 0, secs: 0.0, tmp: vec![], cbuf: vec![], pbuf: vec![] }
+        Self { k, nv, wav, llr, n_wt: 0, n_llr: 0, secs: 0.0, gpu: None, tmp: vec![], cbuf: vec![], pbuf: vec![] }
     }
 
     pub fn any(&self) -> bool {
         self.wav.is_some() || self.llr.is_some()
+    }
+
+    /// switch to device mode; `chunk` = knot images per wavelet scratch (the gradient streams the stack through it)
+    pub fn to_gpu(&mut self, dev: &Device, st: &Arc<CudaStream>, chunk: usize) -> Result<(), Error> {
+        let wg = if self.wav.is_some() { Some(WavGpu::new(dev, st, self.k)?) } else { None };
+        self.gpu = Some(PriorsGpu { wg, chunk: chunk.clamp(1, self.k.max(1)), scr: None, tmp: None });
+        Ok(())
+    }
+
+    /// back to host mode (frees the device scratch)
+    pub fn to_cpu(&mut self) {
+        self.gpu = None;
+    }
+
+    pub fn on_gpu(&self) -> bool {
+        self.gpu.is_some()
+    }
+
+    pub fn dev(&self) -> PriorDev {
+        if self.on_gpu() { PriorDev::Gpu } else { PriorDev::Cpu }
+    }
+
+    /// Device bytes the priors add in device mode while `solver` runs, beyond the solver's own image vectors (the
+    /// memory ledger row): the persistent scratch (wavelet chunk + engine, one LLR stack) plus the solver's own prior
+    /// stacks — NCG: the coefficient stacks of x and of the direction, the LLR gradient at x; ADMM: the wavelet dual
+    /// (coefficient stack) and the LLR dual; power iteration: the prior gradient at x. `np` = coefficient images'
+    /// complex size (`WavGpu::npc`), `nv` voxels per knot image.
+    pub fn dev_bytes(solver: DevSolver, k: usize, nv: usize, np: usize, has_w: bool, has_l: bool, chunk: usize) -> usize {
+        let (img, coef) = (k * nv * 8, k * np * 8);
+        let mut b = 0;
+        if has_w {
+            b += chunk.clamp(1, k.max(1)) * np * 8 + WavGpu::bytes(k);
+        }
+        if has_l {
+            b += img + nv * 4;
+        }
+        b + match solver {
+            DevSolver::Ncg => (if has_w { 2 * coef } else { 0 }) + (if has_l { img } else { 0 }),
+            DevSolver::Admm => (if has_w { coef } else { 0 }) + (if has_l { img } else { 0 }),
+            DevSolver::Power => img,
+            DevSolver::Fista | DevSolver::Zmshr1 => 0,
+        }
+    }
+
+    /// device mode: g ← a ∇R(x) + b g (b = 0: g is not read); returns the values (wavelet, LLR)
+    pub fn grad_dev(&mut self, kern: &Kernels, st: &Arc<CudaStream>, x: &CudaSlice<C32>, g: &mut CudaSlice<C32>, a: f32, b: f32) -> Result<(f64, f64), Error> {
+        let t0 = std::time::Instant::now();
+        let (k, n) = (self.k, x.len());
+        let (mut vw, mut vl) = (0.0, 0.0);
+        let Priors { wav, llr, gpu, n_wt, n_llr, .. } = self;
+        let pg = gpu.as_mut().expect("Priors::grad_dev: not in device mode");
+        let mut beta = b;
+        if let Some(w) = wav.as_ref() {
+            let wg = pg.wg.as_ref().unwrap();
+            let npc = WavGpu::npc(w);
+            if pg.scr.is_none() {
+                pg.scr = Some(st.alloc_zeros::<C32>(pg.chunk * npc)?);
+            }
+            vw = wg.grad(st, w, x, k, pg.scr.as_mut().unwrap(), g, a, beta)?;
+            *n_wt += 2;
+            beta = 1.0;
+        }
+        if beta == 0.0 {
+            st.memset_zeros(g)?;
+        } else if beta != 1.0 {
+            kern.axpby(st, re(0.0), x, re(beta as f64), g)?;
+        }
+        if let Some(l) = llr.as_mut() {
+            if pg.tmp.is_none() {
+                pg.tmp = Some(st.alloc_zeros::<C32>(n)?);
+            }
+            let tmp = pg.tmp.as_mut().unwrap();
+            vl = l.eval_dev(kern, st, x, None, tmp, k)?;
+            kern.axpby(st, re(a as f64), tmp, re(1.0), g)?;
+            *n_llr += 1;
+        }
+        st.synchronize()?;
+        self.secs += t0.elapsed().as_secs_f64();
+        Ok((vw, vl))
+    }
+
+    /// the LLR scratch stack of device mode (allocated at first use)
+    fn llr_tmp(&mut self, st: &Arc<CudaStream>) -> Result<CudaSlice<C32>, Error> {
+        let n = self.k * self.nv;
+        let pg = self.gpu.as_mut().unwrap();
+        match pg.tmp.take() {
+            Some(t) => Ok(t),
+            None => Ok(st.alloc_zeros::<C32>(n)?),
+        }
+    }
+
+    /// the wavelet scratch of device mode (allocated at first use)
+    fn wav_scr(&mut self, st: &Arc<CudaStream>) -> Result<CudaSlice<C32>, Error> {
+        let npc = self.wav.as_ref().map_or(1, WavGpu::npc);
+        let pg = self.gpu.as_mut().unwrap();
+        match pg.scr.take() {
+            Some(t) => Ok(t),
+            None => Ok(st.alloc_zeros::<C32>(pg.chunk * npc)?),
+        }
     }
 
     /// total prior gradient at x into g; returns the values (wavelet, LLR)
@@ -705,7 +885,11 @@ fn full_grad(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, pri: &mu
     op.adjoint(st, r, g)?;
     kern.axpby(st, re(0.0), tmp, re(-1.0), g)?;
     info.f = 0.5 * kern.dot(st, r, r)?.re;
-    if pri.any() {
+    if pri.any() && pri.on_gpu() {
+        let (vw, vl) = pri.grad_dev(kern, st, x, g, 1.0, 1.0)?;
+        info.pw = vw;
+        info.pl = vl;
+    } else if pri.any() {
         st.memcpy_dtoh(x, xh)?;
         let (vw, vl) = pri.grad(xh, gh)?;
         info.pw = vw;
@@ -721,6 +905,9 @@ fn full_grad(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, pri: &mu
 #[allow(clippy::too_many_arguments)]
 /// Returns the final residual y − A x (a continuation stage hands it to the next).
 pub fn ncg(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: &PriorMetric, pri: &mut Priors, x: &mut CudaSlice<C32>, mut r: CudaSlice<C32>, cb: Cb<'_>) -> Result<CudaSlice<C32>, Error> {
+    if pri.on_gpu() {
+        return ncg_dev(op, kern, st, metric, pri, x, r, cb);
+    }
     let n = x.len();
     let k = pri.k;
     let mut g = st.alloc_zeros::<C32>(n)?;
@@ -923,6 +1110,339 @@ pub fn ncg(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: &P
     Ok(r)
 }
 
+/// The NCG step on the device: the root a > 0 of the increasing φ'(a) = c0 + c1 a + w'(a) (w' = the wavelet line
+/// derivative, `ev` evaluates it at up to `MAXM` steps per sweep of the coefficient stacks). Bracketing by doublings
+/// from −φ0 / c1 (≤ 31 points as the host's 30 doublings, MAXM per sweep), then per sweep the regula-falsi point of
+/// the bracket and points around it (±10⁻³, 10⁻², 10⁻¹ of the bracket) and its midpoint; stops at the host's
+/// tolerances (|φ'| ≤ 10⁻⁴ |φ0| or a bracket ≤ 10⁻⁵ a).
+fn step_multi(phi0: f64, c0: f64, c1: f64, ev: &mut dyn FnMut(&[f64]) -> Result<Vec<f64>, Error>) -> Result<f64, Error> {
+    let mut hi = -phi0 / c1.max(1e-300);
+    let f = |a: f64, wd: f64| c0 + c1 * a + wd;
+    if !(hi > 0.0) {
+        return Ok(hi);
+    }
+    let (mut lo, mut flo) = (0.0, phi0);
+    let mut fhi = f64::NAN;
+    let mut done = 0usize;
+    let mut base = hi;
+    while fhi.is_nan() {
+        let m = crate::wavgpu::MAXM.min(31 - done);
+        let pts: Vec<f64> = (0..m).map(|j| base * 2f64.powi(j as i32)).collect();
+        let fs: Vec<f64> = pts.iter().zip(ev(&pts)?).map(|(&a, wd)| f(a, wd)).collect();
+        match fs.iter().position(|&v| v >= 0.0) {
+            Some(j) => {
+                hi = pts[j];
+                fhi = fs[j];
+                if j > 0 {
+                    lo = pts[j - 1];
+                    flo = fs[j - 1];
+                }
+            }
+            None => {
+                lo = pts[m - 1];
+                flo = fs[m - 1];
+                done += m;
+                base = 2.0 * pts[m - 1];
+                if done >= 31 {
+                    // no sign change: the largest step tried (as the host, which stops doubling there)
+                    return Ok(pts[m - 1]);
+                }
+            }
+        }
+    }
+    let tol = 1e-4 * phi0.abs();
+    if fhi.abs() <= tol {
+        return Ok(hi);
+    }
+    let secant = |lo: f64, flo: f64, hi: f64, fhi: f64| (lo * fhi - hi * flo) / (fhi - flo);
+    for _ in 0..12 {
+        if hi - lo <= 1e-5 * hi {
+            break;
+        }
+        let a0 = secant(lo, flo, hi, fhi);
+        let wd = hi - lo;
+        let mut pts = vec![a0, 0.5 * (lo + hi)];
+        for e in [1e-3, 1e-2, 1e-1] {
+            pts.push(a0 - e * wd);
+            pts.push(a0 + e * wd);
+        }
+        pts.retain(|&p| p > lo && p < hi);
+        pts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        pts.dedup();
+        if pts.is_empty() {
+            break;
+        }
+        let fs: Vec<f64> = pts.iter().zip(ev(&pts)?).map(|(&a, wd)| f(a, wd)).collect();
+        if let Some((j, _)) = fs.iter().enumerate().filter(|(_, v)| v.abs() <= tol).min_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap()) {
+            return Ok(pts[j]);
+        }
+        for (&p, &v) in pts.iter().zip(&fs) {
+            if v < 0.0 {
+                if p > lo {
+                    lo = p;
+                    flo = v;
+                }
+            } else if p < hi {
+                hi = p;
+                fhi = v;
+            }
+        }
+    }
+    Ok(secant(lo, flo, hi, fhi))
+}
+
+/// [`ncg`] with the priors on the device (device mode): x, d, the coefficient stacks of x and d and the LLR gradients
+/// stay on the device; the wavelet line search sweeps the coefficient stacks at up to `MAXM` steps per sweep.
+#[allow(clippy::too_many_arguments)]
+fn ncg_dev(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: &PriorMetric, pri: &mut Priors, x: &mut CudaSlice<C32>, mut r: CudaSlice<C32>, cb: Cb<'_>) -> Result<CudaSlice<C32>, Error> {
+    let n = x.len();
+    let k = pri.k;
+    let mut g = st.alloc_zeros::<C32>(n)?;
+    let mut gp = st.alloc_zeros::<C32>(n)?;
+    let mut d = st.alloc_zeros::<C32>(n)?;
+    let mut z = st.alloc_zeros::<C32>(n)?;
+    let mut q = st.alloc_zeros::<C32>(r.len())?;
+    let has_l = pri.llr.is_some();
+    let has_w = pri.wav.is_some();
+    let npc = pri.wav.as_ref().map_or(0, WavGpu::npc);
+    // coefficient stacks of x and of the direction (cd doubles as ψ(cx) for the gradient)
+    let mut cx = st.alloc_zeros::<C32>(if has_w { k * npc } else { 1 })?;
+    let mut cd = st.alloc_zeros::<C32>(if has_w { k * npc } else { 1 })?;
+    // LLR gradient at x (glh) and at the trial point (glt: the priors' LLR scratch)
+    let mut glh = st.alloc_zeros::<C32>(if has_l { n } else { 1 })?;
+    let mut glt = if has_l { pri.llr_tmp(st)? } else { st.alloc_zeros::<C32>(1)? };
+    let mut info = Info { pw: f64::NAN, pl: f64::NAN, ..Default::default() };
+    let res = (|| -> Result<CudaSlice<C32>, Error> {
+        op.adjoint(st, &r, &mut g)?;
+        neg(kern, st, &z, &mut g)?;
+        let t0 = std::time::Instant::now();
+        if let Some(w) = &pri.wav {
+            let wg = pri.gpu.as_ref().unwrap().wg.as_ref().unwrap();
+            wg.coef(st, w, x, k, &mut cx)?;
+            info.pw = wg.value_psi(st, w, &cx, &mut cd, k)?;
+            wg.synth_axpby(st, w, &mut cd, k, 1.0, &mut g, 1.0)?;
+            pri.n_wt += 2;
+        }
+        if let Some(l) = pri.llr.as_mut() {
+            info.pl = l.eval_dev(kern, st, x, None, &mut glh, k)?;
+            pri.n_llr += 1;
+            kern.axpby(st, re(1.0), &glh, re(1.0), &mut g)?;
+        }
+        st.synchronize()?;
+        pri.secs += t0.elapsed().as_secs_f64();
+        info.f = 0.5 * kern.dot(st, &r, &r)?.re;
+        info.n_wt = pri.n_wt;
+        info.n_llr = pri.n_llr;
+        if !cb(&info, x) {
+            return Ok(r);
+        }
+        metric.apply_metric(st, &g, &mut z)?;
+        st.memcpy_dtod(&z, &mut d)?;
+        neg(kern, st, &z, &mut d)?;
+        let mut gz = kern.dot(st, &g, &z)?.re;
+        st.memcpy_dtod(&g, &mut gp)?;
+        let mut kap_l = 0.0f64;
+        for it in 1.. {
+            op.forward(st, &d, &mut q)?;
+            let bq = kern.dot(st, &q, &q)?.re;
+            let phi0 = kern.dot(st, &g, &d)?.re;
+            let t1 = std::time::Instant::now();
+            let dd = kern.dot(st, &d, &d)?.re;
+            let pl0 = if has_l { kern.dot(st, &glh, &d)?.re } else { 0.0 };
+            let pw0 = if let Some(w) = &pri.wav {
+                let wg = pri.gpu.as_ref().unwrap().wg.as_ref().unwrap();
+                wg.coef(st, w, &d, k, &mut cd)?;
+                pri.n_wt += 1;
+                wg.line(st, w, &cx, &cd, k, &[0.0])?[0].1
+            } else {
+                0.0
+            };
+            // φ'(a) = (φ0 − w'(0)) + a (‖A d‖² + h) + w'(a): data exact, wavelet exact, LLR linearised with curvature h
+            let solve = |pri: &Priors, h: f64| -> Result<f64, Error> {
+                match &pri.wav {
+                    None => Ok(-phi0 / (bq + h).max(1e-300)),
+                    Some(w) => {
+                        let wg = pri.gpu.as_ref().unwrap().wg.as_ref().unwrap();
+                        step_multi(phi0, phi0 - pw0, bq + h, &mut |a: &[f64]| -> Result<Vec<f64>, Error> { Ok(wg.line(st, w, &cx, &cd, k, a)?.into_iter().map(|v| v.1).collect()) })
+                    }
+                }
+            };
+            let mut a = solve(pri, kap_l * dd)?;
+            if !(a > 0.0) || !a.is_finite() {
+                eprintln!("    ncg it {it}: no descent step (φ'(0) = {phi0:.3e}), stopping");
+                return Ok(r);
+            }
+            if has_l {
+                let l = pri.llr.as_mut().unwrap();
+                info.pl = l.eval_dev(kern, st, x, Some((&d, a)), &mut glt, k)?;
+                pri.n_llr += 1;
+                let pla = kern.dot(st, &glt, &d)?.re;
+                let h = ((pla - pl0) / a).max(0.0);
+                kap_l = h / dd.max(1e-300);
+                let a1 = solve(pri, h)?;
+                if a1 > 0.0 && a1.is_finite() && (a1 - a).abs() > 0.1 * a {
+                    a = a1;
+                    let l = pri.llr.as_mut().unwrap();
+                    info.pl = l.eval_dev(kern, st, x, Some((&d, a)), &mut glt, k)?;
+                    pri.n_llr += 1;
+                }
+                std::mem::swap(&mut glh, &mut glt);
+            }
+            st.synchronize()?;
+            pri.secs += t1.elapsed().as_secs_f64();
+            kern.axpby(st, re(a), &d, re(1.0), x)?;
+            kern.axpby(st, re(-a), &q, re(1.0), &mut r)?;
+            op.adjoint(st, &r, &mut g)?;
+            neg(kern, st, &z, &mut g)?;
+            let t2 = std::time::Instant::now();
+            if let Some(w) = &pri.wav {
+                let wg = pri.gpu.as_ref().unwrap().wg.as_ref().unwrap();
+                kern.axpby(st, re(a), &cd, re(1.0), &mut cx)?;
+                info.pw = wg.value_psi(st, w, &cx, &mut cd, k)?;
+                wg.synth_axpby(st, w, &mut cd, k, 1.0, &mut g, 1.0)?;
+                pri.n_wt += 1;
+            }
+            if has_l {
+                kern.axpby(st, re(1.0), &glh, re(1.0), &mut g)?;
+            }
+            st.synchronize()?;
+            pri.secs += t2.elapsed().as_secs_f64();
+            info.iter = it;
+            info.step = a;
+            info.f = 0.5 * kern.dot(st, &r, &r)?.re;
+            info.n_wt = pri.n_wt;
+            info.n_llr = pri.n_llr;
+            metric.apply_metric(st, &g, &mut z)?;
+            let gz_new = kern.dot(st, &g, &z)?.re;
+            let gpz = kern.dot(st, &gp, &z)?.re;
+            let mut beta = ((gz_new - gpz) / gz).max(0.0);
+            let mut restart = false;
+            if gpz.abs() >= 0.2 * gz_new {
+                beta = 0.0;
+                restart = true;
+            }
+            kern.axpby(st, re(-1.0), &z, re(beta), &mut d)?;
+            if kern.dot(st, &d, &g)?.re >= 0.0 {
+                st.memcpy_dtod(&z, &mut d)?;
+                neg(kern, st, &z, &mut d)?;
+                beta = 0.0;
+                restart = true;
+            }
+            st.memcpy_dtod(&g, &mut gp)?;
+            gz = gz_new;
+            info.beta = beta;
+            info.restart = restart;
+            if !cb(&info, x) {
+                break;
+            }
+        }
+        Ok(r)
+    })();
+    // the LLR scratch back to the priors (whichever of glh / glt holds it: both are full stacks)
+    if has_l {
+        if let Some(pg) = pri.gpu.as_mut() {
+            pg.tmp = Some(glt);
+        }
+    }
+    res
+}
+
+/// [`admm`] with the priors on the device (device mode): the splits' duals (wavelet: a coefficient stack; LLR: a knot
+/// stack) live on the device; the wavelet prox runs per knot chunk through the priors' scratch.
+#[allow(clippy::too_many_arguments)]
+fn admm_dev(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: &PriorMetric, pri: &mut Priors, x: &mut CudaSlice<C32>, mut r: CudaSlice<C32>, rho: f64, n_inner: usize, cb: Cb<'_>) -> Result<(), Error> {
+    let n = x.len();
+    let k = pri.k;
+    let nsplit = pri.wav.is_some() as usize + pri.llr.is_some() as usize;
+    assert!(nsplit > 0, "ADMM needs a prior");
+    let lam = rho * nsplit as f64;
+    let mut s = st.alloc_zeros::<C32>(n)?;
+    let mut p = st.alloc_zeros::<C32>(n)?;
+    let mut z = st.alloc_zeros::<C32>(n)?;
+    let mut q = st.alloc_zeros::<C32>(r.len())?;
+    let lw = pri.wav.as_ref().map(|w| w.theta / w.gamma);
+    let ll = pri.llr.as_ref().map(|l| l.theta / l.gamma);
+    // scaled duals 0, the centre m = x
+    let npc = pri.wav.as_ref().map_or(0, WavGpu::npc);
+    let mut vw = st.alloc_zeros::<C32>(if lw.is_some() { k * npc } else { 1 })?;
+    let mut vl = st.alloc_zeros::<C32>(if ll.is_some() { n } else { 1 })?;
+    let mut scr = if lw.is_some() { Some(pri.wav_scr(st)?) } else { None };
+    let mut ul = if ll.is_some() { Some(pri.llr_tmp(st)?) } else { None };
+    let mut mc = st.clone_dtod(x)?;
+    let res = (|| -> Result<(), Error> {
+        op.adjoint(st, &r, &mut s)?;
+        let mut info = Info { pw: f64::NAN, pl: f64::NAN, ..Default::default() };
+        info.f = 0.5 * kern.dot(st, &r, &r)?.re;
+        info.n_wt = pri.n_wt;
+        if !cb(&info, x) {
+            return Ok(());
+        }
+        let mut it = 0;
+        loop {
+            metric.apply_metric(st, &s, &mut z)?;
+            st.memcpy_dtod(&z, &mut p)?;
+            let mut gam = kern.dot(st, &s, &z)?.re;
+            for _ in 0..n_inner {
+                op.forward(st, &p, &mut q)?;
+                let qq = kern.dot(st, &q, &q)?.re + lam * kern.dot(st, &p, &p)?.re;
+                let al = gam / qq;
+                kern.axpby(st, re(al), &p, re(1.0), x)?;
+                kern.axpby(st, re(-al), &q, re(1.0), &mut r)?;
+                op.adjoint(st, &r, &mut s)?;
+                kern.axpby(st, re(-lam), x, re(1.0), &mut s)?;
+                kern.axpby(st, re(lam), &mc, re(1.0), &mut s)?;
+                metric.apply_metric(st, &s, &mut z)?;
+                let gn = kern.dot(st, &s, &z)?.re;
+                kern.axpby(st, re(1.0), &z, re(gn / gam), &mut p)?;
+                gam = gn;
+                it += 1;
+                info.iter = it;
+                info.f = 0.5 * kern.dot(st, &r, &r)?.re;
+                info.step = al;
+                info.n_wt = pri.n_wt;
+                info.n_llr = pri.n_llr;
+                if !cb(&info, x) {
+                    return Ok(());
+                }
+            }
+            // prox steps and duals; s = Aᴴr − λ(x − m): the old centre out, the new one in
+            let t0 = std::time::Instant::now();
+            kern.axpby(st, re(-lam), &mc, re(1.0), &mut s)?;
+            st.memset_zeros(&mut mc)?;
+            if let Some(w) = &pri.wav {
+                let wg = pri.gpu.as_ref().unwrap().wg.as_ref().unwrap();
+                wg.admm(st, w, x, k, scr.as_mut().unwrap(), &mut vw, lw.unwrap() / rho, &mut mc, 1.0 / nsplit as f32)?;
+                pri.n_wt += 2;
+            }
+            if let Some(l) = pri.llr.as_mut() {
+                // u = SVT(x + v), v ← v + x − u; centre part u − v
+                let u = ul.as_mut().unwrap();
+                st.memcpy_dtod(x, u)?;
+                kern.axpby(st, re(1.0), &vl, re(1.0), u)?;
+                l.svt_dev(st, u, k, ll.unwrap() / rho)?;
+                pri.n_llr += 1;
+                kern.axpby(st, re(1.0), x, re(1.0), &mut vl)?;
+                kern.axpby(st, re(-1.0), u, re(1.0), &mut vl)?;
+                let f = 1.0 / nsplit as f64;
+                kern.axpby(st, re(f), u, re(1.0), &mut mc)?;
+                kern.axpby(st, re(-f), &vl, re(1.0), &mut mc)?;
+            }
+            st.synchronize()?;
+            pri.secs += t0.elapsed().as_secs_f64();
+            kern.axpby(st, re(lam), &mc, re(1.0), &mut s)?;
+        }
+    })();
+    if let Some(pg) = pri.gpu.as_mut() {
+        if scr.is_some() {
+            pg.scr = scr.take();
+        }
+        if ul.is_some() {
+            pg.tmp = ul.take();
+        }
+    }
+    res
+}
+
 /// FISTA (accelerated gradient, step 1/L in the metric P, gradient restart) on the smoothed objective. `y` = the data
 /// (kept); every iteration: one forward (the residual at the extrapolated point) and one adjoint.
 #[allow(clippy::too_many_arguments)]
@@ -934,7 +1454,8 @@ pub fn fista(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: 
     let mut g = st.alloc_zeros::<C32>(n)?;
     let mut z = st.alloc_zeros::<C32>(n)?;
     let mut q = st.alloc_zeros::<C32>(y.len())?;
-    let (mut yh, mut gh) = (vec![zero; n], vec![zero; n]);
+    let hn = if pri.on_gpu() { 0 } else { n };
+    let (mut yh, mut gh) = (vec![zero; hn], vec![zero; hn]);
     let mut info = Info { pw: f64::NAN, pl: f64::NAN, ..Default::default() };
     op.forward(st, &yk, &mut q)?;
     kern.axpby(st, re(1.0), &y, re(-1.0), &mut q)?;
@@ -990,8 +1511,9 @@ pub fn zmshr1(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric:
     let mut q = st.alloc_zeros::<C32>(r.len())?;
     let mut xph = vec![zero; n];
     let mut gph = vec![zero; n];
-    let mut xh = vec![zero; n];
-    let mut gh = vec![zero; n];
+    let hn = if pri.on_gpu() { 0 } else { n };
+    let mut xh = vec![zero; hn];
+    let mut gh = vec![zero; hn];
     let mut info = Info { pw: f64::NAN, pl: f64::NAN, ..Default::default() };
     full_grad(op, kern, st, pri, x, &r, &mut g, &mut wb, &mut xh, &mut gh, &mut info)?;
     if !cb(&info, x) {
@@ -1044,6 +1566,9 @@ pub fn zmshr1(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric:
 /// λ = θ/γ). `metric` must carry the ridge 2ρ (ρ per split) in its prior term. `r` = y − A x on entry.
 #[allow(clippy::too_many_arguments)]
 pub fn admm(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, metric: &PriorMetric, pri: &mut Priors, x: &mut CudaSlice<C32>, mut r: CudaSlice<C32>, rho: f64, n_inner: usize, cb: Cb<'_>) -> Result<(), Error> {
+    if pri.on_gpu() {
+        return admm_dev(op, kern, st, metric, pri, x, r, rho, n_inner, cb);
+    }
     let n = x.len();
     let k = pri.k;
     let zero = C32::new(0.0, 0.0);
@@ -1166,6 +1691,30 @@ pub fn power_lmax(op: &mut impl LinOp, kern: &Kernels, st: &Arc<CudaStream>, met
     let mut u = st.alloc_zeros::<C32>(n)?;
     let mut w = st.alloc_zeros::<C32>(n)?;
     let mut q = st.alloc_zeros::<C32>(data_len)?;
+    if pri.any() && pri.on_gpu() {
+        // device mode: ∇R(x) kept on the device; x + εv formed in w (free at that point of the iteration)
+        let mut g0 = st.alloc_zeros::<C32>(n)?;
+        pri.grad_dev(kern, st, x, &mut g0, 1.0, 0.0)?;
+        let xn = kern.dot(st, x, x)?.re.sqrt();
+        let mut hist = vec![];
+        let mut lam = 0.0;
+        for _ in 0..iters {
+            let vn = kern.dot(st, &v, &v)?.re.sqrt();
+            kern.axpby(st, re(0.0), &u, re(1.0 / vn), &mut v)?;
+            op.forward(st, &v, &mut q)?;
+            op.adjoint(st, &q, &mut u)?;
+            let eps = 1e-3 * xn.max(1e-30);
+            st.memcpy_dtod(x, &mut w)?;
+            kern.axpby(st, re(eps), &v, re(1.0), &mut w)?;
+            pri.grad_dev(kern, st, &w, &mut u, (1.0 / eps) as f32, 1.0)?;
+            kern.axpby(st, re(-1.0 / eps), &g0, re(1.0), &mut u)?;
+            metric.apply_metric(st, &u, &mut w)?;
+            lam = kern.dot(st, &w, &u)?.re / kern.dot(st, &v, &u)?.re.max(1e-300);
+            hist.push(lam);
+            std::mem::swap(&mut v, &mut w);
+        }
+        return Ok((lam, hist));
+    }
     let (mut xh, mut g0, mut g1, mut vh) = (vec![zero; n], vec![zero; n], vec![zero; n], vec![zero; n]);
     if pri.any() {
         st.memcpy_dtoh(x, &mut xh)?;

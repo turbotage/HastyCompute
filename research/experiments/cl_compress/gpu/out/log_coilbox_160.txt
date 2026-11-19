@@ -1,0 +1,9 @@
+coilbox: 7573020 samples (1898 readouts of encode 0), calibration [24, 24, 24] from 388771 samples; box [160.0, 160.0, 160.0] mm at [0.0, 0.0, 0.0] mm + 10 mm: 2565 of 13824 calibration voxels
+  reference: 32 whitened coils, 15 PCGLS iterations; plain SENSE forward + adjoint 375 ms
+  e = 0.999:             global: 31 coils; box energy 99.955 % (voxel loss p50 1.7e-4, p99 3.7e-3, max 1.5e-2), whole region 99.952 %; recon vs 32-coil: in box 0.0484, outside 0.0509; SENSE fwd + adj 363 ms (1.03× the reference)
+  e = 0.999:                box: 30 coils; box energy 99.912 % (voxel loss p50 4.6e-4, p99 6.1e-3, max 3.0e-2), whole region 99.875 %; recon vs 32-coil: in box 0.0434, outside 0.0551; SENSE fwd + adj 348 ms (1.08× the reference)
+  e = 0.999:  global, box count: 30 coils; box energy 99.906 % (voxel loss p50 5.2e-4, p99 5.8e-3, max 2.9e-2), whole region 99.884 %; recon vs 32-coil: in box 0.0665, outside 0.0646; SENSE fwd + adj 347 ms (1.08× the reference)
+  e = 0.9995:             global: 31 coils; box energy 99.955 % (voxel loss p50 1.7e-4, p99 3.7e-3, max 1.5e-2), whole region 99.952 %; recon vs 32-coil: in box 0.0484, outside 0.0509; SENSE fwd + adj 360 ms (1.04× the reference)
+  e = 0.9995:                box: 31 coils; box energy 99.959 % (voxel loss p50 1.8e-4, p99 3.5e-3, max 1.9e-2), whole region 99.938 %; recon vs 32-coil: in box 0.0281, outside 0.0318; SENSE fwd + adj 361 ms (1.04× the reference)
+  e = 0.9995:  global, box count: 31 coils; box energy 99.955 % (voxel loss p50 1.7e-4, p99 3.7e-3, max 1.5e-2), whole region 99.952 %; recon vs 32-coil: in box 0.0484, outside 0.0509; SENSE fwd + adj 361 ms (1.04× the reference)
+done coilbox_160

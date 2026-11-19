@@ -1,0 +1,59 @@
+output directory research/experiments/sample_compress/out/drivers/p2np_box (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch research/experiments/sample_compress/out/drivers/p2np_box/STOP to pause with a checkpoint)
+k-space data: 13.49 GiB raw coil data, 36.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [100, 96, 120] (native [198, 189, 228]), voxel [2.0, 2.0, 1.9] mm
+--keep 4: 2495 of 9891 readouts kept (a shorter scan; hash-spread over all strata)
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 140 sets (11828795 samples) in 0.4s
+calibration region [24, 24, 24]: 46070 samples of encode 0, 32 coils (1.7s)
+coil compression (whitened calibration region): 22 of 32 virtual coils (energy ≥ 99.900 %), 99.924 % energy kept; σ²/Σσ²: [3.9e-1, 1.7e-1, 1.5e-1, 1.3e-1, 4.9e-2, 3.1e-2, 2.3e-2, 1.6e-2, 1.3e-2, 8.2e-3, 5.2e-3, 4.7e-3, 3.6e-3, 2.9e-3, 1.7e-3, 1.3e-3, 1.1e-3, 8.8e-4, 6.9e-4, 6.0e-4, 5.2e-4, 3.0e-4, 2.1e-4, 1.6e-4, 1.2e-4, 8.6e-5, 6.5e-5, 3.5e-5, 3.0e-5, 2.2e-5, 1.7e-5, 1.5e-5]
+  k-space store: 16 / 140 sets (1s)
+  k-space store: 32 / 140 sets (2s)
+  k-space store: 48 / 140 sets (4s)
+  k-space store: 64 / 140 sets (5s)
+  k-space store: 80 / 140 sets (7s)
+  k-space store: 96 / 140 sets (8s)
+  k-space store: 112 / 140 sets (9s)
+  k-space store: 128 / 140 sets (11s)
+  k-space store: 140 / 140 sets (11s)
+k-space store built in 11.5s: dense in RAM: 140 sets × 22 coils, 1.94 GiB raw → 1.94 GiB stored (×1.00), 1.94 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 2463652 of 11828795 samples kept (20.83 %), ADC window 0..1041 of 4741 (1.580..3.662 ms), 9783 .. 27706 per set (0.0s)
+k-space crop: kept data 0.40 GiB read through a filtered view of the store
+device memory after loading and coil compression: 21.21 GiB free of 23.51 GiB
+140 sets (20 frames x 7 encodes), 10..28 readouts per set, 22 virtual coils, model seg, physics full, setup 30.1s
+device memory after the data placement: 20.87 GiB free of 23.51 GiB
+warm start: 0 PCGLS iterations per encode (30s)
+device memory after the warm start: 18.96 GiB free of 23.51 GiB
+support 1145976 voxels
+coil maps not masked (--coil-mask none): 1152000 voxels; fit region 1148112 voxels
+lumen 56026 voxels: 55920 in the support, 56026 in the masked maps
+rcompress: band [-997, 928] Hz, decay ≤ 300 1/s; box 200.0 × 191.0 × 229.9 mm: estimated reduction 1.513×
+rcompress gate (2 readouts of set 0, 200 sources, half on the band edge): worst source 2.79e-5, normal operator on the sources 4.62e-6
+rcompress: box 200.0 × 191.0 × 229.9 mm, band [-997, 928] Hz, decay ≤ 300 1/s, os 1.35, q 32, 1235 design(s) (5.4s): 2463652 → 1632841 samples (1.509×), R tables 0.193 GiB; data constant Σ ‖y‖² − ‖ỹ‖² = 2.922e10 of ‖y‖² 1.534e14 (1.000× the noise expectation)
+device memory before the segment operator: 18.93 GiB free of 23.51 GiB
+monomial quadratic fit over 1148112 voxels: rms 1.9e-14 / max 6.2e-14 m² (z², x²+y², xz, yz: ["0.0e0", "6.2e-14", "1.7e-18", "1.7e-18"])
+  [build timer] monomial fit done: 0.2s since the build start
+segments (auto): the field spans 2.78 phase cycles over the 2.08 ms readout → L = 8
+  [build timer] segment bases of all encodes done: 17.8s since the build start
+sample tables: 245 B/sample, 0.37 GiB for 140 sets → device
+  [build timer] sample tables (280 sets) done: 19.9s since the build start
+  [build timer] autotune done: 21.9s since the build start
+SegNufft: L = 8, order 2, frames/set 1, coil batch 16, kernels 1.9/3.1 ms (set 0), max phase left out by the quadratic fit 1.40e-12 rad, built in 21.9s
+host sample records released: 0.65 GiB
+memory after setup: RSS 6.2 GiB → 5.3 GiB (malloc_trim)
+rcompress: R tables on the device (0.193 GiB, q 32)
+device memory before the solver: 17.55 GiB free of 23.51 GiB
+lambda_max(N) = 1.022e8, lambda_max(M N) = 1.000e0, setup 60s
+solver state: device (1.20 GiB per stack, 140 sets)
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.429 m/s (rel 1.000)
+  zmshr1  κ 0    it   0: f = NaN, velocity RMSE 0.429 m/s (rel 1.000), frames 0.24 0.27 0.70 0.80 0.73 0.74 0.58 0.40 0.29 0.23 0.20 0.31 0.37 0.31 0.22 0.19 0.18 0.17 0.23 0.35, 3s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.440 m/s (rel 1.026)
+  zmshr1  κ 0    it   1: f = 7.6665e13, velocity RMSE 0.441 m/s (rel 1.028), frames 0.27 0.32 0.72 0.80 0.72 0.74 0.59 0.42 0.31 0.26 0.23 0.32 0.40 0.32 0.24 0.20 0.19 0.20 0.25 0.38, 14s
+    time it 0: gradient 8.1s, step 0.0s, prior 0.2s, report 2.8s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.458 m/s (rel 1.069)
+  zmshr1  κ 0    it   2: f = 2.7439e13, velocity RMSE 0.482 m/s (rel 1.125), frames 0.37 0.34 0.73 0.81 0.74 0.76 0.67 0.52 0.35 0.27 0.28 0.38 0.42 0.38 0.34 0.31 0.32 0.25 0.27 0.41, 25s
+    time it 1: gradient 8.1s, step 0.1s, prior 0.2s, report 2.8s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.496 m/s (rel 1.157)
+  zmshr1  κ 0    it   3: f = 1.8047e13, velocity RMSE 0.547 m/s (rel 1.276), frames 0.47 0.38 0.76 0.85 0.81 0.81 0.70 0.56 0.41 0.34 0.38 0.45 0.51 0.48 0.41 0.46 0.45 0.40 0.36 0.48, 37s
+    time it 2: gradient 8.1s, step 0.1s, prior 0.2s, report 2.9s
+3 figures in research/experiments/sample_compress/out/drivers/p2np_box/figs
+figures: research/experiments/sample_compress/out/drivers/p2np_box/figs

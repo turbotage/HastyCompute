@@ -236,6 +236,20 @@ pub trait Objective {
     fn curvature_pair_ok(&self) -> bool {
         true
     }
+    /// Trust region of the preconditioned step of chunk t (`step` is what is subtracted from x): the objective may
+    /// shrink it in place where its model of f is not valid (velocity model: the phase linearisation, research/
+    /// velocity_model_sr.md §F.2). Returns the number of shrunk elements (diagnostics). Default: nothing.
+    fn limit_step(&mut self, _st: &Arc<CudaStream>, _t: usize, _step: &mut CudaSlice<C32>) -> Result<usize, Error> {
+        Ok(0)
+    }
+    /// Host form of [`limit_step`](Self::limit_step): `step` (host slice of chunk t) shrunk in place. Default: nothing.
+    fn limit_step_host(&mut self, _t: usize, _step: &mut [C32]) -> usize {
+        0
+    }
+    /// whether [`limit_step`](Self::limit_step) does anything (the solvers skip the extra pass otherwise)
+    fn has_step_limit(&self) -> bool {
+        false
+    }
     /// [`gradient`](Self::gradient) on host-resident stacks ([`crate::hoststack`]). Default: upload the whole stack,
     /// compute, download (needs the device memory of two stacks); objectives that stream set by set override it.
     fn gradient_host(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack) -> Result<f64, Error> {
@@ -1267,11 +1281,11 @@ pub fn run_objective_with(
                         }
                     }
                 }
-                if k % 10 == 0 && (metric || per_set) {
+                if (k % 10 == 0 || std::env::var_os("HASTY_ZMSHR1_LOG").is_some()) && (metric || per_set) {
                     let taus: Vec<f64> = at.iter().map(|p| p.1).collect();
                     let (lo, hi) = taus.iter().fold((f64::INFINITY, 0.0f64), |(l, h), &v| (l.min(v), h.max(v)));
                     let mixed = at.iter().filter(|p| p.0 > 0.0).count();
-                    eprintln!("    zmshr1{} it {k}: tau {lo:.3e}..{hi:.3e}, a > 0 in {mixed}/{nt} sets, rank-one in {}/{nt}", if metric { "-M" } else { "" }, ct.iter().filter(|&&c| c != 0.0).count());
+                    eprintln!("    zmshr1{} it {k}: tau {lo:.3e}..{hi:.3e}, a > 0 in {mixed}/{nt} sets (a {:.3}), rank-one in {}/{nt} (c {:.3e})", if metric { "-M" } else { "" }, at[0].0, ct.iter().filter(|&&c| c != 0.0).count(), ct[0]);
                 }
             }
         }
@@ -1279,6 +1293,16 @@ pub fn run_objective_with(
             for t in 0..nt {
                 x_prev.put(st, t, &x.v[t])?;
                 g_prev.put(st, t, &g.v[t])?;
+            }
+        }
+        // the objective's trust region on the step (default none)
+        if obj.has_step_limit() {
+            let mut n = 0usize;
+            for t in 0..nt {
+                n += obj.limit_step(st, t, &mut pg.v[t])?;
+            }
+            if n > 0 {
+                eprintln!("    step trust region (it {k}): {n} elements shrunk");
             }
         }
         // z = x − P α g, x = D(z)

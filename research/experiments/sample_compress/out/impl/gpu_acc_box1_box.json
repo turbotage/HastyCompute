@@ -1,0 +1,69 @@
+{
+  "design_s": 3.857146786,
+  "designs": 354,
+  "dims": [
+    160,
+    160,
+    160
+  ],
+  "encode": 0,
+  "gate": {
+    "frob": 0.0,
+    "gram": 0.0,
+    "worst": 0.0
+  },
+  "gpu": {
+    "adj_full_ms": 4169.63330078125,
+    "adj_kept_ms": 3978.188720703125,
+    "coil_batch": 8,
+    "coils": 8,
+    "data_compress_s": 2.1233475410000002,
+    "err_grad": 0.0001365261989089443,
+    "err_normal": 0.00013368335268808525,
+    "err_obj": 3.1410235820171706e-8,
+    "fwd_full_ms": 3954.99609375,
+    "fwd_kept_ms": 3655.74462890625,
+    "knot_images": 96,
+    "knots2d": [
+      6,
+      16
+    ],
+    "nseg": 10,
+    "order": 3,
+    "pts_full_gib": 0.3170819878578186,
+    "pts_kept_gib": 0.2249695509672165,
+    "r_adj_ms": 1.1550719738006592,
+    "r_fwd_ms": 1.1267520189285278,
+    "ref": [
+      12,
+      2.0
+    ],
+    "sigma": 1.25,
+    "speedup": 1.0639601945877075,
+    "tables_full_s": 1.5401709019999998,
+    "tables_kept_s": 1.187429229,
+    "vs_ref": {
+      "grad_full": 0.00008299155938859634,
+      "grad_kept": 0.00013707712768301113,
+      "normal_full": 0.00007788298176288106,
+      "normal_kept": 0.00013292867122981474,
+      "obj_full": 1.3668008637844485e-9,
+      "obj_kept": 3.0043434999318796e-8
+    },
+    "width": 10
+  },
+  "kept": 1187838,
+  "kscale": 1.0,
+  "landau": 1.984683927224626,
+  "os": 1.35,
+  "q": 32,
+  "readouts": 354,
+  "reduction": 1.412908157509694,
+  "roi": "box 161.0 × 161.0 × 161.0 mm",
+  "samples": 1678306,
+  "scan": "data/hasty/phantom/factory_arms/ph0001/sim_flow_10min_box1mm_b/scan",
+  "stride": 4,
+  "table_gib": 0.2832026481628418,
+  "upsample": 1,
+  "vox_mm": 1.0
+}

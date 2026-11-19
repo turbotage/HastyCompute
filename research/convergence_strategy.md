@@ -704,3 +704,43 @@ x_γ.
 - Anderson + keepfp for the learned prior: rate theory with a non-normal J_D(I − αPH).
 - The LLR prior-aware term: does a global temporal subspace Ū_r represent the per-block discarded subspaces well
   enough? Measure ⟨Ū_r, U_r,block⟩ on R-type iterates.
+
+## Results P1–P2, cheap rerun (2026-11-17, `p12_k4g` / `p12_k16g`)
+
+**Setup.** Legacy bench config: lin4 × cubic10, truth breathing coordinate, 8-coil subset, B0 only. Device priors (wavelet db4 L3 + LLR B8, smoothed γ = 0.1/bulk). Encodes 0–1, 30 gradients per arm, arms pcg / ncgI / ncgcap / admm10.
+
+`--keep N` keeps 1/N of the readouts, so k16 has less data per knot than k4. Summary: `summarize.py k4g k16g`.
+
+**Held-out k-space residual, best of each arm (encode 0 / encode 1):**
+
+| arm | k4 | k16 |
+|---|---|---|
+| ncgI | **0.0571 / 0.0527** | **0.0919 / 0.0790** |
+| ncgcap | 0.0592 / 0.0538 | 0.0974 / 0.0852 |
+| admm10 | 0.0707 / 0.0675 | 0.0992 / 0.0899 |
+| pcg | 0.0862 / 0.0789 | 0.1118 / 0.1032 |
+
+At k16, pcg reaches its best at 6–11 gradients and then overfits.
+
+**Truth velocity phase (encode 1 − 0) at r* 0.493, depth ≥ 5:** slope / corr of the best iterate. A slope of 1 means no velocity shrinkage.
+
+| arm | k4 | k16 |
+|---|---|---|
+| ncgcap | **0.569 / 0.437** | **0.344 / 0.190** |
+| admm10 | 0.373 / 0.262 | 0.227 / 0.085 |
+| pcg | 0.249 / 0.083 | 0.151 / 0.040 |
+| ncgI | 0.235 / 0.150 | 0.147 / 0.052 |
+
+**Finding: the held-out residual and velocity accuracy rank the arms in opposite order.**
+- ncgI wins the held-out residual but barely moves the velocity phase from the warm start (slope 0.15 → 0.24).
+- The prior-aware metric (ncgcap) is about 3–4 % worse on held-out but recovers velocity 2.4× faster.
+- After 30 gradients no arm is near converged in velocity (slope ≤ 0.57).
+
+So the held-out k-space residual (one number over all samples) is dominated by the magnitude and static content. It is **not** a sufficient stopping or ranking criterion for the velocity-phase difference.
+
+Consequences:
+1. Rank solvers on a velocity-sensitive data metric. One candidate is the held-out residual of the encode-difference data, which is real-data computable.
+2. The prior-aware metric's value is in the velocity directions, so it should not be dropped.
+3. These results strengthen the case for solving on magnitude / velocity / phase directly (the end-goal parametrisation), where the slow direction is an explicit unknown.
+
+Earlier statements in this document and in chat that "ncgI is best" hold only for the held-out residual.

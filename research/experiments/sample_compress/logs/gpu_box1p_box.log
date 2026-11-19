@@ -1,0 +1,6 @@
+data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: encode 0, 3796 readouts (stride 2), 15146040 samples in the grid band of 15146040 per encode before the crop; grid [160, 160, 160] at 1 mm, k × 2, dwell / 1; ROI box 161.0 × 161.0 × 161.0 mm, band [-1500, 1500] Hz, decay ≤ 300 1/s, os 1.35, q 32 (4.3s)
+design: box 161.0 × 161.0 × 161.0 mm, band [-1500, 1500] Hz, decay ≤ 300 1/s, os 1.35, q 32, 3796 design(s) in 129.0s; reduction 1.076× (15146040 → 14074035 samples), Landau bound n / ∫B dt = 1.344; R tables 3.356 GiB
+gate (0 readouts, 240 sources each, half on the band edge; 0.0s): worst source 0.00e0, Frobenius 0.00e0, Gram (normal operator on the sources) 0.00e0
+gpu lock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock taken after 39s
+memory plan: 21.00 GiB (grid slot 2.98, maps 0.49, diagonals 0.31, tables (build peak) 3.27, y 1.81, x, x0, adjoint out 8.79, R tables 3.36) of 21.31 GiB free
+does not fit: skipped (HASTY_BENCH_FORCE=1 to try)

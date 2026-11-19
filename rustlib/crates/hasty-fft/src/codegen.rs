@@ -279,7 +279,8 @@ pub fn generate(cfg: &AxisCfg) -> String {
             s,
             r#"  const int tid = threadIdx.x;
   const int li = tid % LPB, tl = tid / LPB;
-  const long lb = blockIdx.y;
+  const long lb = (long)blockIdx.z * gridDim.y + blockIdx.y;   // line groups fold into (y, z): > 65535 groups
+  if (lb >= lb_cnt) return;
   const long ar_h = arange[2 * lb], ar_c = ar_h + arange[2 * lb + 1];
   if ((long)blockIdx.x * LPB >= ar_c) return;
   long la = (long)blockIdx.x * LPB + li;
@@ -302,7 +303,8 @@ pub fn generate(cfg: &AxisCfg) -> String {
             r#"  const int tid = threadIdx.x;
   const int li = tid % LPB, tl = tid / LPB;
   const long la = (long)blockIdx.x * LPB + li;
-  const long lb = blockIdx.y;
+  const long lb = (long)blockIdx.z * gridDim.y + blockIdx.y;   // line groups fold into (y, z): > 65535 groups
+  if (lb >= lb_cnt) return;   // block-uniform (padding blocks of the folded grid)
   const bool act = la < la_cnt;
   long lb1 = lb % lb1_cnt, lb2 = lb / lb1_cnt;
   if (lb1 >= lb1_hi) lb1 += lb1_gap;

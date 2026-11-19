@@ -1,0 +1,9 @@
+=== diag_fsb_4_4_8_4_2_4_128_m4000000_c48_l1_o0: env [] --mode fwd --m 4000000 --ncb 48 --nseg 1 --order 0 --designs ps --fixed 4,4,8,4,2,4,128 --check 400 --reps 5 (Thu Nov 19 01:07:45 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 48 (48 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 2.86 GiB, y 1.43 GiB, 192000000000 useful complex MACs per pass
+  ps: 1 candidates, compiled in 0.5 s
+    ps t [4, 4, 8] ch   8 tps  4 (fc  2) nt 128 smax 128 sb 4 rx 1 smem  39552 regs 228:    55.07 ms
+  RES ps: regs 228, local 0 B, smem 39552 B, blocks/SM 2, warps/SM 8 of 48
+  WORK ps: useful/issued x-loop MAC slots 0.463 (x 0.769 = W/HXP; rows/warp 12.66, planes/warp 11.52, live slots 0.880); active (warp, plane) 0.515; block fill 0.669; FFMA-pipe use of issued work 38.1 %
+  BEST ps: 51.84 ms Cfg { halo: 3, tt: 4, ch: 8, tps: 4, nt: 128, smax: 128, padc: 0, sb: 4, rx: 1, ty: 4, tz: 8 } items 46708 | 3703 G cMAC/s, 17.6 % of FP32 FMA peak (2 FMA/MAC) | value loads 29.6 TB/s (L1/smem), halo staging 994 GB/s | rel err 6.47e-7 (max 7.23e-6 of rms 1.92e0) on 400 samples

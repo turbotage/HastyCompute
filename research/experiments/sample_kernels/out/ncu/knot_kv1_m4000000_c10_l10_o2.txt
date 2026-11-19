@@ -1,0 +1,174 @@
+[843488] proto_gather@127.0.0.1
+  seg_forward_k (0, 0, 0)x(0, 0, 0), Context 1, Stream 7, Device 0, CC 8.9
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                   hz      (!) nan
+    SM Frequency                     hz      (!) nan
+    Elapsed Cycles                cycle      (!) nan
+    Memory Throughput                 %      (!) nan
+    DRAM Throughput                   %      (!) nan
+    Duration                         ns      (!) nan
+    L1/TEX Cache Throughput           %      (!) nan
+    L2 Cache Throughput               %      (!) nan
+    SM Active Cycles              cycle      (!) nan
+    Compute (SM) Throughput           %      (!) nan
+    ----------------------- ----------- ------------
+
+    INF   This workload is utilizing greater than 80.0% of the available compute or memory performance of the device.   
+          To further improve performance, work will likely need to be shifted from the most utilized to another unit.   
+          Start by analyzing workloads in the Memory Workload Analysis section.                                         
+
+    Section: GPU Speed Of Light Roofline Chart
+    ERR   float division by zero                                                                                        
+          /root/Documents/NVIDIA Nsight Compute/2025.3.0/Sections/SpeedOfLight_Roofline.py:146                          
+
+    Section: PM Sampling
+    ------------------------- ----------- ------------
+    Metric Name               Metric Unit Metric Value
+    ------------------------- ----------- ------------
+    Maximum Buffer Size                        (!) n/a
+    Maximum Sampling Interval          ns            0
+    # Pass Groups                              (!) n/a
+    ------------------------- ----------- ------------
+
+    Section: Compute Workload Analysis
+    -------------------- ----------- ------------
+    Metric Name          Metric Unit Metric Value
+    -------------------- ----------- ------------
+    Executed Ipc Active   inst/cycle      (!) nan
+    Executed Ipc Elapsed  inst/cycle      (!) nan
+    Issue Slots Busy               %      (!) nan
+    Issued Ipc Active     inst/cycle      (!) nan
+    SM Busy                        %      (!) nan
+    -------------------- ----------- ------------
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                           byte/s      (!) nan
+    Mem Busy                                         %      (!) nan
+    Max Bandwidth                                    %      (!) nan
+    L1/TEX Hit Rate                                  %      (!) nan
+    L2 Persisting Size                                      (!) n/a
+    L2 Compression Success Rate                      %      (!) nan
+    L2 Compression Ratio                                        nan
+    L2 Compression Input Sectors                sector      (!) nan
+    L2 Hit Rate                                      %      (!) nan
+    Mem Pipes Busy                                   %      (!) nan
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %      (!) nan
+    Issued Warp Per Scheduler                     (!) nan
+    No Eligible                            %      (!) nan
+    Active Warps Per Scheduler          warp      (!) nan
+    Eligible Warps Per Scheduler        warp      (!) nan
+    ---------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle      (!) nan
+    Warp Cycles Per Executed Instruction           cycle      (!) nan
+    Avg. Active Threads Per Warp                              (!) nan
+    Avg. Not Predicated Off Threads Per Warp                  (!) nan
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Instruction Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Avg. Executed Instructions Per Scheduler        inst      (!) nan
+    Executed Instructions                           inst      (!) nan
+    Avg. Issued Instructions Per Scheduler          inst      (!) nan
+    Issued Instructions                             inst      (!) nan
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric inst_executed could not be found. Collecting it as an additional metric could enable the  
+          rule to provide more guidance.                                                                                
+
+    Section: Launch Statistics
+    -------------------------------- ----------- ------------
+    Metric Name                      Metric Unit Metric Value
+    -------------------------------- ----------- ------------
+    Block Size                                        (!) n/a
+    Function Cache Configuration                      (!) n/a
+    Grid Size                                         (!) n/a
+    Registers Per Thread                              (!) n/a
+    Shared Memory Configuration Size                  (!) n/a
+    Driver Shared Memory Per Block                    (!) n/a
+    Dynamic Shared Memory Per Block                   (!) n/a
+    Static Shared Memory Per Block                    (!) n/a
+    # SMs                                             (!) n/a
+    Stack Size                                        (!) n/a
+    Threads                                           (!) n/a
+    # TPCs                                            (!) n/a
+    Enabled TPC IDs                                   (!) n/a
+    Uses Green Context                                (!) n/a
+    Waves Per SM                                      (!) n/a
+    -------------------------------- ----------- ------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                                   (!) n/a
+    Block Limit Registers                            (!) n/a
+    Block Limit Shared Mem                           (!) n/a
+    Block Limit Warps                                (!) n/a
+    Theoretical Active Warps per SM                  (!) n/a
+    Theoretical Occupancy                            (!) n/a
+    Achieved Occupancy                        %      (!) nan
+    Achieved Active Warps Per SM           warp      (!) nan
+    ------------------------------- ----------- ------------
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- ------------
+    Metric Name                Metric Unit Metric Value
+    -------------------------- ----------- ------------
+    Average DRAM Active Cycles       cycle      (!) nan
+    Total DRAM Elapsed Cycles        cycle      (!) nan
+    Average L1 Active Cycles         cycle      (!) nan
+    Total L1 Elapsed Cycles          cycle      (!) nan
+    Average L2 Active Cycles         cycle      (!) nan
+    Total L2 Elapsed Cycles          cycle      (!) nan
+    Average SM Active Cycles         cycle      (!) nan
+    Total SM Elapsed Cycles          cycle      (!) nan
+    Average SMSP Active Cycles       cycle      (!) nan
+    Total SMSP Elapsed Cycles        cycle      (!) nan
+    -------------------------- ----------- ------------
+
+    Section: Source Counters
+    ------------------------- ----------- ------------
+    Metric Name               Metric Unit Metric Value
+    ------------------------- ----------- ------------
+    Branch Instructions Ratio           %      (!) nan
+    Branch Instructions              inst      (!) nan
+    Branch Efficiency                   %      (!) nan
+    Avg. Divergent Branches      branches      (!) nan
+    ------------------------- ----------- ------------
+
+    ERR   Required metric smsp__pcsamp_sample_count could not be found.                                                 
+    ----- --------------------------------------------------------------------------------------------------------------
+    ERR   Required metric smsp__pcsamp_interval_cycles could not be found.                                              
+    ----- --------------------------------------------------------------------------------------------------------------
+    ERR   Rule PC sampling data returned an error: Some required metrics are missing; aborted rule execution.           
+    ----- --------------------------------------------------------------------------------------------------------------
+    ERR   <built-in function raise_exception> returned a result with an exception set                                   
+          /root/Documents/NVIDIA Nsight Compute/2025.3.0/Sections/PCSamplingData.py:58                                  
+          /opt/nvidia/nsight-compute/2025.3.0/target/linux-desktop-glibc_2_11_3-x64/../../sections/RequestedMetrics.py:2
+          31                                                                                                            
+          /opt/nvidia/nsight-compute/2025.3.0/target/linux-desktop-glibc_2_11_3-x64/../../sections/NvRules.py:3237      
+

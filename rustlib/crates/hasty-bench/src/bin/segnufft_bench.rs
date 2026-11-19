@@ -11,9 +11,47 @@
 //! so density ∝ 1/k², centre-dense) or sos (stack of spirals: uniform in the disk of radius 3.1 × kz).
 //! HASTY_SEG_KPRUNE=0 turns the k-support pruning of the grid FFTs off, HASTY_SEG_KERNEL=kb selects the KB window,
 //! HASTY_NUFFT_GRID=auto the measured fine-grid sizes (hasty-nufft; research/temporal_operator.md §20).
+//! Order 3 uses the order-3 sample tables (`points_hi` / `points2d_hi`, random degree-3/4 terms); HASTY_BENCH_HI=0
+//! keeps the plain tables (the order-2 operator on an order-3 engine, the old behaviour).
+//! HASTY_BENCH_REPS: timed calls per direction (median; default 4, plus one warm-up).
+//! Memory plan: before each case the device bytes it will allocate are estimated per component (printed) and the case
+//! is skipped when they exceed the free memory (HASTY_BENCH_FORCE=1 runs it anyway); allocation / launch errors skip
+//! the case instead of aborting. The measured device-memory growth of each stage is printed with the timings.
 use cudarc::driver::sys::CUevent_flags;
 use hasty_cuda::{Device, C32};
-use hasty_nufft::{build_segments, NufftOpts, NufftPlan, SegNufft, SegNufftOpts};
+use hasty_nufft::{build_segments, grid_default_size, NufftOpts, NufftPlan, SegNufft, SegNufftOpts, NHI};
+
+const GIB: f64 = (1u64 << 30) as f64;
+
+/// device bytes in use (other processes included), after the stream is idle
+fn used(dev: &Device, st: &std::sync::Arc<cudarc::driver::CudaStream>) -> usize {
+    st.synchronize().unwrap();
+    let (free, total) = dev.ctx.mem_get_info().unwrap();
+    total - free
+}
+
+/// return the stream-ordered pool's free blocks to the device (freed buffers stay in the pool otherwise, and the next
+/// case's free-memory check would see them as used)
+fn trim_pool(dev: &Device, st: &std::sync::Arc<cudarc::driver::CudaStream>) {
+    st.synchronize().unwrap();
+    unsafe {
+        let mut pool = std::mem::MaybeUninit::uninit();
+        if cudarc::driver::sys::cuDeviceGetDefaultMemPool(pool.as_mut_ptr(), dev.ctx.cu_device()) == cudarc::driver::sys::CUresult::CUDA_SUCCESS {
+            cudarc::driver::sys::cuMemPoolTrimTo(pool.assume_init(), 0);
+        }
+    }
+}
+
+/// print the estimated per-component bytes of a case and whether they fit in the free device memory
+fn plan_fits(dev: &Device, label: &str, parts: &[(&str, usize)]) -> bool {
+    let need: usize = parts.iter().map(|p| p.1).sum();
+    let free = dev.ctx.mem_get_info().map(|(f, _)| f).unwrap_or(usize::MAX);
+    // 3 % + 256 MiB headroom: allocator granularity, kernel modules, cuFFT-free but twiddle / tile tables
+    let fits = (need as f64 * 1.03) as usize + (256 << 20) <= free;
+    let list: Vec<String> = parts.iter().filter(|p| p.1 > 0).map(|(n, b)| format!("{n} {:.2}", *b as f64 / GIB)).collect();
+    println!("    memory plan {label}: {:.2} GiB ({}) of {:.2} GiB free{}", need as f64 / GIB, list.join(", "), free as f64 / GIB, if fits { "" } else { " -> does not fit" });
+    fits || std::env::var("HASTY_BENCH_FORCE").is_ok_and(|v| v != "0")
+}
 
 fn main() {
     let a: Vec<usize> = std::env::args().skip(1).filter_map(|s| s.parse().ok()).collect();
@@ -21,9 +59,10 @@ fn main() {
     let dev = Device::new(0).unwrap();
     let st = dev.default_stream();
     let ev = (dev.ctx.new_event(Some(CUevent_flags::CU_EVENT_DEFAULT)).unwrap(), dev.ctx.new_event(Some(CUevent_flags::CU_EVENT_DEFAULT)).unwrap());
+    let reps: usize = std::env::var("HASTY_BENCH_REPS").ok().map_or(4, |v| v.parse().unwrap());
     let time = |f: &mut dyn FnMut()| -> f32 {
         let mut t = Vec::new();
-        for i in 0..5 {
+        for i in 0..=reps {
             ev.0.record(&st).unwrap();
             f();
             ev.1.record(&st).unwrap();
@@ -88,6 +127,14 @@ fn main() {
         // plain NUFFT reference (σ = 2, tol 1e-5 and σ = 1.25 W = 10)
         let plain: &[(f64, Option<usize>)] = if std::env::var("HASTY_BENCH_PLAIN").as_deref() == Ok("0") { &[] } else { &[(2.0, None), (1.25, Some(10usize))] };
         for &(sig, w) in plain {
+            let gb = 3usize << 30;
+            let ge: usize = dims.iter().map(|&d| grid_default_size(d, sig, w.unwrap_or(8))).product();
+            let pl = [("grid", (gb / (8 * ge)).clamp(1, nc) * ge * 8), ("x + out", 2 * nv * nc * 8), ("y", m * nc * 8), ("points", m * 40)];
+            trim_pool(&dev, &st);
+            if !plan_fits(&dev, &format!("plain σ={sig}"), &pl) {
+                println!("  plain NUFFT σ={sig}: skipped (memory)");
+                continue;
+            }
             let mut p = NufftPlan::<f32>::new(&dev, &dims, NufftOpts { tol: 1e-5, sigma: sig, width: w, ntransf: nc, ..Default::default() }).unwrap();
             let dc: Vec<_> = coords.iter().map(|v| st.clone_htod(v).unwrap()).collect();
             p.set_points(&st, &[&dc[0], &dc[1], &dc[2]], m).unwrap();
@@ -107,38 +154,83 @@ fn main() {
         for (nseg, order) in cfgs {
             let knot = std::env::var("HASTY_BENCH_KNOT").is_ok_and(|v| v != "0");
             let so = SegNufftOpts { sigma: 1.25, width, nseg, order, frames, bspline, max_grid_bytes: std::env::var("HASTY_BENCH_GRID_GB").ok().map_or(6 << 30, |v| (v.parse::<f64>().unwrap() * (1u64 << 30) as f64) as usize) };
-            let mut op = match r2d {
-                Some((kr, rdeg)) => SegNufft::new_temporal2d(&dev, dims, [res; 3], nc, so, kr, rdeg).unwrap(),
-                None => SegNufft::new_temporal(&dev, dims, [res; 3], nc, so, knot).unwrap(),
-            };
-            op.set_maps(&st, &smaps).unwrap();
-            let fit: Vec<usize> = (0..nv).step_by(97).collect();
-            let psi = |v: usize, t: f64| 2000.0 * ((v % 113) as f64 / 113.0 - 0.5) * t;
-            let (sp, at, t0, dt) = build_segments(nv, nseg, 2e-3, 8e-3, 128, &fit, &psi);
-            let seg = op.segments(&st, &sp, &at, t0, dt).unwrap();
-            let tau: Vec<f32> = (0..m).map(|_| (5e-3 + u() * 6e-3) as f32).collect();
-            let dcv: Vec<f32> = (0..6 * m).map(|_| (u() * 10.0) as f32).collect();
-            let tp = std::time::Instant::now();
-            let pts = if r2d.is_some() {
-                op.points2d(&st, [&coords[0], &coords[1], &coords[2]], &tau, &vec![0f32; m], &dcv, &tfr, &rir, &rvr).unwrap()
-            } else {
-                op.points(&st, [&coords[0], &coords[1], &coords[2]], &tau, &vec![0f32; m], &dcv, (frames > 1).then_some(&tfr[..])).unwrap()
-            };
-            st.synchronize().unwrap();
-            let tp = tp.elapsed().as_secs_f64() * 1e3;
-            let def = (op.tiles_fwd, op.tiles_adj);
-            if std::env::var("HASTY_BENCH_TUNE").as_deref() != Ok("0") {
-                let tt = std::time::Instant::now();
-                let (kf, ka) = op.autotune(&st, &seg, &pts).unwrap();
-                println!("    autotune {:.1} s: kernels fwd {kf:.1} ms {:?}, adj {ka:.1} ms {:?} (default fwd {:?}, adj {:?})", tt.elapsed().as_secs_f64(), op.tiles_fwd, op.tiles_adj, def.0, def.1);
+            let hi = order >= 3 && std::env::var("HASTY_BENCH_HI").as_deref() != Ok("0");
+            // memory plan (estimates of what the engine and this case allocate; `dx` is already resident)
+            let ge: usize = dims.iter().map(|&d| grid_default_size(d, 1.25, width)).product();
+            let nslots = if (knot || r2d.is_some()) && frames > 1 { 1 } else if frames > 1 { bspline as usize + 1 } else { 1 };
+            let cb = (so.max_grid_bytes / (nslots * nseg * ge * 8)).clamp(1, nc.min(16));
+            let mem = [
+                ("grid slots", nslots * cb * nseg * ge * 8),
+                ("plan scratch (released)", ge * 8),
+                ("coil maps", nc * nv * 8),
+                ("segment diagonals", nseg * nv * 8),
+                // ≈ 200 B per sample at the stage's peak (measured: upload, sorting, 48 B records, tile lists)
+                ("sample tables", m * (200 + if hi { 16 } else { 0 })),
+                ("y", m * nc * 8),
+                ("forward coil-batch y", cb * m * 8),
+                ("adjoint x", nv * nimg * 8),
+            ];
+            trim_pool(&dev, &st);
+            if !plan_fits(&dev, &format!("L={nseg} order {order} (coil batch {cb}, grid {ge} cells)"), &mem) {
+                println!("  SegNufft L={nseg:>2} order {order}: skipped (memory; HASTY_BENCH_FORCE=1 to try)");
+                continue;
             }
-            let mut y = st.alloc_zeros::<C32>(m * nc).unwrap();
-            let mut xo = st.alloc_zeros::<C32>(nv * nimg).unwrap();
-            let tf = time(&mut || op.forward(&st, &seg, &pts, &dx, &mut y).unwrap());
-            let ta = time(&mut || op.adjoint(&st, &seg, &pts, &y, &mut xo).unwrap());
-            let nfg = [op.plan.nf[0], op.plan.nf[1], op.plan.nf[2]];
-            let ks = op.grid_fft_ksupport().map(|k| (k.fractions(nfg), k.cell_fraction(nfg)));
-            println!("  SegNufft L={nseg:>2} order {order}: forward {tf:.1} ms, adjoint {ta:.1} ms (coil batch {}, set_points {tp:.0} ms; traj {traj}, grid {:?}, window {:?}, k-support {})", op.cb, op.plan.nf, op.kernel_kind(), ks.map_or("off".to_string(), |((c, p), v)| format!("columns {c:.2}, proj {p:.2?}, cells {v:.2}")));
+            let outcome: Result<(), Box<dyn std::error::Error>> = (|| {
+                let u0 = used(&dev, &st);
+                let mut op = match r2d {
+                    Some((kr, rdeg)) => SegNufft::new_temporal2d(&dev, dims, [res; 3], nc, so, kr, rdeg)?,
+                    None => SegNufft::new_temporal(&dev, dims, [res; 3], nc, so, knot)?,
+                };
+                let u1 = used(&dev, &st);
+                op.set_maps(&st, &smaps)?;
+                let u2 = used(&dev, &st);
+                let fit: Vec<usize> = (0..nv).step_by(97).collect();
+                let psi = |v: usize, t: f64| 2000.0 * ((v % 113) as f64 / 113.0 - 0.5) * t;
+                let (sp, at, t0, dt) = build_segments(nv, nseg, 2e-3, 8e-3, 128, &fit, &psi);
+                let seg = op.segments(&st, &sp, &at, t0, dt)?;
+                drop(sp);
+                let u3 = used(&dev, &st);
+                let tau: Vec<f32> = (0..m).map(|_| (5e-3 + u() * 6e-3) as f32).collect();
+                let dcv: Vec<f32> = (0..6 * m).map(|_| (u() * 10.0) as f32).collect();
+                // order 3: degree-3/4 terms of the size of a GNL-warped concomitant fit's remainder (random)
+                let uh: Vec<f32> = if hi { (0..4 * m).map(|_| (u() * 2.0) as f32).collect() } else { vec![] };
+                let hh: Vec<f64> = if hi { (0..4 * NHI).map(|_| u() * 50.0).collect() } else { vec![] };
+                let tp = std::time::Instant::now();
+                let ph0 = vec![0f32; m];
+                let pts = match (r2d.is_some(), hi) {
+                    (true, true) => op.points2d_hi(&st, [&coords[0], &coords[1], &coords[2]], &tau, &ph0, &dcv, &tfr, &rir, &rvr, &uh, &hh)?,
+                    (true, false) => op.points2d(&st, [&coords[0], &coords[1], &coords[2]], &tau, &ph0, &dcv, &tfr, &rir, &rvr)?,
+                    (false, true) => op.points_hi(&st, [&coords[0], &coords[1], &coords[2]], &tau, &ph0, &dcv, &uh, &hh, (frames > 1).then_some(&tfr[..]))?,
+                    (false, false) => op.points(&st, [&coords[0], &coords[1], &coords[2]], &tau, &ph0, &dcv, (frames > 1).then_some(&tfr[..]))?,
+                };
+                st.synchronize()?;
+                let tp = tp.elapsed().as_secs_f64() * 1e3;
+                let u4 = used(&dev, &st);
+                let def = (op.tiles_fwd, op.tiles_adj);
+                if std::env::var("HASTY_BENCH_TUNE").as_deref() != Ok("0") {
+                    let tt = std::time::Instant::now();
+                    let (kf, ka) = op.autotune(&st, &seg, &pts)?;
+                    println!("    autotune {:.1} s: kernels fwd {kf:.1} ms {:?}, adj {ka:.1} ms {:?} (default fwd {:?}, adj {:?})", tt.elapsed().as_secs_f64(), op.tiles_fwd, op.tiles_adj, def.0, def.1);
+                }
+                let mut y = st.alloc_zeros::<C32>(m * nc)?;
+                let mut xo = st.alloc_zeros::<C32>(nv * nimg)?;
+                op.forward(&st, &seg, &pts, &dx, &mut y)?;
+                op.adjoint(&st, &seg, &pts, &y, &mut xo)?;
+                st.synchronize()?;
+                let tf = time(&mut || op.forward(&st, &seg, &pts, &dx, &mut y).unwrap());
+                let ta = time(&mut || op.adjoint(&st, &seg, &pts, &y, &mut xo).unwrap());
+                let u5 = used(&dev, &st);
+                let nfg = [op.plan.nf[0], op.plan.nf[1], op.plan.nf[2]];
+                let ks = op.grid_fft_ksupport().map(|k| (k.fractions(nfg), k.cell_fraction(nfg)));
+                println!("  SegNufft L={nseg:>2} order {order}{}: forward {tf:.1} ms, adjoint {ta:.1} ms (coil batch {}, set_points {tp:.0} ms; traj {traj}, grid {:?}, pruned FFT {}, window {:?}, k-support {})", if order >= 3 && !hi { " (plain tables)" } else { "" }, op.cb, op.plan.nf, op.grid_fft_pruned(), op.kernel_kind(), ks.map_or("off".to_string(), |((c, p), v)| format!("columns {c:.2}, proj {p:.2?}, cells {v:.2}")));
+                let g = |a: usize, b: usize| b.saturating_sub(a) as f64 / GIB;
+                println!("    device memory measured (GiB, stage peaks: pool growth): engine {:.2}, maps {:.2}, segments {:.2}, sample tables {:.2}, y + x + forward work {:.2}; peak case total {:.2}", g(u0, u1), g(u1, u2), g(u2, u3), g(u3, u4), g(u4, u5), g(u0, u5));
+                Ok(())
+            })();
+            if let Err(e) = outcome {
+                println!("  SegNufft L={nseg:>2} order {order}: failed: {e}");
+            }
+            trim_pool(&dev, &st);
         }
     }
 }

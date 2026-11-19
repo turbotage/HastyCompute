@@ -1,0 +1,7 @@
+time: dims [640, 384, 384] (94371840 voxels, 0.001 m), M = 1998990 (501 readouts × 3990), order 3, 2-D knots 2 (deg 1) × 4 (deg 3) = 8 knot images
+  samples built in 0.3 s
+  today C = 2 × L = 4: failed/skipped: DriverError(CUDA_ERROR_OUT_OF_MEMORY, "out of memory")
+  today C = 2 × L = 6: failed/skipped: DriverError(CUDA_ERROR_OUT_OF_MEMORY, "out of memory")
+  Φ generation (C = 30, K = 40): 15.00 ms per batch of 8 on 4096000 voxels → 0.458 ns per voxel·channel; this grid: 345.7 ms per batch
+  joint C = 30, R = 32, cbj ≤ 8: failed/skipped: DriverError(CUDA_ERROR_OUT_OF_MEMORY, "out of memory")
+  joint C = 30, R = 64, cbj ≤ 8: failed/skipped: DriverError(CUDA_ERROR_OUT_OF_MEMORY, "out of memory")

@@ -1,0 +1,81 @@
+{
+ "configs": [
+  {
+   "os": 1.35,
+   "q": 32,
+   "nS": 8642,
+   "n": 15960,
+   "reduction": 1.8467947234436473,
+   "normal_err_spectral": 1.622670084525198e-05,
+   "normal_err_signal_image": 4.629460748601966e-06,
+   "AHy_err": 3.279655298052393e-06,
+   "objective_rel_err_max": 3.454760857811162e-06,
+   "bS_cov_diag_ratio_mean_minus_1": 0.0003543349681947028,
+   "bS_cov_diag_ratio_sd": 0.01855963692378637,
+   "bS_cov_adjacent_corr_err_sd": 0.008534952107423343,
+   "cov_sampling_sd_expected": 0.018257418583505537
+  },
+  {
+   "os": 1.25,
+   "q": 32,
+   "nS": 8067,
+   "n": 15960,
+   "reduction": 1.9784306433618446,
+   "normal_err_spectral": 5.979310614481294e-05,
+   "normal_err_signal_image": 1.6679951237692877e-05,
+   "AHy_err": 1.1248354745679358e-05,
+   "objective_rel_err_max": 3.332955795192014e-06,
+   "bS_cov_diag_ratio_mean_minus_1": 0.0005118886919905918,
+   "bS_cov_diag_ratio_sd": 0.018316556813291338,
+   "bS_cov_adjacent_corr_err_sd": 0.008486014637884568,
+   "cov_sampling_sd_expected": 0.018257418583505537
+  },
+  {
+   "os": 1.5,
+   "q": 32,
+   "nS": 9508,
+   "n": 15960,
+   "reduction": 1.6785864535128312,
+   "normal_err_spectral": 7.922753023372676e-06,
+   "normal_err_signal_image": 2.9624975209363834e-06,
+   "AHy_err": 1.9846117829437258e-06,
+   "objective_rel_err_max": 8.539175742342378e-07,
+   "bS_cov_diag_ratio_mean_minus_1": 1.5828012005281167e-05,
+   "bS_cov_diag_ratio_sd": 0.01816084214441226,
+   "bS_cov_adjacent_corr_err_sd": 0.008461861207948188,
+   "cov_sampling_sd_expected": 0.018257418583505537
+  },
+  {
+   "os": 2.0,
+   "q": 24,
+   "nS": 12427,
+   "n": 15960,
+   "reduction": 1.2843003138327835,
+   "normal_err_spectral": 2.4568900667429376e-06,
+   "normal_err_signal_image": 1.1057018382195583e-06,
+   "AHy_err": 7.893516766996119e-07,
+   "objective_rel_err_max": 7.611276931293637e-07,
+   "bS_cov_diag_ratio_mean_minus_1": -0.000123603031398134,
+   "bS_cov_diag_ratio_sd": 0.01801789969866222,
+   "bS_cov_adjacent_corr_err_sd": 0.008384292856486312,
+   "cov_sampling_sd_expected": 0.018257418583505537
+  }
+ ],
+ "readouts": [
+  6825,
+  7105,
+  26530,
+  42350
+ ],
+ "g": 10,
+ "unknowns": 16000,
+ "normal_norm": 8951.70617197064,
+ "active_knots": 12,
+ "knot_midpoint": {
+  "op_err_spectral": 0.08494406561090932,
+  "op_err_signal_image": 0.0006411985530856132,
+  "dbeta_max": 0.049834167298695164,
+  "dbeta_rms": 0.027365679219579615
+ },
+ "seconds": 14.124892711639404
+}

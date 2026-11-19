@@ -1,0 +1,72 @@
+\section{Geometric deep learning for the denoiser and super-resolution}
+
+\begin{frame}{The denoiser as a symmetry problem}
+Data: a complex field on a 3-D grid, $F$ cardiac frames, $K$ velocity-encoded copies:
+\[ X\in\CC^{N^3\times F\times K},\qquad \text{only a few simulated subjects (phantoms) for training.} \]
+\pause
+\textbf{Which symmetries does the \emph{prior} have?}
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}\toprule
+group & acts as & status\\\midrule
+translations $\ZZ^3$ & shift voxels & exact\\
+cyclic time $\ZZ_F$ & shift cardiac phase & exact (periodic)\\
+octahedral $O_h$ (48) & rotate grid \emph{and} permute/sign encode axes & exact on voxel grid\\
+global phase $U(1)$ & $X\mapsto e^{\ii\phi}X$ & exact (gauge)\\
+scale $\RR_{>0}$ & $X\mapsto\mu X$ (noise level) & exact, built in\\
+dilation (resolution) & $r\mapsto sr$ & approximate, see next\\
+\bottomrule\end{tabular}\end{center}
+\pause
+\begin{itemize}\small
+\item The group acts on the \emph{encode index} too: the moment vectors $k_e$ rotate with $g\in O_h$. The representation is induced, not trivial.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Equivariance constraints are not all compatible}
+\textbf{Normalisation equivariance} (Herbreteau et al.): $D(\mu x)=\mu D(x)$, via bias-free, positively homogeneous nets. This matches the changing step scale of the quasi-Newton preconditioner (an MMSE denoiser satisfies $\tfrac1\mu D_\sigma(\mu x)=D_{\sigma/\mu}(x)$).
+\pause
+\medskip
+\textbf{Shift equivariance is incompatible with a local gauge.}
+\begin{block}{Observation}
+If $D(e^{\ii\varphi}x)=e^{\ii\varphi}D(x)$ for every \emph{per-voxel} phase field $\varphi$ and also $D(x+\Delta\mathbf 1)=D(x)+\Delta\mathbf 1$, then $D=\mathrm{id}+\text{const}$.
+\end{block}
+Proof idea: composing a gauge transform with a shift shows equivariance to adding $\Delta e^{\ii\varphi(r)}$ for any $\varphi$, and two such shifts give an \emph{arbitrary} complex field $u$. So $D(x+u)=D(x)+u$ for all $u$.
+\medskip
+\Q{Which weaker local-gauge (e.g.\ equivariance to smooth phase fields only, matching coil and $B_0$ phase) is both physically right and non-degenerate?}
+\end{frame}
+
+\iflong
+\begin{frame}{Representation theory of the layers}
+Steerable / group convolutions (Cohen--Welling, Weiler--Cesa; Bronstein et al.\ blueprint): layers are $G$-equivariant linear maps between fields of types $\rho_{\rm in},\rho_{\rm out}$.
+\begin{itemize}
+\item \textbf{Regular representation} features for $O_h$: ReLU is applied pointwise, so equivariance is exact. Cost: feature maps $|G|=48$ times wider; parameters shrink $\sim|G|\times$.
+\item \textbf{Fields are of different types}: velocity is a polar vector, a vorticity/curl output a pseudovector (flips under reflection). The \emph{type} of the output encodes physics.
+\item \textbf{Divergence-free output} by construction $v=\nabla\times\psi$ with $\psi$ a pseudo-vector potential: equivariant, structure-preserving, kills a class of hallucinations.
+\item Anisotropic acquisition voxels break $O_h$ to $D_{4h}$: use the stabiliser subgroup, or resample.
+\end{itemize}
+\Q{Grid discretisation gives exact equivariance only for the finite group. How much error does an interpolated $SO(3)$-equivariant network incur, and is the equivariance defect a regulariser worth tuning?}
+\end{frame}
+\fi
+
+\begin{frame}{Super-resolution: equivariance under dilations}
+\small
+Goal: reconstruct on a grid \emph{finer} than the acquisition ($s\ge1$, possibly non-integer, anisotropic), so that 3\,mm vessels have more than a few voxels.
+\pause
+\begin{itemize}
+\item \textbf{Discretisation-invariant networks}: act on the continuous field $u:\RR^3\to\RR^c$ and sample on any grid (neural-operator / implicit-field viewpoint). A conv-net is a family $D_h$; we want $D_{h}\approx\mathcal P_h D\,\mathcal I_h$ consistently in $h$.
+\item \textbf{Physical dilation symmetry}: incompressible Navier--Stokes is invariant under $u_\lambda(x,t)=\lambda\,u(\lambda x,\lambda^2t)$ with $\nu$ fixed. A net trained on scale $h$ can be \emph{tested} on $h/\lambda$ if the denoiser is equivariant, but anatomy is not self-similar. Which scales are actually shared?
+\item \textbf{Measurement side}: $A_s$ (grid $s$) differs only by the model of voxel basis functions. The SR problem is an inverse problem for the \emph{same} field: the null space of $A_s$ grows with $s$, and the \emph{tangent dimension} $d$ of the denoiser has to carry the information (cf.\ the sampling theorem).
+\end{itemize}
+\Q{Is there a sampling theorem for SR with a denoiser prior: $\#\text{shots}\gtrsim d(s)\log(\cdot)$ and how does $d(s)$ grow with $s$ for fields with a power-law spectrum?}
+\end{frame}
+
+\iflong
+\begin{frame}{Learning without full-resolution truth}
+\begin{itemize}
+\item Real scans never have ground truth. Equivariant imaging (Chen, Tachella, Davies): train on measurements only, using invariance of the prior under $G$ and \emph{variation} of $A$ under $G$.
+\item Condition: the operators $\{AgA^{+}\}_{g}$ must jointly see the null space of $A$: a \hl{sensing theorem}, not just the number of measurements.
+\item In our setting, $A$ is rotated by gradient directions and coil geometry, so which $g\in O_h$ give new information?
+\item Synthetic route: CFD + MR simulation gives truth, but the \emph{generalisation gap} (anatomy, noise, operator) has to be quantified.
+\end{itemize}
+\Q{Minimal group + dataset size for which self-supervised equivariant training provably identifies the denoiser on $T$.}
+\end{frame}
+\fi

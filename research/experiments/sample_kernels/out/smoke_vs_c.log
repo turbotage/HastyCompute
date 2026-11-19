@@ -1,0 +1,9 @@
+=== smoke_vs_c: env [] --mode fwd --m 200000 --ncb 4 --nseg 2 --order 0 --designs vs --fixed 2,4,8,32,1,2,1 --check 300 --reps 2 (Thu Nov 19 02:19:16 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 8 (4 coils x 2 seg), order 0, M 200000
+trajectory: 200000 samples of 51 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  grid 0.48 GiB, y 0.01 GiB, 1600000000 useful complex MACs per pass
+  vs: 1 candidates, compiled in 0.0 s
+    vs t [2, 4, 8] ch  16 tps  1 (fc 16) nt  64 smax  32 sb 0 rx 0 nwc 1 nws 2 vxpad 1 smem  11424 regs 159:     1.48 ms
+  WORK vs: item fill 0.183, samples active per (item, plane) 7.2, bodies per (plane, window step) 1.8, planes per item 11.9, channel-lane efficiency 0.500; FFMA-pipe use of issued work 11.4 %
+  RES vs: regs 159, local 0 B, smem 11424 B, blocks/SM 6, warps/SM 12 of 48
+  BEST vs: 1.49 ms Cfg { halo: 4, tt: 2, ch: 16, tps: 1, nt: 64, smax: 32, padc: 0, sb: 0, rx: 0, ty: 4, tz: 8, acfg: 0, pfs: 0, minb: 0, nwc: 1, nws: 2, vxpad: 1 } items 34156 | 1072 G cMAC/s, 5.1 % of FP32 FMA peak (2 FMA/MAC) | value loads 8.6 TB/s (L1/smem), halo staging 6125 GB/s | rel err 6.46e-7 (max 7.91e-6 of rms 2.80e0) on 301 samples

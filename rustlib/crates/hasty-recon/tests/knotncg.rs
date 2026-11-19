@@ -243,3 +243,81 @@ fn llr_envelope_gpu_matches_cpu() {
     assert!(rel(&g2, &g1) < 1e-4);
     assert!(z1.iter().zip(&z2).all(|(a, b)| (a - b).abs() < 1e-4));
 }
+
+/// device mode (`Priors::to_gpu`): NCG, the power iteration, FISTA, ZMSHR1 and ADMM with the priors on the device reach
+/// the host path's minimiser (the NCG line search differs: multi-step sweeps; LLR on the device stack)
+#[test]
+fn device_priors_match_host() {
+    let _g = GPU.lock().unwrap_or_else(|e| e.into_inner());
+    let s = setup();
+    let nv: usize = D.iter().product();
+    let n = nv * K;
+    let wd = s.st.clone_htod(&s.w.iter().map(|&v| C32::new(v, 0.0)).collect::<Vec<_>>()).unwrap();
+    let mut op = DiagOp { w: wd, kern: s.kern.clone(), n };
+    let y = s.st.clone_htod(&s.y).unwrap();
+    let bulk = s.w.iter().map(|&v| (v * v) as f64).sum::<f64>() / n as f64;
+    let gamma = 0.3 / bulk;
+    let (lw, ll) = (0.5 * bulk * 0.3, 0.5 * bulk * 1.0);
+    let mk = |gpu_llr: bool| {
+        let w = WavHuber::new(D, 2, lw * gamma, gamma);
+        let l = Llr::new(D, 4, 1.0, vec![true; nv]);
+        let be = if gpu_llr { LlrBackend::Gpu(hasty_recon::llr_gpu::LlrGpu::new(l, &[0]).unwrap()) } else { LlrBackend::Cpu(l) };
+        Priors::new(K, nv, Some(w), Some(LlrHuber { be, theta: ll * gamma, gamma, shift: 7 }))
+    };
+    let mk_dev = |gpu_llr: bool, chunk: usize| {
+        let mut p = mk(gpu_llr);
+        p.to_gpu(&s.dev, &s.st, chunk).unwrap();
+        p
+    };
+    let pm = metric(&s, 1.0);
+    let fobj = |i: &Info| i.f + i.pw + i.pl;
+    // host NCG reference
+    let mut x = s.st.alloc_zeros::<C32>(n).unwrap();
+    let mut pri = mk(false);
+    let mut hh = vec![];
+    knotncg::ncg(&mut op, &s.kern, &s.st, &pm, &mut pri, &mut x, s.st.clone_dtod(&y).unwrap(), &mut |i: &Info, _| { hh.push(fobj(i)); i.iter < 150 }).unwrap();
+    let xn = s.st.clone_dtoh(&x).unwrap();
+    let fh = *hh.last().unwrap();
+    // device NCG (LLR on the device stack)
+    let mut x = s.st.alloc_zeros::<C32>(n).unwrap();
+    let mut pri = mk_dev(true, 2);
+    let mut hd = vec![];
+    knotncg::ncg(&mut op, &s.kern, &s.st, &pm, &mut pri, &mut x, s.st.clone_dtod(&y).unwrap(), &mut |i: &Info, _| { hd.push(fobj(i)); i.iter < 150 }).unwrap();
+    let xg = s.st.clone_dtoh(&x).unwrap();
+    let fd = *hd.last().unwrap();
+    println!("NCG host F {fh:.8e} (it 5: {:.6e}), device F {fd:.8e} (it 5: {:.6e}); iterates rel {:.2e}; device: {} transforms, {} LLR sweeps, {:.2}s in priors", hh[5], hd[5], rel(&xg, &xn), pri.n_wt, pri.n_llr, pri.secs);
+    assert!(hd.windows(2).all(|w| w[1] <= w[0] * (1.0 + 1e-6)), "device NCG not monotone: {hd:?}");
+    assert!((fd - fh).abs() < 1e-5 * fh.abs(), "{fd} vs {fh}");
+    assert!(rel(&xg, &xn) < 2e-3, "device NCG vs host: {}", rel(&xg, &xn));
+    // power iteration
+    let x0 = s.st.alloc_zeros::<C32>(n).unwrap();
+    let mut ph = mk(true);
+    let (lh, _) = knotncg::power_lmax(&mut op, &s.kern, &s.st, &pm, &mut ph, &x0, n, 15).unwrap();
+    let mut pd = mk_dev(true, 3);
+    let (ld, _) = knotncg::power_lmax(&mut op, &s.kern, &s.st, &pm, &mut pd, &x0, n, 15).unwrap();
+    println!("power iteration λ_max: host {lh:.6} device {ld:.6}");
+    assert!((lh - ld).abs() < 1e-3 * lh, "{lh} vs {ld}");
+    // FISTA, ZMSHR1 on the device priors (the same minimiser)
+    let mut x = s.st.alloc_zeros::<C32>(n).unwrap();
+    knotncg::fista(&mut op, &s.kern, &s.st, &pm, &mut pd, &mut x, s.st.clone_dtod(&y).unwrap(), 1.05 * ld, &mut |i: &Info, _| i.iter < 1500).unwrap();
+    let xf = s.st.clone_dtoh(&x).unwrap();
+    let mut x = s.st.alloc_zeros::<C32>(n).unwrap();
+    let mut pz = mk_dev(true, 1);
+    knotncg::zmshr1(&mut op, &s.kern, &s.st, &pm, &mut pz, &mut x, s.st.clone_dtod(&y).unwrap(), 1.0 / ld, &mut |i: &Info, _| i.iter < 600).unwrap();
+    let xz = s.st.clone_dtoh(&x).unwrap();
+    println!("device FISTA vs host NCG {:.2e}, device ZMSHR1 vs host NCG {:.2e}", rel(&xf, &xn), rel(&xz, &xn));
+    assert!(rel(&xf, &xn) < 2e-3 && rel(&xz, &xn) < 5e-3);
+    // ADMM: host and device on the same LLR engine, same iterations
+    let rho = 0.5 * bulk;
+    let mut pma = metric(&s, 1.0);
+    pma.set_prior(&s.st, &vec![2.0 * rho; K], None).unwrap();
+    let mut run_admm = |pri: &mut Priors| {
+        let mut x = s.st.alloc_zeros::<C32>(n).unwrap();
+        knotncg::admm(&mut op, &s.kern, &s.st, &pma, pri, &mut x, s.st.clone_dtod(&y).unwrap(), rho, 3, &mut |i: &Info, _| i.iter < 300).unwrap();
+        s.st.clone_dtoh(&x).unwrap()
+    };
+    let xah = run_admm(&mut mk(true));
+    let xad = run_admm(&mut mk_dev(true, 2));
+    println!("ADMM device vs host (300 iterations): {:.2e}", rel(&xad, &xah));
+    assert!(rel(&xad, &xah) < 1e-3, "{}", rel(&xad, &xah));
+}

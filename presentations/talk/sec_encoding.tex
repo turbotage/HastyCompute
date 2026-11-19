@@ -1,0 +1,134 @@
+\section{Optimal velocity encoding and its ambiguity polytope}
+
+\begin{frame}{Velocity encoding: a linear code on a torus}
+A bipolar gradient with first moment $M_1$ imprints phase $\gamma M_1\!\cdot v$ on moving spins. Use $K$ encodes:
+\[ \psi_e=\theta+k_e\!\cdot\! v+\text{noise}\pmod{2\pi},\qquad k_e=\gamma M_{1,e}\in\RR^3,\quad e=1,\dots,K. \]
+$\theta$ = unknown nuisance phase (coil, $B_0$, \dots); $E=[k_1\dots k_K]^{\!\top}\in\RR^{K\times3}$ is the \hl{encoding matrix}.
+\pause
+\begin{itemize}
+\item We observe $\psi\in\mathbb T^K=(\RR/2\pi\ZZ)^K$. Unknowns $(\theta,v)\in\RR^{1+3}$.
+\item Large $k_e$: precise phase$\to$velocity map (low noise). Small $k_e$: no wrapping. \hl{The two compete.}
+\item Constraint from the scanner: moments cost gradient time; $K$ costs scan time ($\sim$10 min total, fixed).
+\end{itemize}
+\Q{Which $E$ (and which decoder) is optimal for a given peak speed $V$, SNR, and failure probability?}
+\end{frame}
+
+\begin{frame}{Aliasing is a lattice, dual to the moment lattice}
+$u,u'$ are indistinguishable (noise-free) iff $E(u-u')\in2\pi\ZZ^K+\RR\mathbf 1$, i.e. $(k_e-k_j)\!\cdot\!(u-u')\in2\pi\ZZ$ for all $e$, for \emph{any} base row $j$ (no zero-moment reference needed). Hence
+\[ \Lambda_E=2\pi\,L_E^{*},\quad L_E=\operatorname{span}_{\ZZ}\{k_e-k_j\}_{e\neq j}\ (\text{any } j),\quad \operatorname{covol}\Lambda_E=\frac{(2\pi)^3}{\det L_E}. \]
+\pause
+\begin{itemize}
+\item \hl{Adding a row adds a generator to $L_E$}: $L_E\subseteq L_{E'}\Rightarrow\Lambda_{E'}\subseteq\Lambda_E$. The alias lattice gets sparser and the unambiguous region (a fundamental domain of $\Lambda_E$) gets \emph{larger or equal}: $\operatorname{vol}$ is multiplied by the integer index $[\Lambda_E:\Lambda_{E'}]\ge1$.
+\item 1-D: $k\in\{0,3\}$: $L=3\ZZ$, range $\pm\pi/3$. Add $k=2$: $L=\gcd(3,2)\ZZ=\ZZ$, range $\pm\pi$. (Chinese remainder theorem.)
+\item The Voronoi cell of $\Lambda_E$ is the \emph{Brillouin zone} of $L_E$: aliasing is Nyquist.
+\end{itemize}
+\end{frame}
+
+\iflong
+\begin{frame}{One dimension: Chinese remainder, two wraps}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.8\textwidth,height=0.4\textheight,xmin=-3.2,xmax=3.2,ymin=-3.6,ymax=3.6,
+  xlabel={$v$},ytick={-3.14159,0,3.14159},yticklabels={$-\pi$,$0$,$\pi$},
+  legend style={font=\tiny,at={(0.5,1.02)},anchor=south,legend columns=2},axis lines=left]
+\foreach \j in {-1,0,1}{
+ \addplot[thick,mLightBrown,forget plot] coordinates {({2*\j-1},-3.14159) ({2*\j+1},3.14159)};}
+\foreach \j in {-1,0,1}{
+ \addplot[thick,blue!60!black,forget plot] coordinates {({3*\j-1.5},-3.14159) ({3*\j+1.5},3.14159)};}
+\addlegendimage{thick,mLightBrown}\addlegendimage{thick,blue!60!black}
+\legend{$k_1=\pi$ (period 2),$k_2=2\pi/3$ (period 3)}
+\draw[dashed] (axis cs:-3,-3.6)--(axis cs:-3,3.6); \draw[dashed] (axis cs:3,-3.6)--(axis cs:3,3.6);
+\end{axis}
+\end{tikzpicture}
+\begin{itemize}\small
+\item Each wrap alone repeats; the pair repeats at $\mathrm{lcm}=6$: range $\pm3$ with \emph{high} sensitivity $k_1$.
+\item In 3-D with parity-check phases, redundant encodes act as an error-correcting code.
+\end{itemize}
+\end{frame}
+\fi
+
+\begin{frame}{The unambiguous polytope, and the trap of per-row constraints}
+\footnotesize
+\textbf{Correct object.} A decoder picks a representative of each coset $u+\Lambda_E$. With the nearest-to-prior-centre choice, the decoded set is the Voronoi cell
+\[ \mathrm{Vor}(\Lambda_E)=\{u:\ \langle u,\lambda\rangle\le\tfrac12\|\lambda\|^2\ \ \forall\lambda\in\Lambda_E\}, \]
+a polytope with $\le14$ facets in 3-D (Voronoi-relevant vectors). Vectors of $\Lambda_E$ are the integer solutions of the $K-4$ \emph{parity checks}: $\lambda=2\pi(\Pi E)^{+}\Pi n$ with $n\in\ZZ^K$ and $P_\perp\Pi n=0$. Same metric: $\Lambda_{E'}\subseteq\Lambda_E\Rightarrow\mathrm{Vor}(\Lambda_E)\subseteq\mathrm{Vor}(\Lambda_{E'})$, \hl{never shrinks}.
+\pause
+\medskip
+\textbf{Wrong object (a trap).} Writing $|k_e\!\cdot\!u|\le\pi$ per row (or for each subset of rows, the permutohedron constraints) describes the region where \emph{no phase wraps}. It is an \emph{intersection} of constraints, so rows can only remove velocities. But the true set is a union over wrap vectors, a fundamental domain tiling $\RR^3$.
+\medskip
+\begin{center}\scriptsize
+\begin{tabular}{@{}lcccccc@{}}\toprule
+rows $K$ (3-D integer moments) & 4 & 5 & 6 & 7 & 8 & 9\\\midrule
+$\det L_E$ & 27 & 9 & 3 & 1 & 1 & 1\\
+unambiguous cell volume $(2\pi)^3/\det L_E$ & 9 & 28 & 83 & 248 & 248 & 248\\
+no-wrap-region volume (Monte Carlo) & 9.1 & 8.3 & 9.1 & 10.0 & 10.8 & 11.8\\\bottomrule
+\end{tabular}
+\end{center}
+\vspace{-1mm}
+The no-wrap region stays tiny and is not even monotone, while the cell grows $27\times$ (rows $0,3e_i,(2,2,2),2e_i,(1,1,1)$).
+\Q{Maximise the cell at fixed noise margin (distance of near-aliases): a Diophantine-approximation problem in $K-4$ parity dimensions.}
+\end{frame}
+
+\begin{frame}{Noise: the Fisher information sees only $\mathrm{Cov}(k)$}
+\small
+One voxel, encode $e$: $s_e=\rho e^{\ii(\theta+k_e\cdot v)}+n_e$. Profile out $\theta$:
+\[ J_v=2\sum_e\mathrm{SNR}_e^{2}\,(k_e-\bar k)(k_e-\bar k)^{\!\top}\ \overset{\text{fixed scan time}}{=}\ 2\,\mathrm{SNR}_T^{2}\,\mathrm{Cov}(k). \]
+\pause
+\begin{itemize}
+\item At \emph{fixed scan time} the number $K$ of encodes does not appear, only the spread of the moments.
+\item So more encodes buy only \hl{room}: bigger moments (smaller $\sigma_v$) while the wraps stay decodable.
+\item Cell requirement: $\mathrm{Vor}(\Lambda_E)\supseteq\{|v|\le V\}$ (convex-body containment), \emph{plus} a noise margin from near-aliases.
+\end{itemize}
+\pause
+\textbf{Packing bound (heuristic).} With $r=K-4$ redundant phases, noise tubes of width $\sim\mathrm{SNR}^{-1}$ must pack in $\mathbb T^{K-1}$:
+\[ \eta=\frac{\sigma_{v}\,\mathrm{SNR}_T}{V}\ \gtrsim\ c_K\,\mathrm{SNR}_T^{-r/3}. \]
+$r=0$ (4-point): SNR does not help; $r=3$ (7-point): $\eta\sim\mathrm{SNR}^{-1}$.
+\end{frame}
+
+\begin{frame}{Designs compared (simulation)}
+\small
+\centering
+\begin{tabular}{@{}lccc@{}}\toprule
+design & $K$ & $\eta$ (lower is better) & $\mathrm{SNR}_T$ needed\\\midrule
+referenced 4-point, VENC $\approx V$ & 4 & 0.71 & 7.8\\
+tetrahedral 5-point (Johnson--Markl) & 5 & 0.42--0.50 & 5.4--6.7\\
+best integer 6-point found by search & 6 & 0.27 & 8.6\\
+coprime 7-point & 7 & 0.29 & 7.9\\
+7-point lattice (search) & 7 & 0.20--0.25 & 7.3--8.3\\
+two tetrahedra, moments $3{:}2$ & 8 & 0.15--0.18 & 9.7\\\bottomrule
+\end{tabular}
+\medskip
+\begin{itemize}\small
+\item $V=3$\,m/s, wrap probability $\le10^{-3}$ inside, enumeration-exact for Gaussian phase noise.
+\item Best designs sit $1.2$--$2.3\times$ above the packing bound. No known matching construction.
+\end{itemize}
+\Q{Is there a family $E_K$ (algebraic number-field lattices? Hadamard/code-based?) that attains the exponent $r/3$, i.e.\ a ``good code'' for the Gaussian channel on a torus with a 3-D linear constraint?}
+\end{frame}
+
+\iflong
+\begin{frame}{Beyond Cram\'er--Rao: threshold effects and stochastic encoding}
+\begin{itemize}
+\item CRB is only valid above the wrap threshold. Below it, the MSE is dominated by \emph{outliers} (wrong lattice cell). The right tools: Ziv--Zakai / Barankin bounds, union bound over Voronoi-relevant vectors.
+\item Random encodes: draw $k_e$ i.i.d.\ from $\mu$ (or randomise \emph{per readout}). Then the aliasing structure becomes a characteristic function question,
+\[ \EE_\mu\, e^{\ii k\cdot u}=\hat\mu(u),\qquad \text{ambiguity}\iff|\hat\mu(u)|\approx 1\ \ \text{for } u\neq0 , \]
+i.e.\ $\mu$ should have no almost-period. Random designs get an incoherent noise-like alias floor instead of sharp aliases.
+\item Bayesian design: optimise $\EE_{v\sim p}\big[\|\hat v-v\|^2\big]$ with a flow prior $p$ (a speed distribution, not a ball).
+\end{itemize}
+\Q{Trade-off between sharp-but-rare (lattice) and diffuse-but-everywhere (random) aliasing, in the regime where every voxel has $\mathrm{SNR}\ll1$ and decoding must pool neighbours in space/time.}
+\end{frame}
+\fi
+
+\iflong
+\begin{frame}{Interaction with undersampling}
+\small
+Each encode is heavily undersampled ($R\approx50$ per frame at 1\,mm). Toy study (2-D, fixed total samples):
+\begin{itemize}
+\item Fully sampled: velocity error follows $\eta$ (more encodes, lower error).
+\item With strong undersampling per encode: the order \emph{reverses}; the artifact enters the phase difference as PSF side-lobes of $\rho\,(k_e-k_0)\!\cdot v$ and its error is \hl{independent of VENC}.
+\item Fix: reconstruct the \emph{parameters} instead of $K$ images,
+\[ x_e(r,\tau)=z(r,\tau)\,e^{\ii\phi_e}\,e^{-\ii k_e\cdot v(r,\tau)},\]
+unknowns $(z,v)$: data per unknown no longer depends on $K$. Non-convex (wrapping!), hence a \emph{prior in $(|z|,v)$ space} is essential.
+\end{itemize}
+\Q{Is the velocity-parametrised problem benign (no spurious local minima) inside the cell $\mathrm{Vor}(\Lambda_E)$ and when does the PnP theory of the next part still apply?}
+\end{frame}
+\fi

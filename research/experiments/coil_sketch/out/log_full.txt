@@ -1,0 +1,13 @@
+problem global: nc 30, M 24576/encode, σ 2.46, toeplitz err 9.2e-16, bulk 2.32e+03, γ 4.32e-05, κ 5.19e+03  (15s)
+  λ 5.79: truth err 0.1415
+  λ 12.5: truth err 0.1165
+  λ 26.9: truth err 0.1014
+  λ 57.9: truth err 0.0933
+  λ 125: truth err 0.0931
+  λ 269: truth err 0.1161
+  λ 579: truth err 0.1275
+  λ 1.25e+03: truth err 0.1551
+  λ 2.69e+03: truth err 0.2342
+  λ 5.79e+03: truth err 3.6005
+λ 124.8
+reference: truth err [   993.9322 156272.866 ], velocity vs truth 79.54 cm/s

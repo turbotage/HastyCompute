@@ -1,0 +1,67 @@
+=== ps_m4000000_c10_l10_o0: env [] --mode fwd --m 4000000 --ncb 10 --nseg 10 --order 0 --designs ps --check 800 --reps 5 (Thu Nov 19 11:21:34 AM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  ps: 61 candidates, compiled in 7.1 s
+    ps t [4, 4, 4] ch   2 tps  1 (fc  2) nt 128 smax 128 sb 1 rx 1 smem  32544 regs  62:   186.73 ms
+    ps t [4, 4, 4] ch   2 tps  1 (fc  2) nt 128 smax 256 sb 2 rx 1 smem  59680 regs  95:   400.19 ms
+    ps t [4, 4, 4] ch   2 tps  1 (fc  2) nt 256 smax 256 sb 1 rx 1 smem  59680 regs  62:   342.94 ms
+    ps t [4, 4, 4] ch   4 tps  1 (fc  4) nt 128 smax 128 sb 1 rx 1 smem  37952 regs  94:   177.60 ms
+    ps t [4, 4, 4] ch   4 tps  1 (fc  4) nt 128 smax 256 sb 2 rx 1 smem  65088 regs 128:   445.41 ms
+    ps t [4, 4, 4] ch   4 tps  1 (fc  4) nt 256 smax 256 sb 1 rx 1 smem  65088 regs  72:   403.86 ms
+    ps t [4, 4, 4] ch  10 tps  1 (fc 10) nt 128 smax 128 sb 1 rx 1 smem  54176 regs 166:   239.51 ms
+    ps t [4, 4, 4] ch  10 tps  1 (fc 10) nt 128 smax 256 sb 2 rx 1 smem  81312 regs 237:   290.67 ms
+    ps t [4, 4, 4] ch  10 tps  1 (fc 10) nt 256 smax 256 sb 1 rx 1 smem  81312 regs 127:   251.00 ms
+    ps t [4, 4, 4] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  24384 regs  78:   136.88 ms
+    ps t [4, 4, 4] ch   4 tps  2 (fc  2) nt 128 smax 128 sb 2 rx 1 smem  37952 regs 127:   149.28 ms
+    ps t [4, 4, 4] ch   4 tps  2 (fc  2) nt 256 smax 128 sb 1 rx 1 smem  37952 regs  78:   146.83 ms
+    ps t [4, 4, 4] ch   4 tps  2 (fc  2) nt 256 smax 256 sb 2 rx 1 smem  65088 regs 121:   205.01 ms
+    ps t [4, 4, 4] ch  20 tps  2 (fc 10) nt 128 smax  64 sb 1 rx 1 smem  67648 regs 255:   268.78 ms
+    ps t [4, 4, 4] ch  20 tps  2 (fc 10) nt 128 smax 128 sb 2 rx 1 smem  81216 regs 252:   185.52 ms
+    ps t [4, 4, 4] ch  20 tps  2 (fc 10) nt 256 smax 128 sb 1 rx 1 smem  81216 regs 168:   191.84 ms
+    ps t [4, 4, 8] ch   2 tps  1 (fc  2) nt 128 smax 128 sb 1 rx 1 smem  32544 regs  62:   166.93 ms
+    ps t [4, 4, 8] ch   2 tps  1 (fc  2) nt 128 smax 256 sb 2 rx 1 smem  59680 regs  95:   271.78 ms
+    ps t [4, 4, 8] ch   2 tps  1 (fc  2) nt 256 smax 256 sb 1 rx 1 smem  59680 regs  62:   240.43 ms
+    ps t [4, 4, 8] ch   4 tps  1 (fc  4) nt 128 smax 128 sb 1 rx 1 smem  37952 regs  94:   158.99 ms
+    ps t [4, 4, 8] ch   4 tps  1 (fc  4) nt 128 smax 256 sb 2 rx 1 smem  65088 regs 128:   301.91 ms
+    ps t [4, 4, 8] ch   4 tps  1 (fc  4) nt 256 smax 256 sb 1 rx 1 smem  65088 regs  72:   276.79 ms
+    ps t [4, 4, 8] ch  10 tps  1 (fc 10) nt 128 smax 128 sb 1 rx 1 smem  54176 regs 166:   195.24 ms
+    ps t [4, 4, 8] ch  10 tps  1 (fc 10) nt 128 smax 256 sb 2 rx 1 smem  81312 regs 237:   199.71 ms
+    ps t [4, 4, 8] ch  10 tps  1 (fc 10) nt 256 smax 256 sb 1 rx 1 smem  81312 regs 127:   183.14 ms
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  24384 regs  78:   134.59 ms
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 128 smax 128 sb 2 rx 1 smem  37952 regs 127:   127.89 ms
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 256 smax 128 sb 1 rx 1 smem  37952 regs  78:   133.53 ms
+    ps t [4, 4, 8] ch   4 tps  2 (fc  2) nt 256 smax 256 sb 2 rx 1 smem  65088 regs 121:   153.39 ms
+    ps t [4, 4, 8] ch  20 tps  2 (fc 10) nt 128 smax  64 sb 1 rx 1 smem  67648 regs 255:   254.07 ms
+    ps t [4, 4, 8] ch  20 tps  2 (fc 10) nt 128 smax 128 sb 2 rx 1 smem  81216 regs 252:   151.92 ms
+    ps t [4, 4, 8] ch  20 tps  2 (fc 10) nt 256 smax 128 sb 1 rx 1 smem  81216 regs 168:   163.65 ms
+    ps t [4, 8, 8] ch   2 tps  1 (fc  2) nt 128 smax 128 sb 1 rx 1 smem  34208 regs  62:   203.19 ms
+    ps t [4, 8, 8] ch   2 tps  1 (fc  2) nt 128 smax 256 sb 2 rx 1 smem  61344 regs  95:   215.42 ms
+    ps t [4, 8, 8] ch   2 tps  1 (fc  2) nt 256 smax 256 sb 1 rx 1 smem  61344 regs  62:   202.33 ms
+    ps t [4, 8, 8] ch   4 tps  1 (fc  4) nt 128 smax 128 sb 1 rx 1 smem  41280 regs 126:   164.13 ms
+    ps t [4, 8, 8] ch   4 tps  1 (fc  4) nt 128 smax 256 sb 2 rx 1 smem  68416 regs 126:   213.05 ms
+    ps t [4, 8, 8] ch   4 tps  1 (fc  4) nt 256 smax 256 sb 1 rx 1 smem  68416 regs  72:   225.55 ms
+    ps t [4, 8, 8] ch  10 tps  1 (fc 10) nt 128 smax 128 sb 1 rx 1 smem  62496 regs 223:   173.67 ms
+    ps t [4, 8, 8] ch  10 tps  1 (fc 10) nt 128 smax 256 sb 2 rx 1 smem  89632 regs 244:   166.62 ms
+    ps t [4, 8, 8] ch  10 tps  1 (fc 10) nt 256 smax 256 sb 1 rx 1 smem  89632 regs 126:   177.42 ms
+    ps t [4, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  27712 regs  94:   149.07 ms
+    ps t [4, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax 128 sb 2 rx 1 smem  41280 regs 146:   132.30 ms
+    ps t [4, 8, 8] ch   4 tps  2 (fc  2) nt 256 smax 128 sb 1 rx 1 smem  41280 regs  78:   139.69 ms
+    ps t [4, 8, 8] ch   4 tps  2 (fc  2) nt 256 smax 256 sb 2 rx 1 smem  68416 regs 121:   146.82 ms
+    ps t [2, 8, 8] ch   2 tps  1 (fc  2) nt 128 smax 128 sb 1 rx 1 smem  33120 regs  64:   195.31 ms
+    ps t [2, 8, 8] ch   2 tps  1 (fc  2) nt 128 smax 256 sb 2 rx 1 smem  60256 regs  94:   344.62 ms
+    ps t [2, 8, 8] ch   2 tps  1 (fc  2) nt 256 smax 256 sb 1 rx 1 smem  60256 regs  64:   226.73 ms
+    ps t [2, 8, 8] ch   4 tps  1 (fc  4) nt 128 smax 128 sb 1 rx 1 smem  39104 regs  95:   182.51 ms
+    ps t [2, 8, 8] ch   4 tps  1 (fc  4) nt 128 smax 256 sb 2 rx 1 smem  66240 regs 128:   380.11 ms
+    ps t [2, 8, 8] ch   4 tps  1 (fc  4) nt 256 smax 256 sb 1 rx 1 smem  66240 regs  78:   204.68 ms
+    ps t [2, 8, 8] ch  10 tps  1 (fc 10) nt 128 smax 128 sb 1 rx 1 smem  57056 regs 164:   208.43 ms
+    ps t [2, 8, 8] ch  10 tps  1 (fc 10) nt 128 smax 256 sb 2 rx 1 smem  84192 regs 228:   230.31 ms
+    ps t [2, 8, 8] ch  10 tps  1 (fc 10) nt 256 smax 256 sb 1 rx 1 smem  84192 regs 128:   206.91 ms
+    ps t [2, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax  64 sb 1 rx 1 smem  25536 regs  80:   148.14 ms
+    ps t [2, 8, 8] ch   4 tps  2 (fc  2) nt 128 smax 128 sb 2 rx 1 smem  39104 regs 122:   139.78 ms
+    ps t [2, 8, 8] ch   4 tps  2 (fc  2) nt 256 smax 128 sb 1 rx 1 smem  39104 regs  80:   140.34 ms
+    ps t [2, 8, 8] ch   4 tps  2 (fc  2) nt 256 smax 256 sb 2 rx 1 smem  66240 regs 116:   171.32 ms
+    ps t [2, 8, 8] ch  20 tps  2 (fc 10) nt 128 smax  64 sb 1 rx 1 smem  73408 regs 255:   304.26 ms
+    ps t [2, 8, 8] ch  20 tps  2 (fc 10) nt 128 smax 128 sb 2 rx 1 smem  86976 regs 254:   172.13 ms
+    ps t [2, 8, 8] ch  20 tps  2 (fc 10) nt 256 smax 128 sb 1 rx 1 smem  86976 regs 208:   143.18 ms
+  BEST ps: 132.12 ms Cfg { halo: 3, tt: 4, ch: 4, tps: 2, nt: 128, smax: 128, padc: 0, sb: 2, rx: 1, ty: 4, tz: 8 } items 46702 | 3028 G cMAC/s, 14.4 % of FP32 FMA peak (2 FMA/MAC) | value loads 24.2 TB/s (L1/smem), halo staging 812 GB/s | rel err 6.45e-7 (max 1.71e-5 of rms 6.22e0) on 800 samples

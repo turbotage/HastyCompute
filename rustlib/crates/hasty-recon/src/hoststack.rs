@@ -839,6 +839,28 @@ pub fn run_objective_host(
             }
         }
         debug_assert!(plain || fused);
+        // the objective's trust region on the step (p2np::Objective::limit_step_host): step = x_prev − x (the quasi-Newton
+        // preconditioners keep the previous iterate), shrunk, x = x_prev − step
+        if obj.has_step_limit() {
+            if quasi {
+                let mut n = 0usize;
+                for t in 0..nt {
+                    let mut s: Vec<C32> = x_prev.chunk(t).iter().zip(x.chunk(t)).map(|(a, b)| C32::new(a.re - b.re, a.im - b.im)).collect();
+                    let nt_ = obj.limit_step_host(t, &mut s);
+                    if nt_ > 0 {
+                        n += nt_;
+                        for ((xo, a), d) in x.chunk_mut(t).iter_mut().zip(x_prev.chunk(t)).zip(&s) {
+                            *xo = C32::new(a.re - d.re, a.im - d.im);
+                        }
+                    }
+                }
+                if n > 0 {
+                    eprintln!("    step trust region (it {k}): {n} elements shrunk");
+                }
+            } else if k == k0 {
+                eprintln!("    step trust region: needs a quasi-Newton preconditioner on host stacks (the previous iterate); not applied");
+            }
+        }
         tm.lap(st, 1);
         denoise(k, &mut x.data);
         tm.lap(st, 2);

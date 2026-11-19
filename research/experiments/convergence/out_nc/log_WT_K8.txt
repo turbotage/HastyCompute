@@ -152,3 +152,288 @@ Running as unit: run-r845f4087fbc0426c98600ba45aae72ac.scope; invocation ID: fb1
 [R=25 WT K=8] lambda 0.0003: truth err 0.2083
 [R=25 WT K=8] lambda 0.0001: truth err 0.1957
 [R=25 WT K=8] lambda 3e-05: truth err 0.2059
+[R=25 WT K=8] l1 reference: {'stage_change': 0.00011635223150934033, 'truth_err_xs_l1': 0.1949166917726781, 'heldout_xs_l1': np.float64(2.989420905281183), 'F_star': 120250.88339960205, 'pg_residual': 1.103995960317689e-13, 'zero_frac_xs': 0.9192149414371636}
+[R=25 WT K=8] smooth gamma=1/bulk ref: {'lbfgs_vs_ncg_polish': 6.987741248449066e-14, 'dist_to_l1': 0.15267501046214998, 'truth_err': 0.24837578212732012, 'heldout': np.float64(4.3608120870797284), 'F': 83723.93412041855, 'frac_quadratic_region': 0.9893094559761226}
+[R=25 WT K=8] smooth gamma=0.1/bulk ref: {'lbfgs_vs_ncg_polish': 5.372741581052917e-14, 'dist_to_l1': 0.03449803523346291, 'truth_err': 0.19315093028101638, 'heldout': np.float64(2.908189058413493), 'F': 113471.46469195872, 'frac_quadratic_region': 0.9420521864966309}
+[R=25 WT K=8] smooth gamma=0.01/bulk ref: {'lbfgs_vs_ncg_polish': 4.024315617501398e-14, 'dist_to_l1': 0.004327841067970866, 'truth_err': 0.1945240182882005, 'heldout': np.float64(2.9780589932506136), 'F': 119515.83871507015, 'frac_quadratic_region': 0.921928277483833}
+[R=25 WT K=8] smooth gamma=0.001/bulk ref: {'lbfgs_vs_ncg_polish': 6.92123769042773e-10, 'dist_to_l1': 0.0004453126498288739, 'truth_err': 0.19487597118186903, 'heldout': np.float64(2.988281123426115), 'F': 120176.77768797922, 'frac_quadratic_region': 0.9195134084022973}
+[R=25 WT K=8] PCG unregularised|I: {'best_truth_it': 47, 'best_truth_err': 0.27656715957999506, 'heldout_min_it': 78, 'truth_at_heldout_min': 0.28636768417357894, 'truth_at_100': 0.29931535660536085, 'dist_to_l1_min_at_heldout': 0.28168253165250784}
+[R=25 WT K=8] PCG unregularised|Cn: {'best_truth_it': 100, 'best_truth_err': 0.7699091748149666, 'heldout_min_it': 100, 'truth_at_heldout_min': 0.7699091748149666, 'truth_at_100': 0.7699091748149666, 'dist_to_l1_min_at_heldout': 0.7698012036474375}
+[R=25 WT K=8] PCG unregularised|Cn+1bulk: {'best_truth_it': 100, 'best_truth_err': 0.5229253761001107, 'heldout_min_it': 92, 'truth_at_heldout_min': 0.525991199724542, 'truth_at_100': 0.5229253761001107, 'dist_to_l1_min_at_heldout': 0.5251670560986105}
+[R=25 WT K=8] NCG|I                                          own 1e-1:69 1e-2:- 1e-3:- @40 0.181 final 0.0123 | l1 1e-1:75 1e-2:- @40 0.187 | truth@40 0.227  (16s)
+[R=25 WT K=8] NCG|Cn                                         own 1e-1:79 1e-2:132 1e-3:187 @40 0.626 final 0.000505 | l1 1e-1:81 1e-2:- @40 0.628 | truth@40 0.653  (17s)
+[R=25 WT K=8] NCG|Cn+0.1bulk                                 own 1e-1:72 1e-2:121 1e-3:171 @40 0.531 final 0.000195 | l1 1e-1:74 1e-2:- @40 0.533 | truth@40 0.564  (18s)
+[R=25 WT K=8] NCG|Cn+1bulk                                   own 1e-1:54 1e-2:93 1e-3:131 @40 0.233 final 1.13e-05 | l1 1e-1:55 1e-2:- @40 0.239 | truth@40 0.307  (17s)
+[R=25 WT K=8] NCG|Cn+10bulk                                  own 1e-1:39 1e-2:94 1e-3:155 @40 0.0955 final 0.000216 | l1 1e-1:42 1e-2:- @40 0.106 | truth@40 0.21  (16s)
+[R=25 WT K=8] NCG|Cn+100bulk                                 own 1e-1:43 1e-2:125 1e-3:- @40 0.107 final 0.00162 | l1 1e-1:46 1e-2:- @40 0.116 | truth@40 0.199  (17s)
+[R=25 WT K=8] NCG|Cnp (pilot 5)                              own 1e-1:66 1e-2:109 1e-3:153 @40 0.411 final 6.1e-05 | l1 1e-1:67 1e-2:- @40 0.414 | truth@40 0.456  (18s)
+[R=25 WT K=8] LBFGS3|I                                       own 1e-1:76 1e-2:- 1e-3:- @40 0.186 final 0.0164 | l1 1e-1:82 1e-2:- @40 0.191 | truth@40 0.229  (17s)
+[R=25 WT K=8] LBFGS3|Cn+1bulk                                own 1e-1:53 1e-2:92 1e-3:130 @40 0.226 final 1.22e-05 | l1 1e-1:55 1e-2:- @40 0.232 | truth@40 0.301  (18s)
+[R=25 WT K=8] LBFGS3|Cnp (pilot 5)                           own 1e-1:68 1e-2:114 1e-3:158 @40 0.41 final 9.25e-05 | l1 1e-1:70 1e-2:- @40 0.414 | truth@40 0.455  (18s)
+[R=25 WT K=8] NCG|I gamma=1                                  own 1e-1:68 1e-2:193 1e-3:- @40 0.182 final 0.00881 | l1 1e-1:- 1e-2:- @40 0.206 | truth@40 0.24  (17s)
+[R=25 WT K=8] NCG|Cn+1bulk gamma=1                           own 1e-1:46 1e-2:78 1e-3:112 @40 0.17 final 2.07e-06 | l1 1e-1:- 1e-2:- @40 0.229 | truth@40 0.298  (16s)
+[R=25 WT K=8] NCG|Cnp (pilot 5) gamma=1                      own 1e-1:52 1e-2:83 1e-3:117 @40 0.281 final 2.65e-06 | l1 1e-1:- 1e-2:- @40 0.319 | truth@40 0.372  (17s)
+[R=25 WT K=8] NCG|I gamma=0.01                               own 1e-1:88 1e-2:- 1e-3:- @40 0.191 final 0.0274 | l1 1e-1:88 1e-2:- @40 0.191 | truth@40 0.229  (17s)
+[R=25 WT K=8] NCG|Cn+1bulk gamma=0.01                        own 1e-1:110 1e-2:- 1e-3:- @40 0.468 final 0.018 | l1 1e-1:110 1e-2:- @40 0.469 | truth@40 0.503  (18s)
+[R=25 WT K=8] NCG|Cnp (pilot 5) gamma=0.01                   own 1e-1:178 1e-2:- 1e-3:- @40 0.741 final 0.0727 | l1 1e-1:179 1e-2:- @40 0.741 | truth@40 0.762  (20s)
+[R=25 WT K=8] NCG|I gamma=0.001                              own 1e-1:137 1e-2:- 1e-3:- @40 0.202 final 0.069 | l1 1e-1:137 1e-2:- @40 0.202 | truth@40 0.235  (18s)
+[R=25 WT K=8] NCG|Cn+1bulk gamma=0.001                       own 1e-1:- 1e-2:- 1e-3:- @40 0.47 final 0.157 | l1 1e-1:- 1e-2:- @40 0.47 | truth@40 0.504  (18s)
+[R=25 WT K=8] NCG|Cnp (pilot 5) gamma=0.001                  own 1e-1:- 1e-2:- 1e-3:- @40 0.775 final 0.326 | l1 1e-1:- 1e-2:- @40 0.775 | truth@40 0.794  (16s)
+[R=25 WT K=8] FISTA-smooth|I                                 own 1e-1:144 1e-2:- 1e-3:- @40 0.26 final 0.0546 | l1 1e-1:154 1e-2:- @40 0.264 | truth@40 0.279  (11s)
+[R=25 WT K=8] ZMSHR1-M-smooth|I                              own 1e-1:130 1e-2:- 1e-3:- @40 0.227 final 0.0623 | l1 1e-1:144 1e-2:- @40 0.232 | truth@40 0.254  (12s)
+[R=25 WT K=8] Anderson5 smooth-gradient map|I                own 1e-1:163 1e-2:- 1e-3:- @40 0.239 final 0.0797 | l1 1e-1:179 1e-2:- @40 0.243 | truth@40 0.262  (13s)
+[R=25 WT K=8] FISTA-smooth|Cn                                own 1e-1:196 1e-2:- 1e-3:- @40 1.4 final 0.0934 | l1 1e-1:- 1e-2:- @40 1.4 | truth@40 1.41  (12s)
+[R=25 WT K=8] ZMSHR1-M-smooth|Cn                             own 1e-1:126 1e-2:198 1e-3:- @40 0.947 final 0.00921 | l1 1e-1:127 1e-2:- @40 0.947 | truth@40 0.964  (12s)
+[R=25 WT K=8] FISTA-smooth|Cn+1bulk                          own 1e-1:119 1e-2:- 1e-3:- @40 0.826 final 0.0266 | l1 1e-1:122 1e-2:- @40 0.827 | truth@40 0.844  (12s)
+[R=25 WT K=8] ZMSHR1-M-smooth|Cn+1bulk                       own 1e-1:71 1e-2:119 1e-3:180 @40 0.392 final 0.000376 | l1 1e-1:72 1e-2:- @40 0.396 | truth@40 0.437  (11s)
+[R=25 WT K=8] Anderson5 smooth-gradient map|Cn+1bulk         own 1e-1:- 1e-2:- 1e-3:- @40 0.868 final 0.295 | l1 1e-1:- 1e-2:- @40 0.869 | truth@40 0.882  (13s)
+[R=25 WT K=8] FISTA-smooth|Cn+1/gamma                        own 1e-1:75 1e-2:- 1e-3:- @40 0.302 final 0.0109 | l1 1e-1:80 1e-2:- @40 0.306 | truth@40 0.341  (12s)
+[R=25 WT K=8] ZMSHR1-M-smooth|Cn+1/gamma                     own 1e-1:60 1e-2:139 1e-3:- @40 0.182 final 0.00304 | l1 1e-1:61 1e-2:- @40 0.188 | truth@40 0.251  (10s)
+[R=25 WT K=8] FISTA-exact|I step 1.0/L                       own 1e-1:146 1e-2:- 1e-3:- @40 0.261 final 0.0584 | l1 1e-1:146 1e-2:- @40 0.261 | truth@40 0.276  (12s)
+[R=25 WT K=8] FISTA-exact|I step 0.3/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.318 final 0.146 | l1 1e-1:- 1e-2:- @40 0.318 | truth@40 0.326  (12s)
+[R=25 WT K=8] FISTA-exact|I step 2.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 inf final inf | l1 1e-1:- 1e-2:- @40 inf | truth@40 inf DIVERGED (1s)
+[R=25 WT K=8] 0SR1 prox-QN (Becker-Fadili)                   own 1e-1:131 1e-2:- 1e-3:- @40 0.249 final 0.0383 | l1 1e-1:131 1e-2:- @40 0.249 | truth@40 0.267  (25s)
+[R=25 WT K=8] Anderson5 on FB map (exact prox, 1/L)          own 1e-1:- 1e-2:- 1e-3:- @40 0.27 final 0.229 | l1 1e-1:- 1e-2:- @40 0.27 | truth@40 0.283  (12s)
+[R=25 WT K=8] ADMM-PCG rho=0.1*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.03 final 0.127 | l1 1e-1:- 1e-2:- @40 1.03 | truth@40 1.05  (8s)
+[R=25 WT K=8] ADMM-PCG rho=0.1*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.644 final 0.129 | l1 1e-1:- 1e-2:- @40 0.644 | truth@40 0.671  (8s)
+[R=25 WT K=8] ADMM-PCG rho=0.3*bulk inner=3                  own 1e-1:174 1e-2:- 1e-3:- @40 0.888 final 0.0648 | l1 1e-1:174 1e-2:- @40 0.888 | truth@40 0.905  (9s)
+[R=25 WT K=8] ADMM-PCG rho=0.3*bulk inner=8                  own 1e-1:115 1e-2:- 1e-3:- @40 0.53 final 0.0497 | l1 1e-1:115 1e-2:- @40 0.53 | truth@40 0.562  (8s)
+[R=25 WT K=8] ADMM-PCG rho=1.0*bulk inner=3                  own 1e-1:152 1e-2:- 1e-3:- @40 0.665 final 0.0437 | l1 1e-1:152 1e-2:- @40 0.665 | truth@40 0.686  (8s)
+[R=25 WT K=8] ADMM-PCG rho=1.0*bulk inner=8                  own 1e-1:95 1e-2:- 1e-3:- @40 0.368 final 0.0219 | l1 1e-1:95 1e-2:- @40 0.368 | truth@40 0.405  (8s)
+[R=25 WT K=8] ADMM-PCG rho=3.0*bulk inner=3                  own 1e-1:134 1e-2:- 1e-3:- @40 0.445 final 0.0435 | l1 1e-1:134 1e-2:- @40 0.445 | truth@40 0.471  (9s)
+[R=25 WT K=8] ADMM-PCG rho=3.0*bulk inner=8                  own 1e-1:114 1e-2:- 1e-3:- @40 0.239 final 0.0599 | l1 1e-1:114 1e-2:- @40 0.239 | truth@40 0.273  (8s)
+[R=25 WT K=8] ADMM-PCG rho=10.0*bulk inner=3                 own 1e-1:149 1e-2:- 1e-3:- @40 0.28 final 0.0747 | l1 1e-1:149 1e-2:- @40 0.28 | truth@40 0.309  (8s)
+[R=25 WT K=8] ADMM-PCG rho=10.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.255 final 0.147 | l1 1e-1:- 1e-2:- @40 0.255 | truth@40 0.272  (8s)
+[R=25 WT K=8] ADMM-PCG rho=30.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.262 final 0.154 | l1 1e-1:- 1e-2:- @40 0.262 | truth@40 0.28  (9s)
+[R=25 WT K=8] ADMM-PCG rho=30.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.305 final 0.222 | l1 1e-1:- 1e-2:- @40 0.305 | truth@40 0.314  (9s)
+[R=25 WT K=8] ADMM-PCG rho=100.0*bulk inner=3                own 1e-1:- 1e-2:- 1e-3:- @40 0.31 final 0.233 | l1 1e-1:- 1e-2:- @40 0.31 | truth@40 0.319  (9s)
+[R=25 WT K=8] ADMM-PCG rho=100.0*bulk inner=8                own 1e-1:- 1e-2:- 1e-3:- @40 0.388 final 0.282 | l1 1e-1:- 1e-2:- @40 0.388 | truth@40 0.392  (8s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=0.3*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.566 final 0.343 | l1 1e-1:- 1e-2:- @40 0.566 | truth@40 0.586  (23s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=1.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.399 final 0.224 | l1 1e-1:- 1e-2:- @40 0.399 | truth@40 0.445  (22s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=3.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.295 final 0.134 | l1 1e-1:- 1e-2:- @40 0.295 | truth@40 0.359  (24s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=10.0*p                  own 1e-1:111 1e-2:- 1e-3:- @40 0.198 final 0.057 | l1 1e-1:111 1e-2:- @40 0.198 | truth@40 0.277  (22s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=30.0*p                  own 1e-1:50 1e-2:- 1e-3:- @40 0.122 final 0.0152 | l1 1e-1:50 1e-2:- @40 0.122 | truth@40 0.224  (23s)
+[R=25 WT K=8] PDHG Ong k-space Sigma=100.0*p                 own 1e-1:20 1e-2:98 1e-3:- @40 0.0452 final 0.00346 | l1 1e-1:20 1e-2:98 @40 0.0452 | truth@40 0.196  (23s)
+[R=25 WT K=8] PDHG scalar sigma=1.0/||A||                    own 1e-1:- 1e-2:- 1e-3:- @40 0.282 final 0.129 | l1 1e-1:- 1e-2:- @40 0.282 | truth@40 0.359  (25s)
+[R=25 WT K=8] PDHG scalar sigma=10.0/||A||                   own 1e-1:84 1e-2:- 1e-3:- @40 0.203 final 0.0342 | l1 1e-1:84 1e-2:- @40 0.203 | truth@40 0.256  (31s)
+[R=25 WT K=8] PDHG scalar sigma=100.0/||A||                  own 1e-1:- 1e-2:- 1e-3:- @40 0.279 final 0.188 | l1 1e-1:- 1e-2:- @40 0.279 | truth@40 0.291  (31s)
+[R=25 WT K=8] done in 2398s
+[R=50 WT K=8] setup 4.6s; spokes/set [23, 17, 18, 22, 19, 25, 20, 27]; pooled R 6.22; L 1.02e+05 bulk 141; floor frac 0.46; heldout(truth) 1.072
+[R=50 WT K=8] lambda 0.01: truth err 0.4219
+[R=50 WT K=8] lambda 0.003: truth err 0.3484
+[R=50 WT K=8] lambda 0.001: truth err 0.3030
+[R=50 WT K=8] lambda 0.0003: truth err 0.2756
+[R=50 WT K=8] lambda 0.0001: truth err 0.2748
+[R=50 WT K=8] lambda 3e-05: truth err 0.2848
+[R=50 WT K=8] l1 reference: {'stage_change': 0.00031375497125627025, 'truth_err_xs_l1': 0.2751172491571167, 'heldout_xs_l1': np.float64(6.503074332938592), 'F_star': 51290.83228906453, 'pg_residual': 3.912796877529883e-09, 'zero_frac_xs': 0.0018179351512684846}
+[R=50 WT K=8] smooth gamma=1/bulk ref: {'lbfgs_vs_ncg_polish': 8.038849895296309e-14, 'dist_to_l1': 0.15799197169400256, 'truth_err': 0.30372621527621624, 'heldout': np.float64(7.748088628513141), 'F': 32842.06822783454, 'frac_quadratic_region': 0.9931081264414597}
+[R=50 WT K=8] smooth gamma=0.1/bulk ref: {'lbfgs_vs_ncg_polish': 8.451643265837402e-14, 'dist_to_l1': 0.04952470339589102, 'truth_err': 0.2688471867269338, 'heldout': np.float64(6.199994502653398), 'F': 47682.76075385903, 'frac_quadratic_region': 0.9533125310903089}
+[R=50 WT K=8] smooth gamma=0.01/bulk ref: {'lbfgs_vs_ncg_polish': 4.9547121993821757e-14, 'dist_to_l1': 0.0068354514604371495, 'truth_err': 0.2742082608422979, 'heldout': np.float64(6.463409032906376), 'F': 50897.8895058433, 'frac_quadratic_region': 0.9384072717406051}
+[R=50 WT K=8] smooth gamma=0.001/bulk ref: {'lbfgs_vs_ncg_polish': 1.745104491282519e-08, 'dist_to_l1': 0.0007088080028417633, 'truth_err': 0.2750208399692631, 'heldout': np.float64(6.498862553100963), 'F': 51251.182059273226, 'frac_quadratic_region': 0.9368606701940035}
+[R=50 WT K=8] PCG unregularised|I: {'best_truth_it': 55, 'best_truth_err': 0.32554067660695857, 'heldout_min_it': 89, 'truth_at_heldout_min': 0.3310853054910163, 'truth_at_100': 0.3347041452797209, 'dist_to_l1_min_at_heldout': 0.31761022854486665}
+[R=50 WT K=8] PCG unregularised|Cn: {'best_truth_it': 100, 'best_truth_err': 1.270547720666064, 'heldout_min_it': 100, 'truth_at_heldout_min': 1.270547720666064, 'truth_at_100': 1.270547720666064, 'dist_to_l1_min_at_heldout': 1.272328392339747}
+[R=50 WT K=8] PCG unregularised|Cn+1bulk: {'best_truth_it': 100, 'best_truth_err': 0.7822707387870911, 'heldout_min_it': 100, 'truth_at_heldout_min': 0.7822707387870911, 'truth_at_100': 0.7822707387870911, 'dist_to_l1_min_at_heldout': 0.7816519708296639}
+[R=50 WT K=8] NCG|I                                          own 1e-1:97 1e-2:- 1e-3:- @40 0.231 final 0.0252 | l1 1e-1:110 1e-2:- @40 0.238 | truth@40 0.29  (14s)
+[R=50 WT K=8] NCG|Cn                                         own 1e-1:131 1e-2:- 1e-3:- @40 0.984 final 0.0154 | l1 1e-1:137 1e-2:- @40 0.984 | truth@40 1  (14s)
+[R=50 WT K=8] NCG|Cn+0.1bulk                                 own 1e-1:121 1e-2:200 1e-3:- @40 0.9 final 0.00967 | l1 1e-1:127 1e-2:- @40 0.901 | truth@40 0.923  (15s)
+[R=50 WT K=8] NCG|Cn+1bulk                                   own 1e-1:87 1e-2:149 1e-3:- @40 0.555 final 0.00118 | l1 1e-1:91 1e-2:- @40 0.558 | truth@40 0.604  (15s)
+[R=50 WT K=8] NCG|Cn+10bulk                                  own 1e-1:60 1e-2:128 1e-3:192 @40 0.196 final 0.000755 | l1 1e-1:65 1e-2:- @40 0.205 | truth@40 0.315  (15s)
+[R=50 WT K=8] NCG|Cn+100bulk                                 own 1e-1:60 1e-2:160 1e-3:- @40 0.161 final 0.00399 | l1 1e-1:67 1e-2:- @40 0.172 | truth@40 0.271  (14s)
+[R=50 WT K=8] NCG|Cnp (pilot 5)                              own 1e-1:104 1e-2:175 1e-3:- @40 0.81 final 0.00381 | l1 1e-1:110 1e-2:- @40 0.811 | truth@40 0.84  (15s)
+[R=50 WT K=8] LBFGS3|I                                       own 1e-1:108 1e-2:- 1e-3:- @40 0.234 final 0.0333 | l1 1e-1:123 1e-2:- @40 0.242 | truth@40 0.292  (15s)
+[R=50 WT K=8] LBFGS3|Cn+1bulk                                own 1e-1:94 1e-2:164 1e-3:- @40 0.579 final 0.00235 | l1 1e-1:99 1e-2:- @40 0.582 | truth@40 0.625  (15s)
+[R=50 WT K=8] LBFGS3|Cnp (pilot 5)                           own 1e-1:114 1e-2:193 1e-3:- @40 0.842 final 0.00782 | l1 1e-1:120 1e-2:- @40 0.843 | truth@40 0.871  (16s)
+[R=50 WT K=8] NCG|I gamma=1                                  own 1e-1:88 1e-2:- 1e-3:- @40 0.23 final 0.0136 | l1 1e-1:- 1e-2:- @40 0.251 | truth@40 0.299  (14s)
+[R=50 WT K=8] NCG|Cn+1bulk gamma=1                           own 1e-1:72 1e-2:118 1e-3:166 @40 0.508 final 0.000163 | l1 1e-1:- 1e-2:- @40 0.525 | truth@40 0.572  (14s)
+[R=50 WT K=8] NCG|Cnp (pilot 5) gamma=1                      own 1e-1:78 1e-2:124 1e-3:171 @40 0.695 final 0.000212 | l1 1e-1:- 1e-2:- @40 0.706 | truth@40 0.74  (14s)
+[R=50 WT K=8] NCG|I gamma=0.01                               own 1e-1:130 1e-2:- 1e-3:- @40 0.242 final 0.0531 | l1 1e-1:132 1e-2:- @40 0.243 | truth@40 0.292  (15s)
+[R=50 WT K=8] NCG|Cn+1bulk gamma=0.01                        own 1e-1:184 1e-2:- 1e-3:- @40 0.712 final 0.0816 | l1 1e-1:185 1e-2:- @40 0.712 | truth@40 0.744  (15s)
+[R=50 WT K=8] NCG|Cnp (pilot 5) gamma=0.01                   own 1e-1:- 1e-2:- 1e-3:- @40 1.02 final 0.28 | l1 1e-1:- 1e-2:- @40 1.02 | truth@40 1.03  (16s)
+[R=50 WT K=8] NCG|I gamma=0.001                              own 1e-1:- 1e-2:- 1e-3:- @40 0.252 final 0.112 | l1 1e-1:- 1e-2:- @40 0.252 | truth@40 0.297  (16s)
+[R=50 WT K=8] NCG|Cn+1bulk gamma=0.001                       own 1e-1:- 1e-2:- 1e-3:- @40 0.714 final 0.349 | l1 1e-1:- 1e-2:- @40 0.714 | truth@40 0.746  (17s)
+[R=50 WT K=8] NCG|Cnp (pilot 5) gamma=0.001                  own 1e-1:- 1e-2:- 1e-3:- @40 1.04 final 0.61 | l1 1e-1:- 1e-2:- @40 1.04 | truth@40 1.06  (17s)
+[R=50 WT K=8] FISTA-smooth|I                                 own 1e-1:200 1e-2:- 1e-3:- @40 0.298 final 0.0994 | l1 1e-1:- 1e-2:- @40 0.305 | truth@40 0.329  (10s)
+[R=50 WT K=8] ZMSHR1-M-smooth|I                              own 1e-1:- 1e-2:- 1e-3:- @40 0.286 final 0.103 | l1 1e-1:- 1e-2:- @40 0.292 | truth@40 0.32  (10s)
+[R=50 WT K=8] Anderson5 smooth-gradient map|I                own 1e-1:- 1e-2:- 1e-3:- @40 0.279 final 0.129 | l1 1e-1:- 1e-2:- @40 0.285 | truth@40 0.315  (13s)
+[R=50 WT K=8] FISTA-smooth|Cn                                own 1e-1:- 1e-2:- 1e-3:- @40 1.79 final 0.213 | l1 1e-1:- 1e-2:- @40 1.79 | truth@40 1.79  (11s)
+[R=50 WT K=8] ZMSHR1-M-smooth|Cn                             own 1e-1:- 1e-2:- 1e-3:- @40 1.29 final 0.126 | l1 1e-1:- 1e-2:- @40 1.29 | truth@40 1.31  (11s)
+[R=50 WT K=8] FISTA-smooth|Cn+1bulk                          own 1e-1:188 1e-2:- 1e-3:- @40 1.13 final 0.0831 | l1 1e-1:199 1e-2:- @40 1.13 | truth@40 1.15  (10s)
+[R=50 WT K=8] ZMSHR1-M-smooth|Cn+1bulk                       own 1e-1:133 1e-2:- 1e-3:- @40 0.792 final 0.0218 | l1 1e-1:142 1e-2:- @40 0.793 | truth@40 0.82  (11s)
+[R=50 WT K=8] Anderson5 smooth-gradient map|Cn+1bulk         own 1e-1:- 1e-2:- 1e-3:- @40 1.08 final 0.551 | l1 1e-1:- 1e-2:- @40 1.08 | truth@40 1.1  (12s)
+[R=50 WT K=8] FISTA-smooth|Cn+1/gamma                        own 1e-1:110 1e-2:- 1e-3:- @40 0.466 final 0.0236 | l1 1e-1:120 1e-2:- @40 0.469 | truth@40 0.505  (10s)
+[R=50 WT K=8] ZMSHR1-M-smooth|Cn+1/gamma                     own 1e-1:89 1e-2:- 1e-3:- @40 0.298 final 0.0129 | l1 1e-1:97 1e-2:- @40 0.304 | truth@40 0.379  (11s)
+[R=50 WT K=8] FISTA-exact|I step 1.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.302 final 0.106 | l1 1e-1:- 1e-2:- @40 0.302 | truth@40 0.327  (10s)
+[R=50 WT K=8] FISTA-exact|I step 0.3/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.35 final 0.202 | l1 1e-1:- 1e-2:- @40 0.35 | truth@40 0.366  (10s)
+[R=50 WT K=8] FISTA-exact|I step 2.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 inf final inf | l1 1e-1:- 1e-2:- @40 inf | truth@40 inf DIVERGED (1s)
+[R=50 WT K=8] 0SR1 prox-QN (Becker-Fadili)                   own 1e-1:152 1e-2:- 1e-3:- @40 0.308 final 0.0623 | l1 1e-1:152 1e-2:- @40 0.308 | truth@40 0.331  (19s)
+[R=50 WT K=8] Anderson5 on FB map (exact prox, 1/L)          own 1e-1:- 1e-2:- 1e-3:- @40 0.311 final 0.275 | l1 1e-1:- 1e-2:- @40 0.311 | truth@40 0.333  (12s)
+[R=50 WT K=8] ADMM-PCG rho=0.1*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.39 final 0.542 | l1 1e-1:- 1e-2:- @40 1.39 | truth@40 1.4  (8s)
+[R=50 WT K=8] ADMM-PCG rho=0.1*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 1.03 final 0.218 | l1 1e-1:- 1e-2:- @40 1.03 | truth@40 1.05  (8s)
+[R=50 WT K=8] ADMM-PCG rho=0.3*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.2 final 0.409 | l1 1e-1:- 1e-2:- @40 1.2 | truth@40 1.22  (8s)
+[R=50 WT K=8] ADMM-PCG rho=0.3*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.836 final 0.129 | l1 1e-1:- 1e-2:- @40 0.836 | truth@40 0.863  (8s)
+[R=50 WT K=8] ADMM-PCG rho=1.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 0.954 final 0.294 | l1 1e-1:- 1e-2:- @40 0.954 | truth@40 0.973  (8s)
+[R=50 WT K=8] ADMM-PCG rho=1.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.656 final 0.108 | l1 1e-1:- 1e-2:- @40 0.656 | truth@40 0.686  (8s)
+[R=50 WT K=8] ADMM-PCG rho=3.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 0.668 final 0.189 | l1 1e-1:- 1e-2:- @40 0.668 | truth@40 0.694  (8s)
+[R=50 WT K=8] ADMM-PCG rho=3.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.399 final 0.111 | l1 1e-1:- 1e-2:- @40 0.399 | truth@40 0.436  (8s)
+[R=50 WT K=8] ADMM-PCG rho=10.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.398 final 0.146 | l1 1e-1:- 1e-2:- @40 0.398 | truth@40 0.432  (8s)
+[R=50 WT K=8] ADMM-PCG rho=10.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.298 final 0.19 | l1 1e-1:- 1e-2:- @40 0.298 | truth@40 0.326  (8s)
+[R=50 WT K=8] ADMM-PCG rho=30.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.312 final 0.201 | l1 1e-1:- 1e-2:- @40 0.312 | truth@40 0.34  (8s)
+[R=50 WT K=8] ADMM-PCG rho=30.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.332 final 0.261 | l1 1e-1:- 1e-2:- @40 0.332 | truth@40 0.351  (8s)
+[R=50 WT K=8] ADMM-PCG rho=100.0*bulk inner=3                own 1e-1:- 1e-2:- 1e-3:- @40 0.337 final 0.27 | l1 1e-1:- 1e-2:- @40 0.337 | truth@40 0.355  (8s)
+[R=50 WT K=8] ADMM-PCG rho=100.0*bulk inner=8                own 1e-1:- 1e-2:- 1e-3:- @40 0.4 final 0.314 | l1 1e-1:- 1e-2:- @40 0.4 | truth@40 0.411  (8s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=0.3*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.502 final 0.275 | l1 1e-1:- 1e-2:- @40 0.502 | truth@40 0.554  (14s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=1.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.341 final 0.189 | l1 1e-1:- 1e-2:- @40 0.341 | truth@40 0.432  (15s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=3.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.262 final 0.137 | l1 1e-1:- 1e-2:- @40 0.262 | truth@40 0.373  (14s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=10.0*p                  own 1e-1:123 1e-2:- 1e-3:- @40 0.198 final 0.066 | l1 1e-1:123 1e-2:- @40 0.198 | truth@40 0.321  (21s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=30.0*p                  own 1e-1:50 1e-2:- 1e-3:- @40 0.116 final 0.0207 | l1 1e-1:50 1e-2:- @40 0.116 | truth@40 0.284  (13s)
+[R=50 WT K=8] PDHG Ong k-space Sigma=100.0*p                 own 1e-1:24 1e-2:130 1e-3:- @40 0.0572 final 0.00532 | l1 1e-1:24 1e-2:130 @40 0.0572 | truth@40 0.279  (12s)
+[R=50 WT K=8] PDHG scalar sigma=1.0/||A||                    own 1e-1:162 1e-2:- 1e-3:- @40 0.213 final 0.0845 | l1 1e-1:162 1e-2:- @40 0.213 | truth@40 0.347  (12s)
+[R=50 WT K=8] PDHG scalar sigma=10.0/||A||                   own 1e-1:189 1e-2:- 1e-3:- @40 0.254 final 0.0954 | l1 1e-1:189 1e-2:- @40 0.254 | truth@40 0.312  (12s)
+[R=50 WT K=8] PDHG scalar sigma=100.0/||A||                  own 1e-1:- 1e-2:- 1e-3:- @40 0.33 final 0.258 | l1 1e-1:- 1e-2:- @40 0.33 | truth@40 0.349  (12s)
+[R=50 WT K=8] done in 1949s
+[R=100 WT K=8] setup 2.1s; spokes/set [12, 8, 9, 11, 10, 12, 10, 13]; pooled R 12.51; L 4.9e+04 bulk 50.5; floor frac 0.52; heldout(truth) 1.110
+[R=100 WT K=8] lambda 0.01: truth err 0.4247
+[R=100 WT K=8] lambda 0.003: truth err 0.3653
+[R=100 WT K=8] lambda 0.001: truth err 0.3452
+[R=100 WT K=8] lambda 0.0003: truth err 0.3379
+[R=100 WT K=8] lambda 0.0001: truth err 0.3415
+[R=100 WT K=8] lambda 3e-05: truth err 0.3494
+[R=100 WT K=8] l1 reference: {'stage_change': 7.740650835247875e-05, 'truth_err_xs_l1': 0.3380073986474207, 'heldout_xs_l1': np.float64(11.629670245923952), 'F_star': 53135.017678502576, 'pg_residual': 1.5489309784331525e-05, 'zero_frac_xs': 0.0}
+[R=100 WT K=8] smooth gamma=1/bulk ref: {'lbfgs_vs_ncg_polish': 9.958930600633022e-14, 'dist_to_l1': 0.274952208830627, 'truth_err': 0.4098663043193882, 'heldout': np.float64(26.456577913800903), 'F': 22290.54220076072, 'frac_quadratic_region': 0.9989508433952878}
+[R=100 WT K=8] smooth gamma=0.1/bulk ref: {'lbfgs_vs_ncg_polish': 2.6771986630771326e-14, 'dist_to_l1': 0.12203402289593018, 'truth_err': 0.3313776706556199, 'heldout': np.float64(11.433498083341899), 'F': 41625.4704069747, 'frac_quadratic_region': 0.9894270338714783}
+[R=100 WT K=8] smooth gamma=0.01/bulk ref: {'lbfgs_vs_ncg_polish': 2.489888372451481e-14, 'dist_to_l1': 0.028233478277580187, 'truth_err': 0.33518524001858085, 'heldout': np.float64(11.437237696408245), 'F': 51488.088295959, 'frac_quadratic_region': 0.9744041966264189}
+[R=100 WT K=8] smooth gamma=0.001/bulk ref: {'lbfgs_vs_ncg_polish': 3.718294610288795e-09, 'dist_to_l1': 0.003267840523531394, 'truth_err': 0.3376962455285579, 'heldout': np.float64(11.60608542308921), 'F': 52951.78747985869, 'frac_quadratic_region': 0.9711572378239045}
+[R=100 WT K=8] PCG unregularised|I: {'best_truth_it': 64, 'best_truth_err': 0.37587515980005204, 'heldout_min_it': 79, 'truth_at_heldout_min': 0.37680650907527435, 'truth_at_100': 0.379350671338194, 'dist_to_l1_min_at_heldout': 0.356469922449804}
+[R=100 WT K=8] PCG unregularised|Cn: {'best_truth_it': 100, 'best_truth_err': 2.2626902852036155, 'heldout_min_it': 100, 'truth_at_heldout_min': 2.2626902852036155, 'truth_at_100': 2.2626902852036155, 'dist_to_l1_min_at_heldout': 2.2814508322737796}
+[R=100 WT K=8] PCG unregularised|Cn+1bulk: {'best_truth_it': 100, 'best_truth_err': 1.5045607632355882, 'heldout_min_it': 100, 'truth_at_heldout_min': 1.5045607632355882, 'truth_at_100': 1.5045607632355882, 'dist_to_l1_min_at_heldout': 1.51672587987925}
+[R=100 WT K=8] NCG|I                                          own 1e-1:77 1e-2:186 1e-3:- @40 0.211 final 0.00728 | l1 1e-1:- 1e-2:- @40 0.234 | truth@40 0.347  (14s)
+[R=100 WT K=8] NCG|Cn                                         own 1e-1:159 1e-2:- 1e-3:- @40 1.18 final 0.0332 | l1 1e-1:- 1e-2:- @40 1.17 | truth@40 1.18  (14s)
+[R=100 WT K=8] NCG|Cn+0.1bulk                                 own 1e-1:150 1e-2:- 1e-3:- @40 1.11 final 0.0229 | l1 1e-1:- 1e-2:- @40 1.11 | truth@40 1.12  (14s)
+[R=100 WT K=8] NCG|Cn+1bulk                                   own 1e-1:109 1e-2:170 1e-3:- @40 0.801 final 0.00292 | l1 1e-1:- 1e-2:- @40 0.804 | truth@40 0.835  (14s)
+[R=100 WT K=8] NCG|Cn+10bulk                                  own 1e-1:58 1e-2:106 1e-3:148 @40 0.254 final 7.77e-05 | l1 1e-1:- 1e-2:- @40 0.278 | truth@40 0.404  (14s)
+[R=100 WT K=8] NCG|Cn+100bulk                                 own 1e-1:48 1e-2:109 1e-3:169 @40 0.13 final 0.000328 | l1 1e-1:- 1e-2:- @40 0.172 | truth@40 0.337  (14s)
+[R=100 WT K=8] NCG|Cnp (pilot 5)                              own 1e-1:108 1e-2:166 1e-3:- @40 1.14 final 0.00238 | l1 1e-1:- 1e-2:- @40 1.14 | truth@40 1.16  (14s)
+[R=100 WT K=8] LBFGS3|I                                       own 1e-1:83 1e-2:200 1e-3:- @40 0.216 final 0.00991 | l1 1e-1:- 1e-2:- @40 0.238 | truth@40 0.346  (14s)
+[R=100 WT K=8] LBFGS3|Cn+1bulk                                own 1e-1:128 1e-2:197 1e-3:- @40 0.857 final 0.00897 | l1 1e-1:- 1e-2:- @40 0.859 | truth@40 0.885  (14s)
+[R=100 WT K=8] LBFGS3|Cnp (pilot 5)                           own 1e-1:127 1e-2:193 1e-3:- @40 1.29 final 0.00781 | l1 1e-1:- 1e-2:- @40 1.29 | truth@40 1.3  (15s)
+[R=100 WT K=8] NCG|I gamma=1                                  own 1e-1:88 1e-2:- 1e-3:- @40 0.231 final 0.0123 | l1 1e-1:- 1e-2:- @40 0.284 | truth@40 0.361  (13s)
+[R=100 WT K=8] NCG|Cn+1bulk gamma=1                           own 1e-1:102 1e-2:166 1e-3:- @40 0.77 final 0.00274 | l1 1e-1:- 1e-2:- @40 0.758 | truth@40 0.789  (14s)
+[R=100 WT K=8] NCG|Cnp (pilot 5) gamma=1                      own 1e-1:114 1e-2:182 1e-3:- @40 0.956 final 0.00526 | l1 1e-1:- 1e-2:- @40 0.942 | truth@40 0.962  (14s)
+[R=100 WT K=8] NCG|I gamma=0.01                               own 1e-1:106 1e-2:- 1e-3:- @40 0.239 final 0.0292 | l1 1e-1:111 1e-2:- @40 0.243 | truth@40 0.342  (14s)
+[R=100 WT K=8] NCG|Cn+1bulk gamma=0.01                        own 1e-1:- 1e-2:- 1e-3:- @40 1.01 final 0.109 | l1 1e-1:- 1e-2:- @40 1.01 | truth@40 1.03  (15s)
+[R=100 WT K=8] NCG|Cnp (pilot 5) gamma=0.01                   own 1e-1:- 1e-2:- 1e-3:- @40 1.42 final 0.24 | l1 1e-1:- 1e-2:- @40 1.42 | truth@40 1.42  (16s)
+[R=100 WT K=8] NCG|I gamma=0.001                              own 1e-1:176 1e-2:- 1e-3:- @40 0.278 final 0.0801 | l1 1e-1:177 1e-2:- @40 0.278 | truth@40 0.354  (16s)
+[R=100 WT K=8] NCG|Cn+1bulk gamma=0.001                       own 1e-1:- 1e-2:- 1e-3:- @40 1.18 final 0.711 | l1 1e-1:- 1e-2:- @40 1.18 | truth@40 1.19  (17s)
+[R=100 WT K=8] NCG|Cnp (pilot 5) gamma=0.001                  own 1e-1:- 1e-2:- 1e-3:- @40 1.5 final 0.973 | l1 1e-1:- 1e-2:- @40 1.5 | truth@40 1.5  (17s)
+[R=100 WT K=8] FISTA-smooth|I                                 own 1e-1:159 1e-2:- 1e-3:- @40 0.316 final 0.0607 | l1 1e-1:- 1e-2:- @40 0.328 | truth@40 0.377  (10s)
+[R=100 WT K=8] ZMSHR1-M-smooth|I                              own 1e-1:155 1e-2:- 1e-3:- @40 0.262 final 0.075 | l1 1e-1:- 1e-2:- @40 0.279 | truth@40 0.357  (10s)
+[R=100 WT K=8] Anderson5 smooth-gradient map|I                own 1e-1:165 1e-2:- 1e-3:- @40 0.283 final 0.0799 | l1 1e-1:- 1e-2:- @40 0.297 | truth@40 0.363  (13s)
+[R=100 WT K=8] FISTA-smooth|Cn                                own 1e-1:- 1e-2:- 1e-3:- @40 2.08 final 0.323 | l1 1e-1:- 1e-2:- @40 2.08 | truth@40 2.07  (11s)
+[R=100 WT K=8] ZMSHR1-M-smooth|Cn                             own 1e-1:- 1e-2:- 1e-3:- @40 1.66 final 0.365 | l1 1e-1:- 1e-2:- @40 1.66 | truth@40 1.66  (11s)
+[R=100 WT K=8] FISTA-smooth|Cn+1bulk                          own 1e-1:- 1e-2:- 1e-3:- @40 1.35 final 0.125 | l1 1e-1:- 1e-2:- @40 1.35 | truth@40 1.36  (11s)
+[R=100 WT K=8] ZMSHR1-M-smooth|Cn+1bulk                       own 1e-1:- 1e-2:- 1e-3:- @40 1.07 final 0.118 | l1 1e-1:- 1e-2:- @40 1.07 | truth@40 1.09  (11s)
+[R=100 WT K=8] Anderson5 smooth-gradient map|Cn+1bulk         own 1e-1:- 1e-2:- 1e-3:- @40 1.29 final 0.704 | l1 1e-1:- 1e-2:- @40 1.29 | truth@40 1.3  (12s)
+[R=100 WT K=8] FISTA-smooth|Cn+1/gamma                        own 1e-1:110 1e-2:- 1e-3:- @40 0.605 final 0.0303 | l1 1e-1:- 1e-2:- @40 0.611 | truth@40 0.654  (10s)
+[R=100 WT K=8] ZMSHR1-M-smooth|Cn+1/gamma                     own 1e-1:80 1e-2:165 1e-3:- @40 0.456 final 0.00287 | l1 1e-1:- 1e-2:- @40 0.466 | truth@40 0.534  (11s)
+[R=100 WT K=8] FISTA-exact|I step 1.0/L                       own 1e-1:176 1e-2:- 1e-3:- @40 0.323 final 0.0787 | l1 1e-1:176 1e-2:- @40 0.323 | truth@40 0.374  (10s)
+[R=100 WT K=8] FISTA-exact|I step 0.3/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.39 final 0.184 | l1 1e-1:- 1e-2:- @40 0.39 | truth@40 0.42  (11s)
+[R=100 WT K=8] FISTA-exact|I step 2.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 inf final inf | l1 1e-1:- 1e-2:- @40 inf | truth@40 inf DIVERGED (1s)
+[R=100 WT K=8] 0SR1 prox-QN (Becker-Fadili)                   own 1e-1:128 1e-2:- 1e-3:- @40 0.307 final 0.0391 | l1 1e-1:128 1e-2:- @40 0.307 | truth@40 0.366  (22s)
+[R=100 WT K=8] Anderson5 on FB map (exact prox, 1/L)          own 1e-1:- 1e-2:- 1e-3:- @40 0.362 final 0.296 | l1 1e-1:- 1e-2:- @40 0.362 | truth@40 0.4  (12s)
+[R=100 WT K=8] ADMM-PCG rho=0.1*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.76 final 0.911 | l1 1e-1:- 1e-2:- @40 1.76 | truth@40 1.75  (9s)
+[R=100 WT K=8] ADMM-PCG rho=0.1*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 1.4 final 0.619 | l1 1e-1:- 1e-2:- @40 1.4 | truth@40 1.4  (8s)
+[R=100 WT K=8] ADMM-PCG rho=0.3*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.52 final 0.735 | l1 1e-1:- 1e-2:- @40 1.52 | truth@40 1.52  (9s)
+[R=100 WT K=8] ADMM-PCG rho=0.3*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 1.16 final 0.371 | l1 1e-1:- 1e-2:- @40 1.16 | truth@40 1.17  (8s)
+[R=100 WT K=8] ADMM-PCG rho=1.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.18 final 0.527 | l1 1e-1:- 1e-2:- @40 1.18 | truth@40 1.19  (8s)
+[R=100 WT K=8] ADMM-PCG rho=1.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.884 final 0.227 | l1 1e-1:- 1e-2:- @40 0.884 | truth@40 0.91  (8s)
+[R=100 WT K=8] ADMM-PCG rho=3.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 0.86 final 0.309 | l1 1e-1:- 1e-2:- @40 0.86 | truth@40 0.885  (8s)
+[R=100 WT K=8] ADMM-PCG rho=3.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 0.589 final 0.127 | l1 1e-1:- 1e-2:- @40 0.589 | truth@40 0.633  (8s)
+[R=100 WT K=8] ADMM-PCG rho=10.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.549 final 0.163 | l1 1e-1:- 1e-2:- @40 0.549 | truth@40 0.595  (8s)
+[R=100 WT K=8] ADMM-PCG rho=10.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.342 final 0.144 | l1 1e-1:- 1e-2:- @40 0.342 | truth@40 0.403  (8s)
+[R=100 WT K=8] ADMM-PCG rho=30.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.38 final 0.163 | l1 1e-1:- 1e-2:- @40 0.38 | truth@40 0.435  (8s)
+[R=100 WT K=8] ADMM-PCG rho=30.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.348 final 0.24 | l1 1e-1:- 1e-2:- @40 0.348 | truth@40 0.391  (9s)
+[R=100 WT K=8] ADMM-PCG rho=100.0*bulk inner=3                own 1e-1:- 1e-2:- 1e-3:- @40 0.362 final 0.255 | l1 1e-1:- 1e-2:- @40 0.362 | truth@40 0.4  (8s)
+[R=100 WT K=8] ADMM-PCG rho=100.0*bulk inner=8                own 1e-1:- 1e-2:- 1e-3:- @40 0.419 final 0.322 | l1 1e-1:- 1e-2:- @40 0.419 | truth@40 0.446  (8s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=0.3*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.577 final 0.344 | l1 1e-1:- 1e-2:- @40 0.577 | truth@40 0.64  (8s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=1.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.446 final 0.236 | l1 1e-1:- 1e-2:- @40 0.446 | truth@40 0.545  (8s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=3.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.351 final 0.169 | l1 1e-1:- 1e-2:- @40 0.351 | truth@40 0.473  (8s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=10.0*p                  own 1e-1:164 1e-2:- 1e-3:- @40 0.224 final 0.0788 | l1 1e-1:164 1e-2:- @40 0.224 | truth@40 0.384  (8s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=30.0*p                  own 1e-1:65 1e-2:- 1e-3:- @40 0.141 final 0.0229 | l1 1e-1:65 1e-2:- @40 0.141 | truth@40 0.362  (9s)
+[R=100 WT K=8] PDHG Ong k-space Sigma=100.0*p                 own 1e-1:32 1e-2:127 1e-3:- @40 0.0745 final 0.0031 | l1 1e-1:32 1e-2:127 @40 0.0745 | truth@40 0.345  (9s)
+[R=100 WT K=8] PDHG scalar sigma=1.0/||A||                    own 1e-1:146 1e-2:- 1e-3:- @40 0.217 final 0.0729 | l1 1e-1:146 1e-2:- @40 0.217 | truth@40 0.398  (6s)
+[R=100 WT K=8] PDHG scalar sigma=10.0/||A||                   own 1e-1:190 1e-2:- 1e-3:- @40 0.256 final 0.0956 | l1 1e-1:190 1e-2:- @40 0.256 | truth@40 0.357  (7s)
+[R=100 WT K=8] PDHG scalar sigma=100.0/||A||                  own 1e-1:- 1e-2:- 1e-3:- @40 0.383 final 0.284 | l1 1e-1:- 1e-2:- @40 0.383 | truth@40 0.415  (7s)
+[R=100 WT K=8] done in 1707s
+[R=200 WT K=8] setup 2.0s; spokes/set [6, 4, 4, 5, 5, 6, 5, 7]; pooled R 25.32; L 2.65e+04 bulk 20.9; floor frac 0.59; heldout(truth) 1.129
+[R=200 WT K=8] lambda 0.01: truth err 0.4807
+[R=200 WT K=8] lambda 0.003: truth err 0.4385
+[R=200 WT K=8] lambda 0.001: truth err 0.4295
+[R=200 WT K=8] lambda 0.0003: truth err 0.4258
+[R=200 WT K=8] lambda 0.0001: truth err 0.4276
+[R=200 WT K=8] lambda 3e-05: truth err 0.4320
+[R=200 WT K=8] l1 reference: {'stage_change': 0.004471426412121212, 'truth_err_xs_l1': 0.42540391245334097, 'heldout_xs_l1': np.float64(39.39599764005016), 'F_star': 22233.334098365955, 'pg_residual': 0.0010267653442304365, 'zero_frac_xs': 0.0}
+[R=200 WT K=8] smooth gamma=1/bulk ref: {'lbfgs_vs_ncg_polish': 2.1384686554421645e-13, 'dist_to_l1': 0.30221580117675795, 'truth_err': 0.5083970694145128, 'heldout': np.float64(71.0021904289028), 'F': 7797.190393245102, 'frac_quadratic_region': 0.9995839551395107}
+[R=200 WT K=8] smooth gamma=0.1/bulk ref: {'lbfgs_vs_ncg_polish': 3.860051121695228e-14, 'dist_to_l1': 0.14335252578416133, 'truth_err': 0.4089626351023153, 'heldout': np.float64(36.520469413886936), 'F': 16048.24725300063, 'frac_quadratic_region': 0.9936688825577714}
+[R=200 WT K=8] smooth gamma=0.01/bulk ref: {'lbfgs_vs_ncg_polish': 2.308935272763097e-12, 'dist_to_l1': 0.044091086801291944, 'truth_err': 0.4209947354582082, 'heldout': np.float64(38.983227133894225), 'F': 20719.43525619781, 'frac_quadratic_region': 0.9842174286618731}
+[R=200 WT K=8] smooth gamma=0.001/bulk ref: {'lbfgs_vs_ncg_polish': 1.0373241898715793e-06, 'dist_to_l1': 0.006358549726615821, 'truth_err': 0.4249431978500038, 'heldout': np.float64(39.347690453299386), 'F': 21550.336360309004, 'frac_quadratic_region': 0.9817392484059151}
+[R=200 WT K=8] PCG unregularised|I: {'best_truth_it': 100, 'best_truth_err': 0.4495446065156213, 'heldout_min_it': 100, 'truth_at_heldout_min': 0.4495446065156213, 'truth_at_100': 0.4495446065156213, 'dist_to_l1_min_at_heldout': 0.42127731190863593}
+[R=200 WT K=8] PCG unregularised|Cn: {'best_truth_it': 1, 'best_truth_err': 1.8885452352054926, 'heldout_min_it': 29, 'truth_at_heldout_min': 4.083917979533054, 'truth_at_100': 4.114821781485863, 'dist_to_l1_min_at_heldout': 4.139323495004418}
+[R=200 WT K=8] PCG unregularised|Cn+1bulk: {'best_truth_it': 1, 'best_truth_err': 1.674547811244519, 'heldout_min_it': 100, 'truth_at_heldout_min': 2.7219276850077927, 'truth_at_100': 2.7219276850077927, 'dist_to_l1_min_at_heldout': 2.7586974265601016}
+[R=200 WT K=8] NCG|I                                          own 1e-1:104 1e-2:- 1e-3:- @40 0.276 final 0.0237 | l1 1e-1:- 1e-2:- @40 0.291 | truth@40 0.419  (15s)
+[R=200 WT K=8] NCG|Cn                                         own 1e-1:- 1e-2:- 1e-3:- @40 2.15 final 0.36 | l1 1e-1:- 1e-2:- @40 2.14 | truth@40 2.12  (15s)
+[R=200 WT K=8] NCG|Cn+0.1bulk                                 own 1e-1:- 1e-2:- 1e-3:- @40 2.02 final 0.317 | l1 1e-1:- 1e-2:- @40 2.01 | truth@40 2  (15s)
+[R=200 WT K=8] NCG|Cn+1bulk                                   own 1e-1:- 1e-2:- 1e-3:- @40 1.46 final 0.127 | l1 1e-1:- 1e-2:- @40 1.46 | truth@40 1.46  (15s)
+[R=200 WT K=8] NCG|Cn+10bulk                                  own 1e-1:112 1e-2:195 1e-3:- @40 0.697 final 0.00847 | l1 1e-1:- 1e-2:- @40 0.701 | truth@40 0.751  (16s)
+[R=200 WT K=8] NCG|Cn+100bulk                                 own 1e-1:73 1e-2:166 1e-3:- @40 0.24 final 0.00444 | l1 1e-1:- 1e-2:- @40 0.262 | truth@40 0.432  (16s)
+[R=200 WT K=8] NCG|Cnp (pilot 5)                              own 1e-1:194 1e-2:- 1e-3:- @40 2.22 final 0.0871 | l1 1e-1:- 1e-2:- @40 2.21 | truth@40 2.19  (16s)
+[R=200 WT K=8] LBFGS3|I                                       own 1e-1:110 1e-2:- 1e-3:- @40 0.278 final 0.0292 | l1 1e-1:- 1e-2:- @40 0.293 | truth@40 0.418  (15s)
+[R=200 WT K=8] LBFGS3|Cn+1bulk                                own 1e-1:- 1e-2:- 1e-3:- @40 1.52 final 0.222 | l1 1e-1:- 1e-2:- @40 1.51 | truth@40 1.51  (17s)
+[R=200 WT K=8] LBFGS3|Cnp (pilot 5)                           own 1e-1:- 1e-2:- 1e-3:- @40 2.3 final 0.167 | l1 1e-1:- 1e-2:- @40 2.29 | truth@40 2.27  (17s)
+[R=200 WT K=8] NCG|I gamma=1                                  own 1e-1:128 1e-2:- 1e-3:- @40 0.317 final 0.034 | l1 1e-1:- 1e-2:- @40 0.333 | truth@40 0.427  (14s)
+[R=200 WT K=8] NCG|Cn+1bulk gamma=1                           own 1e-1:- 1e-2:- 1e-3:- @40 1.45 final 0.108 | l1 1e-1:- 1e-2:- @40 1.44 | truth@40 1.44  (15s)
+[R=200 WT K=8] NCG|Cnp (pilot 5) gamma=1                      own 1e-1:- 1e-2:- 1e-3:- @40 1.91 final 0.149 | l1 1e-1:- 1e-2:- @40 1.9 | truth@40 1.89  (15s)
+[R=200 WT K=8] NCG|I gamma=0.01                               own 1e-1:141 1e-2:- 1e-3:- @40 0.3 final 0.0574 | l1 1e-1:150 1e-2:- @40 0.303 | truth@40 0.419  (15s)
+[R=200 WT K=8] NCG|Cn+1bulk gamma=0.01                        own 1e-1:- 1e-2:- 1e-3:- @40 1.69 final 0.446 | l1 1e-1:- 1e-2:- @40 1.69 | truth@40 1.68  (16s)
+[R=200 WT K=8] NCG|Cnp (pilot 5) gamma=0.01                   own 1e-1:- 1e-2:- 1e-3:- @40 2.12 final 0.549 | l1 1e-1:- 1e-2:- @40 2.11 | truth@40 2.09  (16s)
+[R=200 WT K=8] NCG|I gamma=0.001                              own 1e-1:- 1e-2:- 1e-3:- @40 0.339 final 0.103 | l1 1e-1:- 1e-2:- @40 0.34 | truth@40 0.429  (17s)
+[R=200 WT K=8] NCG|Cn+1bulk gamma=0.001                       own 1e-1:- 1e-2:- 1e-3:- @40 1.81 final 1.18 | l1 1e-1:- 1e-2:- @40 1.81 | truth@40 1.8  (18s)
+[R=200 WT K=8] NCG|Cnp (pilot 5) gamma=0.001                  own 1e-1:- 1e-2:- 1e-3:- @40 2.46 final 1.54 | l1 1e-1:- 1e-2:- @40 2.46 | truth@40 2.44  (19s)
+[R=200 WT K=8] FISTA-smooth|I                                 own 1e-1:- 1e-2:- 1e-3:- @40 0.393 final 0.112 | l1 1e-1:- 1e-2:- @40 0.402 | truth@40 0.456  (10s)
+[R=200 WT K=8] ZMSHR1-M-smooth|I                              own 1e-1:- 1e-2:- 1e-3:- @40 0.352 final 0.103 | l1 1e-1:- 1e-2:- @40 0.363 | truth@40 0.438  (10s)
+[R=200 WT K=8] Anderson5 smooth-gradient map|I                own 1e-1:- 1e-2:- 1e-3:- @40 0.354 final 0.123 | l1 1e-1:- 1e-2:- @40 0.364 | truth@40 0.439  (13s)
+[R=200 WT K=8] FISTA-smooth|Cn                                own 1e-1:- 1e-2:- 1e-3:- @40 3.53 final 0.95 | l1 1e-1:- 1e-2:- @40 3.51 | truth@40 3.47  (11s)
+[R=200 WT K=8] ZMSHR1-M-smooth|Cn                             own 1e-1:- 1e-2:- 1e-3:- @40 3 final 1.1 | l1 1e-1:- 1e-2:- @40 2.98 | truth@40 2.95  (12s)
+[R=200 WT K=8] FISTA-smooth|Cn+1bulk                          own 1e-1:- 1e-2:- 1e-3:- @40 2.28 final 0.607 | l1 1e-1:- 1e-2:- @40 2.28 | truth@40 2.25  (12s)
+[R=200 WT K=8] ZMSHR1-M-smooth|Cn+1bulk                       own 1e-1:- 1e-2:- 1e-3:- @40 1.79 final 0.597 | l1 1e-1:- 1e-2:- @40 1.79 | truth@40 1.78  (12s)
+[R=200 WT K=8] Anderson5 smooth-gradient map|Cn+1bulk         own 1e-1:- 1e-2:- 1e-3:- @40 2.07 final 1.2 | l1 1e-1:- 1e-2:- @40 2.06 | truth@40 2.05  (15s)
+[R=200 WT K=8] FISTA-smooth|Cn+1/gamma                        own 1e-1:- 1e-2:- 1e-3:- @40 1.01 final 0.129 | l1 1e-1:- 1e-2:- @40 1.01 | truth@40 1.02  (11s)
+[R=200 WT K=8] ZMSHR1-M-smooth|Cn+1/gamma                     own 1e-1:- 1e-2:- 1e-3:- @40 0.912 final 0.134 | l1 1e-1:- 1e-2:- @40 0.914 | truth@40 0.932  (12s)
+[R=200 WT K=8] FISTA-exact|I step 1.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.396 final 0.124 | l1 1e-1:- 1e-2:- @40 0.396 | truth@40 0.453  (11s)
+[R=200 WT K=8] FISTA-exact|I step 0.3/L                       own 1e-1:- 1e-2:- 1e-3:- @40 0.469 final 0.241 | l1 1e-1:- 1e-2:- @40 0.469 | truth@40 0.502  (10s)
+[R=200 WT K=8] FISTA-exact|I step 2.0/L                       own 1e-1:- 1e-2:- 1e-3:- @40 inf final inf | l1 1e-1:- 1e-2:- @40 inf | truth@40 inf DIVERGED (1s)
+[R=200 WT K=8] 0SR1 prox-QN (Becker-Fadili)                   own 1e-1:165 1e-2:- 1e-3:- @40 0.396 final 0.0706 | l1 1e-1:165 1e-2:- @40 0.396 | truth@40 0.453  (22s)
+[R=200 WT K=8] Anderson5 on FB map (exact prox, 1/L)          own 1e-1:- 1e-2:- 1e-3:- @40 0.436 final 0.365 | l1 1e-1:- 1e-2:- @40 0.436 | truth@40 0.477  (14s)
+[R=200 WT K=8] ADMM-PCG rho=0.1*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 3.05 final 1.7 | l1 1e-1:- 1e-2:- @40 3.05 | truth@40 3.01  (10s)
+[R=200 WT K=8] ADMM-PCG rho=0.1*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 2.49 final 1.27 | l1 1e-1:- 1e-2:- @40 2.49 | truth@40 2.47  (9s)
+[R=200 WT K=8] ADMM-PCG rho=0.3*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 2.71 final 1.49 | l1 1e-1:- 1e-2:- @40 2.71 | truth@40 2.68  (10s)
+[R=200 WT K=8] ADMM-PCG rho=0.3*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 2.1 final 1.01 | l1 1e-1:- 1e-2:- @40 2.1 | truth@40 2.08  (8s)
+[R=200 WT K=8] ADMM-PCG rho=1.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 2.06 final 1.2 | l1 1e-1:- 1e-2:- @40 2.06 | truth@40 2.04  (9s)
+[R=200 WT K=8] ADMM-PCG rho=1.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 1.5 final 0.785 | l1 1e-1:- 1e-2:- @40 1.5 | truth@40 1.49  (8s)
+[R=200 WT K=8] ADMM-PCG rho=3.0*bulk inner=3                  own 1e-1:- 1e-2:- 1e-3:- @40 1.42 final 0.893 | l1 1e-1:- 1e-2:- @40 1.42 | truth@40 1.42  (9s)
+[R=200 WT K=8] ADMM-PCG rho=3.0*bulk inner=8                  own 1e-1:- 1e-2:- 1e-3:- @40 1.06 final 0.586 | l1 1e-1:- 1e-2:- @40 1.06 | truth@40 1.07  (8s)
+[R=200 WT K=8] ADMM-PCG rho=10.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.919 final 0.562 | l1 1e-1:- 1e-2:- @40 0.919 | truth@40 0.933  (9s)
+[R=200 WT K=8] ADMM-PCG rho=10.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.624 final 0.321 | l1 1e-1:- 1e-2:- @40 0.624 | truth@40 0.659  (8s)
+[R=200 WT K=8] ADMM-PCG rho=30.0*bulk inner=3                 own 1e-1:- 1e-2:- 1e-3:- @40 0.614 final 0.352 | l1 1e-1:- 1e-2:- @40 0.614 | truth@40 0.649  (10s)
+[R=200 WT K=8] ADMM-PCG rho=30.0*bulk inner=8                 own 1e-1:- 1e-2:- 1e-3:- @40 0.431 final 0.291 | l1 1e-1:- 1e-2:- @40 0.431 | truth@40 0.478  (10s)
+[R=200 WT K=8] ADMM-PCG rho=100.0*bulk inner=3                own 1e-1:- 1e-2:- 1e-3:- @40 0.464 final 0.326 | l1 1e-1:- 1e-2:- @40 0.464 | truth@40 0.503  (9s)
+[R=200 WT K=8] ADMM-PCG rho=100.0*bulk inner=8                own 1e-1:- 1e-2:- 1e-3:- @40 0.482 final 0.378 | l1 1e-1:- 1e-2:- @40 0.482 | truth@40 0.513  (9s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=0.3*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.577 final 0.315 | l1 1e-1:- 1e-2:- @40 0.577 | truth@40 0.704  (6s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=1.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.439 final 0.241 | l1 1e-1:- 1e-2:- @40 0.439 | truth@40 0.59  (6s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=3.0*p                   own 1e-1:- 1e-2:- 1e-3:- @40 0.316 final 0.175 | l1 1e-1:- 1e-2:- @40 0.316 | truth@40 0.509  (6s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=10.0*p                  own 1e-1:164 1e-2:- 1e-3:- @40 0.21 final 0.0793 | l1 1e-1:164 1e-2:- @40 0.21 | truth@40 0.452  (6s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=30.0*p                  own 1e-1:70 1e-2:- 1e-3:- @40 0.151 final 0.026 | l1 1e-1:70 1e-2:- @40 0.151 | truth@40 0.452  (6s)
+[R=200 WT K=8] PDHG Ong k-space Sigma=100.0*p                 own 1e-1:60 1e-2:- 1e-3:- @40 0.144 final 0.0149 | l1 1e-1:60 1e-2:- @40 0.144 | truth@40 0.427  (6s)
+[R=200 WT K=8] PDHG scalar sigma=1.0/||A||                    own 1e-1:118 1e-2:- 1e-3:- @40 0.214 final 0.0557 | l1 1e-1:118 1e-2:- @40 0.214 | truth@40 0.458  (6s)
+[R=200 WT K=8] PDHG scalar sigma=10.0/||A||                   own 1e-1:- 1e-2:- 1e-3:- @40 0.341 final 0.171 | l1 1e-1:- 1e-2:- @40 0.341 | truth@40 0.436  (6s)
+[R=200 WT K=8] PDHG scalar sigma=100.0/||A||                  own 1e-1:- 1e-2:- 1e-3:- @40 0.481 final 0.378 | l1 1e-1:- 1e-2:- @40 0.481 | truth@40 0.512  (6s)
+[R=200 WT K=8] done in 1754s

@@ -1,0 +1,43 @@
+=== fwd_m1300000_c192_l1_o0: --mode fwd --m 1300000 --ncb 192 --nseg 1 --order 0 --designs halo,gm --check 800 --reps 5
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 192 (192 coils x 1 seg), order 0, M 1300000
+trajectory: 1300000 samples of 326 readouts (encode 0, rotations from 3796), |k|max 1567.5 rad/m -> 0.98 π
+  grid 11.44 GiB, y 1.86 GiB, 249600000000 useful complex MACs per pass
+  halo: 194 candidates, compiled in 17.7 s
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 128 pad 0 smem  60512 regs  56:  2156.31 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 128 pad 0 smem  60512 regs  64:  2565.51 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 128 pad 0 smem  60512 regs 128:  3464.40 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 256 pad 0 smem  78432 regs  56:  2161.28 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 256 pad 0 smem  78432 regs  64:  2618.31 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 128 smax 256 pad 0 smem  78432 regs 128:  3474.40 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 256 smax 256 pad 0 smem  78432 regs  64:  1508.40 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 256 smax 256 pad 0 smem  78432 regs  80:  1929.07 ms
+    halo tt  2 ch   4 tps  1 (fc  4) nt 256 smax 256 pad 0 smem  78432 regs 128:  3325.38 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 128 pad 0 smem  81808 regs  65:  1327.47 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 128 pad 0 smem  81808 regs  96:  1956.94 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 128 pad 0 smem  81808 regs 168:  2877.56 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 256 pad 0 smem  99728 regs  65:  1328.67 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 256 pad 0 smem  99728 regs  96:  1956.13 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 128 smax 256 pad 0 smem  99728 regs 168:  2876.68 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 256 smax 256 pad 0 smem  99728 regs  65:  1260.91 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 256 smax 256 pad 0 smem  99728 regs 108:  1722.41 ms
+    halo tt  2 ch   6 tps  1 (fc  6) nt 256 smax 256 pad 0 smem  99728 regs 160:  2968.59 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax  64 pad 0 smem  72848 regs  48:  1296.65 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax  64 pad 0 smem  72848 regs  72:  1487.09 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax  64 pad 0 smem  72848 regs 128:  1875.50 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 128 pad 0 smem  81808 regs  48:  1295.34 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 128 pad 0 smem  81808 regs  72:  1486.27 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 128 pad 0 smem  81808 regs 128:  1874.04 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 256 pad 0 smem  99728 regs  48:  1295.89 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 256 pad 0 smem  99728 regs  72:  1485.98 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 128 smax 256 pad 0 smem  99728 regs 128:  1873.35 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 128 pad 0 smem  81808 regs  48:  1151.85 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 128 pad 0 smem  81808 regs  80:  1361.61 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 128 pad 0 smem  81808 regs 128:  1728.78 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 256 pad 0 smem  99728 regs  48:  1151.88 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 256 pad 0 smem  99728 regs  80:  1361.89 ms
+    halo tt  2 ch   6 tps  2 (fc  3) nt 256 smax 256 pad 0 smem  99728 regs 128:  1728.30 ms
+    halo tt  2 ch   6 tps  3 (fc  2) nt 128 smax 128 pad 0 smem  81808 regs  56:   952.37 ms
+    halo tt  2 ch   6 tps  3 (fc  2) nt 128 smax 128 pad 0 smem  81808 regs  72:  1323.89 ms
+    halo tt  2 ch   6 tps  3 (fc  2) nt 128 smax 128 pad 0 smem  81808 regs 128:  1504.72 ms
+    halo tt  2 ch   6 tps  3 (fc  2) nt 128 smax 256 pad 0 smem  99728 regs  56:   952.48 ms
+FAILED rc=143

@@ -1,0 +1,17 @@
+coils: 30 of 32 virtual coils (energy ≥ 99.900 %), 99.945 % energy kept; σ²/Σσ²: [3.2e-1, 1.4e-1, 8.6e-2, 7.4e-2, 6.1e-2, 5.2e-2, 4.2e-2, 3.8e-2, 3.2e-2, 2.6e-2, 1.9e-2, 1.7e-2, 1.4e-2, 1.3e-2, 1.0e-2, 9.0e-3, 7.8e-3, 6.3e-3, 5.5e-3, 5.0e-3, 3.9e-3, 3.2e-3, 2.8e-3, 2.3e-3, 1.8e-3, 1.6e-3, 1.2e-3, 8.8e-4, 8.0e-4, 4.9e-4, 2.9e-4, 2.6e-4]
+setup 35.7 s: grid [254, 144, 114], region 4169664 voxels, 30 virtual coils, 3990 ADC samples τ ∈ [1.600, 9.578] ms
+  [full, pd weights, noise time weights] 4169664 voxels, 2341196 fit, time grid 271 points; building the joint basis on the GPU (fp64 Gram)
+    [joint build] time Gram (2341196 fit voxels × 271 times) + eigh → K = 45: 12.31 s
+    [joint build] h for 4169664 voxels + reduced fp64 Gram (1350 × 1350): 22.90 s
+    [joint build] eigh of the reduced Gram (1350): 0.15 s
+    [joint build] least-squares time extension (32975 voxels × 3990 table times): 5.46 s
+    [joint build] total 40.8 s
+  [full, pd weights, noise time weights] coil-common weighted spectrum done (50 s)
+  [full, pd weights, noise time weights] ε = 1e-2: fixed (count LS) L = 13 (8.46e-3) → 390 ch; fixed (energy LS) L = 13 (6.82e-3) → 390 ch; SVD L = 10 (8.40e-3) → 300 ch; joint R = 220 (9.41e-3; predicted R 220); joint gain vs fixed 1.77×, vs SVD 1.36× (258 s)
+  [full, pd weights, noise time weights] ε = 1e-3: fixed (count LS) L = 20 (8.81e-4) → 600 ch; fixed (energy LS) L = 18 (9.27e-4) → 540 ch; SVD L = 13 (8.90e-4) → 390 ch; joint R = 332 (9.33e-4; predicted R 332); joint gain vs fixed 1.81×, vs SVD 1.17× (516 s)
+  [full, pd weights, noise time weights] ε = 1e-4: fixed (count LS) L = 37 (8.82e-5) → 1110 ch; fixed (energy LS) L = 30 (8.26e-5) → 900 ch; SVD L = 17 (7.36e-5) → 510 ch; joint R = 409 (8.01e-5; predicted R 409); joint gain vs fixed 2.71×, vs SVD 1.25× (919 s)
+  [full, pd weights, noise time weights] ε = 1e-2, joint R = 220: point-image error p50 1.23e-2, p99 8.66e-2, max 1.62e-1; weight fraction with ρ > 10ε 4.17e-3
+  [full, pd weights, noise time weights] ε = 1e-3, joint R = 332: point-image error p50 8.41e-4, p99 1.19e-2, max 1.28e-1; weight fraction with ρ > 10ε 1.21e-2
+  [full, pd weights, noise time weights] ε = 1e-4, joint R = 409: point-image error p50 9.38e-5, p99 1.04e-3, max 1.12e-2; weight fraction with ρ > 10ε 7.45e-3
+wrote /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/cl_compress/gpu/out/full_pd_noise.json
+done full_pd_noise

@@ -1,0 +1,116 @@
+\section{Plug-and-play, RED and compressed sensing with denoisers}
+
+\begin{frame}{Reconstruction with a learned prior}
+$y=Ax^\natural+n$, $\ f(x)=\tfrac12\norm{Ax-y}^2$, $\ H=A^\adj A$. Here $A$ is multi-coil, non-uniform, and \hl{massively undersampled} ($R\sim50$ per frame, so $\dim\ker A\approx 98\%$ of $n$).
+\pause
+\medskip
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+\textbf{Plug-and-play (PnP / P$^2$nP)}
+\[ x_{k+1}=D\big(x_k-\alpha P_k\nabla f(x_k)\big) \]
+$D$: trained denoiser. $P_k\succ0$: preconditioner, often a quasi-Newton matrix from iterate differences (ZMSHR1).
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{RED}
+\[ x_{k+1}=x_k-\alpha P_k\big(\nabla f(x_k)+\lambda(x_k-D(x_k))\big) \]
+The prior enters the descent direction itself.
+\end{column}
+\end{columns}
+\pause
+\medskip
+\textbf{Why this is mathematically interesting:} $D$ is an opaque map, $A$ has a huge null space, $P_k$ changes every iteration. What does it take to \emph{recover $x^\natural$}?
+\end{frame}
+
+\begin{frame}{Global contraction theory cannot work}
+Classical template (Ryu et al.): $D$ is $(1+\epsilon)$-Lipschitz and
+\[ (1+\epsilon)\,\rho(I-\alpha PH)<1\ \Rightarrow\ \text{convergence}. \]
+\pause
+\begin{itemize}
+\item If $\ker A\neq0$ then $\rho(I-\alpha PH)=1$. The hypothesis is \hl{unsatisfiable} in compressed sensing.
+\item Not even sufficient when $PH$ is non-normal: there is a 2-D counterexample with $1$-Lipschitz $D$ and divergent iterates. (Operator norm instead of $\rho$ repairs it.)
+\item Contraction can only come from the \emph{product} $D\circ(\text{data step})$: $D$ must kill exactly what the data cannot see.
+\end{itemize}
+\pause
+\textbf{Replace global by restricted.} Learned denoisers behave locally like projections: Jacobian $J_D(x)\approx\Pi_{T_x}$ onto a low-dimensional, signal-adaptive subspace (Mohan et al., Kadkhodaie et al.).
+\end{frame}
+
+\iflong
+\begin{frame}{Picture: tangent spaces and the null space}
+\centering
+\begin{tikzpicture}[scale=1.15]
+\draw[thick,mLightBrown,domain=-2.6:2.6,samples=60] plot (\x,{0.25*\x*\x-0.6+0.12*sin(\x*140)});
+\fill (0,-0.6) circle (0.06) node[below right]{$x^\natural$};
+\draw[blue!60!black,thick] (-1.6,-0.6)--(1.6,-0.6) node[right,font=\small]{$T$ (tangent, $\dim d$)};
+\draw[red!70!black,thick,dashed] (-0.7,-1.9)--(0.7,1.5) node[above,font=\small]{$\ker A$};
+\draw (-2.7,1.4) node[right,mLightBrown,font=\small]{prior manifold $\mathcal M$ (what $D$ projects onto)};
+\end{tikzpicture}
+\begin{itemize}
+\item $\ker A$ is huge, but need only avoid $T$: $\ \delta=\|\Pi_T(I-\alpha PH)\Pi_T\|<1$ is a \emph{restricted} isometry.
+\item $d\ll n$ is the \hl{local dimension of the image prior}, not the sparsity of any fixed basis.
+\end{itemize}
+\end{frame}
+\fi
+
+\begin{frame}{Theorem (restricted contraction to the truth)}
+\small
+\small
+Assume $D$'s secant acts on the error as a nonexpansive map supported on a $d$-dim.\ tangent space, up to leakage $\eta$. Let $\delta$ = restricted constant of the data step, $m$ = bound on the data step, noise $W$, model mismatch $\varepsilon_0=\|D(x^\natural)-x^\natural\|$.
+\[ \eta\, m\,(1-\delta+m)<1-\delta\ \Longrightarrow\ E_k=\|x_k-x^\natural\|\text{ converges linearly to a ball,} \]
+\[ \limsup_k E_k\ \le\ \frac{W+\mu+(1-\delta)\varepsilon_0+(1-\delta+m)\eta W'}{1-\delta-\eta m(1-\delta+m)} . \]
+\begin{itemize}
+\item No fixed point assumed, no global Lipschitz constant, arbitrary dynamic $P_k$, undersampled $A$.
+\item $\eta=0$: rate $\delta$, error $\varepsilon_0+(W+\mu)/(1-\delta)$.
+\item Soft thresholding satisfies it with $\eta=0$: recovers classical ISTA/LASSO local theory.
+\end{itemize}
+\Q{Measure $\eta$ for trained networks. Does training (noise-level, equivariance, architecture) control leakage, and can one \emph{train for small $\eta$}?}
+\end{frame}
+
+\begin{frame}{Sampling theorem: how many shots?}
+\small
+For random block sampling (spiral interleaves, radial spokes, \dots), matrix Chernoff on the restricted Gram matrix gives, with high probability,
+\[ \#\text{shots}\ \ \ge\ \frac{3\,\Phi_0}{t^2\,\lambda_-}\ \log\frac{2d}{p}\ \Longrightarrow\ \delta\le t. \]
+\begin{itemize}
+\item $\Phi_0$: \emph{block coherence} of $T$ w.r.t.\ the sampling blocks; $\lambda_-$: restricted expected curvature.
+\item Classical CS: $m\gtrsim s\log n$ with $s$ = sparsity. Here: \hl{proportional to the tangent dimension $d$ of the denoiser}, times coherence.
+\item Variable-density sampling enters through $\Phi_0$: the $k$-space density should be matched to how $T$ concentrates in frequency.
+\item Uniform version over a family of tangent spaces covers the ``moving basis'' of a learned prior.
+\end{itemize}
+\Q{Curvature: $\mathcal M$ is a manifold, not a union of fixed subspaces. How far from $x^\natural$ does the tangent theory extend, and what replaces the restricted isometry on the whole manifold (reach, metric entropy)?}
+\end{frame}
+
+\iflong
+\begin{frame}{Preconditioning changes the estimator}
+\footnotesize
+Local affine model of the denoiser at the truth. The PnP limit with preconditioner $P$ is available in closed form.
+\begin{itemize}
+\item Noise part is the \hl{best linear unbiased estimator on $T$} iff $\ \Pi_T P A^\adj(I-Q_T)=0$ (``$P$ does not map data-visible directions off $T$ into $T$'').
+\item Model mismatch inside $T$ is amplified by $(\alpha\Pi_T P H\Pi_T)^{-1}$: for $P=I$ up to the restricted condition number.
+\item \textbf{Density-compensation} preconditioners fail both tests; a tangent-restricted $P$ attains optimal variance \emph{and} unamplified bias.
+\end{itemize}
+\pause
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+\textbf{The quasi-Newton spectrum (ZMSHR1).} Secant $(s,u)$ with angle $\vartheta$, BB step $\rho$:
+\[ \mathrm{spec}\,P=\{\rho(1-\sin\vartheta)^{\times(n-1)},\ \rho(1+\sin\vartheta)\}. \]
+Exact, so the published stability constant is pessimistic by $\approx10^{7}$: the safeguard can never activate.
+\end{column}
+\begin{column}{0.5\textwidth}
+\textbf{Fixed-point displacement.} The fixed point of $x=D(x-\alpha P\nabla f)$ moves with $P$; there is an exact bound, and accelerations that \hl{preserve the fixed point} exist.
+\end{column}
+\end{columns}
+\end{frame}
+\fi
+
+\iflong
+\begin{frame}{RED: the prior inside the step}
+\footnotesize
+$g_k=\nabla f(x_k)+\lambda(x_k-D(x_k))$, $\ x_{k+1}=x_k-\alpha P_kg_k$, with $P_k$ from secants of the \emph{total} gradient.
+\begin{itemize}
+\item Fixed points satisfy $g=0$: \hl{independent of the metric $P$}. (For PnP they are not.) The metric changes only the path.
+\item If $D=\operatorname{prox}_{\theta R}$, $R$ convex: $x-D(x)=\theta\nabla M_{\theta R}(x)$ (Moreau envelope), and RED is quasi-Newton on $f+\lambda\theta M_{\theta R}$: a genuine objective.
+\item Static-tissue lock, $D=\Pi$ a projector: $\tfrac12\|(I-\Pi)x\|^2$, a quadratic penalty. Newton goes to the minimiser in one step.
+\item General trained $D$: Jacobian is neither symmetric nor a projector. No objective exists (Reehorst--Schniter), yet the iteration has fixed points and a restricted theory.
+\end{itemize}
+\Q{Restricted-contraction theorem for RED with a non-symmetric Jacobian; quantify what the quasi-Newton metric buys when $D$ has curvature.}
+\end{frame}
+\fi

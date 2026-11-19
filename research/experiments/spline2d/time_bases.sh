@@ -10,5 +10,5 @@ S=data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan
 for b in "1 0 20 0 frames8x20 --resp-keep 8:0" "8 0 10 3 bins8" "6 1 10 3 lin6" "4 1 10 3 lin4" "4 1 20 0 lin4_card20bins"; do
   set -- $b
   echo "== $5 (resp $1 deg $2, cardiac $3 deg $4) ${@:6}"
-  systemd-run --user --scope -q -p MemoryMax=60G -p MemorySwapMax=0 rustlib/target/release/splinerecon $S --rknots $1 --rdeg $2 --cknots $3 --cdeg $4 "${@:6}" --time-only --encodes 0 --eval 0.07:$O/idx_r0.07_f32.npy --out $O/time_$5 2>&1 | grep -E "time-only|ledger|GiB|autotune|panicked|does not fit"
+  systemd-run --user --scope -q -p MemoryMax=60G -p MemorySwapMax=0 rustlib/target/release/splinerecon $S --rknots $1 --rdeg $2 --cknots $3 --cdeg $4 --resp truth --coils 8 --no-gnl --seg-basis fixed --nseg 10 --conc-fit quad "${@:6}" --time-only --encodes 0 --eval 0.07:$O/idx_r0.07_f32.npy --out $O/time_$5 2>&1 | grep -E "time-only|ledger|GiB|autotune|panicked|does not fit"
 done

@@ -10,4 +10,6 @@ pub fn median(v: &[f32]) -> f32 {
 pub mod beats;
 pub mod seqsched;
 pub mod b0data;
+pub mod ratemap;
 pub mod physio;
+pub mod respfield;

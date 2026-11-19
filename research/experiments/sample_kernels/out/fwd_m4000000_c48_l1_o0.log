@@ -1,0 +1,10 @@
+=== fwd_m4000000_c48_l1_o0: --mode fwd --m 4000000 --ncb 48 --nseg 1 --order 0 --designs halo,gm --check 800 --reps 5
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 48 (48 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 2.86 GiB, y 1.43 GiB, 192000000000 useful complex MACs per pass
+  halo: 194 candidates, compiled in 17.9 s
+
+thread 'main' (809949) panicked at crates/hasty-bench/src/bin/proto_gather.rs:470:45:
+called `Result::unwrap()` on an `Err` value: DriverError(CUDA_ERROR_INVALID_HANDLE, "invalid resource handle")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED rc=101

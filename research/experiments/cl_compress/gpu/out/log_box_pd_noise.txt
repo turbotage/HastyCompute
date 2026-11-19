@@ -1,0 +1,26 @@
+coils: 30 of 32 virtual coils (energy ≥ 99.900 %), 99.945 % energy kept; σ²/Σσ²: [3.2e-1, 1.4e-1, 8.6e-2, 7.4e-2, 6.1e-2, 5.2e-2, 4.2e-2, 3.8e-2, 3.2e-2, 2.6e-2, 1.9e-2, 1.7e-2, 1.4e-2, 1.3e-2, 1.0e-2, 9.0e-3, 7.8e-3, 6.3e-3, 5.5e-3, 5.0e-3, 3.9e-3, 3.2e-3, 2.8e-3, 2.3e-3, 1.8e-3, 1.6e-3, 1.2e-3, 8.8e-4, 8.0e-4, 4.9e-4, 2.9e-4, 2.6e-4]
+setup 43.5 s: grid [254, 144, 114], region 512000 voxels, 30 virtual coils, 3990 ADC samples τ ∈ [1.600, 9.578] ms
+  [box, pd weights, noise time weights] 512000 voxels, 443326 fit, time grid 271 points; building the joint basis on the GPU (fp64 Gram)
+    [joint build] time Gram (443326 fit voxels × 271 times) + eigh → K = 42: 2.46 s
+    [joint build] h for 512000 voxels + reduced fp64 Gram (1260 × 1260): 3.62 s
+    [joint build] eigh of the reduced Gram (1260): 0.16 s
+    [joint build] least-squares time extension (34102 voxels × 3990 table times): 4.92 s
+    [joint build] total 11.2 s
+  [box, pd weights, noise time weights] coil-common weighted spectrum done (13 s)
+  [box, pd weights, noise time weights] ε = 1e-2: fixed (count LS) L = 14 (8.68e-3) → 420 ch; fixed (energy LS) L = 12 (9.06e-3) → 360 ch; SVD L = 9 (8.14e-3) → 270 ch; joint R = 116 (9.65e-3; predicted R 116); joint gain vs fixed 3.62×, vs SVD 2.33× (52 s)
+  [box, pd weights, noise time weights] ε = 1e-3: fixed (count LS) L = 22 (8.13e-4) → 660 ch; fixed (energy LS) L = 22 (6.81e-4) → 660 ch; SVD L = 12 (9.74e-4) → 360 ch; joint R = 247 (9.96e-4; predicted R 247); joint gain vs fixed 2.67×, vs SVD 1.46× (120 s)
+  [box, pd weights, noise time weights] ε = 1e-4: fixed (count LS) L = 34 (9.78e-5) → 1020 ch; fixed (energy LS) L = 33 (9.00e-5) → 990 ch; SVD L = 17 (6.70e-5) → 510 ch; joint R = 366 (9.44e-5; predicted R 359); joint gain vs fixed 2.79×, vs SVD 1.39× (209 s)
+  [box, pd weights, noise time weights] ε = 1e-2, joint R = 116: point-image error p50 1.57e-2, p99 1.06e-1, max 1.64e-1; weight fraction with ρ > 10ε 9.97e-4
+  [box, pd weights, noise time weights] ε = 1e-3, joint R = 247: point-image error p50 1.32e-3, p99 1.28e-2, max 9.43e-2; weight fraction with ρ > 10ε 5.07e-3
+  [box, pd weights, noise time weights] ε = 1e-4, joint R = 366: point-image error p50 1.02e-4, p99 9.66e-4, max 2.82e-2; weight fraction with ρ > 10ε 4.59e-3
+  [rebuild] ε = 1e-2, R = 116: old basis on the updated ratemap (+20 Hz smooth, ±10 1/s): 9.80e-3 (was 9.65e-3)
+  [rebuild] ε = 1e-3, R = 247: old basis on the updated ratemap (+20 Hz smooth, ±10 1/s): 1.01e-3 (was 9.96e-4)
+  [rebuild] ε = 1e-4, R = 366: old basis on the updated ratemap (+20 Hz smooth, ±10 1/s): 9.67e-5 (was 9.44e-5)
+  [weights] ε = 1e-2: basis built on the warm-start weights at R = 116: 1.07e-1 on this problem's weights (own basis 9.65e-3); this basis on uniform support weights 1.45e-2; the other basis' own count 59
+  [weights] ε = 1e-3: basis built on the warm-start weights at R = 247: 1.75e-2 on this problem's weights (own basis 9.96e-4); this basis on uniform support weights 1.75e-3; the other basis' own count 130
+  [weights] ε = 1e-4: basis built on the warm-start weights at R = 366: 4.25e-3 on this problem's weights (own basis 9.44e-5); this basis on uniform support weights 1.99e-4; the other basis' own count 209
+  [op] ε = 1e-2: ‖Δy‖/‖y‖ vs rank-40 SVD at the real samples (48 readouts), all / centre / outer: fixed L 14 4.34e-3 / 3.44e-3 / 4.68e-3; SVD L 9 4.87e-3 / 1.92e-3 / 9.57e-2; joint R 116 5.78e-3 / 1.72e-3 / 1.14e-1
+  [op] ε = 1e-3: ‖Δy‖/‖y‖ vs rank-40 SVD at the real samples (48 readouts), all / centre / outer: fixed L 22 3.65e-4 / 3.26e-4 / 4.38e-4; SVD L 12 6.10e-4 / 2.56e-4 / 1.23e-2; joint R 247 6.07e-4 / 1.10e-4 / 1.30e-2
+  [op] ε = 1e-4: ‖Δy‖/‖y‖ vs rank-40 SVD at the real samples (48 readouts), all / centre / outer: fixed L 34 7.88e-5 / 7.07e-5 / 3.59e-4; SVD L 17 4.31e-5 / 1.97e-5 / 8.39e-4; joint R 366 6.68e-5 / 3.21e-5 / 1.21e-3
+wrote /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/cl_compress/gpu/out/box_pd_noise.json
+done box_pd_noise

@@ -29,6 +29,11 @@
 //! smaps_true.npy and field_ppm_recon.npy on the reconstruction grid (axial logical frame). Interruptible / resumable
 //! (STOP file, Ctrl-C): chunks of bins are kept as `state_sim_bins_<b0>_<b1>.hv`.
 //!
+//! `--resp-field <resp_field.hv>` (default off): breathing- and cardiac-dependent off-resonance from `tools/phantom/resp_field.py`
+//! --k K --q Q (χ deformed by the motion u_c + r S at K × Q (breathing, cardiac) states, dipole field, the reference-pose
+//! shim held): per tissue source ω = ω_static + Δ bilinear in the bin's (r, cardiac time), per blood frame source in r;
+//! hasty_bench::respfield; the truth ratemap per state comes from resp_field.py --truth-dir; meta.resp_field records
+//! the state grid (research/resp_field_sim.md).
 //! Cost (the direct sum is sources × samples × coils per readout; one readout per 10 ms motion bin, so a type-3 NUFFT
 //! would gain only ≈ samples / (segments · w³) ≈ 2× and needs time segmentation of the B0 / M1 / fat terms):
 //! - `--readout-stride n | auto`: simulate every n-th encode group (all encodes of a kept group, original excitation times,
@@ -551,6 +556,11 @@ fn main() {
     // --blood-box on: every blood (sub-)source is a uniform cube of the blood voxel's edge (sinc form factor, as the
     // tissue's box elements) instead of a point: a lattice of points at 1 mm aliases near kmax (its replica at 2π/h)
     let blood_box = take("--blood-box").map_or(false, |v| v == "on");
+    // --resp-field <resp_field.hv>: breathing- and cardiac-dependent off-resonance (tools/phantom/resp_field.py --k K --q Q
+    // for this input: per source the field change Δ at K × Q states (r_k, c_q), χ deformed by u_c + r S, the reference
+    // shim held; the bin's ω is the static ω + Δ bilinear in (r, cardiac time) for tissue, linear in r for the blood
+    // frames; hasty_bench::respfield, research/resp_field_sim.md). Default off: the static ω.
+    let resp_field_path: Option<PathBuf> = take("--resp-field").map(PathBuf::from);
     // slab excitation (hasty_mrsim::rf): windowed sinc of time-bandwidth --rf-tbw over --rf-dur (default the
     // sequence's t_rf), slab thickness --slab-thk (default the FOV's z), Bloch-simulated profile
     let rf_tbw: f64 = take("--rf-tbw").map(|s| s.parse().unwrap()).unwrap_or(6.0);
@@ -825,7 +835,7 @@ fn main() {
     let npk: i32 = if fat_six && !fat_expand { six.amp.len() as i32 } else { 0 };
     // --tissue-sub n: every box element → n³ boxes of edge h / n, magnetization / n³, ω shifted by the element's field
     // gradient at the sub-box centre (the analytic box integral of each keeps the linear field inside it)
-    let (tpos, tm, tom, tr2, te1, tzo, telh, telg, tfat) = if tissue_sub > 1 && tel_on {
+    let (tpos, tm, tom, tr2, te1, tzo, telh, telg, tfat, tin) = if tissue_sub > 1 && tel_on {
         let n = tissue_sub;
         let w = 1.0 / (n * n * n) as f32;
         // cardiac displacement range per element (max over the cycle of |u − ū|), for --tissue-sub-moving-mm
@@ -865,6 +875,7 @@ fn main() {
         };
         let mut nsel = 0usize;
         let (mut p_, mut m_, mut o_, mut r_, mut e_, mut z_, mut h_, mut g_, mut f_) = (vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![]);
+        let mut x_: Vec<usize> = vec![];
         for i in 0..nt {
             let sel = pick(i, telh[i]);
             nsel += sel as usize;
@@ -887,13 +898,14 @@ fn main() {
                 z_.push(tzo[i]);
                 h_.push(if sel { hh / n as f32 } else { telh[i] });
                 f_.push(tfat[i]);
+                x_.push(tidx[i]);
             }
         }
         println!("tissue sub-boxes: {n}³ per element for {:.2} M of {:.2} M elements → {:.2} M tissue sources", nsel as f64 / 1e6, nt as f64 / 1e6, m_.len() as f64 / 1e6);
-        (p_, m_, o_, r_, e_, z_, h_, g_, f_)
+        (p_, m_, o_, r_, e_, z_, h_, g_, f_, x_)
     } else {
         assert!(tissue_sub <= 1 || tel_on, "--tissue-sub needs box elements (prep_sim --src-octree)");
-        (tpos, tm, tom, tr2, te1, tzo, telh, telg, tfat)
+        (tpos, tm, tom, tr2, te1, tzo, telh, telg, tfat, tidx.clone())
     };
     let tm: Vec<f32> = if only == "blood" { vec![0.0; tm.len()] } else { tm };
     let nt = tm.len();
@@ -1444,6 +1456,88 @@ fn main() {
     let d_atab = st.clone_htod(&prof.alpha).unwrap();
     let (ntab, az0, adz) = (prof.alpha.len() as i32, prof.z0 as f32, prof.dz as f32);
     let nbmax0 = d_bf.iter().map(|b| b.6).max().unwrap_or(1);
+    // --resp-field: blood tables Δ_k [n][K] (rad/s) on the device; tissue: the f16 table [Q][K][n_in] (ppm) on the host,
+    // the state columns of the simulated sources uploaded on use (LRU of 8); the bin's ω buffers (tissue; two blood slots)
+    struct RespDev {
+        rk: Vec<f64>,
+        k: i32,
+        nq: usize,
+        period: f64,
+        mode: String,
+        n_in: usize,
+        tab_t: Vec<u8>,
+        cols: Vec<(usize, CudaSlice<f32>)>,
+        tab_b: Vec<CudaSlice<f32>>,
+        om_t: CudaSlice<f32>,
+        om_b: [CudaSlice<f32>; 2],
+        func: cudarc::driver::CudaFunction,
+        func_bi: cudarc::driver::CudaFunction,
+    }
+    let mut resp_dev: Option<RespDev> = resp_field_path.as_ref().map(|path| {
+        assert!(!ideal, "--resp-field with --ideal: the ideal run has no field");
+        let t = Instant::now();
+        let rf = hasty_value::read(&mut std::io::BufReader::new(std::fs::File::open(path).unwrap_or_else(|e| panic!("{}: {e}", path.display())))).unwrap();
+        let rk = fls(&rf, "r");
+        let k = rk.len();
+        assert!(rk[0] == 0.0 && rk.windows(2).all(|w| w[1] > w[0]), "resp field: states must start at r = 0 and increase");
+        let cq = fls(&rf, "c");
+        let nq = cq.len();
+        let rperiod = fl(&rf, "period");
+        assert!((rperiod - period).abs() < 1e-6 * period, "resp field: cardiac period {rperiod} ≠ the input's {period}");
+        let n_in = tf32(ts, "pd").len();
+        assert_eq!(fl(&rf, "n_tissue") as usize, n_in, "{}: made for another input (tissue sources)", path.display());
+        let tt = rf.get("tissue_dppm").and_then(|x| x.as_tensor()).expect("resp field: tissue_dppm");
+        assert!(tt.dtype() == hasty_value::DType::F16 && tt.shape() == [nq, k, n_in], "resp field: tissue_dppm must be f16 [Q, K, n] (got {:?} {:?})", tt.dtype(), tt.shape());
+        let tab_t = tt.bytes().to_vec();
+        let mode = rf.get("mode").and_then(|x| x.as_str()).unwrap_or("r").to_string();
+        let counts = fls(&rf, "blood_counts");
+        let Some(Value::List(bl)) = rf.get("blood_dppm") else { panic!("resp field: blood_dppm") };
+        assert_eq!(bl.len(), nbf, "resp field: blood frames");
+        let mut tab_b = vec![];
+        for (f, b) in bl.iter().enumerate() {
+            let n = bf[f].3.len();
+            assert_eq!(counts[f] as usize, n, "resp field: blood frame {f} sources (made for another input)");
+            let d: Vec<f32> = b.as_tensor().unwrap().to_vec::<f32>().unwrap();
+            assert_eq!(d.len(), n * k);
+            let id: Vec<usize> = (0..n).collect();
+            let e = hasty_bench::respfield::expand(&d, k, &id, gam);
+            tab_b.push(if e.is_empty() { st.alloc_zeros::<f32>(1).unwrap() } else { st.clone_htod(&e).unwrap() });
+        }
+        let mr = dev.load_module("simphantom_respfield_v2", hasty_bench::respfield::KERNEL, &CompileSettings { options: vec![], no_cache: false }).unwrap();
+        let (func, func_bi) = (mr.load_function("rlerp").unwrap(), mr.load_function("bilerp").unwrap());
+        let mb = (tab_t.len() + 4 * bf.iter().map(|b| b.3.len()).sum::<usize>() * k) as f64 / 1e6;
+        println!("resp field ({mode}): {k} breathing states r = {:?} × {nq} cardiac phases from {} ({mb:.0} MB of tables, {:.1}s)",
+                 rk.iter().map(|r| (r * 1e3).round() / 1e3).collect::<Vec<_>>(), path.display(), t.elapsed().as_secs_f64());
+        RespDev {
+            k: k as i32,
+            nq,
+            period,
+            mode,
+            n_in,
+            tab_t,
+            cols: vec![],
+            tab_b,
+            om_t: st.alloc_zeros::<f32>(nt.max(1)).unwrap(),
+            om_b: [st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap(), st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap()],
+            rk,
+            func,
+            func_bi,
+        }
+    });
+    // ω of the bin's sources for breathing state r: out = base + Δ(r) (n sources)
+    let rlerp = |func: &cudarc::driver::CudaFunction, rk: &[f64], k: i32, n: usize, base: &CudaSlice<f32>, tab: &CudaSlice<f32>, r: f32, out: &mut CudaSlice<f32>| {
+        if n == 0 {
+            return;
+        }
+        let (j, a) = hasty_bench::respfield::segment(rk, r as f64);
+        let (nl, ji) = (n as i64, j as i32);
+        unsafe {
+            st.launch_builder(func)
+                .arg(&nl).arg(base).arg(tab).arg(&k).arg(&ji).arg(&a).arg(out)
+                .launch(LaunchConfig { grid_dim: ((n as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                .unwrap();
+        }
+    };
     // with a beat library every blood source becomes six sub-sources (zero amplitude where unused)
     assert!(!blood_blend || beat_src.is_some(), "--blood-blend needs a beat library (--beats)");
     let nbmax = if beat_src.is_some() { 6 * nbmax0 * if blood_blend { 2 } else { 1 } } else { nbmax0 };
@@ -1642,12 +1736,39 @@ fn main() {
                     .unwrap();
             }
             lap(&st, 0, &mut tstage);
-            // tissue sources
+            // tissue sources (--resp-field: ω of the bin's breathing state)
             let ntl = nt as i64;
             let (mode0, zero, one) = (0i32, 0f32, 1f32);
+            if let Some(rd) = resp_dev.as_mut() {
+                // the four states around (r, tc), their columns on the device (LRU of 8)
+                let w = hasty_bench::respfield::bilinear(&rd.rk, rd.nq, rd.period, r as f64, tc);
+                for &(s, _) in &w {
+                    if let Some(i) = rd.cols.iter().position(|e| e.0 == s) {
+                        let e = rd.cols.remove(i);
+                        rd.cols.push(e);
+                    } else {
+                        if rd.cols.len() >= 8 {
+                            rd.cols.remove(0);
+                        }
+                        let row = &rd.tab_t[2 * s * rd.n_in..2 * (s + 1) * rd.n_in];
+                        let col = hasty_bench::respfield::column(row, &tin, gam);
+                        rd.cols.push((s, st.clone_htod(&col).unwrap()));
+                    }
+                }
+                let ci = w.map(|(s, _)| rd.cols.iter().position(|e| e.0 == s).unwrap());
+                let (ntl_, ww) = (nt as i64, w.map(|e| e.1));
+                unsafe {
+                    st.launch_builder(&rd.func_bi)
+                        .arg(&ntl_).arg(&d_tom).arg(&rd.cols[ci[0]].1).arg(&rd.cols[ci[1]].1).arg(&rd.cols[ci[2]].1).arg(&rd.cols[ci[3]].1)
+                        .arg(&ww[0]).arg(&ww[1]).arg(&ww[2]).arg(&ww[3]).arg(&mut rd.om_t)
+                        .launch(LaunchConfig { grid_dim: ((nt as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                        .unwrap();
+                }
+            }
+            let tom_bin = resp_dev.as_ref().map_or(&d_tom, |rd| &rd.om_t);
             unsafe {
                 st.launch_builder(&kprep)
-                    .arg(&mode0).arg(&ntl).arg(&d_tpos).arg(&d_tpos).arg(&d_tm).arg(&d_tom).arg(&d_tr2).arg(&d_tfat).arg(&d_te1).arg(&d_tzo).arg(&d_telh).arg(&d_telg).arg(&el_on)
+                    .arg(&mode0).arg(&ntl).arg(&d_tpos).arg(&d_tpos).arg(&d_tm).arg(tom_bin).arg(&d_tr2).arg(&d_tfat).arg(&d_te1).arg(&d_tzo).arg(&d_telh).arg(&d_telg).arg(&el_on)
                     .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&zero)
                     .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&one)
                     .arg(&mut d_src).arg(&mut d_amp)
@@ -1686,7 +1807,7 @@ fn main() {
                 st.memset_zeros(&mut d_cnt).unwrap();
                 let collapse2 = beat_collapse * beat_collapse;
                 let mut nbl_all = 0i64;
-                for &(f, wf) in &fparts {
+                for (fi, &(f, wf)) in fparts.iter().enumerate() {
                     // the beat's moments at frame f in one of two device slots (uploaded when (beat, frame) is new;
                     // the slot not holding the bin's other frame is replaced)
                     let key = Some((k, f));
@@ -1707,9 +1828,14 @@ fn main() {
                     let nb_ = bf_.6 as i64;
                     let dtt = if stat { 0f32 } else { dt_frame(bf_.0) as f32 };
                     let wf = wf as f32;
+                    // --resp-field: the frame's ω at the bin's breathing state in slot fi
+                    if let Some(rd) = resp_dev.as_mut() {
+                        rlerp(&rd.func, &rd.rk, rd.k, bf_.6, &bf_.4, &rd.tab_b[f], r, &mut rd.om_b[fi]);
+                    }
+                    let om_f = resp_dev.as_ref().map_or(&bf_.4, |rd| &rd.om_b[fi]);
                     unsafe {
                         st.launch_builder(&kbsig)
-                            .arg(&nb_).arg(&bf_.1).arg(&bf_.2).arg(&bf_.3).arg(&bf_.4).arg(&bf_.5).arg(&bf_.7).arg(&bf_.8).arg(&d_rows[f]).arg(&d_moms[si]).arg(&vs).arg(&bs.spin).arg(&bs.pd_scale)
+                            .arg(&nb_).arg(&bf_.1).arg(&bf_.2).arg(&bf_.3).arg(om_f).arg(&bf_.5).arg(&bf_.7).arg(&bf_.8).arg(&d_rows[f]).arg(&d_moms[si]).arg(&vs).arg(&bs.spin).arg(&bs.pd_scale)
                             .arg(&collapse2).arg(&dtt).arg(&wf).arg(&mut d_cnt)
                             .arg(&mut d_p6).arg(&mut d_v6).arg(&mut d_m6).arg(&mut d_o6).arg(&mut d_r6).arg(&mut d_e6).arg(&mut d_z6)
                             .launch(LaunchConfig { grid_dim: ((nb_ as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
@@ -1735,11 +1861,15 @@ fn main() {
                 }
                 n6 as usize
             } else {
+                if let Some(rd) = resp_dev.as_mut() {
+                    rlerp(&rd.func, &rd.rk, rd.k, bfr.6, &bfr.4, &rd.tab_b[kf], r, &mut rd.om_b[0]);
+                }
+                let om_f = resp_dev.as_ref().map_or(&bfr.4, |rd| &rd.om_b[0]);
                 let mut src_b = d_src.slice_mut(nt * SRC_FLOATS..);
                 let mut amp_b = d_amp.slice_mut(nt * ncs..);
                 unsafe {
                     st.launch_builder(&kprep)
-                        .arg(&mode1).arg(&nbl).arg(&bfr.1).arg(&bfr.2).arg(&bfr.3).arg(&bfr.4).arg(&bfr.5).arg(&d_bfat).arg(&bfr.7).arg(&bfr.8).arg(&d_bh).arg(&d_bg).arg(&el_blood)
+                        .arg(&mode1).arg(&nbl).arg(&bfr.1).arg(&bfr.2).arg(&bfr.3).arg(om_f).arg(&bfr.5).arg(&d_bfat).arg(&bfr.7).arg(&bfr.8).arg(&d_bh).arg(&d_bg).arg(&el_blood)
                         .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&dl)
                         .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&vs)
                         .arg(&mut src_b).arg(&mut amp_b)
@@ -2109,6 +2239,15 @@ fn main() {
         // the beat library's heartbeat → library beat sequence (the truth of each heartbeat), its spin history mode
         "beats": beats_meta,
     });
+    let mut meta = meta;
+    if let Some(rd) = resp_dev.as_ref() {
+        meta["resp_field"] = serde_json::json!({
+            "file": resp_field_path.as_ref().map(|p| p.display().to_string()), "mode": rd.mode, "r_k": rd.rk, "n_cardiac": rd.nq, "period": rd.period,
+            "c_q": (0..rd.nq).map(|q| q as f64 * rd.period / rd.nq as f64).collect::<Vec<_>>(),
+            "model": "tissue ω(p, r, c) = ω_static(p) + Δ(p, r, c), bilinear in (breathing r, cardiac template time c) between the states (r_k, c_q); blood frames: linear in r at the frame's cardiac time. Δ = F_state(position in the state) − F_ref(reference position), F_state: dipole field of χ deformed by the state's motion (u_c + r S), the reference-pose (end-expiration) shim held",
+            "truth": "truth_ratemap_bc/ (tools/phantom/resp_field.py --truth-dir): per state [S, nv], s = q K + k",
+        });
+    }
     std::fs::write(out.join("meta.json"), serde_json::to_string_pretty(&meta).unwrap()).unwrap();
     if hasty_value::store::write_hv() {
         // the noise-free k-space, quantised at k_step (uniform, ADC-like; |err| ≤ step/2) with one readout per chunk,

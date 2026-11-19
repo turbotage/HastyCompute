@@ -4,6 +4,12 @@
 //!     recon_b0 <sim_dir> <out_dir> [--vcoils auto|n] [--coil-energy 0.999] [--iters 40] [--kappa 0.3] [--block 8] [--every 5] [--clean]
 //!              [--no-conc] [--support 0.05] [--resp-bins 1] [--resp gate|bellows|truth] [--grid-scale 1] [--moco <motionfit run>]
 //!              [--precond zmshr1m|circ|zmshr1|none] [--eps 1e-3] [--state auto|device|host]
+//!              [--fit smooth|voxel] [--fit-thr 0.01] [--om-max-hz 880] [--save-echoes] [--smaps truth|espirit[:eig_min]]
+//!
+//! `--fit smooth` (default, hasty_bench::ratemap): robust B-spline field from all voxels coarse → fine, each voxel
+//! re-fitted inside a ±200 Hz window around it (no water–fat swaps); `--fit voxel` the original independent voxel fits
+//! (|ω| ≤ 500 Hz, fitted voxels above 5 % of the first-echo 99th percentile). `--save-echoes` writes the complex echo
+//! images (echoes.npy) for `ratemap_fit`. summary.json `resp.bin_amp`: the surrogate's mean per bin.
 //!
 //! `--state host`: the solver stacks live in host memory (sets streamed through two device slots, hasty-recon
 //! `hoststack`) and the circulant preconditioners keep their N-grid arrays on the host (uploaded per application into
@@ -49,8 +55,6 @@ use hasty_cuda::{Device, C32};
 use hasty_mrsim::physio::Ecg;
 use hasty_mrsim::sequence::{Schedule, SAMPLE_FLOATS};
 use hasty_phantom::volume::write_npy;
-use hasty_qfit::waterfat::gpu::WaterFatGpu;
-use hasty_qfit::waterfat::{FatSpectrum, Species, WaterFat, WfConfig};
 use hasty_recon::checkpoint::{Outcome, RunCtl};
 use hasty_recon::data::read_npy;
 use hasty_recon::gpu::Kernels;
@@ -129,9 +133,18 @@ fn main() {
     let pre_name = take("--precond").unwrap_or_else(|| "zmshr1m".into());
     let eps: f64 = take("--eps").map_or(1e-3, |s| s.parse().unwrap());
     let state_arg = take("--state").unwrap_or_else(|| "auto".into());
+    let fit_method = hasty_bench::ratemap::Method::parse(&take("--fit").unwrap_or_else(|| "smooth".into()));
+    let om_max_arg: Option<f64> = take("--om-max-hz").map(|s| s.parse().unwrap());
+    // coil maps: truth (oracle, the simulator's maps; default for continuity) or espirit[:eig_min] from the data
+    let smaps_spec = take("--smaps").unwrap_or_else(|| "truth".into());
+    // fitted voxels: first-echo magnitude above fit_thr × its 99th percentile (voxel: 5 %, smooth: 1 %; the smooth
+    // field fit weights by confidence, so weak deep tissue is fitted too)
+    let fit_thr: f64 = take("--fit-thr").map_or(if fit_method == hasty_bench::ratemap::Method::Voxel { 0.05 } else { 0.01 }, |s| s.parse().unwrap());
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let clean = flag(&mut args, "--clean");
     let no_conc = flag(&mut args, "--no-conc");
+    let save_echoes = flag(&mut args, "--save-echoes");
+
     let dir = PathBuf::from(&args[0]);
     let out = PathBuf::from(&args[1]);
     std::fs::create_dir_all(&out).unwrap();
@@ -185,62 +198,103 @@ fn main() {
             }
         }
     }
-    let smaps0 = read_npy(&dir.join("smaps_true.npy")).unwrap().c32s();
-    // whitened maps, Gram → compression matrix (rows = top eigenvectors^H)
-    let mut sw = vec![Complex64::new(0.0, 0.0); nc * nv_f];
-    for q in 0..nv_f {
-        for c in 0..nc {
-            let mut acc = Complex64::new(0.0, 0.0);
-            for c2 in 0..nc {
-                let s = smaps0[c2 * nv_f + q];
-                acc += wh[(c, c2)] * Complex64::new(s.re as f64, s.im as f64);
+    let dev = Device::new(0).unwrap();
+    let st = dev.default_stream();
+    let kern = Arc::new(Kernels::new(&dev).unwrap());
+    let (smaps, support, aw, nvc, kept, tot): (Vec<C32>, Vec<bool>, Vec<Vec<Complex64>>, usize, f64, f64) = if let Some(arg) = smaps_spec.strip_prefix("espirit") {
+        // ESPIRiT maps from the data (hasty_recon::espirit, as recon_p2np --smaps espirit): whitened, uncompressed;
+        // calibration = the samples of every TR's first crossing (TE ≤ 0.6 ms, little off-resonance phase) inside a 24³
+        // box, low-resolution coil images by CG; support = the ESPIRiT mask
+        let aw: Vec<Vec<Complex64>> = (0..nc).map(|v| (0..nc).map(|c| Complex64::new(wh[(v, c)], 0.0)).collect()).collect();
+        let cal_dims = dims.map(|d| 24.min(d) & !1);
+        let sc = [0, 1, 2].map(|a| dims[a] as f64 / cal_dims[a] as f64);
+        let (mut kc, mut ky): ([Vec<f32>; 3], Vec<Vec<C32>>) = ([vec![], vec![], vec![]], vec![vec![]; nc]);
+        for i in 0..n_ro {
+            let s = ro[i * 14 + 1] as usize;
+            for n in 0..na {
+                let r = &samples[(i * na + n) * 4..(i * na + n) * 4 + 4];
+                if (r[3] as f64) > te[s][0] + 0.5 * t_lobe {
+                    break;
+                }
+                let k = [0, 1, 2].map(|a| r[a] as f64 * res);
+                if (0..3).all(|a| (k[a] * sc[a]).abs() < std::f64::consts::PI * (1.0 - 1e-6)) {
+                    for a in 0..3 {
+                        kc[a].push(k[a] as f32);
+                    }
+                    let src = &data[(i * na + n) * nc..(i * na + n + 1) * nc];
+                    for c in 0..nc {
+                        let z: Complex64 = (0..nc).map(|c2| wh[(c, c2)] * Complex64::new(src[c2].re as f64, src[c2].im as f64)).sum();
+                        ky[c].push(C32::new(z.re as f32, z.im as f32));
+                    }
+                }
             }
-            sw[c * nv_f + q] = acc;
         }
-    }
-    let mut gram = hasty_recon::coils::CoilGram::new(nc);
-    gram.add_c64(&sw, nv_f, 7);
-    let ccx = hasty_recon::coils::CoilCompression::from_gram(&gram, coil_rule);
-    println!("coil compression (whitened maps): {}", ccx.report());
-    let nvc = ccx.nvc();
-    let (kept, tot) = (ccx.retained, 1.0);
-    let comp: Vec<Vec<Complex64>> = ccx.rows.clone();
-    let mut smaps_f = vec![Complex64::new(0.0, 0.0); nvc * nv_f];
-    for v in 0..nvc {
+        let yall: Vec<C32> = ky.concat();
+        let (cal, used) = hasty_recon::espirit::calib_from_noncart(&dev, &st, &kern, [&kc[0], &kc[1], &kc[2]], &yall, nc, dims, cal_dims, 30, 1e-3).unwrap();
+        let opts = hasty_recon::espirit::EspiritOpts { eig_min: arg.strip_prefix(':').map_or(0.8, |v| v.parse().unwrap()), ..Default::default() };
+        let em = hasty_recon::espirit::espirit(&cal, cal_dims, nc, dims, &opts);
+        let support: Vec<bool> = (0..nv).map(|q| (0..nc).any(|c| em.maps[c * nv + q] != C32::new(0.0, 0.0))).collect();
+        println!("coil maps: ESPIRiT from the data ({used} calibration samples, calib {cal_dims:?}, {} kernels, eig_min {}); support {} voxels ({:.0}s)", em.n_kernels, opts.eig_min, support.iter().filter(|&&b| b).count(), t0.elapsed().as_secs_f64());
+        (em.maps, support, aw, nc, 1.0, 1.0)
+    } else {
+        let smaps0 = read_npy(&dir.join("smaps_true.npy")).unwrap().c32s();
+        // whitened maps, Gram → compression matrix (rows = top eigenvectors^H)
+        let mut sw = vec![Complex64::new(0.0, 0.0); nc * nv_f];
         for q in 0..nv_f {
-            let mut acc = Complex64::new(0.0, 0.0);
             for c in 0..nc {
-                acc += comp[v][c] * sw[c * nv_f + q];
+                let mut acc = Complex64::new(0.0, 0.0);
+                for c2 in 0..nc {
+                    let s = smaps0[c2 * nv_f + q];
+                    acc += wh[(c, c2)] * Complex64::new(s.re as f64, s.im as f64);
+                }
+                sw[c * nv_f + q] = acc;
             }
-            smaps_f[v * nv_f + q] = acc;
         }
-    }
-    let mut smaps: Vec<C32> = (0..nvc).flat_map(|v| down(&smaps_f[v * nv_f..(v + 1) * nv_f], dims_f, gs).into_iter().map(|c| C32::new(c.re as f32, c.im as f32))).collect();
-    drop(smaps_f);
-    let mut sos = vec![0f64; nv];
-    for v in 0..nvc {
-        for q in 0..nv {
-            { let s = smaps[v * nv + q]; sos[q] += (s.re as f64).powi(2) + (s.im as f64).powi(2); }
-        }
-    }
-    let smed = {
-        let mut v: Vec<f64> = sos.iter().cloned().filter(|&x| x > 0.0).collect();
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v[v.len() / 2]
-    };
-    let support: Vec<bool> = sos.iter().map(|&s| s > sup_thr * smed).collect();
-    // ESPIRiT-style normalisation Σ_c |S_c|² = 1 (as recon_p2np): raw Biot–Savart maps blow up next to the loops and
-    // dominate the normal operator; the receive bias moves into the image magnitude (ω, R2*, fat fraction unaffected)
-    let smx = sos.iter().cloned().fold(0.0, f64::max);
-    for q in 0..nv {
-        let sc = (1.0 / (sos[q] + 1e-6 * smx).sqrt()) as f32;
+        let mut gram = hasty_recon::coils::CoilGram::new(nc);
+        gram.add_c64(&sw, nv_f, 7);
+        let ccx = hasty_recon::coils::CoilCompression::from_gram(&gram, coil_rule);
+        println!("coil compression (whitened maps): {}", ccx.report());
+        let nvc = ccx.nvc();
+        let (kept, tot) = (ccx.retained, 1.0);
+        let comp: Vec<Vec<Complex64>> = ccx.rows.clone();
+        let mut smaps_f = vec![Complex64::new(0.0, 0.0); nvc * nv_f];
         for v in 0..nvc {
-            smaps[v * nv + q].re *= sc;
-            smaps[v * nv + q].im *= sc;
+            for q in 0..nv_f {
+                let mut acc = Complex64::new(0.0, 0.0);
+                for c in 0..nc {
+                    acc += comp[v][c] * sw[c * nv_f + q];
+                }
+                smaps_f[v * nv_f + q] = acc;
+            }
         }
-    }
-    // combined whitening + compression: y_v = Σ_c (A W)_{vc} y_c
-    let aw: Vec<Vec<Complex64>> = (0..nvc).map(|v| (0..nc).map(|c| (0..nc).map(|c2| comp[v][c2] * wh[(c2, c)]).sum()).collect()).collect();
+        let mut smaps: Vec<C32> = (0..nvc).flat_map(|v| down(&smaps_f[v * nv_f..(v + 1) * nv_f], dims_f, gs).into_iter().map(|c| C32::new(c.re as f32, c.im as f32))).collect();
+        drop(smaps_f);
+        let mut sos = vec![0f64; nv];
+        for v in 0..nvc {
+            for q in 0..nv {
+                { let s = smaps[v * nv + q]; sos[q] += (s.re as f64).powi(2) + (s.im as f64).powi(2); }
+            }
+        }
+        let smed = {
+            let mut v: Vec<f64> = sos.iter().cloned().filter(|&x| x > 0.0).collect();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v[v.len() / 2]
+        };
+        let support: Vec<bool> = sos.iter().map(|&s| s > sup_thr * smed).collect();
+        // ESPIRiT-style normalisation Σ_c |S_c|² = 1 (as recon_p2np): raw Biot–Savart maps blow up next to the loops and
+        // dominate the normal operator; the receive bias moves into the image magnitude (ω, R2*, fat fraction unaffected)
+        let smx = sos.iter().cloned().fold(0.0, f64::max);
+        for q in 0..nv {
+            let sc = (1.0 / (sos[q] + 1e-6 * smx).sqrt()) as f32;
+            for v in 0..nvc {
+                smaps[v * nv + q].re *= sc;
+                smaps[v * nv + q].im *= sc;
+            }
+        }
+        // combined whitening + compression: y_v = Σ_c (A W)_{vc} y_c
+        let aw: Vec<Vec<Complex64>> = (0..nvc).map(|v| (0..nc).map(|c| (0..nc).map(|c2| comp[v][c2] * wh[(c2, c)]).sum()).collect()).collect();
+        (smaps, support, aw, nvc, kept, tot)
+    };
     println!("{n_ro} TRs × {na} samples × {nc} coils ({dname}); {nvc} virtual coils keep {:.2} % of the map energy ({:.0}s)", 100.0 * kept / tot, t0.elapsed().as_secs_f64());
 
     // ── respiratory surrogate (FID at the first crossing) and bins ──
@@ -287,6 +341,9 @@ fn main() {
             v.iter().sum::<f64>() / v.len().max(1) as f64
         })
         .collect();
+    // the used surrogate's mean / sd per bin: ratemap knots linear in the (bellows) amplitude
+    let bin_amp: Vec<f64> = (0..nb).map(|b| { let v: Vec<f64> = (0..n_ro).filter(|&i| bin[i] == b).map(|i| r_used[i]).collect(); v.iter().sum::<f64>() / v.len().max(1) as f64 }).collect();
+    let bin_amp_sd: Vec<f64> = (0..nb).map(|b| { let v: Vec<f64> = (0..n_ro).filter(|&i| bin[i] == b).map(|i| r_used[i]).collect(); let m = bin_amp[b]; (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / v.len().max(1) as f64).sqrt() }).collect();
     println!("self-gating: leading component {:.0} % of the band-passed FID variance; correlation with the true breathing {}; bins ({resp_mode}) mean true r {:?}",
              100.0 * sg.explained, gate_corr.map_or("n/a".into(), |c| format!("{c:.3}")), bin_truth_r.iter().map(|x| (x * 1000.0).round() / 1000.0).collect::<Vec<_>>());
     let mut sgt: Vec<u8> = Vec::new();
@@ -364,9 +421,6 @@ fn main() {
     println!("{nset} echo sets ({nb} breathing bins × {n_shift} TE shifts × {n_echo} crossings), {}–{} samples each ({:.0}s)", ms.iter().min().unwrap(), ms.iter().max().unwrap(), t0.elapsed().as_secs_f64());
 
     // ── P²nP with LLR across the echo images ──
-    let dev = Device::new(0).unwrap();
-    let st = dev.default_stream();
-    let kern = Arc::new(Kernels::new(&dev).unwrap());
     let mut op = SenseOp::new(&dev, &st, kern.clone(), dims, [&coords[0][0], &coords[0][1], &coords[0][2]], &smaps, nvc, vec![], 1e-4).unwrap();
     // motion-compensated: reference sets (shift, crossing) with one block per bin
     let nd = n_shift * n_echo;
@@ -499,7 +553,7 @@ fn main() {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v[(0.99 * (v.len() - 1) as f64) as usize]
     };
-    let vox: Vec<usize> = (0..nv).filter(|&q| support[q] && e0mag[q] > 0.05 * e0_99).collect();
+    let vox: Vec<usize> = (0..nv).filter(|&q| support[q] && e0mag[q] > fit_thr as f32 * e0_99).collect();
     let nvx = vox.len();
     let nb_fit = if moco_dir.is_some() { 1 } else { nb };
     let nprob = nb_fit * nvx;
@@ -524,30 +578,44 @@ fn main() {
             }
         }
     }
-    let wf = WaterFat::new(Species::WaterFat, set_te[..nd].to_vec(), b0, FatSpectrum::six_peak());
-    let cfg = WfConfig { r2_max: 1000.0, grid_r2: vec![0.0, 15.0, 30.0, 60.0, 120.0, 250.0, 500.0, 1000.0], ..Default::default() };
-    let gpu = WaterFatGpu::<f32>::new(&dev, &wf, &cfg).unwrap();
-    let fit = gpu.fit(&y, nprob).unwrap();
-    println!("voxel fits: {nvx} voxels × {nb_fit} bins ({:.0}s)", t0.elapsed().as_secs_f64());
-    let par = |j: usize, pi: usize| fit.params[j * nprob + pi];
-    // maps [bin][voxel] (bin-major), bin 0 = end-expiration
-    let mut om_hz = vec![f32::NAN; nb_fit * nv];
-    let mut r2 = vec![f32::NAN; nb_fit * nv];
-    let mut ff = vec![f32::NAN; nb_fit * nv];
-    let mut wm = vec![0f32; nb_fit * nv];
-    let mut fm = vec![0f32; nb_fit * nv];
-    for b in 0..nb_fit {
-        for (vi, &q) in vox.iter().enumerate() {
-            let pi = b * nvx + vi;
-            let (w, f) = ((par(0, pi).powi(2) + par(1, pi).powi(2)).sqrt(), (par(2, pi).powi(2) + par(3, pi).powi(2)).sqrt());
-            let o = b * nv + q;
-            om_hz[o] = (par(5, pi) / (2.0 * std::f64::consts::PI)) as f32;
-            r2[o] = par(4, pi) as f32;
-            ff[o] = (f / (w + f).max(1e-30)) as f32;
-            wm[o] = w as f32;
-            fm[o] = f as f32;
+    // `--save-echoes`: the conc-corrected complex echo images of every fitted set, [dims, nd · nb_fit] (set = bin · nd + d)
+    // for `ratemap_fit` (refits without the 20 min echo reconstruction)
+    if save_echoes {
+        let mut buf: Vec<u8> = Vec::with_capacity(nb_fit * nd * nv * 8);
+        for b in 0..nb_fit {
+            for d in 0..nd {
+                let t = b * nd + d;
+                for q in 0..nv {
+                    let x = pos(q);
+                    let mono = [x[2] * x[2], x[0] * x[0] + x[1] * x[1], x[0] * x[2], x[1] * x[2]];
+                    let ph = if no_conc { 0.0 } else { (0..4).map(|a| wfit[t][a] * mono[a]).sum::<f64>() };
+                    let z = Complex64::new(imgs[t][q].re as f64, imgs[t][q].im as f64) * Complex64::from_polar(1.0, ph);
+                    buf.extend_from_slice(&(z.re as f32).to_le_bytes());
+                    buf.extend_from_slice(&(z.im as f32).to_le_bytes());
+                }
+            }
         }
+        write_npy(&out.join("echoes.npy"), "<c8", &[dims[0], dims[1], dims[2], nd * nb_fit], true, &buf).unwrap();
+        println!("wrote echoes.npy ({:.2} GB)", buf.len() as f64 / 1e9);
     }
+    // the fit (hasty_bench::ratemap): `--fit smooth` (default) global smooth field first, then windowed voxel fits;
+    // `--fit voxel` the original independent voxel fits (|ω| ≤ 500 Hz unless --om-max-hz)
+    let rcfg = {
+        let mut c = hasty_bench::ratemap::Cfg { method: fit_method, ..Default::default() };
+        if fit_method == hasty_bench::ratemap::Method::Voxel {
+            c.om_max_hz = 500.0;
+        }
+        if let Some(v) = om_max_arg {
+            c.om_max_hz = v;
+        }
+        c
+    };
+    let rm = hasty_bench::ratemap::fit(&dev, b0, &set_te[..nd], dims, res, &vox, nb_fit, &y, &rcfg);
+    drop(y);
+    println!("voxel fits: {nvx} voxels × {nb_fit} bins, method {} ({:.0}s)", fit_method.name(), t0.elapsed().as_secs_f64());
+    let hasty_bench::ratemap::Maps { mut om_hz, mut r2, mut ff, mut wm, mut fm, om_smooth_hz, rel_res, .. } = rm;
+    f32npy(&out.join("maps_omega_smooth_hz.npy"), &[dims[0], dims[1], dims[2], nb_fit], &om_smooth_hz);
+    f32npy(&out.join("maps_relres.npy"), &[dims[0], dims[1], dims[2], nb_fit], &rel_res);
     // moco: dynamic maps = the reference maps pulled back along r_b S (bin 0 = reference pose)
     if let Some(md) = &moco_dir {
         let smm = read_npy(&md.join("motion_S_mm.npy")).unwrap().f32s();
@@ -609,12 +677,12 @@ fn main() {
     let slope_hz = (phc[n_echo - 1] - phc[0]) / (set_te[n_echo - 1] - set_te[0]) / (2.0 * std::f64::consts::PI);
     println!("the scan's own concomitant field at the FOV edge (x = {:.2} m, z = {:.2} m): {slope_hz:.2} Hz equivalent", corner[0], corner[2]);
     let summary = serde_json::json!({
-        "sim_dir": dir, "data": dname, "vcoils": nvc, "map_energy_kept": kept / tot, "iters": iters, "kappa": kappa, "block": block, "lambda_max": lmax,
+        "sim_dir": dir, "data": dname, "vcoils": nvc, "smaps": smaps_spec, "map_energy_kept": kept / tot, "iters": iters, "kappa": kappa, "block": block, "lambda_max": lmax,
         "n_sets": nset, "te": set_te, "set_samples": ms, "conc_corrected": !no_conc, "wbar": wbar, "conc_edge_hz": slope_hz,
         "omega_err_hz": {"n": sel.len(), "mean": mean, "median": med, "rmse": rmse, "abs_p95": a95, "abs_p99": a99, "gt150": swaps},
-        "fit": {"species": "WaterFat", "fat": "six_peak", "r2_max": cfg.r2_max, "om_max_hz": cfg.om_max / (2.0 * std::f64::consts::PI), "n_start": cfg.n_start},
+        "fit": rcfg.json(), "fit_thr": fit_thr, "fit_voxels": nvx, "echoes_saved": save_echoes,
         "dims": dims, "res": res, "grid_scale": gs, "b0": b0, "seconds": t0.elapsed().as_secs_f64(),
-        "moco": moco_dir, "resp": {"bins": nb, "mode": resp_mode, "gate_explained": sg.explained, "gate_corr_truth": gate_corr, "used_corr_truth": used_corr, "bin_mean_true_r": bin_truth_r},
+        "moco": moco_dir, "resp": {"bins": nb, "mode": resp_mode, "gate_explained": sg.explained, "gate_corr_truth": gate_corr, "used_corr_truth": used_corr, "bin_mean_true_r": bin_truth_r, "bin_amp": bin_amp, "bin_amp_sd": bin_amp_sd, "amp_note": "bin_amp: mean of the used surrogate (bellows: recorded bellows scaled to [0, 1] by its 2nd / 98th percentiles) per bin; maps are linear in it between bins"},
     });
     std::fs::write(out.join("summary.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
     let tools = hasty_site::tool("b0/plot_b0recon.py");

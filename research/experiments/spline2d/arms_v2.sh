@@ -8,7 +8,7 @@ EV="0.07:$O/idx_r0.07_f32.npy,0.181:$O/idx_r0.181_f32.npy,0.493:$O/idx_r0.493_f3
 for arm in "8 0 v2_bins8" "6 1 v2_lin6" "4 1 v2_lin4"; do
   set -- $arm
   { [ -f $O/$3_r0.493_itbest_lumen.npy ] || [ -f $O/$3_r0.493_itbest_lumen.hv ]; } && continue
-  systemd-run --user --scope -q -p MemoryMax=60G -p MemorySwapMax=0 rustlib/target/release/splinerecon $S --rknots $1 --rdeg $2 \
+  systemd-run --user --scope -q -p MemoryMax=60G -p MemorySwapMax=0 rustlib/target/release/splinerecon $S --rknots $1 --rdeg $2 --cknots 10 --resp truth --coils 8 --no-gnl --seg-basis fixed --nseg 10 --conc-fit quad \
     --iters 40 --save-at 20,40 --warm 10 --precond knot --heldout 20 --ho-every 4 --encodes 0,1 --phys b0 --eval $EV --out $O/$3 > $O/$3.log 2>&1
 done
 rustlib/.venv/bin/python -I research/experiments/spline2d/score_pair.py $O/v2_bins8 $O/v2_lin6 $O/v2_lin4 > $O/v2_scores.txt 2>&1

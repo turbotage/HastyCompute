@@ -1,0 +1,148 @@
+
+running 3 tests
+test kv_1d_cubic_orders ... nseg 4 order 0 kr 0 m 3000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.5e-7, adjoint 1.6e-5, adjointness 6.4e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 5.0e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 6.8e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.9e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 5.9e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 5.1e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 6.1e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.5e-7, adjoint 1.6e-5, adjointness 6.5e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 5.0e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.6e-7, adjoint 1.6e-5, adjointness 6.8e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.7e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 6.1e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 5.3e-8
+nseg 4 order 0 kr 0 m 3000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 5.9e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 2 acb 2: vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 6.2e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 4 acb 2: vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 6.8e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 4 acb 4: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.6e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 8 acb 2: vs kv 0 forward 5.7e-7, adjoint 1.6e-5, adjointness 6.4e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 8 acb 4: vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 6.2e-8
+nseg 4 order 0 kr 0 m 3000: kv 1 cpba 8 acb 8: vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 6.6e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.4e-7, adjoint 1.8e-5, adjointness 5.3e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.2e-6, adjoint 1.8e-5, adjointness 3.7e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.2e-7, adjoint 1.8e-5, adjointness 5.0e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.5e-7, adjoint 1.8e-5, adjointness 5.3e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.4e-6, adjoint 1.8e-5, adjointness 3.4e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.2e-6, adjoint 1.8e-5, adjointness 3.7e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.4e-6, adjoint 1.8e-5, adjointness 3.7e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.4e-7, adjoint 1.8e-5, adjointness 5.2e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.2e-6, adjoint 1.8e-5, adjointness 3.6e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.4e-7, adjoint 1.8e-5, adjointness 5.2e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.4e-7, adjoint 1.8e-5, adjointness 4.9e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.4e-6, adjoint 1.8e-5, adjointness 3.5e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.2e-6, adjoint 1.8e-5, adjointness 3.7e-8
+nseg 5 order 1 kr 0 m 3000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.4e-6, adjoint 1.8e-5, adjointness 3.7e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 2 acb 2: vs kv 0 forward 5.2e-7, adjoint 1.8e-5, adjointness 5.0e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 4 acb 2: vs kv 0 forward 5.3e-7, adjoint 1.8e-5, adjointness 5.2e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 4 acb 4: vs kv 0 forward 5.3e-7, adjoint 1.8e-5, adjointness 5.2e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 8 acb 2: vs kv 0 forward 5.3e-7, adjoint 1.8e-5, adjointness 4.9e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 8 acb 4: vs kv 0 forward 5.3e-7, adjoint 1.8e-5, adjointness 5.0e-8
+nseg 5 order 1 kr 0 m 3000: kv 1 cpba 8 acb 8: vs kv 0 forward 5.2e-7, adjoint 1.8e-5, adjointness 5.0e-8
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.1e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 1.8e-5, adjointness 1.0e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.2e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.5e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.3e-6, adjoint 1.8e-5, adjointness 9.0e-8
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 1.8e-5, adjointness 1.0e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.3e-6, adjoint 1.8e-5, adjointness 9.1e-8
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.1e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 1.8e-5, adjointness 1.0e-7
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.1e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.4e-7, adjoint 1.8e-5, adjointness 1.2e-7
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.3e-6, adjoint 1.8e-5, adjointness 9.0e-8
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 1.8e-5, adjointness 1.0e-7
+nseg 4 order 2 kr 0 m 3000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.3e-6, adjoint 1.8e-5, adjointness 9.0e-8
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 2 acb 2: vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.2e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 4 acb 2: vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 4 acb 4: vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 8 acb 2: vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.2e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 8 acb 4: vs kv 0 forward 5.0e-7, adjoint 1.8e-5, adjointness 1.1e-7
+nseg 4 order 2 kr 0 m 3000: kv 1 cpba 8 acb 8: vs kv 0 forward 4.9e-7, adjoint 1.8e-5, adjointness 1.2e-7
+ok
+test kv_2d_linear_cubic ... nseg 4 order 0 kr 3 m 4000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.6e-7, adjoint 1.6e-5, adjointness 6.0e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 4.0e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.2e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 5.9e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 4.3e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 4.6e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 4.3e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.6e-7, adjoint 1.6e-5, adjointness 6.1e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 4.3e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 5.8e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.8e-7, adjoint 1.6e-5, adjointness 5.8e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 4.4e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.9e-6, adjoint 1.6e-5, adjointness 4.4e-8
+nseg 4 order 0 kr 3 m 4000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 1.6e-5, adjointness 4.3e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 2 acb 2: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.0e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 4 acb 2: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.0e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 4 acb 4: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.1e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 8 acb 2: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 6.0e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 8 acb 4: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 5.9e-8
+nseg 4 order 0 kr 3 m 4000: kv 1 cpba 8 acb 8: vs kv 0 forward 5.9e-7, adjoint 1.6e-5, adjointness 5.9e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.3e-7, adjoint 1.7e-5, adjointness 3.1e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.0e-6, adjoint 1.7e-5, adjointness 2.6e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.8e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.4e-7, adjoint 1.7e-5, adjointness 3.4e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.2e-6, adjoint 1.7e-5, adjointness 2.4e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.0e-6, adjoint 1.7e-5, adjointness 2.7e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.2e-6, adjoint 1.7e-5, adjointness 2.8e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.3e-7, adjoint 1.7e-5, adjointness 3.1e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.0e-6, adjoint 1.7e-5, adjointness 2.3e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.5e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 5.4e-7, adjoint 1.7e-5, adjointness 3.1e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.2e-6, adjoint 1.7e-5, adjointness 2.5e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.0e-6, adjoint 1.7e-5, adjointness 2.3e-8
+nseg 3 order 2 kr 3 m 4000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.2e-6, adjoint 1.7e-5, adjointness 2.9e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 2 acb 2: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.5e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 4 acb 2: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.3e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 4 acb 4: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.1e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 8 acb 2: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.3e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 8 acb 4: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.1e-8
+nseg 3 order 2 kr 3 m 4000: kv 1 cpba 8 acb 8: vs kv 0 forward 5.1e-7, adjoint 1.7e-5, adjointness 3.1e-8
+ok
+test kv_split_lists ... nseg 4 order 0 kr 0 m 40000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 2.9e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.8e-6, adjoint 3.5e-5, adjointness 3.2e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 3.3e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 4.5e-7, adjoint 3.6e-5, adjointness 2.9e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 3.6e-5, adjointness 2.8e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.8e-6, adjoint 3.6e-5, adjointness 3.1e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 3.6e-5, adjointness 2.9e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 2.8e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.8e-6, adjoint 3.5e-5, adjointness 3.3e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.2e-7, adjoint 3.6e-5, adjointness 3.6e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 4.2e-7, adjoint 3.6e-5, adjointness 3.0e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 3.5e-6, adjoint 3.6e-5, adjointness 2.7e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 3.8e-6, adjoint 3.6e-5, adjointness 3.0e-8
+nseg 4 order 0 kr 0 m 40000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 3.5e-6, adjoint 3.6e-5, adjointness 2.8e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 2 acb 2: vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 2.8e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 4 acb 2: vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 3.3e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 4 acb 4: vs kv 0 forward 4.3e-7, adjoint 3.5e-5, adjointness 3.8e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 8 acb 2: vs kv 0 forward 4.3e-7, adjoint 3.5e-5, adjointness 3.3e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 8 acb 4: vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 3.3e-8
+nseg 4 order 0 kr 0 m 40000: kv 1 cpba 8 acb 8: vs kv 0 forward 4.3e-7, adjoint 3.6e-5, adjointness 3.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.2e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 3.5e-5, adjointness 7.4e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 4.3e-7, adjoint 3.5e-5, adjointness 7.1e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.3e-6, adjoint 3.5e-5, adjointness 7.0e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 3.5e-5, adjointness 7.1e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.3e-6, adjoint 3.5e-5, adjointness 6.9e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 1 cpbf 1 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.2e-7, adjoint 3.5e-5, adjointness 7.4e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 2 cpbf 2 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 3.5e-5, adjointness 7.3e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 4 cpbf 4 ppf 2 fsb 1 (chunk 32): vs kv 0 forward 4.1e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 8 cpbf 8 ppf 2 fsb 2 (chunk 64): vs kv 0 forward 4.4e-7, adjoint 3.5e-5, adjointness 7.2e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 4 cpbf 2 ppf 4 fsb 2 (chunk 64): vs kv 0 forward 4.3e-6, adjoint 3.5e-5, adjointness 7.1e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 8 cpbf 4 ppf 1 fsb 1 (chunk 32): vs kv 0 forward 5.1e-6, adjoint 3.5e-5, adjointness 7.0e-8
+nseg 4 order 2 kr 3 m 40000: kv 2 cpba 2 cpbf 8 ppf 4 fsb 1 (chunk 16): vs kv 0 forward 4.3e-6, adjoint 3.5e-5, adjointness 7.0e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 2 acb 2: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 4 acb 2: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 4 acb 4: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 8 acb 2: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 8 acb 4: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.5e-8
+nseg 4 order 2 kr 3 m 40000: kv 1 cpba 8 acb 8: vs kv 0 forward 4.0e-7, adjoint 3.5e-5, adjointness 7.3e-8
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 187.64s
+

@@ -1,0 +1,15 @@
+==PROF== Connected to process 841206 (/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/release/proto_gather)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 5.96 GiB, y 0.30 GiB, 400000000000 useful complex MACs per pass
+  ps: 1 candidates, compiled in 0.0 s
+==PROF== Profiling "pg_fwd_ps": 0%
+==WARNING== Launching the workload is taking more time than expected. If this continues to hang, terminate the profile and re-try by profiling the range of all related launches using '--replay-mode range'. See https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay for more details.
+....50%....100% - 43 passes
+==PROF== Profiling "pg_fwd_ps": 0%....50%....100% - 2 passes
+
+==ERROR== LaunchFailed
+==PROF== Trying to shutdown target application
+==ERROR== The application returned an error code (9).
+==WARNING== No source files were imported. Check that the target application was compiled with -lineinfo.
+==PROF== Report: /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/sample_kernels/out/ncu/ps_m4000000_c10_l10_o0.ncu-rep

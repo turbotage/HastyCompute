@@ -1,0 +1,13 @@
+synthetic head [96, 112, 96] at 0.002 m: 317225 object voxels, 32 loops → 31 of 32 virtual coils (energy ≥ 99.900 %), 99.914 % energy kept; σ²/Σσ²: [2.7e-1, 1.7e-1, 1.4e-1, 8.4e-2, 5.9e-2, 5.9e-2, 3.9e-2, 3.0e-2, 2.1e-2, 2.1e-2, 1.7e-2, 1.3e-2, 1.2e-2, 8.8e-3, 8.7e-3, 7.4e-3, 5.7e-3, 5.2e-3, 4.7e-3, 3.9e-3, 3.3e-3, 3.1e-3, 3.0e-3, 2.6e-3, 2.3e-3, 2.0e-3, 1.8e-3, 1.5e-3, 1.3e-3, 1.2e-3, 9.3e-4, 8.6e-4]
+  [synthetic head [96, 112, 96]] 317225 voxels, 317225 fit, time grid 284 points; building the joint basis on the GPU (fp64 Gram)
+    [joint build] time Gram (317225 fit voxels × 284 times) + eigh → K = 14: 1.90 s
+    [joint build] h for 317225 voxels + reduced fp64 Gram (434 × 434): 1.95 s
+    [joint build] eigh of the reduced Gram (434): 0.03 s
+    [joint build] least-squares time extension (35248 voxels × 3990 table times): 12.22 s
+    [joint build] total 16.1 s
+  [synthetic head [96, 112, 96]] coil-common weighted spectrum done (23 s)
+  [synthetic head [96, 112, 96]] ε = 1e-2: fixed (count LS) L = 8 (3.30e-3) → 248 ch; fixed (energy LS) L = 8 (2.95e-3) → 248 ch; SVD L = 7 (5.65e-3) → 217 ch; joint R = 116 (9.83e-3; predicted R 116); joint gain vs fixed 2.14×, vs SVD 1.87× (124 s)
+  [synthetic head [96, 112, 96]] ε = 1e-3: fixed (count LS) L = 9 (7.23e-4) → 279 ch; fixed (energy LS) L = 9 (6.46e-4) → 279 ch; SVD L = 9 (3.39e-4) → 279 ch; joint R = 168 (9.76e-4; predicted R 168); joint gain vs fixed 1.66×, vs SVD 1.66× (150 s)
+  [synthetic head [96, 112, 96]] ε = 1e-4: fixed (count LS) L = 11 (3.35e-5) → 341 ch; fixed (energy LS) L = 11 (2.98e-5) → 341 ch; SVD L = 10 (7.54e-5) → 310 ch; joint R = 220 (9.99e-5; predicted R 220); joint gain vs fixed 1.55×, vs SVD 1.41× (171 s)
+wrote /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/cl_compress/gpu/out/head_2mm.json
+done head_2mm
