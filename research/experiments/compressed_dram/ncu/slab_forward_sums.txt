@@ -1,0 +1,20 @@
+== /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu_cz/sum_f32.csv 513 kernels
+  fft_axis                     grid (2, 256, 1)        x 256      7.93 ms  dram R   3.222 W   3.345 GB
+  fft_axis                     grid (480, 1, 1)        x 256      5.94 ms  dram R   0.000 W   1.513 GB
+  fft_axis                     grid (153600, 1, 1)     x   1     13.80 ms  dram R   5.033 W   6.286 GB
+  total 27.68 ms R 8.26 W 11.14 GB
+== /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu_cz/sum_epi.csv 513 kernels
+  fft_axis                     grid (2, 256, 1)        x 256      7.88 ms  dram R   3.222 W   3.252 GB
+  fft_axis                     grid (480, 1, 1)        x 256      6.89 ms  dram R   0.001 W   1.426 GB
+  fft_axis                     grid (480, 320, 1)      x   1     12.41 ms  dram R   3.814 W   6.285 GB
+  total 27.18 ms R 7.04 W 10.96 GB
+== /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu_cz/sum_d0.csv 513 kernels
+  fft_axis                     grid (2, 256, 1)        x 256      7.87 ms  dram R   3.222 W   3.228 GB
+  fft_axis                     grid (480, 1, 1)        x 256      8.32 ms  dram R   0.001 W   1.454 GB
+  fft_axis                     grid (480, 320, 1)      x   1     12.40 ms  dram R   3.814 W   6.285 GB
+  total 28.58 ms R 7.04 W 10.97 GB
+== /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu_cz/sum_d1.csv 513 kernels
+  fft_axis                     grid (2, 256, 1)        x 256      7.85 ms  dram R   3.222 W   2.831 GB
+  fft_axis                     grid (480, 1, 1)        x 256      9.45 ms  dram R   0.001 W   0.925 GB
+  fft_axis                     grid (480, 320, 1)      x   1     12.41 ms  dram R   3.814 W   6.279 GB
+  total 29.71 ms R 7.04 W 10.04 GB

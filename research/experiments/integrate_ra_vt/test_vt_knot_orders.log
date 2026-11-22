@@ -1,0 +1,39 @@
+
+running 1 test
+test vt_knot_orders ... knot1d o2 8x4: forward floors: one-ulp image 1.3e-6, tile shapes 1.1e-6
+knot1d o2 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.1e-6), adjointness vs tile adjoint 1.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.1e-9 (tile 3.3e-9)
+knot1d o2 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.1e-6), adjointness vs tile adjoint 1.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.1e-9 (tile 3.3e-9)
+knot1d o2 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.1e-6), adjointness vs tile adjoint 1.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.1e-9 (tile 3.3e-9)
+knot1d o2 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.1e-6), adjointness vs tile adjoint 1.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.1e-9 (tile 3.3e-9)
+knot1d o2 6(3)x5: forward floors: one-ulp image 8.2e-6, tile shapes 7.0e-6
+knot1d o2 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 7.2e-6 (tile shapes 7.0e-6), adjointness vs tile adjoint 8.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.1e-7 (tile 1.1e-7)
+knot1d o2 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 7.2e-6 (tile shapes 7.0e-6), adjointness vs tile adjoint 8.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.1e-7 (tile 1.1e-7)
+knot2d o2 4x3: forward floors: one-ulp image 7.7e-6, tile shapes 6.5e-6
+knot2d o2 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 6.7e-6 (tile shapes 6.5e-6), adjointness vs tile adjoint 1.2e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.0e-8 (tile 1.2e-7)
+knot2d o2 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 6.7e-6 (tile shapes 6.5e-6), adjointness vs tile adjoint 1.2e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.0e-8 (tile 1.2e-7)
+knot2d o2 10(5)x10: forward floors: one-ulp image 6.9e-6, tile shapes 6.0e-6
+knot2d o2 10(5)x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 1, vxpad: 0 }: vt vs tile forward 6.3e-6 (tile shapes 6.0e-6), adjointness vs tile adjoint 7.2e-8, vs ra Some(RaCfg { nxg: 1, cb: 2, chk: 16 }) 3.3e-9 (tile 4.6e-8)
+knot2d o2 10(5)x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 2, vxpad: 0 }: vt vs tile forward 6.3e-6 (tile shapes 6.0e-6), adjointness vs tile adjoint 7.2e-8, vs ra Some(RaCfg { nxg: 1, cb: 2, chk: 16 }) 3.3e-9 (tile 4.6e-8)
+knot1d o3 8x4: forward floors: one-ulp image 1.7e-6, tile shapes 1.5e-6
+knot1d o3 8x4: order-3 terms: tile forward with vs without the degree-3/4 data differs by 9.3e-1
+knot1d o3 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.6e-6 (tile shapes 1.5e-6), adjointness vs tile adjoint 1.3e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.4e-9 (tile 1.7e-8)
+knot1d o3 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.6e-6 (tile shapes 1.5e-6), adjointness vs tile adjoint 1.3e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.4e-9 (tile 1.7e-8)
+knot1d o3 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vt vs tile forward 1.6e-6 (tile shapes 1.5e-6), adjointness vs tile adjoint 1.3e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.4e-9 (tile 1.7e-8)
+knot1d o3 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vt vs tile forward 1.6e-6 (tile shapes 1.5e-6), adjointness vs tile adjoint 1.3e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 8.4e-9 (tile 1.7e-8)
+knot1d o3 6(3)x5: forward floors: one-ulp image 1.1e-5, tile shapes 9.7e-6
+knot1d o3 6(3)x5: order-3 terms: tile forward with vs without the degree-3/4 data differs by 9.9e-1
+knot1d o3 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.0e-5 (tile shapes 9.7e-6), adjointness vs tile adjoint 1.8e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.2e-7 (tile 1.6e-7)
+knot1d o3 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.0e-5 (tile shapes 9.7e-6), adjointness vs tile adjoint 1.8e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.2e-7 (tile 1.6e-7)
+knot2d o3 4x3: forward floors: one-ulp image 1.1e-5, tile shapes 9.1e-6
+knot2d o3 4x3: order-3 terms: tile forward with vs without the degree-3/4 data differs by 9.9e-1
+knot2d o3 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.0e-5 (tile shapes 9.1e-6), adjointness vs tile adjoint 1.7e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.4e-7 (tile 1.7e-7)
+knot2d o3 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.0e-5 (tile shapes 9.1e-6), adjointness vs tile adjoint 1.7e-7, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.4e-7 (tile 1.7e-7)
+knot2d o3 10(5)x10: forward floors: one-ulp image 9.0e-6, tile shapes 7.9e-6
+knot2d o3 10(5)x10: order-3 terms: tile forward with vs without the degree-3/4 data differs by 9.9e-1
+knot2d o3 10(5)x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 1, vxpad: 0 }: vt vs tile forward 8.6e-6 (tile shapes 7.9e-6), adjointness vs tile adjoint 7.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 2, chk: 16 }) 8.9e-8 (tile 5.7e-8)
+knot2d o3 10(5)x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 2, vxpad: 0 }: vt vs tile forward 8.6e-6 (tile shapes 7.9e-6), adjointness vs tile adjoint 7.0e-8, vs ra Some(RaCfg { nxg: 1, cb: 2, chk: 16 }) 8.9e-8 (tile 5.7e-8)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 1.29s
+
+exit 0

@@ -1,0 +1,23 @@
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra None kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 3.3e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 3.8e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.5e-4
+Knot2d o3 ra None kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off NaN
+
+thread 'kl_support_union' (952894) panicked at crates/hasty-nufft/tests/seg_kl.rs:353:21:
+control: stale cells not detected (NaN)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_support_union
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.50s
+
+exit 101

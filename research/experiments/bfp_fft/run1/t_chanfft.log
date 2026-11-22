@@ -1,0 +1,26 @@
+=== t_chanfft: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bin/chanfft --nocapture --test-threads 1 pruned_matches_full ksupport_matches_full slab_passes_equal_whole_grid (2026-11-20 15:15:46)
+locked 15:20:10; power limit 300.00 W
+
+running 3 tests
+test ksupport_matches_full ... n [20, 24, 30] × 3, block [(8, 8), (10, 9), (12, 12)], support columns 0.45, proj [0.77, 0.79, 0.85], cells 0.24: forward (support) 0.00e0, inverse (block) 1.52e-7
+n [20, 24, 30] × 3, block [(8, 8), (10, 9), (12, 12)], support columns 0.73, proj [0.83, 0.88, 0.95], cells 0.69: forward (support) 0.00e0, inverse (block) 1.66e-7
+n [16, 20, 24] × 8, block [(16, 0), (10, 10), (1, 0)], support columns 0.07, proj [0.38, 0.35, 0.31], cells 0.02: forward (support) 0.00e0, inverse (block) 1.08e-7
+n [20, 24, 30] × 2, block [(8, 8), (10, 9), (12, 12)], support columns 1.00, proj [1.00, 1.00, 1.00], cells 1.00: forward (support) 0.00e0, inverse (block) 1.68e-7
+ok
+test pruned_matches_full ... n [20, 24, 30] × 3 channels, block [(8, 8), (10, 9), (12, 12)]: forward 0.00e0, inverse (block) 1.72e-7
+n [16, 20, 24] × 8 channels, block [(16, 0), (10, 10), (1, 0)]: forward 0.00e0, inverse (block) 2.96e-7
+n [34, 20, 34] × 4 channels, block [(13, 13), (8, 7), (14, 13)]: forward 0.00e0, inverse (block) 2.42e-7
+ok
+test slab_passes_equal_whole_grid ... slab 1 planes, k-support false: forward identical true, inverse identical true
+slab 3 planes, k-support false: forward identical true, inverse identical true
+slab 8 planes, k-support false: forward identical true, inverse identical true
+slab 100 planes, k-support false: forward identical true, inverse identical true
+slab 1 planes, k-support true: forward identical true, inverse identical true
+slab 3 planes, k-support true: forward identical true, inverse identical true
+slab 8 planes, k-support true: forward identical true, inverse identical true
+slab 100 planes, k-support true: forward identical true, inverse identical true
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.49s
+
+exit 0 15:20:10

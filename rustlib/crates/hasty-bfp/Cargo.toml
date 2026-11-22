@@ -1,0 +1,15 @@
+[package]
+name = "hasty-bfp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Block-floating-point storage codec (CPU + CUDA header) for compressed f32 / complex buffers"
+
+[dependencies]
+cudarc.workspace = true
+hasty-cuda = { path = "../hasty-cuda" }
+rayon = "1.12"
+
+[[bin]]
+name = "bfp_bench"
+path = "src/bin/bfp_bench.rs"

@@ -1,0 +1,11 @@
+=== seg_knot (2026-11-20 15:39:55); power.limit 300.00 W
+
+running 4 tests
+test knot_major_cubic_matches_interval_major ... ok
+test knot_major_linear_matches_interval_major ... ok
+test knot_major_order0_matches_interval_major ... ok
+test knot_major_split_lists_match_interval_major ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+
+exit 0 (2026-11-20 15:40:27)

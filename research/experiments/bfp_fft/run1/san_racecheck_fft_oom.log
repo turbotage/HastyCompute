@@ -1,0 +1,6 @@
+=== san_racecheck_fft: env HASTY_BFP_TEST_BITS=22,23,16 /usr/local/cuda/bin/compute-sanitizer --tool racecheck /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bin/bfp_store --test-threads 1 bfp_store_matches_codec_and_f32 (2026-11-20 15:41:52)
+locked 15:41:59; power limit 300.00 W
+========= COMPUTE-SANITIZER
+
+running 1 test
+test bfp_store_matches_codec_and_f32 ... 

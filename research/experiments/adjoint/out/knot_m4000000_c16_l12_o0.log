@@ -1,0 +1,5 @@
+=== knot_m4000000_c16_l12_o0: env [] --mode base --knot --m 4000000 --ncb 16 --nseg 12 --order 0 (Thu Nov 19 07:23:29 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 192 (16 coils x 12 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  engine points 3.5 s, grid [200, 200, 200]
+  base (today's tile kernels, autotuned 650 s): forward 130.96 ms TileCfg { tt: 4, cpba: 1, cpbf: 8, ppf: 2, chunk: 64, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }, adjoint 220.81 ms TileCfg { tt: 4, cpba: 16, cpbf: 8, ppf: 2, chunk: 44, max_item: 1024, acb: 2, fsb: 2, fcb: 1, kv: 1 } (default TileCfg { tt: 4, cpba: 6, cpbf: 4, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 } / TileCfg { tt: 4, cpba: 6, cpbf: 4, ppf: 2, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 })

@@ -1,0 +1,133 @@
+=== t02_bfp_store_fused: env HASTY_FFT_BFP_STORE=fused /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-fft__bfp_store --nocapture --test-threads 1 (2026-11-21 13:09:23)
+locked 13:09:23; power limit / draw / sm clock / memory used: 450.00 W, 61.07 W, 2565 MHz, 240 MiB
+
+running 3 tests
+test bfp_store_matches_codec_and_f32 ... block, 3 ch (partial tiles)        bfp16: blocks written 2304 / 2304 of 2304; buffer error 1.956 / 1.900 · 2^-b; forward (support) 1.956, inverse (block) 1.901 · 2^-b vs f32; exact writer + reader
+block, 3 ch (partial tiles)        bfp20: blocks written 2304 / 2304 of 2304; buffer error 1.977 / 1.912 · 2^-b; forward (support) 1.979, inverse (block) 1.917 · 2^-b vs f32; exact writer + reader
+block, 3 ch (partial tiles)        bfp22: blocks written 2304 / 2304 of 2304; buffer error 1.970 / 1.930 · 2^-b; forward (support) 2.000, inverse (block) 2.018 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+block, 3 ch (partial tiles)        bfp24: blocks written 2304 / 2304 of 2304; buffer error 2.061 / 2.000 · 2^-b; forward (support) 2.455, inverse (block) 2.950 · 2^-b vs f32; exact writer + reader
+block, 3 ch (partial tiles)        bfp17: blocks written 2304 / 2304 of 2304; buffer error 1.983 / 1.894 · 2^-b; forward (support) 1.983, inverse (block) 1.888 · 2^-b vs f32; exact writer + reader
+block, 3 ch (partial tiles)        bfp23: blocks written 2304 / 2304 of 2304; buffer error 1.990 / 1.948 · 2^-b; forward (support) 2.105, inverse (block) 2.237 · 2^-b vs f32; exact writer + reader
+ball, 3 ch                         bfp16: blocks written 1440 / 1440 of 2304; buffer error 1.928 / 2.020 · 2^-b; forward (support) 1.929, inverse (block) 2.018 · 2^-b vs f32; exact writer + reader
+ball, 3 ch                         bfp20: blocks written 1440 / 1440 of 2304; buffer error 1.924 / 2.037 · 2^-b; forward (support) 1.913, inverse (block) 2.022 · 2^-b vs f32; exact writer + reader
+ball, 3 ch                         bfp22: blocks written 1440 / 1440 of 2304; buffer error 1.942 / 2.025 · 2^-b; forward (support) 1.988, inverse (block) 2.107 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+ball, 3 ch                         bfp24: blocks written 1440 / 1440 of 2304; buffer error 2.029 / 2.134 · 2^-b; forward (support) 2.432, inverse (block) 2.983 · 2^-b vs f32; exact writer + reader
+ball, 3 ch                         bfp17: blocks written 1440 / 1440 of 2304; buffer error 1.949 / 2.051 · 2^-b; forward (support) 1.944, inverse (block) 2.056 · 2^-b vs f32; exact writer + reader
+ball, 3 ch                         bfp23: blocks written 1440 / 1440 of 2304; buffer error 1.947 / 2.078 · 2^-b; forward (support) 2.068, inverse (block) 2.344 · 2^-b vs f32; exact writer + reader
+cube, 3 ch                         bfp16: blocks written 2016 / 2016 of 2304; buffer error 1.921 / 1.901 · 2^-b; forward (support) 1.921, inverse (block) 1.912 · 2^-b vs f32; exact writer + reader
+cube, 3 ch                         bfp20: blocks written 2016 / 2016 of 2304; buffer error 1.918 / 1.890 · 2^-b; forward (support) 1.921, inverse (block) 1.894 · 2^-b vs f32; exact writer + reader
+cube, 3 ch                         bfp22: blocks written 2016 / 2016 of 2304; buffer error 1.923 / 1.893 · 2^-b; forward (support) 1.956, inverse (block) 1.968 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+cube, 3 ch                         bfp24: blocks written 2016 / 2016 of 2304; buffer error 2.019 / 1.984 · 2^-b; forward (support) 2.412, inverse (block) 2.929 · 2^-b vs f32; exact writer + reader
+cube, 3 ch                         bfp17: blocks written 2016 / 2016 of 2304; buffer error 1.931 / 1.881 · 2^-b; forward (support) 1.932, inverse (block) 1.880 · 2^-b vs f32; exact writer + reader
+cube, 3 ch                         bfp23: blocks written 2016 / 2016 of 2304; buffer error 1.937 / 1.923 · 2^-b; forward (support) 2.049, inverse (block) 2.216 · 2^-b vs f32; exact writer + reader
+non-convex, 5 ch                   bfp16: blocks written 1469 / 1469 of 2574; buffer error 1.905 / 1.933 · 2^-b; forward (support) 1.904, inverse (block) 1.927 · 2^-b vs f32; exact writer + reader
+non-convex, 5 ch                   bfp20: blocks written 1469 / 1469 of 2574; buffer error 1.909 / 1.938 · 2^-b; forward (support) 1.914, inverse (block) 1.944 · 2^-b vs f32; exact writer + reader
+non-convex, 5 ch                   bfp22: blocks written 1469 / 1469 of 2574; buffer error 1.907 / 1.975 · 2^-b; forward (support) 1.946, inverse (block) 2.030 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+non-convex, 5 ch                   bfp24: blocks written 1469 / 1469 of 2574; buffer error 1.998 / 2.047 · 2^-b; forward (support) 2.452, inverse (block) 2.830 · 2^-b vs f32; exact writer + reader
+non-convex, 5 ch                   bfp17: blocks written 1469 / 1469 of 2574; buffer error 1.915 / 1.986 · 2^-b; forward (support) 1.887, inverse (block) 1.981 · 2^-b vs f32; exact writer + reader
+non-convex, 5 ch                   bfp23: blocks written 1469 / 1469 of 2574; buffer error 1.972 / 2.020 · 2^-b; forward (support) 2.093, inverse (block) 2.248 · 2^-b vs f32; exact writer + reader
+full support, 2 ch                 bfp16: blocks written 1536 / 1536 of 1536; buffer error 1.999 / 1.905 · 2^-b; forward (support) 1.999, inverse (block) 1.898 · 2^-b vs f32; exact writer + reader
+full support, 2 ch                 bfp20: blocks written 1536 / 1536 of 1536; buffer error 1.972 / 1.895 · 2^-b; forward (support) 1.973, inverse (block) 1.900 · 2^-b vs f32; exact writer + reader
+full support, 2 ch                 bfp22: blocks written 1536 / 1536 of 1536; buffer error 1.989 / 1.921 · 2^-b; forward (support) 2.020, inverse (block) 1.994 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+full support, 2 ch                 bfp24: blocks written 1536 / 1536 of 1536; buffer error 2.058 / 2.008 · 2^-b; forward (support) 2.444, inverse (block) 2.962 · 2^-b vs f32; exact writer + reader
+full support, 2 ch                 bfp17: blocks written 1536 / 1536 of 1536; buffer error 2.015 / 1.890 · 2^-b; forward (support) 2.015, inverse (block) 1.905 · 2^-b vs f32; exact writer + reader
+full support, 2 ch                 bfp23: blocks written 1536 / 1536 of 1536; buffer error 2.016 / 1.966 · 2^-b; forward (support) 2.133, inverse (block) 2.255 · 2^-b vs f32; exact writer + reader
+block, 8 ch, z tail 0 (whole tiles) bfp16: blocks written 3840 / 3840 of 3840; buffer error 1.710 / 1.990 · 2^-b; forward (support) 1.710, inverse (block) 1.981 · 2^-b vs f32; exact writer + reader, in place = dense (2 % of the dense buffer's bytes)
+block, 8 ch, z tail 0 (whole tiles) bfp20: blocks written 3840 / 3840 of 3840; buffer error 1.737 / 1.996 · 2^-b; forward (support) 1.738, inverse (block) 1.981 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch, z tail 0 (whole tiles) bfp22: blocks written 3840 / 3840 of 3840; buffer error 1.761 / 1.994 · 2^-b; forward (support) 1.790, inverse (block) 2.058 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch, z tail 0 (whole tiles) bfp24: blocks written 3840 / 3840 of 3840; buffer error 1.869 / 2.072 · 2^-b; forward (support) 2.189, inverse (block) 2.847 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch, z tail 0 (whole tiles) bfp17: blocks written 3840 / 3840 of 3840; buffer error 1.751 / 1.984 · 2^-b; forward (support) 1.751, inverse (block) 1.997 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch, z tail 0 (whole tiles) bfp23: blocks written 3840 / 3840 of 3840; buffer error 1.772 / 2.043 · 2^-b; forward (support) 1.874, inverse (block) 2.292 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp16: blocks written 336 / 336 of 3840; buffer error 1.749 / 1.980 · 2^-b; forward (support) 1.797, inverse (block) 1.898 · 2^-b vs f32; exact writer + reader, in place = dense (2 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp20: blocks written 336 / 336 of 3840; buffer error 1.717 / 1.956 · 2^-b; forward (support) 1.619, inverse (block) 1.996 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp22: blocks written 336 / 336 of 3840; buffer error 1.749 / 1.999 · 2^-b; forward (support) 1.847, inverse (block) 2.015 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical, in place = dense (1 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp24: blocks written 336 / 336 of 3840; buffer error 1.887 / 2.067 · 2^-b; forward (support) 2.365, inverse (block) 2.544 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp17: blocks written 336 / 336 of 3840; buffer error 1.708 / 1.871 · 2^-b; forward (support) 1.740, inverse (block) 1.954 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, 8 ch, z tail 0               bfp23: blocks written 336 / 336 of 3840; buffer error 1.783 / 2.040 · 2^-b; forward (support) 1.898, inverse (block) 2.273 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, in-place y / z, 3 ch        bfp16: blocks written 1472 / 1472 of 1472; buffer error 2.087 / 2.022 · 2^-b; forward (support) 2.087, inverse (block) 2.037 · 2^-b vs f32; exact writer + reader
+block, in-place y / z, 3 ch        bfp20: blocks written 1472 / 1472 of 1472; buffer error 2.109 / 2.008 · 2^-b; forward (support) 2.111, inverse (block) 1.991 · 2^-b vs f32; exact writer + reader
+block, in-place y / z, 3 ch        bfp22: blocks written 1472 / 1472 of 1472; buffer error 2.085 / 2.031 · 2^-b; forward (support) 2.114, inverse (block) 2.085 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+block, in-place y / z, 3 ch        bfp24: blocks written 1472 / 1472 of 1472; buffer error 2.165 / 2.136 · 2^-b; forward (support) 2.565, inverse (block) 2.861 · 2^-b vs f32; exact writer + reader
+block, in-place y / z, 3 ch        bfp17: blocks written 1472 / 1472 of 1472; buffer error 2.086 / 2.016 · 2^-b; forward (support) 2.086, inverse (block) 2.013 · 2^-b vs f32; exact writer + reader
+block, in-place y / z, 3 ch        bfp23: blocks written 1472 / 1472 of 1472; buffer error 2.118 / 2.073 · 2^-b; forward (support) 2.231, inverse (block) 2.279 · 2^-b vs f32; exact writer + reader
+ball, in-place y / z, 7 ch         bfp16: blocks written 1656 / 1656 of 3312; buffer error 2.055 / 1.968 · 2^-b; forward (support) 2.055, inverse (block) 1.978 · 2^-b vs f32; exact writer + reader
+ball, in-place y / z, 7 ch         bfp20: blocks written 1656 / 1656 of 3312; buffer error 2.097 / 1.980 · 2^-b; forward (support) 2.107, inverse (block) 1.973 · 2^-b vs f32; exact writer + reader
+ball, in-place y / z, 7 ch         bfp22: blocks written 1656 / 1656 of 3312; buffer error 2.119 / 1.974 · 2^-b; forward (support) 2.152, inverse (block) 2.042 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+ball, in-place y / z, 7 ch         bfp24: blocks written 1656 / 1656 of 3312; buffer error 2.172 / 2.066 · 2^-b; forward (support) 2.589, inverse (block) 2.742 · 2^-b vs f32; exact writer + reader
+ball, in-place y / z, 7 ch         bfp17: blocks written 1656 / 1656 of 3312; buffer error 2.071 / 1.976 · 2^-b; forward (support) 2.072, inverse (block) 1.992 · 2^-b vs f32; exact writer + reader
+ball, in-place y / z, 7 ch         bfp23: blocks written 1656 / 1656 of 3312; buffer error 2.138 / 2.009 · 2^-b; forward (support) 2.249, inverse (block) 2.230 · 2^-b vs f32; exact writer + reader
+ball, y 384 (unpadded smem), 3 ch  bfp16: blocks written 11200 / 11200 of 12288; buffer error 1.899 / 1.931 · 2^-b; forward (support) 1.872, inverse (block) 1.931 · 2^-b vs f32; exact writer + reader
+ball, y 384 (unpadded smem), 3 ch  bfp20: blocks written 11200 / 11200 of 12288; buffer error 1.885 / 1.928 · 2^-b; forward (support) 1.875, inverse (block) 1.930 · 2^-b vs f32; exact writer + reader
+ball, y 384 (unpadded smem), 3 ch  bfp22: blocks written 11200 / 11200 of 12288; buffer error 1.889 / 1.942 · 2^-b; forward (support) 1.901, inverse (block) 2.028 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical
+ball, y 384 (unpadded smem), 3 ch  bfp24: blocks written 11200 / 11200 of 12288; buffer error 1.976 / 2.024 · 2^-b; forward (support) 2.345, inverse (block) 3.088 · 2^-b vs f32; exact writer + reader
+ball, y 384 (unpadded smem), 3 ch  bfp17: blocks written 11200 / 11200 of 12288; buffer error 1.878 / 1.931 · 2^-b; forward (support) 1.840, inverse (block) 1.927 · 2^-b vs f32; exact writer + reader
+ball, y 384 (unpadded smem), 3 ch  bfp23: blocks written 11200 / 11200 of 12288; buffer error 1.925 / 1.974 · 2^-b; forward (support) 2.013, inverse (block) 2.309 · 2^-b vs f32; exact writer + reader
+block, 8 ch (whole tiles)          bfp16: blocks written 5760 / 5760 of 5760; buffer error 2.004 / 1.904 · 2^-b; forward (support) 2.004, inverse (block) 1.902 · 2^-b vs f32; exact writer + reader, in place = dense (2 % of the dense buffer's bytes)
+block, 8 ch (whole tiles)          bfp20: blocks written 5760 / 5760 of 5760; buffer error 1.999 / 1.917 · 2^-b; forward (support) 2.001, inverse (block) 1.920 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch (whole tiles)          bfp22: blocks written 5760 / 5760 of 5760; buffer error 2.024 / 1.934 · 2^-b; forward (support) 2.053, inverse (block) 2.006 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch (whole tiles)          bfp24: blocks written 5760 / 5760 of 5760; buffer error 2.076 / 1.993 · 2^-b; forward (support) 2.461, inverse (block) 2.928 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch (whole tiles)          bfp17: blocks written 5760 / 5760 of 5760; buffer error 2.000 / 1.919 · 2^-b; forward (support) 2.000, inverse (block) 1.924 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+block, 8 ch (whole tiles)          bfp23: blocks written 5760 / 5760 of 5760; buffer error 2.032 / 1.955 · 2^-b; forward (support) 2.146, inverse (block) 2.239 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp16: blocks written 1820 / 1820 of 3718; buffer error 1.916 / 2.023 · 2^-b; forward (support) 1.931, inverse (block) 2.019 · 2^-b vs f32; exact writer + reader, in place = dense (2 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp20: blocks written 1820 / 1820 of 3718; buffer error 1.944 / 2.022 · 2^-b; forward (support) 1.943, inverse (block) 2.025 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp22: blocks written 1820 / 1820 of 3718; buffer error 1.935 / 2.021 · 2^-b; forward (support) 1.970, inverse (block) 2.082 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical, in place = dense (1 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp24: blocks written 1820 / 1820 of 3718; buffer error 1.978 / 2.133 · 2^-b; forward (support) 2.402, inverse (block) 2.898 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp17: blocks written 1820 / 1820 of 3718; buffer error 1.931 / 1.989 · 2^-b; forward (support) 1.915, inverse (block) 1.998 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+non-convex, 8 ch (whole tiles)     bfp23: blocks written 1820 / 1820 of 3718; buffer error 1.951 / 2.045 · 2^-b; forward (support) 2.059, inverse (block) 2.294 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp16: blocks written 966 / 966 of 1840; buffer error 2.089 / 1.987 · 2^-b; forward (support) 2.074, inverse (block) 1.980 · 2^-b vs f32; exact writer + reader, in place = dense (2 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp20: blocks written 966 / 966 of 1840; buffer error 2.087 / 1.996 · 2^-b; forward (support) 2.113, inverse (block) 1.995 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp22: blocks written 966 / 966 of 1840; buffer error 2.095 / 2.004 · 2^-b; forward (support) 2.137, inverse (block) 2.043 · 2^-b vs f32; exact writer + reader, slabs [1, 3] identical, in place = dense (1 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp24: blocks written 966 / 966 of 1840; buffer error 2.155 / 2.099 · 2^-b; forward (support) 2.558, inverse (block) 2.749 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp17: blocks written 966 / 966 of 1840; buffer error 2.115 / 1.974 · 2^-b; forward (support) 2.096, inverse (block) 1.964 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+ball, in-place y / z, 4 ch (whole tiles) bfp23: blocks written 966 / 966 of 1840; buffer error 2.111 / 2.007 · 2^-b; forward (support) 2.249, inverse (block) 2.221 · 2^-b vs f32; exact writer + reader, in place = dense (1 % of the dense buffer's bytes)
+buffer error range 1.708 … 2.172 · 2^-b; worst transform error 3.088 · 2^-b
+ok
+test bfp_store_short_batch ... short batch 3 of 8 channels, in place, k-support false, forward: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, in place, k-support false, inverse: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, in place, k-support false, forward: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, in place, k-support false, inverse: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 8 of 8 channels, in place, k-support false, forward: stale channels do not change the active results (0 of 115200 values differ before restricting to the defined cells)
+short batch 8 of 8 channels, in place, k-support false, inverse: stale channels do not change the active results (0 of 115200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, dense, k-support false, forward: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, dense, k-support false, inverse: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, dense, k-support false, forward: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, dense, k-support false, inverse: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, in place, k-support true, forward: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, in place, k-support true, inverse: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, in place, k-support true, forward: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, in place, k-support true, inverse: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 8 of 8 channels, in place, k-support true, forward: stale channels do not change the active results (0 of 115200 values differ before restricting to the defined cells)
+short batch 8 of 8 channels, in place, k-support true, inverse: stale channels do not change the active results (0 of 115200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, dense, k-support true, forward: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 3 of 8 channels, dense, k-support true, inverse: stale channels do not change the active results (0 of 43200 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, dense, k-support true, forward: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+short batch 5 of 8 channels, dense, k-support true, inverse: stale channels do not change the active results (0 of 72000 values differ before restricting to the defined cells)
+ok
+test bfp_store_switch ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.50s
+
+	Command being timed: "timeout 900 env HASTY_FFT_BFP_STORE=fused /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-fft__bfp_store --nocapture --test-threads 1"
+	User time (seconds): 31.39
+	System time (seconds): 1.14
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:32.55
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 202616
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 541842
+	Voluntary context switches: 550
+	Involuntary context switches: 282
+	Swaps: 0
+	File system inputs: 8
+	File system outputs: 46416
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:09:56; power limit at end 450.00 W

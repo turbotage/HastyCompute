@@ -133,6 +133,9 @@ fn warp_adjoint_gpu() {
     // envelope over 4 runs; the warped operator must stay inside 3x that envelope
     for frames in [1usize, 3] {
         let (mut op, seg, pts, _, _, _, _, w) = build(&dev, &c, 8, frames, WarpStencil::Cubic);
+        // the warped operator runs the separate pad / crop kernels: the plain reference too (the fused pad / crop of
+        // the plain path rounds differently, here with a smaller mismatch: 7.5e-5 against 4.2e-4)
+        op.fuse_padcrop = false;
         let m = c.tau.len();
         let xr: Vec<C32> = (0..frames * nv).map(|i| C32::new(((i * 7919) % 101) as f32 / 50.0 - 1.0, ((i * 104729) % 97) as f32 / 48.0 - 1.0)).collect();
         let yr: Vec<C32> = (0..c.nc * m).map(|i| C32::new(((i * 31) % 89) as f32 / 44.0 - 1.0, ((i * 17) % 83) as f32 / 41.0 - 1.0)).collect();

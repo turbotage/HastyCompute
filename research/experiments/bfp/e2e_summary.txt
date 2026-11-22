@@ -1,0 +1,10 @@
+rms(A x)/sigma_k over the grid at image SNR 20: 4.01
+| b | forward ε_f (data samples) | gradient, early iteration (A^H A x, measured) | adjoint ε_a, noise residual | gradient at convergence, / ‖A^H n‖ | ε_f / NUFFT forward error (1e-5) |
+|---|---|---|---|---|---|
+| 16 | 4.9e-05 | 2.5e-05 (all buffers at b) | 3.3e-05 | 2.0e-04 | 4.93 |
+| 18 | 1.2e-05 | — (all buffers at b) | 8.3e-06 | 5.0e-05 | 1.23 |
+| 20 | 3.1e-06 | 1.6e-06 (all buffers at b) | 2.1e-06 | 1.3e-05 | 0.31 |
+| 22 | 7.8e-07 | — (all buffers at b) | 5.3e-07 | 3.2e-06 | 0.08 |
+| 24 | 2.1e-07 | 9.8e-08 (all buffers at b) | 1.6e-07 | 8.6e-07 | 0.02 |
+e2e measured: {'proposed_b16': '1.80e-05', 'proposed_b20': '1.50e-06', 'proposed_b22': '1.04e-06', 'proposed_b24': '1.01e-06', 'all_b16': '2.52e-05', 'all_b20': '1.57e-06', 'all_b24': '9.81e-08', 'all_f32': '3.96e-08'}
+NUFFT reference: forward 1e-5 -> converged gradient 4.0e-05

@@ -1,0 +1,45 @@
+=== p192_o3_static_cb10: nsys + /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_gs2 --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 10 --models seg-full --sets 1 --seq flow --no-gnl --reps 1 --profile (2026-11-20 14:38:11); power 300.00 W, 275.23 W, 2805 MHz
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.8 GiB free), PCIe pinned 21.4 / 20.1 GB/s (h2d / d2h), device 915 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 10 virtual coils, GNL off, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 10.0 min (600 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 7592 rotations, GIRF ideal
+   53144 readouts × 3990 ADC samples (step 1), 212044560 samples; 140 static sets (samples per set 1412460 / 1516200 / 1631910 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (no GNL) + quadratic monomial fit over 2466061 support voxels: 9.2 s
+  model seg-full:
+    matrix [192, 192, 192] (voxel 2.344 × 2.344 × 1.167 mm, 7077888 voxels): image 0.06 GB, coil maps 0.57 GB, segment diagonals 0.57 GB per encode
+    autotune 25.2 s: fwd TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 2, chunk: 16, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }
+    FFT column: k-support pruned grid FFT (100 ch, grid [240, 240, 240], z-pass columns 0.863, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.628, x pass Some((16, 48)) lines × threads, two-pass L2 slabs of 1 z planes (46.1 MB), pad / crop fused into the x passes (not in this FFT time)) — forward 38.42 ms × 1, inverse 39.51 ms × 1 per call
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-d282.qdstrm'
+[1/1] [0%                          ] p192_o3_static_cb10.nsys-repProcessing events...
+[1/1] [0%                          ] p192_o3_static_cb10.nsys-rep[1/1] [=====32%                    ] p192_o3_static_cb10.nsys-rep[1/1] [======33%                   ] p192_o3_static_cb10.nsys-rep[1/1] [======35%                   ] p192_o3_static_cb10.nsys-rep[1/1] [==============61%           ] p192_o3_static_cb10.nsys-rep[1/1] [=====================88%    ] p192_o3_static_cb10.nsys-rep[1/1] [========================100%] p192_o3_static_cb10.nsys-rep    profiled one gradient (forward + adjoint) between cuProfilerStart / Stop
+[1/1] [========================100%] p192_o3_static_cb10.nsys-rep    frame 4 encode 2             M   1516200: forward    194.2 ms, adjoint    215.4 ms, normal    410.4 ms | kernels 134.5 / 152.4 ms, FFT 38.4 / 39.5 ms, pad/crop/rest 21.2 / 23.5 ms | tables 1.1 s, 221 B/sample on the GPU
+
+    engine 10.88 GiB (coil batch 10), segment tables 0.53 GiB per encode (0.6 s), resident problem 125.4 GiB (does not fit: data streamed from host), device part without data 76.0 GiB
+    per iteration: operator 57.28 s (forward + adjoint over 140 sets, 2.120e8 samples; tile kernels (gridding + physics) 70 %, FFT 19 %, pad/crop/rest 11 %) + data streaming 2.98 s + prior round trip 0.61 s + ZMSHR1 vectors 0.07 s = 60.94 s; setup 190 s; 40 iterations ≈ 43.8 min
+    format error: memory plan: nothing fits — smallest placement needs 33.51 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 10.0 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  3 |         60.94 |      43.8 |    125.4 (streamed)
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.nsys-rep
+exit 0 (2026-11-20 14:38:55)
+Generating SQLite file /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite from /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.nsys-rep
+Processing [/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite] with [/opt/nvidia/nsight-systems/2025.3.2/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/grid_sizes/p/p192_o3_static_cb10_cuda_gpu_kern_sum.csv]... PROCESSED
+
+
+NOTICE: Existing SQLite export found: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite
+        It is assumed file was previously exported from: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite] with [/opt/nvidia/nsight-systems/2025.3.2/host-linux-x64/reports/cuda_gpu_mem_time_sum.py] to [/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/grid_sizes/p/p192_o3_static_cb10_cuda_gpu_mem_time_sum.csv]... PROCESSED
+
+
+NOTICE: Existing SQLite export found: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite
+        It is assumed file was previously exported from: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/p192_o3_static_cb10.sqlite] with [/opt/nvidia/nsight-systems/2025.3.2/host-linux-x64/reports/cuda_gpu_trace.py] to [/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/grid_sizes/p/p192_o3_static_cb10_cuda_gpu_trace.csv]... PROCESSED
+

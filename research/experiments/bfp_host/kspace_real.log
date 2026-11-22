@@ -1,0 +1,11 @@
+store /home/turbotage/Documents/GitHub/HastyCompute/rustlib/crates/hasty-recon/../../target/kstore/69d8d33581799b5c.kst: 280 sets × 22 virtual coils, 46893231 samples; σ 28.2701 per component (store key); every 4th set
+peak / σ 1763; data-only σ estimate (weakest coil, median over sets) 28.9785 = 1.025 × the key's
+σ rule widths: 15 bits × 70
+ bfp12: rms error 6.52e-3 σ, max 0.566 σ, 3.063 bytes per complex (0.383 of f32)
+ bfp14: rms error 1.63e-3 σ, max 0.141 σ, 3.563 bytes per complex (0.445 of f32)
+ bfp16: rms error 4.08e-4 σ, max 0.035 σ, 4.063 bytes per complex (0.508 of f32)
+  rule: rms error 8.15e-4 σ, max 0.071 σ, 3.813 bytes per complex (0.477 of f32)
+host codec on this data (σ-rule width, 8 rayon threads): encode 9.08 GB/s, decode 15.00 GB/s of f32 bytes
+store built from set 0: BFP, width per set from the noise rule (peak block step ≤ 0.25 σ) in RAM: 1 sets × 22 coils, 0.03 GiB raw → 0.01 GiB stored (×2.10), 0.01 GiB in RAM; BFP widths 15 bits × 1, worst block step 0.141 σ, predicted rms error 8.28e-4 σ
+test sigma_rule_on_a_real_store ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.75s

@@ -462,8 +462,35 @@ impl LedgerPlan {
 /// data (all sets resident, or one staged set), the tables (resident, or two slots of the largest set), the fixed
 /// operator, the model scratch, and the state (device: x, g, step + secant pair (+ w) or the λ_max power stacks;
 /// host: six node slots). Host needs: host state 4 stacks (x, g, x_prev, g_prev; the λ_max power iteration's two
-/// extra stacks come before the solver's), device state 1 stack (the prior's copy) + the pinned pair and w.
+/// extra stacks come before the solver's — Lanczos (`--lam-method`, default): three extra host stacks with host state,
+/// one (q_{j−1}) with device state, plus K stacks only when the warm start is on, which recon_p2np's `--lam-warm auto`
+/// allows only within min(HASTY_LAM_WARM_GB, ¼ of the available memory)), device state 1 stack (the prior's copy) +
+/// the pinned pair and w.
 pub fn plan(n: &LedgerIn, force_state: Option<bool>, force_data: Option<bool>, force_tables: Option<bool>) -> Result<LedgerPlan, String> {
+    plan_sink(n, false, force_state, force_data, force_tables)
+}
+
+/// [`plan`] for an objective with (`has_sink`) or without a gradient sink path (`Objective::has_gradient_sink`: the
+/// velocity objective in at-knots mode has one, so a BFP host state stores g and g_prev at their width; without it they
+/// stay f32)
+pub fn plan_sink(n: &LedgerIn, has_sink: bool, force_state: Option<bool>, force_data: Option<bool>, force_tables: Option<bool>) -> Result<LedgerPlan, String> {
+    let store = crate::bfpstate::StateStore::from_env()?;
+    let kst = crate::kstage::stage_from_env().map_err(|e| e.to_string())?;
+    plan_with(n, store.effective(has_sink), kst, force_state, force_data, force_tables)
+}
+
+/// [`plan`] with the host state's storage (`HASTY_STATE_STORE`, [`crate::bfpstate::StateStore`]) and the k-space
+/// staging tier (`HASTY_KSTAGE`, [`crate::kstage::stage_from_env`]) given explicitly (`store` as the run uses it:
+/// [`crate::bfpstate::StateStore::effective`] of the objective's gradient sink). Sizes from `hasty_bfp::Bfp`
+/// bytes: BFP host state = x (f32) + g, g_prev, secant step in their widths (+ one more set-sized f32 temporary of the
+/// metric steps); packed staging = the f32 set the device decodes into plus its packed upload, PCIe at the BFP size;
+/// resident packed = every set at the BFP size on the device plus one decoded set, no PCIe per gradient. With both
+/// None the plan is the f32 one, entry for entry.
+pub fn plan_with(n: &LedgerIn, store: crate::bfpstate::StateStore, kst: Option<(crate::kstore::BfpRule, bool)>, force_state: Option<bool>, force_data: Option<bool>, force_tables: Option<bool>) -> Result<LedgerPlan, String> {
+    let ratio = |f: Option<hasty_bfp::Bfp>| f.map_or(1.0, |b| b.bytes_per_complex() / 8.0);
+    let sb = |f: Option<hasty_bfp::Bfp>| (n.stack as f64 * ratio(f)).ceil() as usize;
+    let kr = kst.as_ref().map(|(r, _)| crate::kstage::planning_ratio(r));
+    let kres = kst.as_ref().is_some_and(|(_, r)| *r);
     let img = if n.img_frames > 0 { n.img_frames } else { n.nk } * n.nv * 8;
     let (data_all, data_max, tab_all, tab_max) = (n.data_all, n.data_max, n.tab_all, n.tab_max);
     let scratch = 2 * n.nv * 8 + 16 * n.nv * 4 + if n.slots > 0 { n.slots } else { 6 * n.chunk_max };
@@ -491,13 +518,20 @@ pub fn plan(n: &LedgerIn, force_state: Option<bool>, force_data: Option<bool>, f
                     // the set image is freed after the residual, before its adjoint is allocated: one knot stack
                     e.push((format!("set image / its adjoint ({} images × {} voxels, one set)", if n.img_frames > 0 { n.img_frames } else { n.nk }, n.nv), img, 0));
                     e.push(("residual of the largest set".into(), data_max, 0));
-                    e.push((if data_host { "k-space data: one set staged".into() } else { "k-space data, resident".into() }, if data_host { data_max } else { data_all }, 0));
+                    match (data_host, kr) {
+                        (true, Some(r)) if kres => e.push((format!("k-space data: all sets packed on the device (BFP, {:.3} of f32) + one decoded set", r), (data_all as f64 * r).ceil() as usize + data_max, 0)),
+                        (true, Some(r)) => e.push((format!("k-space data: one set staged packed (BFP, {:.3} of f32), decoded on the device", r), data_max + (data_max as f64 * r).ceil() as usize, 0)),
+                        _ => e.push((if data_host { "k-space data: one set staged".into() } else { "k-space data, resident".into() }, if data_host { data_max } else { data_all }, 0)),
+                    }
                     e.push((if tables_host { "sample tables: two streaming slots".into() } else { "sample tables, resident".into() }, if tables_host { 2 * tab_max } else { tab_all }, 0));
                     e.push(("model scratch (node images, accumulators, metric weights)".into(), scratch, if state_host { n.nk * n.nv * 4 } else { n.nk * n.nv * 4 }));
                     if n.prior_dev > 0 {
                         e.push(("prior on the device".into(), n.prior_dev, 0));
                     }
-                    if state_host {
+                    if state_host && !store.is_f32() {
+                        let h = n.stack + sb(store.grad) + if n.quasi { sb(store.grad) + sb(store.pair) + n.chunk_max } else { 0 };
+                        e.push((format!("parameter state ({}; host)", store.describe()), 0, h));
+                    } else if state_host {
                         e.push(("parameter state: x, g, x_prev, g_prev (host)".into(), 0, 4 * n.stack));
                     } else {
                         let dev_st = 3 + if n.quasi && !prev_host { 3 } else { 0 };
@@ -510,14 +544,15 @@ pub fn plan(n: &LedgerIn, force_state: Option<bool>, force_data: Option<bool>, f
                     // times and the gradient up / down E times over pageable memory (E = sets)
                     let ns = n.nsets.max(1) as f64;
                     let mut tr = 0.0;
-                    if data_host {
-                        tr += data_all as f64 / n.h2d;
+                    if data_host && !kres {
+                        tr += data_all as f64 * kr.unwrap_or(1.0) / n.h2d;
                     }
                     if tables_host {
                         tr += tab_all as f64 / n.h2d;
                     }
                     if state_host {
-                        tr += 4.0 * ns * n.stack as f64 / n.pageable;
+                        // θ up twice and the gradient down per set: the gradient download at the BFP size when packed
+                        tr += (3.0 + ratio(store.grad)) * ns * n.stack as f64 / n.pageable;
                     }
                     if prev_host {
                         tr += 4.0 * n.stack as f64 / n.h2d;
@@ -539,6 +574,56 @@ pub fn plan(n: &LedgerIn, force_state: Option<bool>, force_data: Option<bool>, f
         }
     }
     best.ok_or_else(|| format!("knot mode: no placement fits (device budget {:.2} GiB, host {:.2} GiB available):\n  {}", n.dev_budget as f64 / GIB, n.host_avail as f64 / GIB, rejected.join("\n  ")))
+}
+
+/// Size the knot engine's grid slot from the ledger (research/memory_ledger.md §3: the slot as a ledger entry, sized
+/// before the engine is built): `n.fixed` holds the operator's device bytes WITHOUT the grid slot; `slot_of(cb)` is
+/// the slot of a coil batch of `cb` coils (the BFP intermediates included). The largest batch (≤ `cb_cap` coils) whose
+/// slot fits next to the rest of the plan bounds the choice; among the batches up to it the rule of the engine's
+/// planner (`hasty_nufft::plan_batch`, research/sample_kernels.md §18.7 / §18.9): the fewest transformed channels
+/// (every coil batch transforms a full slot, so a ragged last batch costs FFT time for nothing), then the fewest
+/// passes. The placement at that slot is [`plan_with`]'s (least transfer). `safety` (e.g. 0.05) is kept free of the
+/// device budget for the estimate's error. Returns (slot bytes, coil batch, the plan at that slot); Err(the refusal at
+/// one coil) when not even one coil fits.
+#[allow(clippy::too_many_arguments)]
+pub fn slot_budget_with(n: &LedgerIn, store: crate::bfpstate::StateStore, kst: Option<(crate::kstore::BfpRule, bool)>, force_state: Option<bool>, force_data: Option<bool>, force_tables: Option<bool>, nc: usize, cb_cap: usize, safety: f64, slot_of: &dyn Fn(usize) -> usize) -> Result<(usize, usize, LedgerPlan), String> {
+    let nc = nc.max(1);
+    let cap = cb_cap.clamp(1, nc);
+    let mut m = n.clone();
+    m.dev_budget = (n.dev_budget as f64 * (1.0 - safety.clamp(0.0, 0.5))) as usize;
+    let fits = |cb: usize| -> Result<LedgerPlan, String> {
+        let mut q = m.clone();
+        q.fixed = n.fixed + slot_of(cb);
+        plan_with(&q, store, kst, force_state, force_data, force_tables)
+    };
+    // the largest batch that fits (a smaller slot always fits where a larger one does)
+    let mut cb_max = 0;
+    let mut last = String::new();
+    for cb in (1..=cap).rev() {
+        match fits(cb) {
+            Ok(_) => {
+                cb_max = cb;
+                break;
+            }
+            Err(e) => last = e,
+        }
+    }
+    if cb_max == 0 {
+        return Err(last);
+    }
+    let cb = (1..=cb_max).min_by_key(|&c| (nc.div_ceil(c) * c, nc.div_ceil(c), std::cmp::Reverse(c))).unwrap();
+    // the engine balances its batches at the same pass count
+    let cb = nc.div_ceil(nc.div_ceil(cb));
+    let pl = fits(cb)?;
+    Ok((slot_of(cb), cb, pl))
+}
+
+/// [`slot_budget_with`] with the host-state store and k-space staging of the env (as [`plan`]); `has_sink`: whether
+/// the objective hands its gradient over set by set (`Objective::has_gradient_sink`; the BFP state then applies to g)
+pub fn slot_budget(n: &LedgerIn, has_sink: bool, force_state: Option<bool>, force_data: Option<bool>, force_tables: Option<bool>, nc: usize, cb_cap: usize, safety: f64, slot_of: &dyn Fn(usize) -> usize) -> Result<(usize, usize, LedgerPlan), String> {
+    let store = crate::bfpstate::StateStore::from_env()?;
+    let kst = crate::kstage::stage_from_env().map_err(|e| e.to_string())?;
+    slot_budget_with(n, store.effective(has_sink), kst, force_state, force_data, force_tables, nc, cb_cap, safety, slot_of)
 }
 
 #[cfg(test)]
@@ -609,6 +694,62 @@ mod tests {
         assert!(nn <= 4 && nkf <= 13 && prim.len() == 48);
         assert_eq!(OpFrames::parse_spec("frames:48").unwrap(), (48, 3));
         assert!(OpFrames::parse_spec("frames:48:2").is_err());
+    }
+
+    #[test]
+    fn ledger_bfp_state_and_kspace_1mm_box() {
+        // the 1 mm box of research/memory_ledger.md (R2): 280 sets (40 frames × 7 encodes) of 8.53 M voxels (streamed
+        // once per gradient: one θ set in this ledger's transfer model), one
+        // stack 17.8 GiB, k-space 7.69 GiB (largest set 1/280 × 1.3), tables 9.30 GiB, operator ≈ 13.4 GiB resident
+        // (maps 1.50, diagonals 5.25, fat 0.68, grids 6.0), RTX 4090 (23 GiB usable), host: 80 G cgroup − 16.6 GiB setup
+        let gib = 1usize << 30;
+        let g = |x: f64| (x * gib as f64) as usize;
+        let n = LedgerIn { nv: 8_530_000, nk: 1, img_frames: 1, slots: 0, stack: g(17.8), chunk_max: g(17.8 / 280.0), nsets: 1, data_all: g(7.69), data_max: g(7.69 / 280.0 * 1.3), data_movable: true, tab_all: g(9.30), tab_max: g(9.30 / 280.0 * 1.3), fixed: g(13.4), dev_budget: 23 * gib, host_avail: g(80.0 * 0.931 - 16.6), quasi: true, prior_dev: 0, h2d: 22e9, pageable: 10e9 };
+        use crate::bfpstate::StateStore;
+        use crate::kstore::BfpRule;
+        let f32p = plan_with(&n, StateStore::F32, None, Some(true), None, None);
+        println!("f32 host state: {}", match &f32p { Ok(p) => p.describe(), Err(e) => e.clone() });
+        assert!(f32p.is_err(), "4 × 17.8 GiB must not fit the host next to the setup");
+        let b16 = StateStore::parse("bfp16").unwrap();
+        // an objective without a gradient sink (the velocity model): only the secant record shrinks
+        let ns = plan_with(&n, b16.effective(false), None, Some(true), None, None);
+        println!("bfp16 record only (no gradient sink): {}", match &ns { Ok(p) => p.describe(), Err(e) => e.clone() });
+        let p = plan_with(&n, b16, None, Some(true), None, None).unwrap();
+        println!("bfp16 host state:\n{}", p.describe());
+        let st = p.entries.iter().find(|e| e.0.starts_with("parameter state")).unwrap().2 as f64 / gib as f64;
+        assert!((st - 45.0).abs() < 0.5, "state {st:.2} GiB");
+        let pk = plan_with(&n, b16, Some((BfpRule::Sigma { q: 0.25 }, false)), Some(true), Some(true), None).unwrap();
+        let pr = plan_with(&n, b16, Some((BfpRule::Sigma { q: 0.25 }, true)), Some(true), Some(true), None).unwrap();
+        println!("+ packed k-space staging:\n{}+ resident packed k-space:\n{}", pk.describe(), pr.describe());
+        assert!(pk.transfer_s < p.transfer_s && pr.transfer_s < pk.transfer_s);
+        // f32 plans are unchanged by the new arguments
+        let m = LedgerIn { stack: gib, host_avail: 60 * gib, ..n.clone() };
+        assert_eq!(plan_with(&m, StateStore::F32, None, None, None, None).unwrap(), plan(&m, None, None, None).unwrap());
+    }
+
+    #[test]
+    fn ledger_slot_budget_fewest_passes() {
+        use crate::bfpstate::StateStore;
+        let gib = 1usize << 30;
+        // the knot operator without its slot (3 GiB), small state: the slot takes what the plan leaves
+        let n = LedgerIn { nv: 1_000_000, nk: 96, img_frames: 0, slots: 0, stack: gib / 2, chunk_max: 12_000_000, nsets: 7, data_all: 2 * gib, data_max: gib / 3, data_movable: true, tab_all: 2 * gib, tab_max: gib / 3, fixed: 3 * gib, dev_budget: 23 * gib, host_avail: 60 * gib, quasi: true, prior_dev: 0, h2d: 20e9, pageable: 8e9 };
+        let slot = |cb: usize| cb * gib;
+        // 10 coils of 1 GiB: all 10 fit next to the rest (one pass)
+        let (s, cb, p) = slot_budget_with(&n, StateStore::F32, None, None, None, None, 10, 16, 0.05, &slot).unwrap();
+        assert_eq!((cb, s), (10, 10 * gib), "{}", p.describe());
+        assert!(p.device_peak <= (23.0 * 0.95 * gib as f64) as usize);
+        // 2 GiB per coil: 5 coils (2 passes), the largest equal batch that fits
+        let (_, cb, _) = slot_budget_with(&n, StateStore::F32, None, None, None, None, 10, 16, 0.05, &|c| 2 * c * gib).unwrap();
+        assert_eq!(cb, 5);
+        // 5 GiB per coil: at most 3 coils fit; 3 would be ragged (3, 3, 3, 1: 12 transformed channels), 2 coils (5
+        // passes, 10 channels) is the planner's choice
+        let (_, cb, _) = slot_budget_with(&n, StateStore::F32, None, None, None, None, 10, 16, 0.05, &|c| 5 * c * gib).unwrap();
+        assert_eq!(cb, 2);
+        // the coil cap
+        let (_, cb, _) = slot_budget_with(&n, StateStore::F32, None, None, None, None, 32, 16, 0.05, &|c| c * gib / 8).unwrap();
+        assert_eq!(cb, 16);
+        // not even one coil fits: Err
+        assert!(slot_budget_with(&n, StateStore::F32, None, None, None, None, 10, 16, 0.05, &|c| 40 * c * gib).is_err());
     }
 
     #[test]

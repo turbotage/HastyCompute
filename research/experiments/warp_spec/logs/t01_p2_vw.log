@@ -1,0 +1,80 @@
+=== t01_p2_vw: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/wsp/bin/seg_phase2 p2_vw --exact --nocapture --test-threads 1 (2026-11-21 23:58:12)
+locked 23:58:12; power limit / draw / sm clock / memory used: 450.00 W, 18.84 W, 210 MHz, 240 MiB
+
+running 1 test
+test p2_vw ... vw Static o2 10x10 (batch 16) VwCfg { ncw: 10, nbw: 3, nst: 2, nwt: 16, ncp: 3 } sch 16 (regs 111, spill 0 B, 16 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 VwCfg { ncw: 8, nbw: 2, nst: 2, nwt: 24, ncp: 2 } sch 24: not valid (invalid argument: set_vs_w: VsCfg { nwc: 7, nws: 1, vxpad: 0 } VwCfg { ncw: 8, nbw: 2, nst: 2, nwt: 24, ncp: 2 } (sub-chunk 24) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Static o2 VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 7, nws: 1, vxpad: 0 } VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 6, nbw: 1, nst: 1, nwt: 16, ncp: 1 } sch 16 (regs 115, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 4, nbw: 2, nst: 3, nwt: 8, ncp: 2 } sch 8 (regs 113, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 5, nbw: 1, nst: 2, nwt: 17, ncp: 2 } sch 16 (regs 113, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 VwCfg { ncw: 1, nbw: 1, nst: 2, nwt: 24, ncp: 1 } sch 24: not valid (invalid argument: set_vs_w: VsCfg { nwc: 7, nws: 1, vxpad: 0 } VwCfg { ncw: 1, nbw: 1, nst: 2, nwt: 24, ncp: 1 } (sub-chunk 24) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 24, ncp: 0 } sch 24 (regs 128, spill 420 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 16, ncp: 0 } sch 16 (regs 112, spill 728 B, 9 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 8, ncp: 0 } sch 8 (regs 128, spill 420 B, 16 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 10x10 (batch 16) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 21, ncp: 0 } sch 16 (regs 112, spill 728 B, 9 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.3e-8
+vw Static o2 VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 7, nws: 1, vxpad: 0 } VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 10, nbw: 3, nst: 2, nwt: 16, ncp: 3 } sch 16 (regs 116, spill 0 B, 16 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 8, nbw: 2, nst: 2, nwt: 24, ncp: 2 } sch 24 (regs 116, spill 0 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 1, nws: 1, vxpad: 0 } VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 6, nbw: 1, nst: 1, nwt: 16, ncp: 1 } sch 16 (regs 128, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 4, nbw: 2, nst: 3, nwt: 8, ncp: 2 } sch 8 (regs 128, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 5, nbw: 1, nst: 2, nwt: 17, ncp: 2 } sch 16 (regs 128, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 1, nbw: 1, nst: 2, nwt: 24, ncp: 1 } sch 24 (regs 118, spill 0 B, 3 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 24, ncp: 0 } sch 24 (regs 254, spill 0 B, 4 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 16, ncp: 0 } sch 16 (regs 254, spill 0 B, 6 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 8, ncp: 0 } sch 8 (regs 254, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 21, ncp: 0 } sch 16 (regs 254, spill 0 B, 6 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot1d o3 6x5 (batch 3) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } sch 48 (regs 244, spill 0 B, 2 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 7.0e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 10, nbw: 3, nst: 2, nwt: 16, ncp: 3 } sch 16 (regs 111, spill 0 B, 16 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 8, nbw: 2, nst: 2, nwt: 24, ncp: 2 } sch 24 (regs 117, spill 0 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 4, nws: 1, vxpad: 0 } VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 6, nbw: 1, nst: 1, nwt: 16, ncp: 1 } sch 16 (regs 115, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 4, nbw: 2, nst: 3, nwt: 8, ncp: 2 } sch 8 (regs 113, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 5, nbw: 1, nst: 2, nwt: 17, ncp: 2 } sch 16 (regs 113, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 1, nbw: 1, nst: 2, nwt: 24, ncp: 1 } sch 24 (regs 127, spill 0 B, 3 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 24, ncp: 0 } sch 24 (regs 200, spill 0 B, 5 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 16, ncp: 0 } sch 16 (regs 168, spill 36 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 8, ncp: 0 } sch 8 (regs 200, spill 0 B, 5 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 10x10 (batch 5) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 21, ncp: 0 } sch 16 (regs 168, spill 36 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 9.6e-8
+vw Knot2d o2 VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 4, nws: 1, vxpad: 0 } VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 10, nbw: 3, nst: 2, nwt: 16, ncp: 3 } sch 16 (regs 117, spill 0 B, 16 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 8, nbw: 2, nst: 2, nwt: 24, ncp: 2 } sch 24 (regs 117, spill 0 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 4, nws: 1, vxpad: 0 } VwCfg { ncw: 6, nbw: 1, nst: 2, nwt: 48, ncp: 1 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 6, nbw: 1, nst: 1, nwt: 16, ncp: 1 } sch 16 (regs 121, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 4, nbw: 2, nst: 3, nwt: 8, ncp: 2 } sch 8 (regs 135, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 5, nbw: 1, nst: 2, nwt: 17, ncp: 2 } sch 16 (regs 135, spill 0 B, 8 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 1, nbw: 1, nst: 2, nwt: 24, ncp: 1 } sch 24 (regs 125, spill 0 B, 3 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 24, ncp: 0 } sch 24 (regs 200, spill 0 B, 5 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 16, ncp: 0 } sch 16 (regs 168, spill 36 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 8, ncp: 0 } sch 8 (regs 200, spill 0 B, 5 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 10x10 (batch 5) VwCfg { ncw: 0, nbw: 2, nst: 0, nwt: 21, ncp: 0 } sch 16 (regs 168, spill 36 B, 12 warps): vs FMA vt 0.00e0 (bitwise true), rerun bitwise true, adjointness vs tile adjoint 1.2e-7
+vw Knot2d o3 VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } sch 48: not valid (invalid argument: set_vs_w: VsCfg { nwc: 4, nws: 1, vxpad: 0 } VwCfg { ncw: 0, nbw: 1, nst: 0, nwt: 48, ncp: 0 } (sub-chunk 48) is not a valid vw shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 83.23s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/wsp/bin/seg_phase2 p2_vw --exact --nocapture --test-threads 1"
+	User time (seconds): 82.32
+	System time (seconds): 1.02
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:23.27
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 300828
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 320702
+	Voluntary context switches: 2290
+	Involuntary context switches: 728
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 40288
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 23:59:35; power limit at end 450.00 W

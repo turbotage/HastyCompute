@@ -1,0 +1,42 @@
+=== ph_k2_o3: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 3 --knots2d 3:1,8:3 --readouts 340 --stores bfp22,bfp20,bfp24,bfp16 (2026-11-20 17:25:43)
+locked 17:34:00; power limit 300.00 W
+ph0001 scan /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: image [254, 144, 114] (2.0 mm voxels), 32 coils, 53144 readouts × 3990 ADC samples, 20 frames; loaded in 2.6 s
+  virtual coils 10 of 32: signal-region energy kept 0.926, eigenvalue ratio last / first 0.042; 2175329 support voxels
+  segment basis fixed: interpolator norm ‖a(τ)‖ min / mean / max 0.88 / 0.97 / 1.08; diagonal rms per segment [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00]
+  encode 3: 340 readouts, 1356600 samples; L 10 segments over τ ∈ [1.60, 9.58] ms; order 3
+  engine: 24 image(s), coil batch 5 (50 channels), k-support pruned grid FFT (50 ch, grid [320, 180, 144], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.633, x pass Some((16, 40)) lines × threads, two-pass L2 slabs of 1 z planes (23.0 MB), pad / crop fused into the x passes (not in this FFT time))
+  one-ulp sensitivity (f32): x moved by one ulp moves the forward 3.1e-7, Aᴴ A x 3.2e-6, Aᴴ(A x − y) 2.0e-5; n moved by one ulp moves Aᴴ n 5.7e-6
+  f32 run to run: forward 5.4e-8, early gradient 2.5e-6, converged gradient 3.0e-6, adjoint of the noise 8.4e-7; |Aᴴ A x| / |Aᴴ n| = 150.0
+    bfp22: adjoint of the noise alone 9.21e-6 (38.63 · 2^-b)
+  2-D knots 3:1,8:3 order 3, bfp22 (in place): loaded slot 4.60e-7 (1.93 · 2^-b), forward 4.52e-7 (1.89), early gradient Aᴴ A x 9.99e-6 (41.91), converged gradient Aᴴ(Ax − y) 3.30e-5 (138.44 · 2^-b)
+    bfp20: adjoint of the noise alone 3.62e-5 (37.96 · 2^-b)
+  2-D knots 3:1,8:3 order 3, bfp20 (in place): loaded slot 1.78e-6 (1.86 · 2^-b), forward 9.25e-7 (0.97), early gradient Aᴴ A x 3.84e-5 (40.24), converged gradient Aᴴ(Ax − y) 7.96e-5 (83.49 · 2^-b)
+    bfp24: adjoint of the noise alone 2.84e-6 (47.61 · 2^-b)
+  2-D knots 3:1,8:3 order 3, bfp24 (in place): loaded slot 1.57e-7 (2.64 · 2^-b), forward 3.16e-7 (5.30), early gradient Aᴴ A x 4.06e-6 (68.19), converged gradient Aᴴ(Ax − y) 2.10e-5 (352.10 · 2^-b)
+    bfp16: adjoint of the noise alone 5.79e-4 (37.92 · 2^-b)
+  2-D knots 3:1,8:3 order 3, bfp16 (in place): loaded slot 2.83e-5 (1.86 · 2^-b), forward 1.16e-5 (0.76), early gradient Aᴴ A x 6.08e-4 (39.82), converged gradient Aᴴ(Ax − y) 9.12e-4 (59.77 · 2^-b)
+  f32 after the BFP runs vs the first f32 forward: 5.4e-8; total 127.3 s
+	Command being timed: "timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 3 --knots2d 3:1,8:3 --readouts 340 --stores bfp22,bfp20,bfp24,bfp16"
+	User time (seconds): 186.06
+	System time (seconds): 43.32
+	Percent of CPU this job got: 178%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:08.22
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 18753144
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 12092275
+	Voluntary context switches: 3318
+	Involuntary context switches: 1584
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 2224
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 17:36:08

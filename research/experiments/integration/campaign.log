@@ -1,0 +1,60 @@
+=== run.sh start 2026-11-20 19:03:23, binaries frozen at 2026-11-20 19:02:03
+start t01_nufft_lib 2026-11-20 19:03:23
+done  t01_nufft_lib: exit 0, peak RSS 9532 kB (2026-11-20 19:03:29)
+start t02_recon_ledger 2026-11-20 19:03:29
+done  t02_recon_ledger: exit 0, peak RSS 5276 kB (2026-11-20 19:03:29)
+start t03_seg_defaults 2026-11-20 19:03:29
+done  t03_seg_defaults: exit 0, peak RSS 280312 kB (2026-11-20 19:06:55)
+start t04_vknot 2026-11-20 19:06:55
+done  t04_vknot: exit 101, peak RSS 204028 kB (2026-11-20 19:07:10)
+start t05_seg_split 2026-11-20 19:07:10
+done  t05_seg_split: exit 0, peak RSS 217296 kB (2026-11-20 19:07:23)
+start t06_seg_fft_store 2026-11-20 19:07:23
+done  t06_seg_fft_store: exit 101, peak RSS 197856 kB (2026-11-20 19:07:24)
+start t07_seg_fft_store_dense 2026-11-20 19:07:24
+done  t07_seg_fft_store_dense: exit 101, peak RSS 191952 kB (2026-11-20 19:07:25)
+start t08_bfp_store 2026-11-20 19:07:25
+done  t08_bfp_store: exit 0, peak RSS 166824 kB (2026-11-20 19:07:27)
+start t09_chanfft 2026-11-20 19:07:27
+done  t09_chanfft: exit 0, peak RSS 150992 kB (2026-11-20 19:07:28)
+start t10_seg_kl 2026-11-20 19:07:28
+done  t10_seg_kl: exit 0, peak RSS 256120 kB (2026-11-20 19:08:10)
+start t11_seg_ra_vt 2026-11-20 19:08:10
+19:10 t04/t06/t07 failed on test setups (bitwise sink check vs atomics spread; seg_fft_store f32 reference built with the default store); fixed, refrozen (only those two binaries changed: bin.sha256.v1 vs bin.sha256); they rerun on the next resume
+done  t11_seg_ra_vt: exit 0, peak RSS 251448 kB (2026-11-20 19:10:41)
+start t12_seg_phase2_tune 2026-11-20 19:10:41
+done  t12_seg_phase2_tune: exit 0, peak RSS 265956 kB (2026-11-20 19:11:40)
+start r01_segnufft 2026-11-20 19:11:40
+done  r01_segnufft: exit 0, peak RSS 197120 kB (2026-11-20 19:11:45)
+start r02_seg_vs 2026-11-20 19:11:45
+done  r02_seg_vs: exit 0, peak RSS 240256 kB (2026-11-20 19:12:25)
+start r03_seg_knot_kv 2026-11-20 19:12:25
+done  r03_seg_knot_kv: exit 0, peak RSS 198524 kB (2026-11-20 19:12:28)
+start r04_seg_knot_hi 2026-11-20 19:12:28
+done  r04_seg_knot_hi: exit 0, peak RSS 209776 kB (2026-11-20 19:12:33)
+start r05_seg_knot 2026-11-20 19:12:33
+done  r05_seg_knot: exit 0, peak RSS 197236 kB (2026-11-20 19:12:35)
+start r06_seg_knot2d 2026-11-20 19:12:35
+done  r06_seg_knot2d: exit 0, peak RSS 193564 kB (2026-11-20 19:12:37)
+start r07_seg_tile_block 2026-11-20 19:12:37
+done  r07_seg_tile_block: exit 101, peak RSS 225112 kB (2026-11-20 19:12:41)
+start r08_seg_stream 2026-11-20 19:12:41
+done  r08_seg_stream: exit 101, peak RSS 190176 kB (2026-11-20 19:12:42)
+start r09_seg_fft_traffic 2026-11-20 19:12:42
+done  r09_seg_fft_traffic: exit 101, peak RSS 158908 kB (2026-11-20 19:12:43)
+start r10_seg_pruned 2026-11-20 19:12:43
+done  r10_seg_pruned: exit 101, peak RSS 210364 kB (2026-11-20 19:12:50)
+start r11_seg_multi 2026-11-20 19:12:50
+done  r11_seg_multi: exit 0, peak RSS 222824 kB (2026-11-20 19:13:02)
+start r12_seg_frames 2026-11-20 19:13:02
+done  r12_seg_frames: exit 0, peak RSS 153796 kB (2026-11-20 19:13:02)
+start r13_seg_kernel 2026-11-20 19:13:02
+done  r13_seg_kernel: exit 101, peak RSS 199232 kB (2026-11-20 19:13:12)
+start r14_seg_b0_direct 2026-11-20 19:13:12
+done  r14_seg_b0_direct: exit 0, peak RSS 163428 kB (2026-11-20 19:14:49)
+start r15_seg_wf 2026-11-20 19:14:49
+done  r15_seg_wf: exit 0, peak RSS 153140 kB (2026-11-20 19:14:50)
+start r16_seg_joint 2026-11-20 19:14:50
+done  r16_seg_joint: exit 0, peak RSS 582496 kB (2026-11-20 19:15:02)
+start r17_seg_fat_union_gpu 2026-11-20 19:15:02
+stopped 2026-11-20 19:15:49

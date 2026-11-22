@@ -1,0 +1,44 @@
+=== t07_seg_fft_store_dense: env HASTY_SEG_FFT_BFP_LAYOUT=dense /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_fft_store --nocapture --test-threads 1 bfp22_engine_matches_f32 (2026-11-20 19:07:24)
+locked 19:07:24; power limit / draw / sm clock / memory used: 300.00 W, 69.08 W, 2565 MHz, 294 MiB
+
+running 1 test
+test bfp22_engine_matches_f32 ... 
+thread 'bfp22_engine_matches_f32' (1215498) panicked at crates/hasty-nufft/tests/seg_fft_store.rs:173:9:
+assertion `left == right` failed
+  left: (Bfp(24), 1319976)
+ right: (F32, 0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    bfp22_engine_matches_f32
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.73s
+
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 env HASTY_SEG_FFT_BFP_LAYOUT=dense /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_fft_store --nocapture --test-threads 1 bfp22_engine_matches_f32"
+	User time (seconds): 0.54
+	System time (seconds): 0.22
+	Percent of CPU this job got: 96%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.79
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 191952
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 22232
+	Voluntary context switches: 200
+	Involuntary context switches: 18
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 720
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 19:07:25; power limit at end 300.00 W

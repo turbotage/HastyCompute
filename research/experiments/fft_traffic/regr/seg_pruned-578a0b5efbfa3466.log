@@ -1,0 +1,20 @@
+
+running 2 tests
+test kpruned_grid_fft_matches_block_pruned ... ok
+test pruned_grid_fft_and_fused_residual ... FAILED
+
+failures:
+
+---- pruned_grid_fft_and_fused_residual stdout ----
+order 0, frames 1, L 4: pruned vs full forward 1.48e-5, adjoint 3.18e-5 (full vs full 3.36e-5); fused residual vs forward − y 8.23e-7
+
+thread 'pruned_grid_fft_and_fused_residual' (917573) panicked at crates/hasty-nufft/tests/seg_pruned.rs:167:9:
+pruned transforms differ: forward 1.48e-5, adjoint 3.18e-5 (spread 3.36e-5)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    pruned_grid_fft_and_fused_residual
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.67s
+

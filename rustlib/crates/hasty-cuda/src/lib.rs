@@ -8,7 +8,7 @@ pub mod pace;
 
 pub use complex::{Real, C32, C64};
 
-pub use nvrtc::{compile_cubin, CompileSettings};
+pub use nvrtc::{compile_cubin, compile_stats, nvrtc_version_pub as nvrtc_version, CompileSettings, CompileStats};
 
 use std::sync::Arc;
 
@@ -62,9 +62,11 @@ impl Device {
         settings: &CompileSettings,
     ) -> Result<Arc<CudaModule>> {
         let cubin = compile_cubin(name, src, &self.arch, settings)?;
+        let t = std::time::Instant::now();
         let module = self
             .ctx
             .load_module(cudarc::nvrtc::Ptx::from_binary(cubin))?;
+        nvrtc::note_load(t);
         Ok(module)
     }
 

@@ -1,0 +1,9 @@
+=== seg_multi (2026-11-20 15:43:59); power.limit 300.00 W
+
+running 2 tests
+test seg_multi_matches_separate_calls ... ok
+test seg_order3_matches_emulation ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.03s
+
+exit 0 (2026-11-20 15:45:32)

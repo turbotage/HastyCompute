@@ -1,0 +1,23 @@
+
+running 5 tests
+test warp_adjoint_correction_matches_cpu ... ok
+test warp_adjoint_gpu ... FAILED
+test warp_correction_matches_cpu ... ok
+test warp_cost_realistic ... ignored
+test warp_moving_vessel_gpu ... ok
+
+failures:
+
+---- warp_adjoint_gpu stdout ----
+frames 1: adjoint mismatch plain 7.5e-5, warped 4.4e-4 (max of 4 runs)
+
+thread 'warp_adjoint_gpu' (922735) panicked at crates/hasty-nufft/tests/seg_warp_gpu.rs:153:9:
+warp adjoint mismatch 0.0004385030553812409 vs plain 0.00007546729141391068
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    warp_adjoint_gpu
+
+test result: FAILED. 3 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.99s
+

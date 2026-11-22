@@ -1,0 +1,10 @@
+
+running 5 tests
+test conv_bluestein_lengths ... ok
+test conv_f32_all_ranks ... ok
+test conv_f64 ... ok
+test conv_is_a_toeplitz_product ... ok
+test conv_kernel_formats ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.29s
+

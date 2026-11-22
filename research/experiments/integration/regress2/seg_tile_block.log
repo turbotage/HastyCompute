@@ -1,0 +1,39 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/seg_tile_block.rs (target/release/deps/seg_tile_block-6f2baa713c5f8299)
+
+running 4 tests
+test balanced_batches_and_defaults_vs_one_coil_batches ... FAILED
+test blocked_shapes_split_lists ... ok
+test knot_blocked_and_ragged_shapes ... ok
+test static_blocked_and_ragged_shapes ... ok
+
+failures:
+
+---- balanced_batches_and_defaults_vs_one_coil_batches stdout ----
+Static nseg 14 order 2: budget 7 coils → batch 4 (tiles fwd TileCfg { tt: 4, cpba: 4, cpbf: 4, ppf: 2, chunk: 12, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, adj TileCfg { tt: 4, cpba: 4, cpbf: 4, ppf: 2, chunk: 12, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, multi None)
+
+thread 'balanced_batches_and_defaults_vs_one_coil_batches' (9288) panicked at crates/hasty-nufft/tests/seg_tile_block.rs:215:13:
+assertion `left == right` failed: balanced batch
+  left: 4
+ right: 6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    balanced_batches_and_defaults_vs_one_coil_batches
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.40s
+
+error: test failed, to rerun pass `-p hasty-nufft --test seg_tile_block`

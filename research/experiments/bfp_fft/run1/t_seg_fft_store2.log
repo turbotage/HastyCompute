@@ -1,0 +1,20 @@
+
+running 2 tests
+test bfp22_engine_matches_f32 ... 
+thread 'bfp22_engine_matches_f32' (1116611) panicked at crates/hasty-nufft/tests/seg_fft_store.rs:183:9:
+Static order 0: forward after switching back to f32 differs from the first f32 forward
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test switch_off_bit_identical ... 
+thread 'switch_off_bit_identical' (1116651) panicked at crates/hasty-nufft/tests/seg_fft_store.rs:227:9:
+Static: f32 forward not reproduced after the bfp22 round trip
+FAILED
+
+failures:
+
+failures:
+    bfp22_engine_matches_f32
+    switch_off_bit_identical
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+

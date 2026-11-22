@@ -1,0 +1,7 @@
+p192_o3_static_cb10|--matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 10
+p192_o3_knot_cb10|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 10
+p192_o0_knot_cb10|--static-knot --matrix 192,192,192 --order 0 --frames 20 --nseg 10 --vcoils 10 --cb-list 10
+p256_o3_knot_cb5|--static-knot --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5
+p320_o3_knot_cb2|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 2
+p512_o3_knot_c1lb2|--static-knot --matrix 512,512,512 --order 3 --frames 20 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+p640_o3_knot_c1|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1

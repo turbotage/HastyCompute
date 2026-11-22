@@ -1,0 +1,38 @@
+=== layout inplace kprune 0
+locked 17:16:05
+ph0001 scan /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: image [254, 144, 114] (2.0 mm voxels), 32 coils, 53144 readouts × 3990 ADC samples, 20 frames; loaded in 2.7 s
+  virtual coils 10 of 32: signal-region energy kept 0.926, eigenvalue ratio last / first 0.042; 2175329 support voxels
+  encode 3: 379 readouts, 1512210 samples; L 10 segments over τ ∈ [1.60, 9.58] ms; order 0
+  engine: 1 image(s), coil batch 5 (50 channels), block-pruned grid FFT (50 ch, grid [320, 180, 144], x pass Some((16, 40)) lines × threads, two-pass L2 slabs of 1 z planes (23.0 MB), pad / crop fused into the x passes (not in this FFT time))
+  f32 run to run: forward 2.3e-8, early gradient 3.1e-6, converged gradient 2.9e-6, adjoint of the noise 1.3e-6; |Aᴴ A x| / |Aᴴ n| = 445.8
+    bfp22: adjoint of the noise alone 8.30e-6 (34.82 · 2^-b)
+  static order 0, bfp22 (in place): loaded slot 4.63e-7 (1.94 · 2^-b), forward 4.45e-7 (1.87), early gradient Aᴴ A x 1.06e-5 (44.37), converged gradient Aᴴ(Ax − y) 8.37e-5 (351.25 · 2^-b)
+    bfp24: adjoint of the noise alone 2.86e-6 (47.90 · 2^-b)
+  static order 0, bfp24 (in place): loaded slot 1.58e-7 (2.65 · 2^-b), forward 3.91e-7 (6.56), early gradient Aᴴ A x 4.16e-6 (69.74), converged gradient Aᴴ(Ax − y) 9.51e-5 (1595.84 · 2^-b)
+    bfp16: adjoint of the noise alone 5.17e-4 (33.87 · 2^-b)
+  static order 0, bfp16 (in place): loaded slot 2.85e-5 (1.87 · 2^-b), forward 1.21e-5 (0.79), early gradient Aᴴ A x 6.35e-4 (41.62), converged gradient Aᴴ(Ax − y) 2.52e-3 (165.45 · 2^-b)
+  f32 after the BFP runs vs the first f32 forward: 2.4e-8; total 58.4 s
+	Command being timed: "timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom_d /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 0 --kprune 0 --stores bfp22,bfp24,bfp16"
+	User time (seconds): 148.00
+	System time (seconds): 8.47
+	Percent of CPU this job got: 264%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:59.08
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11925644
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 6229298
+	Voluntary context switches: 1231
+	Involuntary context switches: 775
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0

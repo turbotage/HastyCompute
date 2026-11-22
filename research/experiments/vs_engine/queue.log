@@ -21,3 +21,4 @@
 16:44:12 start st_4m_10x10_o1: --models seg-full --nseg 10 --vcoils 10 --order 1 --frames 7
 16:49:18 done st_4m_10x10_o1
 16:49:18 start kn_4m_10x10_o1: --models seg-full --nseg 10 --vcoils 10 --order 1 --temporal cubic --knot --frames 20 --scan-min 1.33
+16:58:09 done kn_4m_10x10_o1

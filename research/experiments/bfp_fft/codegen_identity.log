@@ -1,0 +1,3 @@
+codegen source identity (temporary unit test, src/codegen_identity.rs compared generate() of the pre-change codegen.rs with the new one; CPU only; removed after the run; copy in scratchpad/bfi/codegen_identity.rs):
+1152 non-BFP configurations: identical source and shared-memory size (n in 12..320, contiguous / strided, lpb 16 / 8, forward / inverse, ranges, tails, arange, lrange in/out, accumulate, pre/post diagonals, conv, poly, load / epilogue hooks)
+test result: ok (2026-11-20, after the review fixes)

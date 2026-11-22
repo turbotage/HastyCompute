@@ -1,0 +1,7 @@
+
+running 2 tests
+test kb_window_at_least_as_accurate_as_es ... ok
+test larger_grid_with_effective_sigma_is_not_less_accurate ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 47.70s
+

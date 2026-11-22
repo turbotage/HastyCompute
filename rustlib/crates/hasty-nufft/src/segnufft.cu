@@ -361,6 +361,23 @@ extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r,
   if (t < n) { const cx v = y[t]; r[t] = cx{-v.x, -v.y}; }
 }
 
+// ---------------------------------------------------------------- zero the split tiles of a grid slot (HASTY_SEG_ZERO=tiles)
+// Work items (tile, first, count, split) with split == 2 mark one item per split tile (`tile_lists`); one block per
+// item of the first n (the host passes the prefix that holds every marked item). The scatter then stores the unsplit
+// tiles (single owner) and adds the split ones atomically onto these zeroed cells, instead of zeroing the whole slot.
+extern "C" __global__ void __launch_bounds__(256) seg_zero_split(const int4* __restrict__ items, cx* __restrict__ grid, Dims d) {
+  const int4 it = items[blockIdx.x];
+  if (it.w != 2) return;
+  const int nt0 = (d.nf0 + TT - 1) / TT, nt1 = (d.nf1 + TT - 1) / TT;
+  const int x0 = (it.x % nt0) * TT, y0 = ((it.x / nt0) % nt1) * TT, z0 = (it.x / (nt0 * nt1)) * TT;
+  const int run = min(TT, d.nf0 - x0) * NCH;   // contiguous cells × channels of one (y, z) row of the tile
+  for (int q = threadIdx.x; q < TT * TT * run; q += blockDim.x) {
+    const int r = q / run, k = q % run;
+    const int gy = y0 + r % TT, gz = z0 + r / TT;
+    if (gy < d.nf1 && gz < d.nf2) grid[(((size_t)gz * d.nf1 + gy) * d.nf0 + x0) * NCH + k] = cx{0.f, 0.f};
+  }
+}
+
 // ---------------------------------------------------------------- tiled gather / scatter on exact tile -> sample lists
 // Fine grid split into TT^3 tiles (shared memory is dynamic, sized per launch shape up to the device's opt-in limit).
 // The host lists, per tile, every sample whose W^3 support meets it (CSR `tl`, original
@@ -414,6 +431,23 @@ extern "C" __global__ void seg_neg(const cx* __restrict__ y, cx* __restrict__ r,
 #define GTS (GN + ((2 - GN % 4) + 4) % 4)   // forward tile point stride (cx), ≡ 2 mod 4: lanes on distinct banks
 struct Item { int tile, first, count, split; };
 struct Grids { cx* p[4]; };
+
+// BFP grid slots (research/bfp_storage.md §10, HASTY_SEG_GRID_STORE): with GBFP (mantissa bits) the forward z pass
+// stored block k = q / 16 (16 consecutive channel-interleaved values of a (z, y) row) in place: its GBFP mantissa words
+// are the first words of the block's own 16 cells, its exponent byte is byte k after the slot's nf0 · nf1 · nf2 · NCH
+// cells. Exponent 0 marks a block the pass did not write (outside the k support): zeros.
+#ifdef GBFP
+__device__ __forceinline__ cx gload_bfp(const cx* __restrict__ g, size_t q, const Dims& d) {
+  const size_t k = q >> 4;
+  const unsigned char* ex = reinterpret_cast<const unsigned char*>(g + (size_t)d.nf0 * d.nf1 * d.nf2 * NCH);
+  if (ex[k] == 0) return cx{0.f, 0.f};
+  const float2 v = bfp_load_c<GBFP>(reinterpret_cast<const unsigned*>(g + (k << 4)), ex + k, (long)(q & 15));
+  return cx{v.x, v.y};
+}
+#define GLOAD(g, q) gload_bfp((g), (q), d)
+#else
+#define GLOAD(g, q) ((g)[q])
+#endif
 
 __device__ __forceinline__ float wrapdiff(float a, int n) { // nearest periodic difference
   if (a > 0.5f * n) a -= n;
@@ -779,7 +813,7 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_t(const float4* _
     const int p = q / GN, fo = q / (CPBF * NSEG) % NF, c = (q / NSEG) % CPBF, l = q % NSEG;
     const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
     cx v = cx{0.f, 0.f};
-    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = g.p[fo][(((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l];
+    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = GLOAD(g.p[fo], (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l);
     gt[p * GTS + (fo * CPBF + c) * NSEG + l] = v;
   }
   constexpr int NR = (3 * CHUNK + NT_F - 1) / NT_F;

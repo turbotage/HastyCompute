@@ -1,0 +1,23 @@
+# research/sample_kernels.md §21 campaign: name|env|command ($B frozen binaries, $SP scratchpad). About 75 min at 450 W.
+# ── regression (each 1–10 min): FMA paths unchanged (vt / vs / ra bitwise or within floors), new variants within bounds
+t01_p2_vtc|P2_ORDERS=2,3|$B/seg_phase2 p2_vtc --nocapture --test-threads 1
+t02_p2_vs|P2_RA_VARS=old|$B/seg_phase2 p2_vs_subchunks --nocapture --test-threads 1
+t03_p2_ra_new|P2_RA_VARS=new|$B/seg_phase2 p2_ra --nocapture --test-threads 1
+t04_p2_kl_auto||$B/seg_phase2 p2_kl p2_autotune p2_spill --nocapture --test-threads 1
+t05_seg_vs||$B/seg_vs --nocapture --test-threads 1
+t06_seg_ra_vt||$B/seg_ra_vt --nocapture --test-threads 1
+t07_seg_kl||$B/seg_kl --nocapture --test-threads 1
+t08_seg_split||$B/seg_split --nocapture --test-threads 1
+# ── timing + added error at 256^3 (fine grid 320^3), order 3, 10 coils x 10 segments, coil batch 5 = 50 channels
+o01_256_mma_cmp|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --no-tune --mma-compare
+o02_256_tune_all|HASTY_SEG_VT_MMA=auto HASTY_SEG_VSA_STAGE=dyn HASTY_SEG_VS_LOG=1 HASTY_SEG_VSA_LOG=1|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --new-compare
+o03_192_mma_cmp|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 192,192,192 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --no-tune --mma-compare
+o04_256_o2_mma_cmp|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 2 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --no-tune --mma-compare
+# ── ra balanced staging at 50 channels (the sub-agent's stages 3 / 4 vs stages 2 at nxg 4, cb 7, chk 14)
+r01_256_ra_s2|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,2,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --new-compare
+r02_256_ra_s3|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,3,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --new-compare
+r03_256_ra_s4|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,4,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --new-compare
+# ── Nsight Compute, one launch each, targeted sections (never full set on multi-GB grids)
+n01_vt_fma|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0|/usr/local/cuda/bin/ncu --section LaunchStats --section Occupancy --section SpeedOfLight --section WarpStateStats --section ComputeWorkloadAnalysis --section InstructionStats --section SourceCounters -k regex:seg_forward_vs --launch-skip 1 --launch-count 1 -f -o $SP/tic/ncu/vt_fma $B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 1 --cb-cap 5 --max-grid-gb 14 --no-tune
+n02_vtc_fp16_q8|HASTY_SEG_VT=1 HASTY_SEG_VT_MMA=fp16 HASTY_SEG_VS_CFG=4,2,0,8|/usr/local/cuda/bin/ncu --section LaunchStats --section Occupancy --section SpeedOfLight --section WarpStateStats --section ComputeWorkloadAnalysis --section InstructionStats --section SourceCounters -k regex:seg_forward_vs --launch-skip 1 --launch-count 1 -f -o $SP/tic/ncu/vtc_fp16_q8 $B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 1 --cb-cap 5 --max-grid-gb 14 --no-tune
+n03_vtc_bf16_q16|HASTY_SEG_VT=1 HASTY_SEG_VT_MMA=bf16 HASTY_SEG_VS_CFG=4,2,0,16|/usr/local/cuda/bin/ncu --section LaunchStats --section Occupancy --section SpeedOfLight --section WarpStateStats --section ComputeWorkloadAnalysis --section InstructionStats --section SourceCounters -k regex:seg_forward_vs --launch-skip 1 --launch-count 1 -f -o $SP/tic/ncu/vtc_bf16_q16 $B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 1 --cb-cap 5 --max-grid-gb 14 --no-tune

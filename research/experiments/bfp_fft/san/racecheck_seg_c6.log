@@ -1,0 +1,5 @@
+=== racecheck_seg_c6: env HASTY_BFP_TEST_CASES=6 /usr/local/cuda/bin/compute-sanitizer --tool racecheck /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bin/seg_fft_store --test-threads 1 bfp22_engine_matches_f32 (2026-11-20 17:43:10)
+========= COMPUTE-SANITIZER
+
+running 1 test
+test bfp22_engine_matches_f32 ... 

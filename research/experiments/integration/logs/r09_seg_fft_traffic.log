@@ -1,0 +1,51 @@
+=== r09_seg_fft_traffic: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_fft_traffic --test-threads 1 (2026-11-20 19:12:42)
+locked 19:12:42; power limit / draw / sm clock / memory used: 300.00 W, 84.31 W, 2805 MHz, 294 MiB
+
+running 4 tests
+test debug_fused_slot ... ignored
+test fft_slabs_match_whole_grid ... FAILED
+test fused_pad_crop_matches_separate_kernels ... ok
+test split_tile_zeroing_matches_full_slot ... ok
+
+failures:
+
+---- fft_slabs_match_whole_grid stdout ----
+[26, 22, 18] frames 1 fused false, slab 1: forward bit-equal false (2.0e-7), adjoint 1.1e-6 (spread 9.4e-7)
+[26, 22, 18] frames 1 fused false, slab 4: forward bit-equal false (2.1e-7), adjoint 9.9e-7 (spread 9.4e-7)
+[26, 22, 18] frames 1 fused true, slab 1: forward bit-equal false (2.0e-7), adjoint 1.2e-6 (spread 0.0e0)
+
+thread 'fft_slabs_match_whole_grid' (1217280) panicked at crates/hasty-nufft/tests/seg_fft_traffic.rs:219:17:
+slab 1: forward 2.0e-7, adjoint 1.2e-6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fft_slabs_match_whole_grid
+
+test result: FAILED. 2 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.84s
+
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_fft_traffic --test-threads 1"
+	User time (seconds): 0.49
+	System time (seconds): 0.46
+	Percent of CPU this job got: 105%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.90
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 158908
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 22270
+	Voluntary context switches: 1814
+	Involuntary context switches: 121
+	Swaps: 0
+	File system inputs: 400
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 19:12:43; power limit at end 300.00 W

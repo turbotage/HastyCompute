@@ -1,0 +1,10 @@
+
+running 5 tests
+test every_length_up_to_600_contiguous_batched ... ok
+test nd_f32 ... ok
+test nd_f64 ... ok
+test normalised_roundtrip ... ok
+test strided_axis_matches_reference ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.19s
+

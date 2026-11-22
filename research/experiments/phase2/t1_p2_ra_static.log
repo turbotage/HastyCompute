@@ -1,0 +1,36 @@
+== p2_ra_static 13:00:45 power limit 300.00 W
+
+running 1 test
+test p2_ra_static ... static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 200, local 32 B, spill 0 B, 8 warps): vs base ra 1.3e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 198, local 32 B, spill 0 B, 8 warps): vs base ra 1.4e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.1e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 200, local 32 B, spill 0 B, 8 warps): vs base ra 1.4e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.3e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 199, local 32 B, spill 0 B, 8 warps): vs base ra 1.3e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 1.9e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 13 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 206, local 32 B, spill 0 B, 8 warps): vs base ra 1.1e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.2e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 13 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 202, local 32 B, spill 0 B, 8 warps): vs base ra 1.1e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 32 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 210, local 32 B, spill 0 B, 8 warps): vs base ra 8.0e-6 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.2e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 32 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 206, local 32 B, spill 0 B, 8 warps): vs base ra 6.1e-6 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.1e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 4 } (regs 128, local 184 B, spill 312 B, 16 warps): vs base ra 5.6e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero tiles RaCfg { nxg: 1, cb: 4, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 4 } (regs 128, local 224 B, spill 328 B, 12 warps): vs base ra 7.0e-5 (bound 7.3e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 200, local 32 B, spill 0 B, 8 warps): vs base ra 1.9e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 198, local 32 B, spill 0 B, 8 warps): vs base ra 1.8e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.2e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 200, local 32 B, spill 0 B, 8 warps): vs base ra 1.1e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.1e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 199, local 32 B, spill 0 B, 8 warps): vs base ra 1.6e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 13 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 206, local 32 B, spill 0 B, 8 warps): vs base ra 9.9e-6 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.2e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 13 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 202, local 32 B, spill 0 B, 8 warps): vs base ra 1.3e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.0e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 32 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 210, local 32 B, spill 0 B, 8 warps): vs base ra 1.3e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.1e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 32 } RaVar { inplace: true, stages: 2, lbmin: 0 } (regs 206, local 32 B, spill 0 B, 8 warps): vs base ra 1.2e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.2e-7 (tile 2.8e-7)
+static o0 10x10 miNone split true zero full RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 4 } (regs 128, local 184 B, spill 312 B, 16 warps): vs base ra 6.5e-5 (bound 4.6e-5), base vs tile 5.5e-4, adjointness 2.8e-7 (tile 2.8e-7)
+
+thread 'p2_ra_static' (1030946) panicked at crates/hasty-nufft/tests/seg_phase2.rs:234:17:
+static o0 10x10 miNone RaCfg { nxg: 1, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 4 } zero_tiles false: variant vs base ra 6.5e-5 (bound 4.6e-5)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    p2_ra_static
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 19.70s
+
+== exit 101 13:03:06

@@ -1,0 +1,47 @@
+=== p16b_640_maps_bfp16: env HASTY_SEG_MAPS_STORE=bfp16 HASTY_SEG_DIAG_STORE=bfp16 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/compressed_dram/perf.jsonl (2026-11-21 15:06:06)
+locked 15:06:06; power limit / draw / sm clock / memory used: 450.00 W, 19.34 W, 210 MHz, 240 MiB
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.9 GiB free), PCIe pinned 22.0 / 20.8 GB/s (h2d / d2h), device 932 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 1 virtual coils, GNL off, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 10.0 min (600 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 7592 rotations, GIRF ideal
+   53144 readouts × 3990 ADC samples (step 1), 212044560 samples; 140 static sets (samples per set 1412460 / 1516200 / 1631910 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (no GNL) + quadratic monomial fit over 2466061 support voxels: 2.1 s
+  model seg-full:
+    matrix [640, 384, 320] (voxel 0.703 × 1.172 × 0.700 mm, 78643200 voxels): image 0.63 GB, coil maps 0.63 GB, segment diagonals 6.29 GB per encode
+    autotune 23.6 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 1, ppf: 4, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 }, adj TileCfg { tt: 4, cpba: 1, cpbf: 1, ppf: 4, chunk: 32, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 1 }
+    autotune adjoint kernels (one coil batch): tile 71.77 ms, ra 52.49 ms (Some(RaCfg { nxg: 1, cb: 1, chk: 8 })) -> ra
+    autotune forward kernels (one coil batch): tile 50.71 ms, vs 44.87 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 1, nws: 1, vxpad: 0 })) -> vs; adjoint 35.28 ms; vs tables 7.0 B/sample
+    autotune knot-path layout (adjoint of a representative knot incl. split-tile zeroing, one coil batch): engine adjoint all items 52.55 ms, skip empty tiles 47.29 ms, whole-tile kl kernel 35.28 ms (Some(RaCfg { nxg: 4, cb: 2, chk: 8 })) -> kl kernel
+    FFT column: k-support pruned grid FFT (10 ch, grid [800, 480, 400], z-pass columns 0.815, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.559, x pass Some((4, 100)) lines × threads, two-pass L2 slabs of 1 z planes (30.7 MB), pad / crop fused into the x passes (not in this FFT time), coil maps bfp16 / diagonals bfp16 (fused pad / crop)) — forward 41.81 ms × 1, inverse 43.96 ms × 1 per call
+    frame 4 encode 2             M   1516200: forward    106.6 ms, adjoint     83.7 ms, normal    184.0 ms | kernels 44.9 / 35.3 ms, FFT 41.8 / 44.0 ms, pad/crop/rest 19.9 / 4.5 ms | tables 1.9 s, 288 B/sample on the GPU
+    engine 12.06 GiB (coil batch 1), segment tables 8.81 GiB per encode (3.2 s), resident problem 169.2 GiB (does not fit: data streamed from host), device part without data 148.3 GiB
+    per iteration: operator 26.62 s (forward + adjoint over 140 sets, 2.120e8 samples; tile kernels (gridding + physics) 42 %, FFT 45 %, pad/crop/rest 13 %) + data streaming 2.85 s + prior round trip 0.59 s + ZMSHR1 vectors 0.07 s = 30.14 s; setup 320 s; 40 iterations ≈ 25.4 min
+    format error: memory plan: nothing fits — smallest placement needs 92.65 GiB of device memory, budget 22.33 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 10.0 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  3 |         30.14 |      25.4 |    169.2 (streamed)
+	Command being timed: "timeout 900 env HASTY_SEG_MAPS_STORE=bfp16 HASTY_SEG_DIAG_STORE=bfp16 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/compressed_dram/perf.jsonl"
+	User time (seconds): 62.59
+	System time (seconds): 3.88
+	Percent of CPU this job got: 194%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:34.15
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 7385868
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2281886
+	Voluntary context switches: 2355
+	Involuntary context switches: 2570
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 720
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 15:06:40; power limit at end 450.00 W

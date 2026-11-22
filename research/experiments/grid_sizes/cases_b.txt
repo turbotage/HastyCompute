@@ -1,0 +1,43 @@
+# after tuning: static one-frame operator on the one-bin knot engine (--static-knot), largest channel batch that fits
+b192_o0_f20_cb10|--static-knot --matrix 192,192,192 --order 0 --frames 20 --nseg 10 --vcoils 10 --cb-list 10
+b192_o3_f20_cb10|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 10
+b192_o3_f20_cb5|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5
+b192_o3_f20_cb2|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 2
+b192_o0_f67_cb10|--static-knot --matrix 192,192,192 --order 0 --frames 67 --nseg 10 --vcoils 10 --cb-list 10
+b192_o3_f67_cb10|--static-knot --matrix 192,192,192 --order 3 --frames 67 --nseg 10 --vcoils 10 --cb-list 10
+b192_o0_f7_cb10|--static-knot --matrix 192,192,192 --order 0 --frames 7 --nseg 10 --vcoils 10 --cb-list 10
+b192_o3_f7_cb10|--static-knot --matrix 192,192,192 --order 3 --frames 7 --nseg 10 --vcoils 10 --cb-list 10
+b256_o0_f20_cb5|--static-knot --matrix 256,256,256 --order 0 --frames 20 --nseg 10 --vcoils 10 --cb-list 5
+b256_o3_f20_cb5|--static-knot --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5
+b256_o3_f20_cb2|--static-knot --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 2
+b256_o0_f67_cb5|--static-knot --matrix 256,256,256 --order 0 --frames 67 --nseg 10 --vcoils 10 --cb-list 5
+b256_o3_f67_cb5|--static-knot --matrix 256,256,256 --order 3 --frames 67 --nseg 10 --vcoils 10 --cb-list 5
+b256_o0_f7_cb5|--static-knot --matrix 256,256,256 --order 0 --frames 7 --nseg 10 --vcoils 10 --cb-list 5
+b256_o3_f7_cb5|--static-knot --matrix 256,256,256 --order 3 --frames 7 --nseg 10 --vcoils 10 --cb-list 5
+b320_o0_f20_cb2|--static-knot --matrix 320,320,320 --order 0 --frames 20 --nseg 10 --vcoils 10 --cb-list 2
+b320_o3_f20_cb2|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 2
+b320_o3_f20_cb1|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 1
+b320_o3_f20_cb3|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 3
+b320_o3_f67_cb2|--static-knot --matrix 320,320,320 --order 3 --frames 67 --nseg 10 --vcoils 10 --cb-list 2
+b320_o3_f7_cb2|--static-knot --matrix 320,320,320 --order 3 --frames 7 --nseg 10 --vcoils 10 --cb-list 2
+b320_o0_f67_cb2|--static-knot --matrix 320,320,320 --order 0 --frames 67 --nseg 10 --vcoils 10 --cb-list 2
+b320_o0_f7_cb2|--static-knot --matrix 320,320,320 --order 0 --frames 7 --nseg 10 --vcoils 10 --cb-list 2
+# 512^3 (640^3 grid, 2.1 GB per channel): one coil's map resident, segment groups inside the coil (time x coils)
+b512_o3_f20_c1lb2|--static-knot --matrix 512,512,512 --order 3 --frames 20 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+b512_o3_f20_c1lb1|--static-knot --matrix 512,512,512 --order 3 --frames 20 --nseg 10 --vcoils 1 --seg-batch 1 --cb-list 1
+b512_o0_f20_c1lb2|--static-knot --matrix 512,512,512 --order 0 --frames 20 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+b512_o3_f67_c1lb2|--static-knot --matrix 512,512,512 --order 3 --frames 67 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+b512_o3_f7_c1lb2|--static-knot --matrix 512,512,512 --order 3 --frames 7 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+b512_o3_f20_c1lb2_static|--matrix 512,512,512 --order 3 --frames 20 --nseg 10 --vcoils 1 --seg-batch 2 --cb-list 1
+# 640x384x320 (800x480x400 grid, 1.23 GB per channel)
+b640_o3_f20_c1|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1
+b640_o0_f20_c1|--static-knot --matrix 640,384,320 --order 0 --frames 20 --nseg 10 --vcoils 1 --cb-list 1
+b640_o3_f20_c1lb5|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --seg-batch 5 --cb-list 1
+b640_o3_f20_c10lb5|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --seg-batch 5 --cb-list 1
+b640_o3_f7_c1|--static-knot --matrix 640,384,320 --order 3 --frames 7 --nseg 10 --vcoils 1 --cb-list 1
+b640_o3_f67_c1|--static-knot --matrix 640,384,320 --order 3 --frames 67 --nseg 10 --vcoils 1 --cb-list 1
+# 16 coils x 16 segments
+b192_o3_f20_c16cb8|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 16 --vcoils 16 --cb-list 8
+b256_o3_f20_c16cb4|--static-knot --matrix 256,256,256 --order 3 --frames 20 --nseg 16 --vcoils 16 --cb-list 4
+b320_o3_f20_c16cb1|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 16 --vcoils 16 --cb-list 1
+b640_o3_f20_c1L16lb8|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 16 --vcoils 1 --seg-batch 8 --cb-list 1

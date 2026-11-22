@@ -1,0 +1,479 @@
+========= COMPUTE-SANITIZER
+
+running 2 tests
+test gpu_matches_cpu_bit_for_bit ... ========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (152,0,0) in block (1,0,0)
+=========     Access to 0xec603d680 is out of bounds
+=========     and is 1 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (153,0,0) in block (1,0,0)
+=========     Access to 0xec603d684 is out of bounds
+=========     and is 5 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (154,0,0) in block (1,0,0)
+=========     Access to 0xec603d688 is out of bounds
+=========     and is 9 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (155,0,0) in block (1,0,0)
+=========     Access to 0xec603d68c is out of bounds
+=========     and is 13 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (156,0,0) in block (1,0,0)
+=========     Access to 0xec603d690 is out of bounds
+=========     and is 17 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (157,0,0) in block (1,0,0)
+=========     Access to 0xec603d694 is out of bounds
+=========     and is 21 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (158,0,0) in block (1,0,0)
+=========     Access to 0xec603d698 is out of bounds
+=========     and is 25 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Invalid __global__ write of size 4 bytes
+=========     at bfp_pack_hw+0xbf0
+=========     by thread (159,0,0) in block (1,0,0)
+=========     Access to 0xec603d69c is out of bounds
+=========     and is 29 bytes after the nearest allocation at 0xec6033400 of size 41,600 bytes
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: cuLaunchKernel [0x39fc14] in libcuda.so.1
+=========         Host Frame: _RNvMs_NtCs1RLiUvZQw5_9hasty_bfp3gpuNtB4_10BfpKernels4pack in gpu.rs:92 [0x8e291] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4adb2] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemcpyDtoHAsync_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream10clone_dtohfINtB7_9CudaSlicefEECs4lbP5QK51T9_3gpu in core.rs:1732 [0x47fbd] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4add8] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemFreeAsync.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result10free_async in result.rs:937 [0xa5a63] in bfp_gpu_test
+=========         Host Frame: _RNvXsi_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreINtB5_9CudaSlicemENtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4dropCs4lbP5QK51T9_3gpu in core.rs:868 [0x4908f] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x492ec] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba5c] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49300] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba5c] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49326] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba5c] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemFreeAsync.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result10free_async in result.rs:937 [0xa5a63] in bfp_gpu_test
+=========         Host Frame: _RNvXsi_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreINtB5_9CudaSlicemENtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4dropCs4lbP5QK51T9_3gpu in core.rs:868 [0x4908f] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x493dc] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba69] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x493f0] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba69] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49416] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba69] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemFreeAsync.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result10free_async in result.rs:937 [0xa5a63] in bfp_gpu_test
+=========         Host Frame: _RNvXsi_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreINtB5_9CudaSlicemENtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4dropCs4lbP5QK51T9_3gpu in core.rs:868 [0x4908f] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x492ec] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba86] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49300] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba86] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicehEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49326] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba86] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemFreeAsync.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result10free_async in result.rs:937 [0xa5a63] in bfp_gpu_test
+=========         Host Frame: _RNvXsi_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreINtB5_9CudaSlicemENtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4dropCs4lbP5QK51T9_3gpu in core.rs:868 [0x4908f] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x493dc] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba93] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x493f0] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba93] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicemEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49416] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ba93] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuMemFreeAsync.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result10free_async in result.rs:937 [0xa5a63] in bfp_gpu_test
+=========         Host Frame: _RNvXsi_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreINtB5_9CudaSlicemENtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4dropCs4lbP5QK51T9_3gpu in core.rs:868 [0x4908f] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicefEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x491fc] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4baa0] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicefEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49210] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4baa0] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuEventDestroy_v2.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs6_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_9CudaEventNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:544 [0xa5409] in bfp_gpu_test
+=========         Host Frame: _RINvNtCskADBYZwJmSU_4core3ptr9drop_glueINtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core9CudaSlicefEECs4lbP5QK51T9_3gpu in mod.rs:847 [0x49236] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4baa0] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuModuleUnload.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvXs1q_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB6_10CudaModuleNtNtNtCskADBYZwJmSU_4core3ops4drop4Drop4drop in core.rs:2257 [0xa5336] in bfp_gpu_test
+=========         Host Frame: _RNvMsn_NtCsgFX3jaOk65H_5alloc4syncINtB5_3ArcNtNtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4core10CudaModuleE9drop_slowCsbJJQHmlyEtl_10hasty_cuda in sync.rs:2149 [0x9b854] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4bb17] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+FAILED
+test gpu_round_trip_large ... ========= Program hit CUDA_ERROR_LAUNCH_FAILED (error 719) due to "unspecified launch failure" on CUDA API call to cuDevicePrimaryCtxRetain.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: _RNvMs3_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB5_11CudaContext3new in core.rs:77 [0xa45c8] in bfp_gpu_test
+=========         Host Frame: _RNvMCsbJJQHmlyEtl_10hasty_cudaNtB2_6Device3new in lib.rs:44 [0x9de09] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu20gpu_round_trip_large0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x49fc3] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+FAILED
+
+failures:
+
+---- gpu_matches_cpu_bit_for_bit stdout ----
+
+thread 'gpu_matches_cpu_bit_for_bit' (1016544) panicked at crates/hasty-bfp/tests/gpu.rs:74:41:
+called `Result::unwrap()` on an `Err` value: DriverError(CUDA_ERROR_LAUNCH_FAILED, "unspecified launch failure")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- gpu_round_trip_large stdout ----
+
+thread 'gpu_round_trip_large' (1016565) panicked at crates/hasty-bfp/tests/gpu.rs:96:30:
+device: Driver(DriverError(CUDA_ERROR_LAUNCH_FAILED, "unspecified launch failure"))
+
+
+failures:
+    gpu_matches_cpu_bit_for_bit
+    gpu_round_trip_large
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+========= Leaked 166,376 bytes at 0xec6000000
+=========     Saved host backtrace up to driver entry point at allocation time
+=========         Host Frame: cuMemAllocAsync [0x3a324f] in libcuda.so.1
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result12malloc_async in result.rs:831 [0xa5b69] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream5allocfECs4lbP5QK51T9_3gpu in core.rs:1629 [0x48a04] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream10clone_htodfINtNtCsgFX3jaOk65H_5alloc3vec3VecfEECs4lbP5QK51T9_3gpu in core.rs:1689 [0x4825d] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ab98] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Leaked 41,600 bytes at 0xec6028a00
+=========     Saved host backtrace up to driver entry point at allocation time
+=========         Host Frame: cuMemAllocAsync [0x3a324f] in libcuda.so.1
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result12malloc_async in result.rs:831 [0xa5b69] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream5allocfECs4lbP5QK51T9_3gpu in core.rs:1629 [0x48a04] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream10clone_htodfINtNtCsgFX3jaOk65H_5alloc3vec3VecfEECs4lbP5QK51T9_3gpu in core.rs:1689 [0x4825d] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4abe6] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Leaked 1,300 bytes at 0xec6032e00
+=========     Saved host backtrace up to driver entry point at allocation time
+=========         Host Frame: cuMemAllocAsync [0x3a324f] in libcuda.so.1
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result12malloc_async in result.rs:831 [0xa5b69] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream5allochECs4lbP5QK51T9_3gpu in core.rs:1629 [0x48baf] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream10clone_htodhINtNtCsgFX3jaOk65H_5alloc3vec3VechEECs4lbP5QK51T9_3gpu in core.rs:1689 [0x4846d] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ac39] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Leaked 41,600 bytes at 0xec6033400
+=========     Saved host backtrace up to driver entry point at allocation time
+=========         Host Frame: cuMemAllocAsync [0x3a324f] in libcuda.so.1
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result12malloc_async in result.rs:831 [0xa5b69] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream5allocfECs4lbP5QK51T9_3gpu in core.rs:1629 [0x48a04] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream11alloc_zerosmECs4lbP5QK51T9_3gpu in core.rs:1656 [0x48670] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4acde] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Leaked 1,300 bytes at 0xec603d800
+=========     Saved host backtrace up to driver entry point at allocation time
+=========         Host Frame: cuMemAllocAsync [0x3a324f] in libcuda.so.1
+=========         Host Frame: _RNvNtNtCsgyHw72UN3Es_6cudarc6driver6result12malloc_async in result.rs:831 [0xa5b69] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream5allochECs4lbP5QK51T9_3gpu in core.rs:1629 [0x48baf] in bfp_gpu_test
+=========         Host Frame: _RINvMs1k_NtNtNtCsgyHw72UN3Es_6cudarc6driver4safe4coreNtB7_10CudaStream11alloc_zeroshECs4lbP5QK51T9_3gpu in core.rs:1656 [0x48820] in bfp_gpu_test
+=========         Host Frame: _RNvYNCNvCs4lbP5QK51T9_3gpu27gpu_matches_cpu_bit_for_bit0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_onceB6_ in function.rs:250 [0x4ad34] in bfp_gpu_test
+=========         Host Frame: _RINvCslTQyRuerOM8_4test28___rust_begin_short_backtraceINtNtCskADBYZwJmSU_4core6result6ResultuNtNtCsgFX3jaOk65H_5alloc6string6StringEFEBQ_EB2_ in lib.rs:733 [0x4bc6a] in bfp_gpu_test
+=========         Host Frame: _RNCNvCslTQyRuerOM8_4test8run_test0B3_ in lib.rs:677 [0x592d4] in bfp_gpu_test
+=========         Host Frame: _RINvNtNtCs8ZKwes1zzDd_3std3sys9backtrace28___rust_begin_short_backtraceNCNvCslTQyRuerOM8_4test8run_tests_0uEB1b_ in backtrace.rs:166 [0x52693] in bfp_gpu_test
+=========         Host Frame: _RNSNvYNCINvNtNtCs8ZKwes1zzDd_3std6thread9lifecycle15spawn_uncheckedNCNvCslTQyRuerOM8_4test8run_tests_0uEs_0INtNtNtCskADBYZwJmSU_4core3ops8function6FnOnceuE9call_once6vtableB17_ in function.rs:250 [0x5c431] in bfp_gpu_test
+=========         Host Frame: _RNvNvMs0_NtNtNtCs8ZKwes1zzDd_3std3sys6thread4unixNtB7_6Thread3new12thread_start in unix.rs:123 [0xdfa28] in bfp_gpu_test
+=========         Host Frame: start_thread in pthread_create.c:447 [0x9cb63] in libc.so.6
+=========         Host Frame: clone3 in clone3.S:78 [0x129e8b] in libc.so.6
+========= 
+========= Target application returned an error
+========= LEAK SUMMARY: 252176 bytes leaked in 5 allocations
+========= ERROR SUMMARY: 31 errors
+exit 101

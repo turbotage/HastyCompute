@@ -1,0 +1,11 @@
+=== seg_split (2026-11-20 16:32:56); power.limit 300.00 W
+
+running 4 tests
+test one_bin_knot_matches_static ... ok
+test one_bin_sanitize ... ok
+test split_matches_plain ... ok
+test static_knot_env_switch ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 840.71s
+
+exit 0 (2026-11-20 16:46:58)

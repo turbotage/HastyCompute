@@ -1,0 +1,9 @@
+
+running 4 tests
+test balanced_batches_and_defaults_vs_one_coil_batches ... ok
+test blocked_shapes_split_lists ... ok
+test knot_blocked_and_ragged_shapes ... ok
+test static_blocked_and_ragged_shapes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 315.05s
+

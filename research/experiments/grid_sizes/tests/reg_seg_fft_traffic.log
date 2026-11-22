@@ -1,0 +1,11 @@
+=== seg_fft_traffic (2026-11-20 15:41:37); power.limit 300.00 W
+
+running 4 tests
+test debug_fused_slot ... ignored
+test fft_slabs_match_whole_grid ... ok
+test fused_pad_crop_matches_separate_kernels ... ok
+test split_tile_zeroing_matches_full_slot ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+exit 0 (2026-11-20 15:41:53)

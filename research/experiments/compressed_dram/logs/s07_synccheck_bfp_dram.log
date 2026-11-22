@@ -1,0 +1,42 @@
+=== s07_synccheck_bfp_dram: env HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool synccheck --print-limit 20 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 (2026-11-21 13:11:50)
+locked 13:11:50; power limit / draw / sm clock / memory used: 450.00 W, 64.40 W, 2565 MHz, 240 MiB
+========= COMPUTE-SANITIZER
+
+running 3 tests
+test bfp_grid_matches_f32 ... Static order 0 kprune true slab 390 fused true forward kernel tile: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.02e-3 (66.58), adjoint 2.3e-5 (spread 3.1e-5), gradient 5.51e-4 (36.10; one ulp 8.9e-6, spread 1.3e-5); forward one ulp 3.6e-6, κ 22.0; adjointness 2.8e-6
+Static order 0 kprune true slab 390 fused true forward kernel tile: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.30e-6 (72.07), adjoint 2.5e-5 (spread 3.1e-5), gradient 1.52e-5 (254.46; one ulp 8.9e-6, spread 1.3e-5); forward one ulp 3.6e-6, κ 22.0; adjointness 1.4e-7
+ok
+test bfp_maps_match_f32 ... Static order 0 kprune true slab 390: maps bfp16 diag f32: forward 2.32e-5 (1.52 · 2^-b), adjoint 3.56e-5 (2.33), gradient 2.31e-5 (1.52); one ulp 3.6e-6 / 6.0e-6 / 6.0e-6; spread 2.3e-5 / 1.4e-5; adjointness f32 7.1e-8, bfp 2.3e-8
+Static order 0 kprune true slab 390: maps f32 diag bfp16: forward 1.50e-5 (0.98 · 2^-b), adjoint 3.16e-5 (2.07), gradient 2.32e-5 (1.52); one ulp 3.6e-6 / 6.0e-6 / 6.0e-6; spread 2.3e-5 / 1.4e-5; adjointness f32 7.1e-8, bfp 2.9e-8
+Static order 0 kprune true slab 390: maps bfp16 diag bfp16: forward 2.71e-5 (1.78 · 2^-b), adjoint 3.59e-5 (2.35), gradient 3.14e-5 (2.05); one ulp 3.6e-6 / 6.0e-6 / 6.0e-6; spread 2.3e-5 / 1.4e-5; adjointness f32 7.1e-8, bfp 1.1e-7
+Static order 0 kprune true slab 390: maps bfp24 diag bfp24: forward 3.51e-6 (58.91 · 2^-b), adjoint 2.95e-5 (495.27), gradient 1.36e-5 (227.78); one ulp 3.6e-6 / 6.0e-6 / 6.0e-6; spread 2.3e-5 / 1.4e-5; adjointness f32 7.1e-8, bfp 1.1e-7
+ok
+test debug_grid_adjoint ... ignored
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+========= ERROR SUMMARY: 0 errors
+	Command being timed: "timeout 900 env HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool synccheck --print-limit 20 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1"
+	User time (seconds): 0.89
+	System time (seconds): 0.39
+	Percent of CPU this job got: 113%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.14
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 192360
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 1
+	Minor (reclaiming a frame) page faults: 33570
+	Voluntary context switches: 2124
+	Involuntary context switches: 564
+	Swaps: 0
+	File system inputs: 344
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:11:51; power limit at end 450.00 W

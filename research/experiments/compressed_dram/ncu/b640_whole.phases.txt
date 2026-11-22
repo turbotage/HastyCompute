@@ -1,0 +1,10 @@
+== /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu_cz/b640_whole.csv
+  F z                                x   1    23.62 ms  R    7.55  W    7.85 GB
+  F x (pad)                          x   2    36.58 ms  R   15.88  W   14.89 GB
+  F gather seg_forward_vs            x   1    56.04 ms  R   10.97  W    0.05 GB
+  F seg_tile_count                   x   1     0.05 ms  R    0.02  W    0.02 GB
+  A seg_zero_empty                   x   1     0.96 ms  R    0.02  W    0.01 GB
+  A seg_adjoint_kl                   x   1    41.86 ms  R    2.54  W    6.86 GB
+  A x^-1 (crop)                      x   2    36.29 ms  R   14.89  W   15.88 GB
+  A z^-1                             x   1    17.61 ms  R   15.41  W    0.66 GB
+  total                                      213.00 ms  R   67.29  W   46.22 GB

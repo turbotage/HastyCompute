@@ -1,0 +1,10 @@
+
+running 5 tests
+test ksupport_matches_full ... ok
+test ksupport_timing ... ok
+test pruned_matches_full ... ok
+test pruned_timing ... ok
+test slab_passes_equal_whole_grid ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.10s
+

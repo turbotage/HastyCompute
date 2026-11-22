@@ -1,0 +1,25 @@
+
+running 1 test
+test kl_unsplit_equals_ra ... Knot1d o0 unsplit RaCfg { nxg: 1, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o0 unsplit RaCfg { nxg: 1, cb: 1, chk: 32 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o0 unsplit RaCfg { nxg: 2, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o0 unsplit RaCfg { nxg: 2, cb: 1, chk: 32 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o0 unsplit RaCfg { nxg: 2, cb: 3, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o2 unsplit RaCfg { nxg: 1, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o2 unsplit RaCfg { nxg: 2, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o2 unsplit RaCfg { nxg: 2, cb: 3, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o3 unsplit RaCfg { nxg: 1, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o3 unsplit RaCfg { nxg: 2, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot1d o3 unsplit RaCfg { nxg: 2, cb: 3, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o1 unsplit RaCfg { nxg: 1, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o1 unsplit RaCfg { nxg: 2, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o1 unsplit RaCfg { nxg: 2, cb: 1, chk: 32 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o1 unsplit RaCfg { nxg: 2, cb: 3, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o3 unsplit RaCfg { nxg: 1, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o3 unsplit RaCfg { nxg: 2, cb: 1, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+Knot2d o3 unsplit RaCfg { nxg: 2, cb: 3, chk: 16 }: kl kernel vs ra 0.0e0 (run-to-run 0.0e0)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.65s
+
+exit 0

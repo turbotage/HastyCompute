@@ -1,0 +1,24 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 6.1e-6
+Knot1d o1 ra None kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 5.3e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 6.8e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 6.6e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: half-ball set inside the union support, layout on vs off 1.6e-4
+
+thread 'kl_support_union' (952857) panicked at crates/hasty-nufft/tests/seg_kl.rs:355:21:
+Knot1d ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: 1.6e-4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_support_union
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 4.85s
+
+========= Target application returned an error
+========= ERROR SUMMARY: 0 errors
+exit 101

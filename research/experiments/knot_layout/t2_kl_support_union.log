@@ -1,0 +1,21 @@
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 3.7e-6
+Knot1d o1 ra None kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 3.2e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 3.4e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 3.6e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: half-ball set inside the union support, layout on vs off 1.8e-4
+
+thread 'kl_support_union' (952291) panicked at crates/hasty-nufft/tests/seg_kl.rs:355:21:
+Knot1d ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: 1.8e-4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_support_union
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.91s
+
+exit 101

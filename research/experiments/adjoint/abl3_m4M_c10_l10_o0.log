@@ -1,0 +1,20 @@
+== PG_DEFS=
+    ra RaCfg { tx: 2, ty: 8, tz: 8, nxg: 2, cb: 2, chk: 32, lmax: 2048 } smem  15872 regs  92 local 0 blocks/SM 2:   253.80 ms (7.5 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  20352 regs 162 local 0 blocks/SM 3:    96.66 ms (19.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 32, lmax: 2048 } smem  40704 regs 167 local 0 blocks/SM 2:   112.22 ms (17.0 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  11904 regs 119 local 0 blocks/SM 4:   124.70 ms (15.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 32, lmax: 2048 } smem  24320 regs 120 local 0 blocks/SM 2:   139.64 ms (13.6 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  28928 regs 174 local 0 blocks/SM 1:   135.43 ms (14.1 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 7, chk: 32, lmax: 2048 } smem  41216 regs 182 local 0 blocks/SM 1:   121.88 ms (15.6 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 7, chk: 16, lmax: 2048 } smem  12032 regs 167 local 0 blocks/SM 3:   132.78 ms (14.3 %)
+  BEST ra: 96.60 ms (kernel; + memset 6.78 ms) RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } items 109007 | 4141 G cMAC/s, 19.7 % of FP32 FMA peak (2 FMA/MAC) | rel err 9.65e-7 at 48 points x 100 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 1.36e-6 on 200 samples
+== PG_DEFS=RA_NOMAC
+    ra RaCfg { tx: 2, ty: 8, tz: 8, nxg: 2, cb: 2, chk: 32, lmax: 2048 } smem  15872 regs  48 local 0 blocks/SM 5:    43.74 ms (43.5 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  20352 regs  56 local 0 blocks/SM 4:    27.11 ms (70.2 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 32, lmax: 2048 } smem  40704 regs  56 local 0 blocks/SM 2:    34.08 ms (55.9 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  11904 regs  52 local 0 blocks/SM 7:    30.81 ms (61.8 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 32, lmax: 2048 } smem  24320 regs  48 local 8 blocks/SM 4:    26.33 ms (72.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  28928 regs  46 local 0 blocks/SM 3:    21.79 ms (87.4 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 7, chk: 32, lmax: 2048 } smem  41216 regs  60 local 0 blocks/SM 2:    23.09 ms (82.5 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 7, chk: 16, lmax: 2048 } smem  12032 regs  52 local 0 blocks/SM 7:    27.36 ms (69.6 %)
+  BEST ra: 21.77 ms (kernel; + memset 6.77 ms) RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 7, chk: 16, lmax: 2048 } items 70143 | 18377 G cMAC/s, 87.5 % of FP32 FMA peak (2 FMA/MAC) | rel err 1.00e0 at 48 points x 100 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 1.00e0 on 200 samples

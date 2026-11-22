@@ -1,0 +1,57 @@
+=== r08_seg_stream: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_stream --test-threads 1 (2026-11-20 19:12:41)
+locked 19:12:41; power limit / draw / sm clock / memory used: 300.00 W, 126.65 W, 2805 MHz, 294 MiB
+
+running 3 tests
+test packed_tables_match_resident ... FAILED
+test streamed_tables_joint_fat ... ok
+test streamed_tables_match_resident ... FAILED
+
+failures:
+
+---- packed_tables_match_resident stdout ----
+packed zstd1, order 2, static, prefetch false: host tables 0.24 MB stored for 0.83 MB (×3.43)
+packed zstd1, order 2, static, prefetch false: streamed vs resident max rel. difference 2.0e-5 (resident repeat 5.0e-7); 5 uploads, 1.3 MB, 0.8 MB freed, slots 0.7 MB
+
+thread 'packed_tables_match_resident' (1217215) panicked at crates/hasty-nufft/tests/seg_stream.rs:149:5:
+packed zstd1, order 2, static, prefetch false: streamed tables differ from resident ones: 2.0e-5 (resident repeat 5.0e-7)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- streamed_tables_match_resident stdout ----
+order 2, static, prefetch false: host tables 0.83 MB stored for 0.83 MB (×1.00)
+order 2, static, prefetch false: streamed vs resident max rel. difference 2.1e-5 (resident repeat 5.0e-7); 5 uploads, 1.3 MB, 0.8 MB freed, slots 0.7 MB
+
+thread 'streamed_tables_match_resident' (1217253) panicked at crates/hasty-nufft/tests/seg_stream.rs:149:5:
+order 2, static, prefetch false: streamed tables differ from resident ones: 2.1e-5 (resident repeat 5.0e-7)
+
+
+failures:
+    packed_tables_match_resident
+    streamed_tables_match_resident
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_stream --test-threads 1"
+	User time (seconds): 0.62
+	System time (seconds): 0.44
+	Percent of CPU this job got: 103%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.03
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 190176
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 30318
+	Voluntary context switches: 389
+	Involuntary context switches: 19
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 920
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 19:12:42; power limit at end 300.00 W

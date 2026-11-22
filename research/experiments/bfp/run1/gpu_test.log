@@ -1,0 +1,28 @@
+
+running 2 tests
+test gpu_matches_cpu_bit_for_bit ... FAILED
+test gpu_round_trip_large ... FAILED
+
+failures:
+
+---- gpu_matches_cpu_bit_for_bit stdout ----
+
+thread 'gpu_matches_cpu_bit_for_bit' (1016509) panicked at crates/hasty-bfp/tests/gpu.rs:81:17:
+bits 8 hw-complex: mantissa word 24 (block 3): gpu 00000000 cpu b3b3b3b3
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- gpu_round_trip_large stdout ----
+
+thread 'gpu_round_trip_large' (1016529) panicked at crates/hasty-bfp/tests/gpu.rs:112:13:
+assertion `left == right` failed: bits 12 hw-complex
+  left: Some(0)
+ right: None
+
+
+failures:
+    gpu_matches_cpu_bit_for_bit
+    gpu_round_trip_large
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s
+
+exit 101

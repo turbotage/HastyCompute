@@ -1,0 +1,45 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+warning: function `bit_equal` is never used
+  --> crates/hasty-nufft/tests/seg_bfp_dram.rs:33:4
+   |
+33 | fn bit_equal(a: &[C32], b: &[C32]) -> bool {
+   |    ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (test "seg_bfp_dram") generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/seg_bfp_dram.rs (target/release/deps/seg_bfp_dram-bcc7115e2f700abc)
+
+running 1 test
+test bfp_maps_match_f32 ... Static order 0 kprune true slab 390: maps bfp16 diag f32: forward 2.31e-5 (1.51 · 2^-b), adjoint 3.24e-5 (2.12), gradient 2.25e-5 (1.47); one ulp 3.7e-6 / 6.9e-6 / 1.3e-5; spread 1.4e-6 / 2.3e-6; adjointness f32 1.3e-8, bfp 1.1e-7
+Static order 0 kprune true slab 390: maps f32 diag bfp16: forward 1.51e-5 (0.99 · 2^-b), adjoint 3.29e-5 (2.15), gradient 2.07e-5 (1.36); one ulp 3.7e-6 / 6.9e-6 / 1.3e-5; spread 1.4e-6 / 2.3e-6; adjointness f32 1.3e-8, bfp 5.6e-8
+Static order 0 kprune true slab 390: maps bfp16 diag bfp16: forward 2.72e-5 (1.78 · 2^-b), adjoint 3.81e-5 (2.50), gradient 2.86e-5 (1.88); one ulp 3.7e-6 / 6.9e-6 / 1.3e-5; spread 1.4e-6 / 2.3e-6; adjointness f32 1.3e-8, bfp 1.4e-7
+Static order 0 kprune true slab 390: maps bfp24 diag bfp24: forward 3.86e-6 (64.74 · 2^-b), adjoint 2.62e-5 (439.76), gradient 1.11e-5 (186.81); one ulp 3.7e-6 / 6.9e-6 / 1.3e-5; spread 1.4e-6 / 2.3e-6; adjointness f32 1.3e-8, bfp 9.6e-8
+Static order 3 kprune false slab 0: maps bfp16 diag f32: forward 2.31e-5 (1.52 · 2^-b), adjoint 3.26e-5 (2.14), gradient 2.23e-5 (1.46); one ulp 3.7e-6 / 7.1e-6 / 7.0e-6; spread 0.0e0 / 2.9e-6; adjointness f32 2.2e-8, bfp 9.8e-8
+Static order 3 kprune false slab 0: maps f32 diag bfp16: forward 1.52e-5 (1.00 · 2^-b), adjoint 3.08e-5 (2.02), gradient 2.03e-5 (1.33); one ulp 3.7e-6 / 7.1e-6 / 7.0e-6; spread 0.0e0 / 2.9e-6; adjointness f32 2.2e-8, bfp 1.2e-7
+Static order 3 kprune false slab 0: maps bfp16 diag bfp16: forward 2.72e-5 (1.78 · 2^-b), adjoint 3.61e-5 (2.37), gradient 2.83e-5 (1.86); one ulp 3.7e-6 / 7.1e-6 / 7.0e-6; spread 0.0e0 / 2.9e-6; adjointness f32 2.2e-8, bfp 5.1e-8
+Static order 3 kprune false slab 0: maps bfp24 diag bfp24: forward 3.88e-6 (65.14 · 2^-b), adjoint 2.27e-5 (380.81), gradient 1.03e-5 (172.50); one ulp 3.7e-6 / 7.1e-6 / 7.0e-6; spread 0.0e0 / 2.9e-6; adjointness f32 2.2e-8, bfp 5.3e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp16 diag f32: forward 2.36e-5 (1.54 · 2^-b), adjoint 2.45e-5 (1.61), gradient 2.29e-5 (1.50); one ulp 4.0e-6 / 5.2e-6 / 6.5e-6; spread 0.0e0 / 3.3e-6; adjointness f32 7.1e-8, bfp 5.9e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps f32 diag bfp16: forward 1.56e-5 (1.02 · 2^-b), adjoint 1.63e-5 (1.07), gradient 2.07e-5 (1.36); one ulp 4.0e-6 / 5.2e-6 / 6.5e-6; spread 0.0e0 / 3.3e-6; adjointness f32 7.1e-8, bfp 7.5e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp16 diag bfp16: forward 2.78e-5 (1.82 · 2^-b), adjoint 2.86e-5 (1.88), gradient 3.00e-5 (1.97); one ulp 4.0e-6 / 5.2e-6 / 6.5e-6; spread 0.0e0 / 3.3e-6; adjointness f32 7.1e-8, bfp 1.1e-7
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp24 diag bfp24: forward 4.24e-6 (71.13 · 2^-b), adjoint 6.48e-6 (108.75), gradient 7.71e-6 (129.34); one ulp 4.0e-6 / 5.2e-6 / 6.5e-6; spread 0.0e0 / 3.3e-6; adjointness f32 7.1e-8, bfp 6.1e-8
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp16 diag f32: forward 2.36e-5 (1.55 · 2^-b), adjoint 2.52e-5 (1.65), gradient 2.32e-5 (1.52); one ulp 4.0e-6 / 5.0e-6 / 7.0e-6; spread 0.0e0 / 3.6e-6; adjointness f32 1.6e-7, bfp 1.4e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps f32 diag bfp16: forward 1.57e-5 (1.03 · 2^-b), adjoint 1.74e-5 (1.14), gradient 2.12e-5 (1.39); one ulp 4.0e-6 / 5.0e-6 / 7.0e-6; spread 0.0e0 / 3.6e-6; adjointness f32 1.6e-7, bfp 1.8e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp16 diag bfp16: forward 2.79e-5 (1.83 · 2^-b), adjoint 2.92e-5 (1.92), gradient 3.01e-5 (1.97); one ulp 4.0e-6 / 5.0e-6 / 7.0e-6; spread 0.0e0 / 3.6e-6; adjointness f32 1.6e-7, bfp 1.8e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp24 diag bfp24: forward 4.24e-6 (71.19 · 2^-b), adjoint 8.18e-6 (137.25), gradient 8.46e-6 (141.87); one ulp 4.0e-6 / 5.0e-6 / 7.0e-6; spread 0.0e0 / 3.6e-6; adjointness f32 1.6e-7, bfp 2.2e-7
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.94s
+

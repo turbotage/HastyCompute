@@ -1,0 +1,6 @@
+=== r17_seg_fat_union_gpu: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_fat_union_gpu --test-threads 1 (2026-11-20 19:15:02)
+locked 19:15:21; power limit / draw / sm clock / memory used: 300.00 W, 297.89 W, 2385 MHz, 294 MiB
+
+running 2 tests
+test fat_union_per_frame_maps_match_direct_sum ... ok
+test fat_union_with_complex_rates_matches_direct_sum ... 

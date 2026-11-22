@@ -1,0 +1,21 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 7.4e-6
+Knot1d o1 ra None kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 6.5e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 6.2e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 6.4e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: half-ball set inside the union support, layout on vs off 1.6e-4
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles false: half-ball set inside the union support, layout on vs off 1.6e-4
+Knot2d o3 ra None kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 1.1e-6
+Knot2d o3 ra None kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 1.0e-6
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true: half-ball set inside the union support, layout on vs off 1.4e-6
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false: half-ball set inside the union support, layout on vs off 1.4e-6
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true: half-ball set inside the union support, layout on vs off 4.3e-5
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles false: half-ball set inside the union support, layout on vs off 4.3e-5
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 23.84s
+
+========= ERROR SUMMARY: 0 errors
+exit 0

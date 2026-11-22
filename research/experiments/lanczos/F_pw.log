@@ -1,0 +1,81 @@
+output directory data/hasty/phantom/factory_arms/ph0001/lanczos_dev/F_pw (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch data/hasty/phantom/factory_arms/ph0001/lanczos_dev/F_pw/STOP to pause with a checkpoint)
+k-space data: 50.56 GiB raw coil data, 24.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [128, 72, 60] (native [254, 144, 114]), voxel [4.0, 4.0, 3.8] mm
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 140 sets (13170990 samples) in 0.5s
+calibration region [24, 24, 24]: 88804 samples of encode 0, 32 coils (1.8s)
+coil compression (whitened calibration region): 8 of 32 virtual coils (fixed 8), 68.304 % energy kept; σ²/Σσ²: [1.5e-1, 1.2e-1, 1.0e-1, 7.8e-2, 6.7e-2, 6.0e-2, 5.5e-2, 5.1e-2, 4.3e-2, 3.5e-2, 3.4e-2, 3.0e-2, 2.6e-2, 2.0e-2, 1.8e-2, 1.6e-2, 1.5e-2, 1.4e-2, 1.2e-2, 1.0e-2, 8.0e-3, 6.3e-3, 6.0e-3, 5.9e-3, 3.9e-3, 3.5e-3, 2.6e-3, 2.1e-3, 1.7e-3, 1.2e-3, 7.6e-4, 5.5e-4]
+  k-space store: 16 / 140 sets (1s)
+  k-space store: 32 / 140 sets (2s)
+  k-space store: 48 / 140 sets (2s)
+  k-space store: 64 / 140 sets (3s)
+  k-space store: 80 / 140 sets (4s)
+  k-space store: 96 / 140 sets (5s)
+  k-space store: 112 / 140 sets (6s)
+  k-space store: 128 / 140 sets (6s)
+  k-space store: 140 / 140 sets (7s)
+k-space store built in 7.0s: dense in RAM: 140 sets × 8 coils, 0.79 GiB raw → 0.79 GiB stored (×1.00), 0.79 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 3001984 of 13170990 samples kept (22.79 %), ADC window 0..3989 of 3990 (1.600..9.578 ms), 11829 .. 31759 per set (0.0s)
+k-space crop: kept data 0.18 GiB read through a filtered view of the store
+device memory after loading and coil compression: 22.79 GiB free of 23.51 GiB
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 17.0s
+device memory after the data placement: 22.67 GiB free of 23.51 GiB
+warm start: 3 PCGLS iterations per encode (21s)
+device memory after the warm start: 21.92 GiB free of 23.51 GiB
+support 526440 voxels
+coil maps not masked (--coil-mask none): 552960 voxels; fit region 547451 voxels
+lumen 6165 voxels: 5714 in the support, 6165 in the masked maps
+circulant metric for encode 0: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 1: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 2: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 3: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 4: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 5: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 6: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+warm-start velocity in the lumen: mean ["0.007", "0.044", "0.015"] m/s, truth (time average) ["0.012", "0.003", "-0.010"], RMSE 1.809 m/s
+device memory before the segment operator: 21.89 GiB free of 23.51 GiB
+monomial quadratic fit over 547451 voxels: rms 3.3e-4 / max 1.7e-3 m² (z², x²+y², xz, yz: ["1.2e-3", "1.7e-3", "1.1e-3", "9.3e-4"])
+  [build timer] monomial fit done: 0.1s since the build start
+monomial degree-4 fit (--conc-fit deg4): rms 6.4e-5 / max 4.4e-4 m² (["4.2e-4", "3.9e-4", "4.4e-4", "3.4e-4"]); degree 3/4 part to first order in the kernel (order 3)
+  [build timer] segment bases of all encodes done: 13.1s since the build start
+sample tables: 234 B/sample, 0.65 GiB for 140 sets → device
+  [build timer] sample tables (280 sets) done: 16.8s since the build start
+    [tune] hit autotune 952364734374d6c5 (file, /home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/hasty-tune/NVIDIA-GeForce-RTX-4090-cc89-drv580.178.04-nvrtc13.0/952364734374d6c5.json): choice loaded, no timing
+  [build timer] autotune done: 16.8s since the build start
+  autotune 0.0 s: timing launches 0.0 s (0 candidates), NVRTC compiles 0.0 s (0), cubin cache reads 0.0 s (3), module loads 0.0 s (3), rest 0.0 s (HASTY_TUNE=Reuse)
+SegNufft: L = 6, order 3, frames/set 1, coil batch 8, kernels 0.7/0.8 ms (set 0), max phase left out by the degree-4 fit 4.54e-2 rad, built in 16.8s
+host sample records released: 0.78 GiB
+memory after setup: RSS 4.2 GiB → 2.9 GiB (malloc_trim)
+device memory before the solver: 21.39 GiB free of 23.51 GiB
+step size by power: λ_max(N) = 7.401e7 (θ 7.4011e7 + bound 0.00e0), λ_max(M N) = 5.093e1 (θ 5.0931e1 + bound 0.00e0); 48 operator applications, 0.2s
+lambda_max(N) = 7.401e7, lambda_max(M N) = 5.093e1, setup 41s
+solver state: device (0.58 GiB per stack, 140 sets)
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.190 m/s (rel 2.786)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 1.846 m/s (rel 4.321), frames 1.81 1.82 1.93 1.96 1.93 1.93 1.88 1.83 1.81 1.81 1.81 1.83 1.84 1.82 1.81 1.81 1.81 1.81 1.82 1.84, 1s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.118 m/s (rel 2.618)
+  zmshr1m κ 1    it   1: f = 4.1034e14, velocity RMSE 1.721 m/s (rel 4.029), frames 1.71 1.71 1.80 1.83 1.82 1.81 1.76 1.70 1.68 1.69 1.70 1.67 1.71 1.65 1.70 1.68 1.70 1.70 1.68 1.69, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.8s, report 0.4s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.031 m/s (rel 2.414)
+  zmshr1m κ 1    it   2: f = 3.5410e14, velocity RMSE 1.558 m/s (rel 3.647), frames 1.55 1.54 1.63 1.68 1.64 1.67 1.58 1.54 1.49 1.53 1.54 1.51 1.55 1.52 1.54 1.46 1.54 1.56 1.49 1.57, 7s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.4s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.179 m/s (rel 2.760)
+  zmshr1m κ 1    it   3: f = 2.7234e14, velocity RMSE 1.783 m/s (rel 4.174), frames 1.70 1.81 1.79 1.85 1.81 1.92 1.74 1.80 1.74 1.80 1.74 1.76 1.80 1.86 1.72 1.74 1.81 1.77 1.69 1.78, 10s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.4s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.190 m/s (rel 2.786)
+  zmshr1  κ 1    it   0: f = NaN, velocity RMSE 1.846 m/s (rel 4.321), frames 1.81 1.82 1.93 1.96 1.93 1.93 1.88 1.83 1.81 1.81 1.81 1.83 1.84 1.82 1.81 1.81 1.81 1.81 1.82 1.84, 1s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.802 m/s (rel 1.878)
+  zmshr1  κ 1    it   1: f = 4.1034e14, velocity RMSE 1.119 m/s (rel 2.619), frames 1.05 1.05 1.24 1.34 1.28 1.35 1.20 1.04 1.07 1.08 1.04 0.97 1.14 1.06 1.01 1.05 1.09 1.11 0.98 1.13, 3s
+    time it 0: gradient 0.6s, step 0.0s, prior 1.7s, report 0.4s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 139, pass 1 0.9s, pass 2 0.7s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.695 m/s (rel 1.628)
+  zmshr1  κ 1    it   2: f = 2.9848e14, velocity RMSE 0.935 m/s (rel 2.190), frames 0.70 0.83 1.06 1.26 1.10 1.33 0.97 0.97 0.74 1.03 0.76 0.70 1.02 0.91 0.68 0.84 0.82 0.92 0.71 1.01, 6s
+    time it 1: gradient 0.6s, step 0.0s, prior 1.8s, report 0.3s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.788 m/s (rel 1.845)
+  zmshr1  κ 1    it   3: f = 2.0444e14, velocity RMSE 1.109 m/s (rel 2.596), frames 0.89 1.05 1.26 1.38 1.30 1.65 1.09 1.08 0.86 1.36 0.84 0.80 1.09 1.07 0.90 1.12 0.98 1.00 0.83 1.22, 9s
+    time it 2: gradient 0.6s, step 0.0s, prior 1.7s, report 0.3s
+4 figures in data/hasty/phantom/factory_arms/ph0001/lanczos_dev/F_pw/figs
+figures: data/hasty/phantom/factory_arms/ph0001/lanczos_dev/F_pw/figs

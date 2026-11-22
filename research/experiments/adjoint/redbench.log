@@ -1,0 +1,14 @@
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 100 (10 coils x 10 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  REDB tile [4, 4, 16] mode 0 (RED stride-8):   161.57 ms, 0.14 G footprint points x 112 ch, 190 G float-ops/s, 0.76 TB/s of 4-B values
+  REDB tile [4, 4, 16] mode 1 (RED packed):   130.42 ms, 0.14 G footprint points x 112 ch, 236 G float-ops/s, 0.94 TB/s of 4-B values
+  REDB tile [4, 4, 16] mode 2 (plain RMW):    49.36 ms, 0.14 G footprint points x 112 ch, 623 G float-ops/s, 2.49 TB/s of 4-B values
+  REDB tile [4, 4, 16] mode 3 (plain store):    62.67 ms, 0.14 G footprint points x 112 ch, 491 G float-ops/s, 1.96 TB/s of 4-B values
+  REDB tile [2, 4, 16] mode 0 (RED stride-8):   246.17 ms, 0.23 G footprint points x 112 ch, 211 G float-ops/s, 0.85 TB/s of 4-B values
+  REDB tile [2, 4, 16] mode 1 (RED packed):   169.55 ms, 0.23 G footprint points x 112 ch, 307 G float-ops/s, 1.23 TB/s of 4-B values
+  REDB tile [2, 4, 16] mode 2 (plain RMW):    72.23 ms, 0.23 G footprint points x 112 ch, 721 G float-ops/s, 2.88 TB/s of 4-B values
+  REDB tile [2, 4, 16] mode 3 (plain store):    97.24 ms, 0.23 G footprint points x 112 ch, 535 G float-ops/s, 2.14 TB/s of 4-B values
+  REDB tile [4, 4, 8] mode 0 (RED stride-8):   199.73 ms, 0.18 G footprint points x 112 ch, 201 G float-ops/s, 0.81 TB/s of 4-B values
+  REDB tile [4, 4, 8] mode 1 (RED packed):   151.55 ms, 0.18 G footprint points x 112 ch, 265 G float-ops/s, 1.06 TB/s of 4-B values
+  REDB tile [4, 4, 8] mode 2 (plain RMW):    66.45 ms, 0.18 G footprint points x 112 ch, 605 G float-ops/s, 2.42 TB/s of 4-B values
+  REDB tile [4, 4, 8] mode 3 (plain store):    76.12 ms, 0.18 G footprint points x 112 ch, 528 G float-ops/s, 2.11 TB/s of 4-B values

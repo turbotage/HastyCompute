@@ -1,0 +1,37 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.08s
+     Running tests/seg_stream.rs (target/release/deps/seg_stream-df924d92a9f6377a)
+
+running 3 tests
+test packed_tables_match_resident ... ok
+test streamed_tables_joint_fat ... ok
+test streamed_tables_match_resident ... FAILED
+
+failures:
+
+---- streamed_tables_match_resident stdout ----
+order 2, static, prefetch false: host tables 0.83 MB stored for 0.83 MB (×1.00)
+order 2, static, prefetch false: streamed vs resident max rel. difference 2.1e-5 (resident repeat 4.9e-7); 5 uploads, 1.3 MB, 0.8 MB freed, slots 0.7 MB
+
+thread 'streamed_tables_match_resident' (9264) panicked at crates/hasty-nufft/tests/seg_stream.rs:149:5:
+order 2, static, prefetch false: streamed tables differ from resident ones: 2.1e-5 (resident repeat 4.9e-7)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    streamed_tables_match_resident
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
+
+error: test failed, to rerun pass `-p hasty-nufft --test seg_stream`

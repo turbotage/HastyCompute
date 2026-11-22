@@ -1,0 +1,10 @@
+executed instructions per real value (warp instructions x 32 / n), n = 2^22 reals; shuffles per real in brackets
+copy_f32: 6.25
+bits   u32 copy      warp pack    warp unpack        hw pack      hw unpack       run pack     run unpack  random unpack
+   8       6.38    72.94 (nan)    31.88 (nan)    63.62 (nan)    29.69 (nan)    25.19 (nan)    12.94 (nan)    23.88 (nan)
+  12       9.06    82.25 (nan)    36.25 (nan)    59.50 (nan)    35.25 (nan)    18.94 (nan)    11.69 (nan)    26.12 (nan)
+  16       8.50    64.94 (nan)    31.88 (nan)    48.38 (nan)    25.44 (nan)    42.75 (nan)    20.69 (nan)    16.88 (nan)
+  18      10.12    75.06 (nan)    36.25 (nan)    67.94 (nan)    39.88 (nan)    15.06 (nan)    10.00 (nan)    26.62 (nan)
+  20      11.19    75.06 (nan)    36.25 (nan)    67.94 (nan)    39.88 (nan)    19.69 (nan)    11.94 (nan)    26.62 (nan)
+  22      12.25    75.06 (nan)    36.25 (nan)    68.19 (nan)    40.12 (nan)    15.19 (nan)    10.12 (nan)    26.62 (nan)
+  24      10.62    74.81 (nan)    36.25 (nan)    67.94 (nan)    39.88 (nan)    27.69 (nan)    15.38 (nan)    26.62 (nan)

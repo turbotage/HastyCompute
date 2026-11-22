@@ -1,0 +1,18 @@
+host codec, 67108864 reals (256 MiB f32), 1 rayon threads; memcpy 25.56 GB/s (1 thread)
+ bits      enc 1 thr      dec 1 thr      enc 1 thr      dec 1 thr
+   12        0.63 GB/s      1.01 GB/s      0.62 GB/s      1.03 GB/s
+   16        0.80 GB/s      2.18 GB/s      0.80 GB/s      2.28 GB/s
+   20        1.31 GB/s      2.59 GB/s      1.44 GB/s      2.18 GB/s
+   24        1.27 GB/s      2.43 GB/s      1.35 GB/s      2.07 GB/s
+host codec, 67108864 reals (256 MiB f32), 10 rayon threads; memcpy 24.40 GB/s (1 thread)
+ bits      enc 1 thr      dec 1 thr     enc 10 thr     dec 10 thr
+   12        0.76 GB/s      1.68 GB/s     13.61 GB/s     27.46 GB/s
+   16        0.76 GB/s      1.41 GB/s     13.96 GB/s     25.77 GB/s
+   20        0.68 GB/s      1.18 GB/s     13.62 GB/s     24.21 GB/s
+   24        0.65 GB/s      1.04 GB/s     13.97 GB/s     24.87 GB/s
+--- after the 16-bit fast path (4 threads) ---
+host codec, 67108864 reals (256 MiB f32), 4 rayon threads; memcpy 24.89 GB/s (1 thread)
+ bits      enc 1 thr      dec 1 thr      enc 4 thr      dec 4 thr
+   16        0.70 GB/s      1.98 GB/s      2.87 GB/s      7.95 GB/s
+   15        0.62 GB/s      0.96 GB/s      2.53 GB/s      4.00 GB/s
+   24        0.60 GB/s      0.89 GB/s      2.45 GB/s      3.73 GB/s

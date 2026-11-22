@@ -1,0 +1,19 @@
+
+running 2 tests
+test debug_fused_slot ... ignored
+test fused_pad_crop_matches_separate_kernels ...   [26, 22, 18]: k-support pruned grid FFT (8 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((8, 9)) lines × threads, two-pass L2 slabs of 585 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 1, knot false, kprune true: fused vs separate pad / crop: forward 3.5e-6, adjoint 1.2e-6, group 1.5e-6, source 1.3e-6 (separate vs separate forward 2.0e-7, adjoint 1.4e-6); adjointness fused 1.5e-7, separate 1.5e-7
+  [52, 22, 18]: k-support pruned grid FFT (8 ch, grid [70, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((8, 10)) lines × threads, two-pass L2 slabs of 300 z planes (37.6 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 1, knot false, kprune true: fused vs separate pad / crop: forward 3.9e-6, adjoint 1.1e-7, group 1.0e-6, source 9.2e-7 (separate vs separate forward 1.8e-7, adjoint 0.0e0); adjointness fused 5.9e-8, separate 4.0e-8
+  [26, 22, 18]: block-pruned grid FFT (8 ch, grid [36, 28, 24], x pass Some((8, 9)) lines × threads, two-pass L2 slabs of 585 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 1, knot false, kprune false: fused vs separate pad / crop: forward 3.5e-6, adjoint 1.3e-6, group 1.3e-6, source 1.4e-6 (separate vs separate forward 1.9e-7, adjoint 1.4e-6); adjointness fused 1.0e-7, separate 1.2e-7
+  [26, 22, 18]: k-support pruned grid FFT (8 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((8, 9)) lines × threads, two-pass L2 slabs of 585 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 5, knot false, kprune true: fused vs separate pad / crop: forward 3.6e-6, adjoint 1.1e-7, group 1.1e-7, source 1.1e-7 (separate vs separate forward 2.9e-7, adjoint 0.0e0); adjointness fused 6.6e-8, separate 4.9e-8
+  [26, 22, 18]: k-support pruned grid FFT (8 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((8, 9)) lines × threads, two-pass L2 slabs of 585 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 6, knot true, kprune true: fused vs separate pad / crop: forward 3.6e-6, adjoint 1.1e-7, group 0.0e0, source 4.1e-7 (separate vs separate forward 2.5e-7, adjoint 0.0e0); adjointness fused 4.5e-8, separate 5.4e-8
+  [52, 22, 18]: k-support pruned grid FFT (8 ch, grid [70, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((8, 10)) lines × threads, two-pass L2 slabs of 300 z planes (37.6 MB), pad / crop fused into the x passes (not in this FFT time))
+  frames 6, knot true, kprune true: fused vs separate pad / crop: forward 4.1e-6, adjoint 1.1e-7, group 0.0e0, source 2.3e-7 (separate vs separate forward 2.3e-7, adjoint 0.0e0); adjointness fused 1.9e-7, separate 2.1e-7
+ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 2 filtered out; finished in 0.84s
+

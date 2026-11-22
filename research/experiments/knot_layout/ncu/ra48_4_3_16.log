@@ -1,0 +1,25 @@
+==PROF== Connected to process 952942 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3)
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.7 GiB free), PCIe pinned 21.6 / 20.3 GB/s (h2d / d2h), device 882 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 48 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 10.0 min (600 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 7592 rotations, GIRF ideal
+   53144 readouts × 3990 ADC samples (step 1), 212044560 samples; 49 static sets (samples per set 4257330 / 4317180 / 4420920 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 78.5 s
+  model seg-none:
+    FFT column: k-support pruned grid FFT (48 ch, grid [288, 288, 140], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.650, x pass Some((16, 36)) lines × threads, two-pass L2 slabs of 1 z planes (31.9 MB), pad / crop fused into the x passes (not in this FFT time)) — forward 16.65 ms × 1, inverse 16.77 ms × 1 per call
+==PROF== Profiling "seg_adjoint_ra": 0%.
+==WARNING== Launching the workload is taking more time than expected. If this continues to hang, terminate the profile and re-try by profiling the range of all related launches using '--replay-mode range'. See https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#replay for more details.
+...50%....100% - 17 passes
+    frame 5 encode 3             M   4317180: forward    317.1 ms, adjoint    183.5 ms, normal    509.7 ms | kernels – / – ms, FFT 16.6 / 16.8 ms, pad/crop/rest – / – ms | tables 4.6 s, 210 B/sample on the GPU
+    engine 6.22 GiB (coil batch 48), segment tables 0.06 GiB per encode (0.0 s), resident problem 212.2 GiB (does not fit: data streamed from host), device part without data 22.2 GiB
+    per iteration: operator 24.59 s (forward + adjoint over 49 sets, 2.120e8 samples; FFT 7 %) + data streaming 6.04 s + prior round trip 0.21 s + ZMSHR1 vectors 0.03 s = 30.86 s; setup 241 s; 40 iterations ≈ 24.6 min
+    memory plan: sample tables host (streamed), data host (streamed), secant pair device, w Host; device 22.15 / 22.34 GiB budget, transfers 6.038 s, predicted 30.626 s / iteration
+    sample tables streamed from pinned host memory into two device slots per set use (2.06 s of uploads per gradient at 21.6 GB/s)
+    k-space data streamed per set
+
+  summary 4D flow 10.0 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-none   1  0 |         30.86 |      24.6 |    212.2 (streamed)
+==PROF== Disconnected from process 952942
+==PROF== Report: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu/ra48_4_3_16.ncu-rep
+exit 0

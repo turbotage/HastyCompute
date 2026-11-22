@@ -1,0 +1,8 @@
+
+running 3 tests
+test bluestein_contiguous_f32 ... ok
+test bluestein_nd_plan ... ok
+test bluestein_strided_and_f64 ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+

@@ -1,0 +1,26 @@
+=== k1_hi_cb10: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 10 --max-grid-gb 10 --kl-compare (Fri Nov 20 12:27:15 AM CET 2026)
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.8 GiB free), PCIe pinned 20.9 / 20.1 GB/s (h2d / d2h), device 932 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 4.4 min (264 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 3340 rotations, GIRF ideal
+   23380 readouts × 3990 ADC samples (step 1), 93286200 samples; 140 static sets (samples per set 570570 / 666330 / 746130 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 15.7 s
+  model seg-full (temporal B-spline 3):
+    tile lists: 181440 tiles, 573218 items (62588 zero-count, 494275 split), 458954838 entries (3861.6 per nonempty tile); per knot window: entries 89319137 / 91790968 / 93964357 (min / mean / max), tiles with samples but an empty window 1389 / 1454 / 1535
+    autotune 507.0 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }, adj TileCfg { tt: 4, cpba: 6, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }
+    autotune adjoint kernels (one coil batch, knot 0): tile 258.04 ms, ra 167.29 ms (Some(RaCfg { nxg: 2, cb: 7, chk: 16 })) -> ra
+    autotune forward kernels (one coil batch, knot 0): tile 233.13 ms, vs 148.74 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 7, nws: 1, vxpad: 0 })) -> vs; adjoint 167.29 ms; vs tables 17.7 B/sample
+    autotune knot-path layout (knot-0 adjoint incl. split-tile zeroing, one coil batch): engine adjoint all items 176.79 ms, skip empty tiles 173.70 ms, whole-tile kl kernel 176.54 ms (Some(RaCfg { nxg: 4, cb: 13, chk: 16 })) -> skip
+    FFT column: k-support pruned grid FFT (100 ch, grid [288, 288, 140], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.655, x pass Some((16, 36)) lines × threads, whole-grid passes, pad / crop fused into the x passes (not in this FFT time)) — forward 40.31 ms × 20, inverse 40.06 ms × 20 per call
+    encode 3 (all frames)        kl off   M  13326600: forward   4115.0 ms, adjoint   4407.1 ms, gradient (forward + adjoint)   8534.1 ms
+    encode 3 (all frames)        skip     M  13326600: forward   4103.6 ms, adjoint   4342.6 ms, gradient (forward + adjoint)   8465.8 ms
+    encode 3 (all frames)        kl kern  M  13326600: forward   4112.0 ms, adjoint   4488.4 ms, gradient (forward + adjoint)   8564.8 ms
+    encode 3 (all frames)        M  13326600: forward   4110.1 ms, adjoint   4340.5 ms, normal   8453.9 ms | kernels – / – ms, FFT 806.2 / 801.2 ms, pad/crop/rest – / – ms | tables 18.3 s, 242 B/sample on the GPU
+    engine 9.13 GiB (coil batch 10), segment tables 0.41 GiB per encode (0.4 s), resident problem 82.4 GiB (does not fit: data streamed from host), device part without data 50.7 GiB
+    per iteration: operator 59.15 s (forward + adjoint over 7 sets, 9.329e7 samples; FFT 19 %) + data streaming 1.44 s + prior round trip 0.62 s + ZMSHR1 vectors 0.07 s = 61.28 s; setup 891 s; 40 iterations ≈ 55.7 min
+    format error: memory plan: nothing fits — smallest placement needs 42.77 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 4.4 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  3 |         61.28 |      55.7 |     82.4 (streamed)
+exit 0

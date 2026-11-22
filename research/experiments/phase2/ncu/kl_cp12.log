@@ -1,0 +1,23 @@
+locked 15:40:27 power limit 300.00 W
+==PROF== Connected to process 1129039 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_p2)
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.7 GiB free), PCIe pinned 21.5 / 20.3 GB/s (h2d / d2h), device 927 GB/s
+grid [150, 150, 75] @ 3.0 mm (450 × 450 × 225 mm, 1687500 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 0.4 min (26 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 334 rotations, GIRF ideal
+   2338 readouts × 3990 ADC samples (step 1), 9328620 samples; 112 static sets (samples per set 67830 / 83790 / 99750 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 734371 support voxels: 4.8 s
+  model seg-full (temporal B-spline 3):
+    tile lists: 55296 tiles, 61568 items (61 zero-count, 10986 split), 45874597 entries (830.5 per nonempty tile); per knot window: entries 1912502 / 3822883 / 4931584 (min / mean / max), tiles with samples but an empty window 187 / 1255 / 4571
+==PROF== Profiling "seg_adjoint_kl": 0%....50%....100% - 14 passes
+    FFT column: k-support pruned grid FFT (100 ch, grid [192, 192, 96], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.999, x pass Some((16, 24)) lines × threads, two-pass L2 slabs of 1 z planes (29.5 MB), pad / crop fused into the x passes (not in this FFT time)) — forward 10.82 ms × 96, inverse 11.29 ms × 96 per call
+    encode 3 (all frames)        M   1332660: forward   2440.8 ms, adjoint   2112.5 ms, normal   4567.1 ms | kernels – / – ms, FFT 1038.9 / 1083.7 ms, pad/crop/rest – / – ms | tables 1.4 s, 227 B/sample on the GPU
+    engine 2.78 GiB (coil batch 10), segment tables 0.12 GiB per encode (0.1 s), resident problem 57.7 GiB (does not fit: data streamed from host), device part without data 31.0 GiB
+    per iteration: operator 31.87 s (forward + adjoint over 7 sets, 9.329e6 samples; FFT 47 %) + data streaming 0.13 s + prior round trip 0.87 s + ZMSHR1 vectors 0.10 s = 32.97 s; setup 148 s; 40 iterations ≈ 24.5 min
+    format error: memory plan: nothing fits — smallest placement needs 37.01 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 0.4 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  3 |         32.97 |      24.5 |     57.7 (streamed)
+==PROF== Disconnected from process 1129039
+==PROF== Report: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu/kl_cp12.ncu-rep
+exit 0

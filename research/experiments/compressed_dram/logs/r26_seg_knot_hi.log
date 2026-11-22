@@ -1,0 +1,38 @@
+=== r26_seg_knot_hi: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_knot_hi --test-threads 1 (2026-11-21 13:54:39)
+locked 13:54:39; power limit / draw / sm clock / memory used: 450.00 W, 63.45 W, 2565 MHz, 240 MiB
+
+running 7 tests
+test knot1d_order3_matches_emulation ... ok
+test knot1d_order3_matches_interval_major ... ok
+test knot1d_order3_split_lists ... ok
+test knot2d_order3_matches_emulation ... ok
+test knot2d_order3_variants ... ok
+test knot2d_order3_zero_equals_order2 ... ok
+test knot_order3_timing ... ignored
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 47.84s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_knot_hi --test-threads 1"
+	User time (seconds): 53.86
+	System time (seconds): 1.16
+	Percent of CPU this job got: 114%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:47.91
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 242868
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 266972
+	Voluntary context switches: 2724
+	Involuntary context switches: 1047
+	Swaps: 0
+	File system inputs: 8
+	File system outputs: 56632
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:55:27; power limit at end 450.00 W

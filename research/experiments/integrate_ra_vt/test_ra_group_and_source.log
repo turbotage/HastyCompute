@@ -1,0 +1,19 @@
+
+running 1 test
+test ra_group_and_source ... Static zero_tiles true RaCfg { nxg: 1, cb: 1, chk: 16 }: group 4.5e-6, source 4.5e-6
+Static zero_tiles true RaCfg { nxg: 1, cb: 1, chk: 32 }: group 4.5e-6, source 4.5e-6
+Static zero_tiles true RaCfg { nxg: 2, cb: 1, chk: 16 }: group 4.5e-6, source 4.5e-6
+Static zero_tiles false RaCfg { nxg: 1, cb: 1, chk: 16 }: group 4.5e-6, source 4.5e-6
+Static zero_tiles false RaCfg { nxg: 1, cb: 1, chk: 32 }: group 4.5e-6, source 4.5e-6
+Static zero_tiles false RaCfg { nxg: 2, cb: 1, chk: 16 }: group 4.5e-6, source 4.5e-6
+Knot1d zero_tiles true RaCfg { nxg: 1, cb: 1, chk: 16 }: group 0.0e0, source 3.7e-6
+Knot1d zero_tiles true RaCfg { nxg: 1, cb: 1, chk: 32 }: group 0.0e0, source 3.7e-6
+Knot1d zero_tiles true RaCfg { nxg: 2, cb: 1, chk: 16 }: group 0.0e0, source 3.7e-6
+Knot1d zero_tiles false RaCfg { nxg: 1, cb: 1, chk: 16 }: group 0.0e0, source 3.7e-6
+Knot1d zero_tiles false RaCfg { nxg: 1, cb: 1, chk: 32 }: group 0.0e0, source 3.7e-6
+Knot1d zero_tiles false RaCfg { nxg: 2, cb: 1, chk: 16 }: group 0.0e0, source 3.7e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 8.21s
+
+exit 0

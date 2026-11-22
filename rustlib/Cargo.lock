@@ -578,6 +578,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hasty-bfp"
+version = "0.1.0"
+dependencies = [
+ "cudarc",
+ "hasty-cuda",
+ "rayon",
+]
+
+[[package]]
 name = "hasty-cfd"
 version = "0.1.0"
 dependencies = [
@@ -614,6 +623,7 @@ name = "hasty-fft"
 version = "0.1.0"
 dependencies = [
  "cudarc",
+ "hasty-bfp",
  "hasty-cuda",
  "hasty-testkit",
  "num-complex",
@@ -645,13 +655,17 @@ name = "hasty-nufft"
 version = "0.1.0"
 dependencies = [
  "cudarc",
+ "hasty-bfp",
  "hasty-cuda",
  "hasty-fft",
+ "hasty-site",
  "hasty-testkit",
  "hasty-value",
  "nalgebra",
  "num-complex",
  "rayon",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -683,6 +697,7 @@ version = "0.1.0"
 dependencies = [
  "ctrlc",
  "cudarc",
+ "hasty-bfp",
  "hasty-cuda",
  "hasty-fft",
  "hasty-mrsim",

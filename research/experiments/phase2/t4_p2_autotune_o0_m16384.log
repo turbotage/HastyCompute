@@ -1,0 +1,12 @@
+== p2_autotune orders 0 mi 16384 14:50:15
+locked 14:54:14 power limit 300.00 W
+
+running 1 test
+test p2_autotune ... Static o2: ra Some((RaCfg { nxg: 4, cb: 13, chk: 16 }, RaVar { inplace: true, stages: 2, lbmin: 3 }, KernRes { regs: 162, local: 32, spill: 0, blocks: 3, warps: 12 })) (times Some((3.39968, 1.673216))), kl None (times None), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((2.199424, 1.268736)))
+Knot2d o3: ra Some((RaCfg { nxg: 4, cb: 13, chk: 24 }, RaVar { inplace: true, stages: 1, lbmin: 0 }, KernRes { regs: 222, local: 32, spill: 0, blocks: 2, warps: 8 })) (times Some((1.23392, 0.899072))), kl None (times Some((1.47968, 1.481344, 4.278272))), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((1.143808, 0.572352)))
+Knot1d o3: ra Some((RaCfg { nxg: 4, cb: 13, chk: 12 }, RaVar { inplace: true, stages: 2, lbmin: 3 }, KernRes { regs: 168, local: 32, spill: 0, blocks: 3, warps: 12 })) (times Some((2.153472, 1.265472))), kl None (times Some((1.28, 1.276768, 4.254784))), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((1.948608, 1.118208)))
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 659.26s
+
+== exit 0 15:05:14

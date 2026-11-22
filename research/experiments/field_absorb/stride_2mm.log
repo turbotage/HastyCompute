@@ -1,0 +1,17 @@
+data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: grid [254, 144, 114] (native [254, 144, 114]), voxel [2.0, 2.0, 2.0] mm, 32 coils, 3990 ADC samples
+physics grid (GNL-aware) 32s
+support 4169664 voxels, fit region 4169664 voxels; the run's mask_fit: 4169664 voxels, agreement 1.00000
+coil energy: whitened true maps compressed by their fit-region Gram: 12 of 32 virtual coils (fixed 12), 77.005 % energy kept; σ²/Σσ²: [1.3e-1, 1.2e-1, 8.9e-2, 6.7e-2, 6.7e-2, 6.0e-2, 5.6e-2, 4.4e-2, 3.7e-2, 3.4e-2, 3.3e-2, 2.9e-2, 2.7e-2, 2.4e-2, 2.1e-2, 1.8e-2, 1.7e-2, 1.5e-2, 1.4e-2, 1.4e-2, 1.3e-2, 1.1e-2, 1.1e-2, 9.8e-3, 7.8e-3, 6.7e-3, 5.7e-3, 5.3e-3, 3.7e-3, 2.9e-3, 2.4e-3, 1.8e-3]
+segment-rule voxels: 1389888 (fit region stride 3)
+per-sample weights (σ = 39.976): first 1.57e5, middle 3.94e1, last 2.38e4; white floor 36.5; time grid 95 points; noise rule: relative weighted error ≤ 2.832e-3 (gain 47.1, margin 1.5) (1s)
+encode-mean concomitant coefficients of 1 encodes (2s)
+knot basis (bellows): 6 linear knots at [-0.054, 0.097, 0.347, 0.668, 0.94, 1.577] × 16 cardiac knots degree 3
+truth ratemap states: 6 breathing × 20 cardiac, 2405028 mask voxels of [254, 144, 114] (5s)
+global fit (--b0-absorb 1): 272.6 Hz + [26.9, 252.3, -1129.7] Hz/m; max shift [0.16, 0.87, 3.08] cells at τ = 9.58 ms
+today's rule (static field, phase only, as recon_p2np --ratemap truth-bc): L per encode [8] → L = 8
+conc0 encode 0: constant part ≤ 0.592 rad, linear part ≤ [0.008, 0.005, 0.109] cells (shift); signal-weighted 0.1–99.9 % phase span over the readout: 1.862 rad → 1.867 rad without const + lin → 0.1185 rad without quad; quad Taylor |ΔQ| ≤ 0.882 rad
+  knot   0 enc 0: a 11/12/15 c 11/13/15
+knot   0 (r 0.032, c 0.027 s, weight 290): fit 270.8 Hz + [23.5, 261.6, -1100.4] Hz/m, shift [0.14, 0.90, 3.00] cells (τ from excitation; [0.06, 0.38, 1.25] from the readout centre); field 0.1–99.9 % -114..511 Hz → b -440..203, c -436..205, d -307..244, g -515..109; quad Taylor 14.687 rad (99.9 % 12.709) (33.1s)
+  knot  48 enc 0: a 11/12/15 c 11/12/15
+knot  48 (r 0.624, c 0.026 s, weight 674): fit 263.2 Hz + [15.8, 306.6, -983.7] Hz/m, shift [0.10, 1.06, 2.69] cells (τ from excitation; [0.04, 0.44, 1.12] from the readout centre); field 0.1–99.9 % -138..507 Hz → b -461..186, c -437..189, d -309..242, g -520..83; quad Taylor 15.683 rad (99.9 % 13.500) (33.1s)
+2 knots in 66s; done in 127s

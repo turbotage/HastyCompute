@@ -1,0 +1,21 @@
+
+running 1 test
+test vt_static_order2 ... static o2 10x10: forward floors: one-ulp image 7.8e-6, tile shapes 6.5e-6
+static o2 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 5, nws: 1, vxpad: 0 }: vt vs tile forward 7.1e-6 (tile shapes 6.5e-6), adjointness vs tile adjoint 6.4e-8, vs ra Some(RaCfg { nxg: 1, cb: 4, chk: 16 }) 2.8e-8 (tile 6.6e-8)
+static o2 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 7, nws: 1, vxpad: 0 }: vt vs tile forward 7.1e-6 (tile shapes 6.5e-6), adjointness vs tile adjoint 6.4e-8, vs ra Some(RaCfg { nxg: 1, cb: 4, chk: 16 }) 2.8e-8 (tile 6.6e-8)
+static o2 12(4)x3: forward floors: one-ulp image 1.3e-6, tile shapes 1.2e-6
+static o2 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.2e-6), adjointness vs tile adjoint 1.5e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 9.4e-9 (tile 1.9e-8)
+static o2 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.2e-6), adjointness vs tile adjoint 1.5e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 9.4e-9 (tile 1.9e-8)
+static o2 12(4)x3: forward floors: one-ulp image 1.3e-6, tile shapes 1.2e-6
+static o2 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.2e-6), adjointness vs tile adjoint 9.4e-9, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.0e-8 (tile 1.3e-8)
+static o2 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 1.2e-6 (tile shapes 1.2e-6), adjointness vs tile adjoint 9.4e-9, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 1.0e-8 (tile 1.3e-8)
+static o2 20x1: forward floors: one-ulp image 7.3e-6, tile shapes 6.3e-6
+static o2 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vt vs tile forward 6.5e-6 (tile shapes 6.3e-6), adjointness vs tile adjoint 4.8e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.3e-8 (tile 6.0e-8)
+static o2 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vt vs tile forward 6.5e-6 (tile shapes 6.3e-6), adjointness vs tile adjoint 4.8e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.3e-8 (tile 6.0e-8)
+static o2 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vt vs tile forward 6.5e-6 (tile shapes 6.3e-6), adjointness vs tile adjoint 4.8e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.3e-8 (tile 6.0e-8)
+static o2 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vt vs tile forward 6.5e-6 (tile shapes 6.3e-6), adjointness vs tile adjoint 4.8e-8, vs ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) 3.3e-8 (tile 6.0e-8)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 11.76s
+
+exit 0

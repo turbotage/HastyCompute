@@ -1,0 +1,25 @@
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.8 GiB free), PCIe pinned 21.8 / 20.6 GB/s (h2d / d2h), device 931 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 0.4 min (26 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 334 rotations, GIRF ideal
+   2338 readouts × 3990 ADC samples (step 1), 9328620 samples; 49 static sets (samples per set 179550 / 191520 / 203490 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 16.0 s
+  model seg-full:
+    autotune 26.6 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 0 }, adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 0 }
+    autotune adjoint kernels (one coil batch): tile 13.97 ms, ra 9.02 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 16 })) -> ra
+    autotune forward kernels (one coil batch): tile 10.72 ms, vs 10.81 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 2, vxpad: 0 })) -> tile; adjoint 9.02 ms; vs tables 5.7 B/sample
+    FFT column: k-support pruned grid FFT (50 ch, grid [288, 288, 140], z-pass columns 0.829, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.600, x pass Some((16, 36)) lines × threads, two-pass L2 slabs of 1 z planes (33.2 MB), pad / crop fused into the x passes (not in this FFT time)) — forward 14.38 ms × 2, inverse 15.54 ms × 2 per call
+    new variants: forward Some(VsCfg { nwc: 4, nws: 2, vxpad: 0 }) (geometry Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })), adjoint Some(RaCfg { nxg: 4, cb: 7, chk: 16 })
+    frame 3 encode 1             both off M    191520: forward     54.1 ms, adjoint     63.5 ms, gradient (forward + adjoint)    117.7 ms
+    frame 3 encode 1             fwd new  M    191520: forward     53.9 ms, adjoint     63.8 ms, gradient (forward + adjoint)    117.8 ms
+    frame 3 encode 1             adj new  M    191520: forward     54.2 ms, adjoint     53.8 ms, gradient (forward + adjoint)    107.9 ms
+    frame 3 encode 1             both new M    191520: forward     54.0 ms, adjoint     53.8 ms, gradient (forward + adjoint)    108.1 ms
+    frame 3 encode 1             M    191520: forward     54.1 ms, adjoint     53.8 ms, normal    108.1 ms | kernels 21.4 / 18.0 ms, FFT 28.8 / 31.1 ms, pad/crop/rest 3.9 / 4.7 ms | tables 0.2 s, 350 B/sample on the GPU
+    engine 4.78 GiB (coil batch 5), segment tables 0.41 GiB per encode (0.4 s), resident problem 24.5 GiB (fits), device part without data 22.0 GiB
+    per iteration: operator 5.25 s (forward + adjoint over 49 sets, 9.329e6 samples; tile kernels (gridding + physics) 37 %, FFT 55 %, pad/crop/rest 8 %) + data streaming 0.00 s + prior round trip 0.21 s + ZMSHR1 vectors 0.02 s = 5.49 s; setup 43 s; 40 iterations ≈ 4.4 min
+    memory plan: sample tables device, data device, secant pair device, w Recompute; device 21.97 / 22.34 GiB budget, transfers 0.000 s, predicted 5.361 s / iteration
+
+  summary 4D flow 0.4 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  2 |          5.49 |       4.4 |     24.5
+exit 0 (try 1)

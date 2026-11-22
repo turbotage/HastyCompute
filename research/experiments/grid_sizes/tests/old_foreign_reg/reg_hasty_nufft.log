@@ -1,0 +1,3 @@
+=== hasty_nufft (2026-11-20 15:25:18); power.limit 300.00 W
+timeout: failed to run command ‘/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/reg/hasty_nufft’: No such file or directory
+exit 127 (2026-11-20 15:27:19)

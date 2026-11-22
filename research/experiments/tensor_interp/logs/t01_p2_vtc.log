@@ -1,0 +1,60 @@
+=== t01_p2_vtc: env P2_ORDERS=2,3 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/tic/bin/seg_phase2 p2_vtc --nocapture --test-threads 1 (2026-11-21 17:27:09)
+locked 17:27:09; power limit / draw / sm clock / memory used: 450.00 W, 17.69 W, 210 MHz, 240 MiB
+
+running 1 test
+test p2_vtc ... vtc Static o2 10x10 (batch 16) mma2 VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 8 (regs 116, spill 0 B, 14 warps): added error vs FMA vt 8.30e-6; FMA vt one-ulp floor 5.6e-6, vt vs tile 6.3e-6; adjointness vs tile adjoint 1.0e-7
+vtc Static o2 10x10 (batch 16) mma2 VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 16 (regs 124, spill 0 B, 7 warps): added error vs FMA vt 8.30e-6; FMA vt one-ulp floor 5.6e-6, vt vs tile 6.3e-6; adjointness vs tile adjoint 1.0e-7
+vtc Static o2 10x10 (batch 16) mma2 VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 24 (regs 162, spill 0 B, 7 warps): added error vs FMA vt 8.30e-6; FMA vt one-ulp floor 5.6e-6, vt vs tile 6.3e-6; adjointness vs tile adjoint 1.0e-7
+vtc Static o2 mma2 VsCfg { nwc: 7, nws: 2, vxpad: 0 } sch 8: not valid (invalid argument: set_vs: VsCfg { nwc: 7, nws: 2, vxpad: 0 } (sub-chunk 8) is not a valid launch shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vtc Static o2 mma2 VsCfg { nwc: 7, nws: 2, vxpad: 0 } sch 24: not valid (invalid argument: set_vs: VsCfg { nwc: 7, nws: 2, vxpad: 0 } (sub-chunk 24) is not a valid launch shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vtc Static o2 10x10 (batch 16) mma1 VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 16 (regs 128, spill 0 B, 7 warps): added error vs FMA vt 2.85e-4; FMA vt one-ulp floor 5.6e-6, vt vs tile 6.3e-6; adjointness vs tile adjoint 3.7e-7
+vtc Static o2 mma1 VsCfg { nwc: 7, nws: 2, vxpad: 0 } sch 24: not valid (invalid argument: set_vs: VsCfg { nwc: 7, nws: 2, vxpad: 0 } (sub-chunk 24) is not a valid launch shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 })
+vtc Knot1d o3 6x5 (batch 3) mma2 VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 8 (regs 105, spill 0 B, 3 warps): added error vs FMA vt 1.30e-5; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 9.6e-8
+vtc Knot1d o3 6x5 (batch 3) mma2 VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 16 (regs 116, spill 0 B, 1 warps): added error vs FMA vt 1.30e-5; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 9.6e-8
+vtc Knot1d o3 6x5 (batch 3) mma2 VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 24 (regs 140, spill 0 B, 1 warps): added error vs FMA vt 1.30e-5; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 9.6e-8
+vtc Knot1d o3 6x5 (batch 3) mma2 VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 8 (regs 105, spill 0 B, 6 warps): added error vs FMA vt 1.85e-5; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 1.2e-7
+vtc Knot1d o3 6x5 (batch 3) mma2 VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 24 (regs 140, spill 0 B, 2 warps): added error vs FMA vt 1.85e-5; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 1.2e-7
+vtc Knot1d o3 6x5 (batch 3) mma1 VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 16 (regs 142, spill 0 B, 1 warps): added error vs FMA vt 5.41e-4; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 2.2e-6
+vtc Knot1d o3 6x5 (batch 3) mma1 VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 24 (regs 136, spill 0 B, 2 warps): added error vs FMA vt 5.41e-4; FMA vt one-ulp floor 1.1e-5, vt vs tile 1.2e-5; adjointness vs tile adjoint 2.2e-6
+vtc Knot2d o2 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 8 (regs 115, spill 0 B, 12 warps): added error vs FMA vt 8.31e-6; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 7.4e-8
+vtc Knot2d o2 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 16 (regs 122, spill 0 B, 4 warps): added error vs FMA vt 8.31e-6; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 7.4e-8
+vtc Knot2d o2 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 24 (regs 156, spill 0 B, 4 warps): added error vs FMA vt 8.31e-6; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 7.4e-8
+vtc Knot2d o2 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 8 (regs 119, spill 0 B, 16 warps): added error vs FMA vt 9.34e-6; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 7.8e-8
+vtc Knot2d o2 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 24 (regs 156, spill 0 B, 8 warps): added error vs FMA vt 9.34e-6; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 7.8e-8
+vtc Knot2d o2 10x10 (batch 5) mma1 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 16 (regs 124, spill 0 B, 4 warps): added error vs FMA vt 2.90e-4; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 5.9e-7
+vtc Knot2d o2 10x10 (batch 5) mma1 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 24 (regs 154, spill 0 B, 8 warps): added error vs FMA vt 2.90e-4; FMA vt one-ulp floor 5.7e-6, vt vs tile 6.5e-6; adjointness vs tile adjoint 5.9e-7
+vtc Knot2d o3 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 8 (regs 107, spill 0 B, 12 warps): added error vs FMA vt 9.79e-6; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 1.1e-7
+vtc Knot2d o3 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 16 (regs 148, spill 0 B, 4 warps): added error vs FMA vt 9.79e-6; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 1.1e-7
+vtc Knot2d o3 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 24 (regs 146, spill 0 B, 4 warps): added error vs FMA vt 9.79e-6; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 1.1e-7
+vtc Knot2d o3 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 8 (regs 117, spill 0 B, 16 warps): added error vs FMA vt 1.20e-5; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 8.4e-8
+vtc Knot2d o3 10x10 (batch 5) mma2 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 24 (regs 162, spill 0 B, 8 warps): added error vs FMA vt 1.20e-5; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 8.4e-8
+vtc Knot2d o3 10x10 (batch 5) mma1 VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 16 (regs 120, spill 0 B, 4 warps): added error vs FMA vt 3.61e-4; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 1.1e-6
+vtc Knot2d o3 10x10 (batch 5) mma1 VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 24 (regs 160, spill 0 B, 8 warps): added error vs FMA vt 3.61e-4; FMA vt one-ulp floor 7.2e-6, vt vs tile 8.3e-6; adjointness vs tile adjoint 1.1e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 1.35s
+
+	Command being timed: "timeout 900 env P2_ORDERS=2,3 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/tic/bin/seg_phase2 p2_vtc --nocapture --test-threads 1"
+	User time (seconds): 0.86
+	System time (seconds): 0.59
+	Percent of CPU this job got: 103%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.40
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 164148
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 25847
+	Voluntary context switches: 1291
+	Involuntary context switches: 18
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 17:27:11; power limit at end 450.00 W

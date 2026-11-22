@@ -1,0 +1,19 @@
+
+running 1 test
+test kl_fused_and_slabs ... Knot1d o2 fuse true slab None ra None: layout on vs off 1.1e-6, adjointness 3.4e-7
+Knot1d o2 fuse true slab None ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 4.9e-7, adjointness 3.4e-7
+Knot1d o2 fuse true slab None kl kernel RaCfg { nxg: 1, cb: 1, chk: 16 }: vs ra 4.8e-5, adjointness 2.7e-7
+
+thread 'kl_fused_and_slabs' (952270) panicked at crates/hasty-nufft/tests/seg_kl.rs:289:21:
+Knot1d fuse true slab None kl kernel: 4.8e-5, adjointness 2.7e-7
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_fused_and_slabs
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 1.01s
+
+exit 101

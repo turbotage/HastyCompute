@@ -1,0 +1,17 @@
+== p2_ra_static 13:11:27 power limit 300.00 W
+
+running 1 test
+test p2_ra_static ... 
+thread 'p2_ra_static' (1033810) panicked at crates/hasty-nufft/tests/seg_phase2.rs:229:13:
+static o0 10x10 miSome(16384): base ra not deterministic without split lists (6.0e-8)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    p2_ra_static
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.10s
+
+== exit 101 13:13:43

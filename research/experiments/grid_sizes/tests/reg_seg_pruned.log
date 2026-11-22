@@ -1,0 +1,9 @@
+=== seg_pruned (2026-11-20 15:41:53); power.limit 300.00 W
+
+running 2 tests
+test kpruned_grid_fft_matches_block_pruned ... ok
+test pruned_grid_fft_and_fused_residual ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 107.27s
+
+exit 0 (2026-11-20 15:43:59)

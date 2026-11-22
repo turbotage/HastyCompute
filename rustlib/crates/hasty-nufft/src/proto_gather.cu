@@ -1582,3 +1582,494 @@ extern "C" __global__ void __launch_bounds__(256) pg_lds_bench(float* __restrict
 }
 #endif
 #endif
+
+#ifdef REDB
+// global float-RED microbenchmark (research/sample_kernels.md §15): the flush pattern of an accumulator-stationary
+// adjoint. Block t flushes the footprint box (TXB + W − 1) × (TYB + W − 1) × (TZB + W − 1) points of home tile t (tiles
+// x fastest, wrapped), NWB warps = channel groups of 16 channels, lane (h, c): half h takes every other row, channel c.
+// RED_MODE 0: RED.ADD.F32 on .x and .y (16 lanes per 128 B span, stride 8 B); 1: packed (lane l adds float l of the
+// 32-float span of its half's 16 channels; the same floats, every RED instruction covers whole sectors); 2: plain
+// read-modify-write (races ignored: reference for the byte traffic); 3: plain store.
+#ifndef RED_MODE
+#define RED_MODE 0
+#endif
+extern "C" __global__ void pg_red_bench(cx* __restrict__ g, int nf, int nch, int ntx, int nty) {
+  const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31, h = lane >> 4, c = lane & 15;
+  const int t = blockIdx.x;
+  const int bx = (t % ntx) * TXB, by = ((t / ntx) % nty) * TYB, bz = (t / (ntx * nty)) * TZB;
+  const float v = 1e-3f * (float)(lane + 1);
+  for (int z = 0; z < TZB + W - 1; ++z) {
+    const int gz = (bz + z) % nf;
+    for (int y = h; y < TYB + W - 1; y += 2) {
+      const int gy = (by + y) % nf;
+      #pragma unroll 4
+      for (int x = 0; x < TXB + W - 1; ++x) {
+        const int gx = (bx + x) % nf;
+        float* p = reinterpret_cast<float*>(g + (((size_t)gz * nf + gy) * nf + gx) * nch + warp * 16);
+#if RED_MODE == 0
+        atomicAdd(p + 2 * c, v); atomicAdd(p + 2 * c + 1, v);
+#elif RED_MODE == 1
+        atomicAdd(p + c, v); atomicAdd(p + 16 + c, v);
+#elif RED_MODE == 2
+        p[2 * c] += v; p[2 * c + 1] += v;
+#else
+        p[2 * c] = v; p[2 * c + 1] = v;
+#endif
+      }
+    }
+  }
+}
+#endif
+
+#ifdef RA
+// ---------------------------------------------------------------- design 7 `ra`: row-blocked output adjoint (§15)
+// Output tile TX × TY × TZ, block = (item of the tile's sample list, channel-block row blockIdx.y). Warp w = tile plane
+// tz = w; lane = (x-group g < NXG, channel block cb < NCL = 32 / NXG); the thread holds acc[TY rows][PT = TX / NXG
+// points][CB channels] (channels blockIdx.y · CPW + cb · CB + k) in registers. Samples are staged per chunk of CHK:
+// kernel values on the tile's cells, relative support corners (ox, oy, oz), z = conj(a_l) y_c for the block's channels;
+// CORR >= 1: the complex weights of every covered (sample, tile row) (stage_weights / stage_weights_hk terms). A warp
+// skips a sample whose z support misses its plane (warp-uniform) and applies it only to the covered rows (exact y and
+// z); x: zero weights outside the support (NXG 1: all lanes the same points, warp-uniform per-point skip, exact x).
+// Output: unsplit items store, split items (tile list longer than one item) atomically add (grid zeroed by the host).
+// Grid G[((z nf1 + y) nf0 + x) NCH + ch]; tile list tl = original sample indices; pos / dco / acf / y / uw in the
+// original order.
+#define PT (TX / NXG)
+#define NCL (32 / NXG)
+#define CBP ((CB + 1) / 2 * 2)
+#define CPW (NCL * CB)
+#define NTA (TZ * 32)
+#define TROWS (TY * TZ)
+#if CORR >= 2
+#define NKA 5
+#elif CORR == 1
+#define NKA 3
+#else
+#define NKA 1
+#endif
+#define R4(n) (((n) + 3) / 4 * 4)
+#define RR_KX 4                               // ints ox, oy, oz, pad at 0..3
+#define RR_KY (RR_KX + NKA * R4(TX))
+#define RR_KZ (RR_KY + NKA * R4(TY))
+#define RR_D (RR_KZ + NKA * R4(TZ))
+#define RR_E (RR_D + (CORR >= 1 ? 6 : 0))
+#define RR_H (RR_E + (CORR >= 2 ? 15 : 0))
+#define RSW R4(RR_H + (CORR >= 3 ? 25 : 0))
+#define RZ_OFF ((size_t)CHK * RSW * 4)
+#define RW_OFF (RZ_OFF + (size_t)CHK * NCL * CBP * 8)
+// raw per-sample inputs of the chunk (prefetched into registers one chunk ahead, then parked here): positions, ΔC,
+// u (CORR 3), a_l (NSEG), y of the block row's coils (≤ NCBRM); the chunk's sample indices, double-buffered
+#define NCBRM ((CPW + NSEG - 1) / NSEG + 1 < NCB ? (CPW + NSEG - 1) / NSEG + 1 : NCB)
+#define RAW_OFF (RW_OFF + (CORR >= 1 ? (size_t)CHK * TROWS * TX * 8 : 0))
+#define RAW_POS RAW_OFF
+#define RAW_U (RAW_POS + (size_t)CHK * 16)
+#define RAW_A (RAW_U + (CORR >= 3 ? (size_t)CHK * 16 : 0))
+#define RAW_Y (RAW_A + (size_t)CHK * NSEG * 8)
+#define RAW_D (RAW_Y + (size_t)CHK * NCBRM * 8)
+#define RAW_J (RAW_D + (CORR >= 1 ? (size_t)CHK * 6 * 4 : 0))
+#define RAW_PL (RAW_J + (size_t)2 * CHK * 4)
+#define RA_SMEM (RAW_PL + (CORR >= 1 ? (size_t)CHK * TZ * 32 * 4 : 0))   // CORR >= 1: per (sample, plane) ER[15] | EQ[15]
+#define DIVUP(a, b) (((a) + (b) - 1) / (b))
+#if CORR >= 3
+#define RHI_ARGS , const float4* __restrict__ uw, const float* __restrict__ htab
+#else
+#define RHI_ARGS
+#endif
+#ifndef RA_NOMAC
+#define RA_NOMAC 0
+#endif
+#ifndef RA_SPLITB
+#define RA_SPLITB 0   // CORR >= 1: 1 = weights in two steps (per-plane ER / EQ, then rows); measured slower (§15)
+#endif
+struct RItem { int tile, first, count, split; };
+__device__ __forceinline__ void ra_kern(float z, float* o) {
+#if CORR >= 1
+  es5(z, o);
+#else
+  const float a = 1.f - z * z;
+  o[0] = a <= 0.f ? 0.f : expf((float)BETA * (sqrtf(a) - 1.f));
+#endif
+}
+extern "C" __global__ void __launch_bounds__(NTA) pg_adj_ra(const float4* __restrict__ pos, const float* __restrict__ dco, const cx* __restrict__ acf,
+                                                           const unsigned int* __restrict__ tl, const RItem* __restrict__ items, const cx* __restrict__ y,
+                                                           cx* __restrict__ grid, int M, Dims d RHI_ARGS) {
+  extern __shared__ __align__(16) unsigned char smem[];
+  float* RS = reinterpret_cast<float*>(smem);
+  cx* ZS = reinterpret_cast<cx*>(smem + RZ_OFF);
+#if CORR >= 1
+  cx* WS = reinterpret_cast<cx*>(smem + RW_OFF);   // [CHK][TROWS][TX]
+#endif
+  const RItem it = items[blockIdx.x];
+  const int ntx = (d.nf0 + TX - 1) / TX, nty = (d.nf1 + TY - 1) / TY;
+  const int o0 = (it.tile % ntx) * TX, o1 = ((it.tile / ntx) % nty) * TY, o2 = (it.tile / (ntx * nty)) * TZ;
+  const int tz = threadIdx.x >> 5, lane = threadIdx.x & 31, g = lane / NCL, cb = lane % NCL;
+  const int chb = blockIdx.y * CPW;
+  cx acc[TY][PT][CB];
+  #pragma unroll
+  for (int r = 0; r < TY; ++r) {
+    #pragma unroll
+    for (int i = 0; i < PT; ++i) {
+      #pragma unroll
+      for (int k = 0; k < CB; ++k) acc[r][i][k] = cx{0.f, 0.f};
+    }
+  }
+  float4* RP = reinterpret_cast<float4*>(smem + RAW_POS);
+  cx* RAa = reinterpret_cast<cx*>(smem + RAW_A);
+  cx* RYy = reinterpret_cast<cx*>(smem + RAW_Y);
+  unsigned int* SJ = reinterpret_cast<unsigned int*>(smem + RAW_J);
+#if CORR >= 1
+  float* RDd = reinterpret_cast<float*>(smem + RAW_D);
+#endif
+#if CORR >= 3
+  float4* RU = reinterpret_cast<float4*>(smem + RAW_U);
+#endif
+  const int clo = chb / NSEG, ncbr = min(NCBRM, NCB - clo);
+  // register prefetch of one chunk's raw inputs (sample indices from SJ[buf])
+  constexpr int NRP = DIVUP(CHK, NTA), NRA = DIVUP(CHK * NSEG, NTA), NRY = DIVUP(CHK * NCBRM, NTA);
+  float4 pp[NRP]; cx pa[NRA], py[NRY];
+#if CORR >= 1
+  constexpr int NRD = DIVUP(CHK * 6, NTA);
+  float pd[NRD];
+#endif
+#if CORR >= 3
+  float4 pu[NRP];
+#endif
+  auto prefetch = [&](int buf, int nl) {
+    const unsigned int* sj = SJ + buf * CHK;
+    #pragma unroll
+    for (int r = 0; r < NRP; ++r) {
+      const int q = threadIdx.x + r * NTA;
+      if (q < nl) { pp[r] = pos[sj[q]];
+#if CORR >= 3
+        pu[r] = uw[sj[q]];
+#endif
+      }
+    }
+    #pragma unroll
+    for (int r = 0; r < NRA; ++r) { const int q = threadIdx.x + r * NTA; if (q < nl * NSEG) pa[r] = ldcx(acf + (size_t)sj[q / NSEG] * NSEG + q % NSEG); }
+    #pragma unroll
+    for (int r = 0; r < NRY; ++r) { const int q = threadIdx.x + r * NTA; if (q < nl * NCBRM && q % NCBRM < ncbr) py[r] = ldcx(y + (size_t)(clo + q % NCBRM) * M + sj[q / NCBRM]); }
+#if CORR >= 1
+    #pragma unroll
+    for (int r = 0; r < NRD; ++r) { const int q = threadIdx.x + r * NTA; if (q < nl * 6) pd[r] = dco[(size_t)(q % 6) * M + sj[q / 6]]; }
+#endif
+  };
+  // prologue: j lists of chunks 0 and 1, raw inputs of chunk 0
+  for (int q = threadIdx.x; q < min(2 * CHK, it.count); q += NTA) SJ[q] = tl[it.first + q];
+  __syncthreads();
+  if (it.count > 0) prefetch(0, min(CHK, it.count));
+  int buf = 0;
+  for (int base = 0; base < it.count; base += CHK) {
+    const int n = min(CHK, it.count - base);
+    __syncthreads();   // previous chunk consumed
+    // park the prefetched raw inputs
+    #pragma unroll
+    for (int r = 0; r < NRP; ++r) { const int q = threadIdx.x + r * NTA; if (q < n) { RP[q] = pp[r];
+#if CORR >= 3
+      RU[q] = pu[r];
+#endif
+    } }
+    #pragma unroll
+    for (int r = 0; r < NRA; ++r) { const int q = threadIdx.x + r * NTA; if (q < n * NSEG) RAa[q] = pa[r]; }
+    #pragma unroll
+    for (int r = 0; r < NRY; ++r) { const int q = threadIdx.x + r * NTA; if (q < n * NCBRM) RYy[q] = py[r]; }
+#if CORR >= 1
+    #pragma unroll
+    for (int r = 0; r < NRD; ++r) { const int q = threadIdx.x + r * NTA; if (q < n * 6) RDd[q] = pd[r]; }
+#endif
+    __syncthreads();
+    // next chunk: raw inputs in flight during this chunk's staging and MACs; j list of the chunk after it
+    if (base + CHK < it.count) prefetch(buf ^ 1, min(CHK, it.count - base - CHK));
+    for (int q = threadIdx.x; q < CHK && base + 2 * CHK + q < it.count; q += NTA) SJ[buf * CHK + q] = tl[it.first + base + 2 * CHK + q];
+    buf ^= 1;
+    // ---- stage A: kernel values on the tile's cells and relative corners (per (sample, axis, cell))
+    constexpr int NCELL = TX + TY + TZ;
+    for (int q = threadIdx.x; q < n * NCELL; q += NTA) {
+      const int s = q / NCELL, r = q % NCELL;
+      const int a = r < TX ? 0 : (r < TX + TY ? 1 : 2), c = r - (a == 0 ? 0 : (a == 1 ? TX : TX + TY));
+      const float4 p4 = RP[s];
+      const float sc = a == 0 ? p4.x : (a == 1 ? p4.y : p4.z);
+      const int nn = a == 0 ? d.nf0 : (a == 1 ? d.nf1 : d.nf2), og = a == 0 ? o0 : (a == 1 ? o1 : o2);
+      const int i0 = (int)ceilf(sc - (float)W * 0.5f);
+      int rel = i0 - og;
+      if (rel > nn / 2) rel -= nn;
+      if (rel < -nn / 2) rel += nn;
+      const int t = c - rel;
+      float o[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+      if (t >= 0 && t < W && og + c < nn) ra_kern(((float)(i0 + t) - sc) * (2.f / (float)W), o);
+      float* P = RS + (size_t)s * RSW;
+      const int off = a == 0 ? RR_KX : (a == 1 ? RR_KY : RR_KZ), str = a == 0 ? R4(TX) : (a == 1 ? R4(TY) : R4(TZ));
+      #pragma unroll
+      for (int k = 0; k < NKA; ++k) P[off + k * str + c] = o[k];
+      if (c == 0) reinterpret_cast<int*>(P)[a] = rel;
+    }
+#if CORR >= 1
+    for (int q = threadIdx.x; q < n; q += NTA) {
+      float* P = RS + (size_t)q * RSW;
+      float dd[6];
+      #pragma unroll
+      for (int p = 0; p < 6; ++p) { dd[p] = RDd[q * 6 + p]; P[RR_D + p] = dd[p]; }
+#if CORR >= 2
+      const int mx[6] = {2, 0, 0, 1, 1, 0}, my[6] = {0, 2, 0, 1, 0, 1};
+      float e[15];
+      #pragma unroll
+      for (int k = 0; k < 15; ++k) e[k] = 0.f;
+      #pragma unroll
+      for (int p = 0; p < 6; ++p) {
+        #pragma unroll
+        for (int pq = 0; pq < 6; ++pq) {
+          const int ea = mx[p] + mx[pq], eb = my[p] + my[pq];
+          e[ea * (11 - ea) / 2 + eb] = fmaf(-0.5f * dd[p], dd[pq], e[ea * (11 - ea) / 2 + eb]);
+        }
+      }
+      #pragma unroll
+      for (int k = 0; k < 15; ++k) P[RR_E + k] = e[k];
+#endif
+    }
+#if CORR >= 3
+    for (int q = threadIdx.x; q < n * 25; q += NTA) {   // degree-3/4 coefficients (segnufft_knot.cu stage_hc_k)
+      const int s = q / 25, a = q % 25;
+      const float4 u = RU[s];
+      RS[(size_t)s * RSW + RR_H + a] = fmaf(u.x, htab[a], fmaf(u.y, htab[25 + a], fmaf(u.z, htab[50 + a], u.w * htab[75 + a])));
+    }
+#endif
+#endif
+    // z = conj(a_l) y_c for the block's channels (zero past NCH); RA_NOZ (timing ablation, wrong results): not built
+#ifndef RA_NOZ
+    // one thread per channel k (index math hoisted out of the sample loop); layout [s][pair kp][cb][2]: the lanes'
+    // float4 loads of one pair are consecutive (conflict-free)
+    for (int k = threadIdx.x; k < CPW; k += NTA) {
+      const int ch = chb + k, kk = k % CB;
+      const bool ok = ch < NCH;
+      const int coil = ok ? ch / NSEG : clo, l = ok ? ch % NSEG : 0;
+      const cx* ap = RAa + l;
+      const cx* yp = RYy + (coil - clo);
+      cx* zp = ZS + ((kk / 2) * NCL + k / CB) * 2 + (kk & 1);
+      #pragma unroll 4
+      for (int s = 0; s < n; ++s) {
+        const cx a = ap[s * NSEG], yy = yp[s * NCBRM];
+        zp[(size_t)s * (CBP / 2) * NCL * 2] = ok ? cx{fmaf(a.x, yy.x, a.y * yy.y), fmaf(a.x, yy.y, -a.y * yy.x)} : cx{0.f, 0.f};
+      }
+    }
+#endif
+    __syncthreads();
+#if CORR >= 1
+#if !RA_SPLITB
+    // ---- stage B (default): complex weights of the covered (sample, tile row) pairs, one task per pair with the
+    // stage_weights / stage_weights_hk terms inline
+    for (int q = threadIdx.x; q < n * TROWS; q += NTA) {
+      const int s = q / TROWS, row = q % TROWS, ty = row % TY, tzr = row / TY;
+      const float* P = RS + (size_t)s * RSW;
+      const int* oo = reinterpret_cast<const int*>(P);
+      if (ty < oo[1] || ty > oo[1] + W - 1 || tzr < oo[2] || tzr > oo[2] + W - 1) continue;
+      float wy[5], wz[5];
+      #pragma unroll
+      for (int k = 0; k < NKA; ++k) { wy[k] = P[RR_KY + k * R4(TY) + ty]; wz[k] = P[RR_KZ + k * R4(TZ) + tzr]; }
+      float R[5] = {0.f, 0.f, 0.f, 0.f, 0.f}, Q[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+      R[0] = wy[0] * wz[0];
+      const float* c = P + RR_D;   // [xx, yy, zz, xy, xz, yz]
+      Q[0] = c[1] * wy[2] * wz[0] + c[2] * wy[0] * wz[2] + c[5] * wy[1] * wz[1];
+      Q[1] = c[3] * wy[1] * wz[0] + c[4] * wy[0] * wz[1];
+      Q[2] = c[0] * wy[0] * wz[0];
+#if CORR >= 2
+      {
+        int idx = 0;
+        #pragma unroll
+        for (int a = 0; a <= 4; ++a) {
+          #pragma unroll
+          for (int b = 0; b <= 4 - a; ++b) { R[a] += P[RR_E + idx] * wy[b] * wz[4 - a - b]; ++idx; }
+        }
+      }
+#endif
+#if CORR >= 3
+      {
+        int idx = 0;
+        #pragma unroll
+        for (int a = 0; a <= 3; ++a) {
+          #pragma unroll
+          for (int b = 0; b <= 3 - a; ++b) { R[a] = fmaf(P[RR_H + idx], wy[b] * wz[3 - a - b], R[a]); ++idx; }
+        }
+        #pragma unroll
+        for (int a = 0; a <= 4; ++a) {
+          #pragma unroll
+          for (int b = 0; b <= 4 - a; ++b) { Q[a] = fmaf(-P[RR_H + idx], wy[b] * wz[4 - a - b], Q[a]); ++idx; }
+        }
+      }
+#endif
+      cx* wp = WS + ((size_t)s * TROWS + row) * TX;
+      #pragma unroll
+      for (int t = 0; t < TX; ++t) {
+        float wr = 0.f, wi = 0.f;
+        #pragma unroll
+        for (int a = 0; a < NKA; ++a) { const float xa = P[RR_KX + a * R4(TX) + t]; wr = fmaf(xa, R[a], wr); wi = fmaf(xa, Q[a], wi); }
+        wp[t] = cx{wr, wi};
+      }
+    }
+    __syncthreads();
+#else
+    // ---- RA_SPLITB 1 (measured slower, §15): stage B1: per covered (sample, plane) the plane coefficients ER_ab = e_ab wz_{4-a-b} (+ wz_0 at (0, 0))
+    // [+ hc_ab wz_{3-a-b}] and EQ_ab (the six ΔC terms [- hc_ab wz_{4-a-b}]), wz folded in (the vt terms of §13.1)
+    float* PL = reinterpret_cast<float*>(smem + RAW_PL);
+    for (int q = threadIdx.x; q < n * TZ; q += NTA) {
+      const int s = q / TZ, tzr = q % TZ;
+      const float* P = RS + (size_t)s * RSW;
+      const int* oo = reinterpret_cast<const int*>(P);
+      if (tzr < oo[2] || tzr > oo[2] + W - 1) continue;
+      float wz[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+      #pragma unroll
+      for (int k = 0; k < NKA; ++k) wz[k] = P[RR_KZ + k * R4(TZ) + tzr];
+      float ER[15], EQ[15];
+      #pragma unroll
+      for (int k = 0; k < 15; ++k) { ER[k] = 0.f; EQ[k] = 0.f; }
+#if CORR >= 2
+      {
+        int idx = 0;
+        #pragma unroll
+        for (int a = 0; a <= 4; ++a) {
+          #pragma unroll
+          for (int b = 0; b <= 4 - a; ++b) { ER[idx] = P[RR_E + idx] * wz[4 - a - b]; ++idx; }
+        }
+      }
+#endif
+      ER[0] += wz[0];
+      const float* dv = P + RR_D;   // [xx, yy, zz, xy, xz, yz]
+      EQ[0] = dv[2] * wz[2]; EQ[1] = dv[5] * wz[1]; EQ[2] = dv[1] * wz[0];
+      EQ[5] = dv[4] * wz[1]; EQ[6] = dv[3] * wz[0]; EQ[9] = dv[0] * wz[0];
+#if CORR >= 3
+      {
+        int j = 0;
+        #pragma unroll
+        for (int a = 0; a <= 3; ++a) {   // degree 3: + c ∂^α φ (real)
+          #pragma unroll
+          for (int b = 0; b <= 3 - a; ++b) { const int id = a * (11 - a) / 2 + b; ER[id] = fmaf(P[RR_H + j], wz[3 - a - b], ER[id]); ++j; }
+        }
+        #pragma unroll
+        for (int a = 0; a <= 4; ++a) {   // degree 4: −i c ∂^α φ (imaginary)
+          #pragma unroll
+          for (int b = 0; b <= 4 - a; ++b) { const int id = a * (11 - a) / 2 + b; EQ[id] = fmaf(-P[RR_H + j], wz[4 - a - b], EQ[id]); ++j; }
+        }
+      }
+#endif
+      float* pl = PL + ((size_t)s * TZ + tzr) * 32;
+      #pragma unroll
+      for (int k = 0; k < 15; ++k) { pl[k] = ER[k]; pl[16 + k] = EQ[k]; }
+    }
+    __syncthreads();
+    // ---- stage B2: complex weights of the covered (sample, tile row) pairs: R_a = Σ_b ER_ab wy_b, Q_a = Σ_b EQ_ab
+    // wy_b, w(t) = Σ_a kx_a(t) (R_a + i Q_a)
+    for (int q = threadIdx.x; q < n * TROWS; q += NTA) {
+      const int s = q / TROWS, row = q % TROWS, ty = row % TY, tzr = row / TY;
+      const float* P = RS + (size_t)s * RSW;
+      const int* oo = reinterpret_cast<const int*>(P);
+      if (ty < oo[1] || ty > oo[1] + W - 1 || tzr < oo[2] || tzr > oo[2] + W - 1) continue;
+      float wy[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
+      #pragma unroll
+      for (int k = 0; k < NKA; ++k) wy[k] = P[RR_KY + k * R4(TY) + ty];
+      const float* pl = PL + ((size_t)s * TZ + tzr) * 32;
+      float R[5], Q[5];
+      {
+        int idx = 0;
+        #pragma unroll
+        for (int a = 0; a <= 4; ++a) {
+          R[a] = pl[idx] * wy[0]; Q[a] = pl[16 + idx] * wy[0];
+          #pragma unroll
+          for (int b = 1; b <= 4 - a; ++b) { R[a] = fmaf(pl[idx + b], wy[b], R[a]); Q[a] = fmaf(pl[16 + idx + b], wy[b], Q[a]); }
+          idx += 5 - a;
+        }
+      }
+      cx* wp = WS + ((size_t)s * TROWS + row) * TX;
+      #pragma unroll
+      for (int t = 0; t < TX; ++t) {
+        float wr = 0.f, wi = 0.f;
+        #pragma unroll
+        for (int a = 0; a < NKA; ++a) { const float xa = P[RR_KX + a * R4(TX) + t]; wr = fmaf(xa, R[a], wr); wi = fmaf(xa, Q[a], wi); }
+        wp[t] = cx{wr, wi};
+      }
+    }
+    __syncthreads();
+#endif   // RA_SPLITB
+#endif   // CORR >= 1
+    // ---- MAC: the warp's plane tz, covered rows only
+#if !RA_NOMAC
+    for (int s = 0; s < n; ++s) {
+      const float* P = RS + (size_t)s * RSW;
+      const int4 oo = *reinterpret_cast<const int4*>(P);
+      if (tz < oo.z || tz > oo.z + W - 1) continue;   // warp-uniform
+      cx zv[CBP];
+      {
+        const float4* zp = reinterpret_cast<const float4*>(ZS) + (size_t)s * (CBP / 2) * NCL + cb;
+        #pragma unroll
+        for (int k = 0; k < CBP / 2; ++k) { const float4 u = zp[k * NCL]; zv[2 * k] = cx{u.x, u.y}; zv[2 * k + 1] = cx{u.z, u.w}; }
+      }
+#if CORR == 0
+      const float fz = P[RR_KZ + tz];
+      float wx[PT], ky[R4(TY)];
+      #pragma unroll
+      for (int i = 0; i < PT; ++i) wx[i] = P[RR_KX + g * PT + i];
+      #pragma unroll
+      for (int k = 0; k < R4(TY) / 4; ++k) { const float4 u = reinterpret_cast<const float4*>(P + RR_KY)[k]; ky[4 * k] = u.x; ky[4 * k + 1] = u.y; ky[4 * k + 2] = u.z; ky[4 * k + 3] = u.w; }
+      #pragma unroll
+      for (int r = 0; r < TY; ++r) {
+        if (r < oo.y || r > oo.y + W - 1) continue;   // warp-uniform: exact rows
+        const float wr = ky[r] * fz;
+        #pragma unroll
+        for (int i = 0; i < PT; ++i) {
+          if (NXG == 1 && (i < oo.x || i > oo.x + W - 1)) continue;   // NXG 1: warp-uniform exact x
+          const float w = wx[i] * wr;
+          #pragma unroll
+          for (int k = 0; k < CB; ++k) { acc[r][i][k].x = fmaf(w, zv[k].x, acc[r][i][k].x); acc[r][i][k].y = fmaf(w, zv[k].y, acc[r][i][k].y); }
+        }
+      }
+#else
+      #pragma unroll
+      for (int r = 0; r < TY; ++r) {
+        if (r < oo.y || r > oo.y + W - 1) continue;
+        const cx* wp = WS + ((size_t)s * TROWS + tz * TY + r) * TX + g * PT;
+        cx wv[PT];
+#if PT % 2 == 0
+        #pragma unroll
+        for (int i = 0; i < PT; i += 2) { const float4 u = *reinterpret_cast<const float4*>(wp + i); wv[i] = cx{u.x, u.y}; wv[i + 1] = cx{u.z, u.w}; }
+#else
+        #pragma unroll
+        for (int i = 0; i < PT; ++i) wv[i] = wp[i];
+#endif
+        #pragma unroll
+        for (int i = 0; i < PT; ++i) {
+          if (NXG == 1 && (i < oo.x || i > oo.x + W - 1)) continue;
+          #pragma unroll
+          for (int k = 0; k < CB; ++k) {   // conj(w) z
+            acc[r][i][k].x = fmaf(wv[i].x, zv[k].x, acc[r][i][k].x); acc[r][i][k].x = fmaf(wv[i].y, zv[k].y, acc[r][i][k].x);
+            acc[r][i][k].y = fmaf(wv[i].x, zv[k].y, acc[r][i][k].y); acc[r][i][k].y = fmaf(-wv[i].y, zv[k].x, acc[r][i][k].y);
+          }
+        }
+      }
+#endif
+    }
+#endif
+  }
+  // ---- output: per warp, row by row, park the TX × CPW values in shared memory and write coalesced runs of CPW channels
+  __syncthreads();
+  constexpr int OBS = CPW | 1;
+  cx* ob = reinterpret_cast<cx*>(smem) + (size_t)tz * TX * OBS;
+  const int gz = o2 + tz;
+  #pragma unroll
+  for (int r = 0; r < TY; ++r) {
+    #pragma unroll
+    for (int i = 0; i < PT; ++i) {
+      #pragma unroll
+      for (int k = 0; k < CB; ++k) ob[(g * PT + i) * OBS + cb * CB + k] = acc[r][i][k];
+    }
+    __syncwarp();
+    const int gy = o1 + r;
+    if (gy < d.nf1 && gz < d.nf2) {
+      for (int q = lane; q < TX * CPW; q += 32) {
+        const int t = q / CPW, k = q % CPW, gx = o0 + t, ch = chb + k;
+        if (gx >= d.nf0 || ch >= NCH) continue;
+        const cx v = ob[t * OBS + k];
+        cx* gp = grid + (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + ch;
+        if (it.split) { atomicAdd(&gp->x, v.x); atomicAdd(&gp->y, v.y); } else *gp = v;
+      }
+    }
+    __syncwarp();
+  }
+}
+#endif

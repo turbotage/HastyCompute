@@ -1,0 +1,12 @@
+== p2_spill_screen orders 0 mi 16384 14:49:33
+locked 14:50:10 power limit 300.00 W
+
+running 1 test
+test p2_spill_screen ... sm_89: ra 48x1 nxg 2 cb 3: KernRes { regs: 128, local: 56, spill: 20, blocks: 4, warps: 16 }; nxg 4 cb 3: KernRes { regs: 111, local: 32, spill: 0, blocks: 4, warps: 16 }
+sm_89: same with __launch_bounds__(128, 4): KernRes { regs: 126, local: 32, spill: 0, blocks: 4, warps: 16 }
+repeat query 0.2 ms
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.81s
+
+== exit 0 14:50:15

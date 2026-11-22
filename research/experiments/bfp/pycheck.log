@@ -1,0 +1,7 @@
+bits 8 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 348785
+bits 12 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 334546
+bits 16 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 332555
+bits 20 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 331335
+bits 22 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 330781
+bits 24 reals 4100008 python emulation vs rust codec: different values 0 | bit differences that are only the sign of zero 330198
+total different values 0

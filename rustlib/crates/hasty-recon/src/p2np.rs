@@ -273,6 +273,17 @@ pub trait Objective {
     fn gradient_host_sets(&mut self, _st: &Arc<CudaStream>, _sets: &[usize], _x: &crate::hoststack::HostStack, _g: &mut crate::hoststack::HostStack) -> Result<Option<f64>, Error> {
         Ok(None)
     }
+    /// whether [`gradient_host_sink`](Self::gradient_host_sink) delivers the gradient (checked before the solver
+    /// allocates a BFP gradient stack, so a wrapper need not compute anything to find out). Default: false.
+    fn has_gradient_sink(&self) -> bool {
+        false
+    }
+    /// [`gradient_host`](Self::gradient_host) delivering each set's gradient to `sink` as it is ready (BFP host
+    /// state, [`crate::bfpstate`]: no f32 gradient stack; a BFP sink may receive device-packed bytes). None (default):
+    /// no sink path; callers fall back to an f32 stack.
+    fn gradient_host_sink(&mut self, _st: &Arc<CudaStream>, _x: &crate::hoststack::HostStack, _sink: &mut dyn crate::bfpstate::GradSink) -> Result<Option<f64>, Error> {
+        Ok(None)
+    }
     /// [`metric`](Self::metric) of chunk t on host slices (uploaded, applied, downloaded)
     fn metric_host(&mut self, st: &Arc<CudaStream>, t: usize, r: &[C32], z: &mut [C32], inverse: bool) -> Result<(), Error> {
         let rd = st.clone_htod(r)?;
@@ -344,6 +355,21 @@ impl Objective for P2np<'_> {
             return Ok(None);
         }
         self.stream_sets(st, x, g, sets).map(Some)
+    }
+    fn has_gradient_sink(&self) -> bool {
+        // the conditions of gradient_host_sink (it streams uniform sets only)
+        let l = P2np::lens(self);
+        self.cur.is_none() && self.lagged.is_none() && !l.is_empty() && l.iter().all(|&v| v == l[0])
+    }
+    /// streamed like [`gradient_host`](Objective::gradient_host), each set's gradient handed to the sink (packed on
+    /// the device for a BFP sink); None with coil sampling, lagged gradients or sets of unequal length
+    fn gradient_host_sink(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, sink: &mut dyn crate::bfpstate::GradSink) -> Result<Option<f64>, Error> {
+        let uniform = x.lens.iter().all(|&l| l == x.lens[0]);
+        if self.cur.is_some() || self.lagged.is_some() || !uniform || x.lens.is_empty() {
+            return Ok(None);
+        }
+        let order: Vec<usize> = (0..self.op.nsets()).collect();
+        self.stream_sets_sink(st, x, sink, &order).map(Some)
     }
     /// streamed per group (`SetStreamer` over the group images), data resident or staged per member from the store:
     /// g_g = Σ_{t∈g} E_tᴴ(E_t x_g − y_t) through `SetOp::forward_group` / `adjoint_group` (`SegSets`: one grid FFT per
@@ -603,6 +629,12 @@ impl<'a> P2np<'a> {
     /// (`SetStreamer`: each set's image up and its gradient down while the GPU works on the neighbouring set), data
     /// resident or staged per set from the store; returns ½ Σ_{t ∈ order} ‖E_t x_t − y_t‖².
     fn stream_sets(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack, order: &[usize]) -> Result<f64, Error> {
+        assert!(order.iter().all(|&t| g.lens[t] == x.lens[t]), "stream_sets: gradient and image stacks differ");
+        self.stream_sets_sink(st, x, &mut crate::bfpstate::StackSink(g), order)
+    }
+
+    /// [`stream_sets`](Self::stream_sets) with the gradients delivered to a sink ([`crate::bfpstate::GradSink`])
+    fn stream_sets_sink(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, sink: &mut dyn crate::bfpstate::GradSink, order: &[usize]) -> Result<f64, Error> {
         let mut sr = match self.streamer.take() {
             Some(s) => s,
             None => crate::hoststack::SetStreamer::new(&st.context().clone(), st, x.lens[order[0]])?,
@@ -611,7 +643,7 @@ impl<'a> P2np<'a> {
         let mut f = 0.0;
         let op = &mut *self.op;
         let ys = &self.ys;
-        let r = sr.for_each(st, x, g, order, &mut |t, xd, gd| {
+        let r = sr.for_each_sink(st, x, sink, order, &mut |t, xd, gd| {
             let staged;
             let y: &CudaSlice<C32> = match stage.as_mut() {
                 Some(sg) => {
@@ -897,6 +929,64 @@ impl<'a> P2np<'a> {
             }
         }
         Ok(best)
+    }
+
+    /// [`step_norm`](Self::step_norm) with a selectable estimator: `Power` runs exactly `step_norm(.., power_iters)`;
+    /// `Lanczos(k)` runs k Lanczos steps per set (p-form for M N: no M⁻¹; one extra set-sized vector over the power
+    /// iteration with the metric, none without) on set 0 and the middle set and returns the largest λ̂ = θ + bound
+    pub fn step_norm_with(&mut self, st: &Arc<CudaStream>, with_circ: bool, method: crate::lanczos::LamMethod, power_iters: usize) -> Result<crate::lanczos::LamEst, Error> {
+        use crate::lanczos::{LamEst, LamMethod};
+        let idx: Vec<usize> = { let mut v = vec![0, self.op.nsets() / 2]; v.dedup(); v };
+        match method {
+            LamMethod::Power => Ok(LamEst::power(self.step_norm(st, with_circ, power_iters)?, power_iters * idx.len())),
+            LamMethod::Lanczos(k) => {
+                let mut best: Option<LamEst> = None;
+                for &t in &idx {
+                    let e = self.lanczos_set(st, t, with_circ, k, None)?;
+                    best = Some(best.map_or(e, |b| b.max(e)));
+                }
+                Ok(best.unwrap_or_default())
+            }
+        }
+    }
+
+    /// [`step_norm_sampled`](Self::step_norm_sampled) with a selectable estimator (see [`step_norm_with`](Self::step_norm_with))
+    pub fn step_norm_sampled_with(&mut self, st: &Arc<CudaStream>, with_circ: bool, method: crate::lanczos::LamMethod, power_iters: usize, draws: usize) -> Result<crate::lanczos::LamEst, Error> {
+        use crate::lanczos::{LamEst, LamMethod};
+        match method {
+            LamMethod::Power => Ok(LamEst::power(self.step_norm_sampled(st, with_circ, power_iters, draws)?, power_iters * draws)),
+            LamMethod::Lanczos(k) => {
+                let s = self.sampling.clone().expect("step_norm_sampled without sampling");
+                let nc = self.op.n_coils();
+                let mut best: Option<LamEst> = None;
+                for d in 0..draws {
+                    let Some(groups) = s.groups(nc, d * s.hold.max(1), usize::MAX) else { continue };
+                    let e = self.lanczos_set(st, 0, with_circ, k, Some(&groups))?;
+                    best = Some(best.map_or(e, |b| b.max(e)));
+                }
+                Ok(best.unwrap_or_default())
+            }
+        }
+    }
+
+    /// k Lanczos steps for N_t (or M_t N_t) of set t, optionally coil-sampled (`groups`); the power iteration's start
+    fn lanczos_set(&mut self, st: &Arc<CudaStream>, t: usize, with_circ: bool, k: usize, groups: Option<&[(Vec<usize>, f64)]>) -> Result<crate::lanczos::LamEst, Error> {
+        let nx = self.op.len_x(t);
+        let host: Vec<C32> = (0..nx).map(|i| C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32)).collect();
+        let p = st.clone_htod(&host)?;
+        drop(host);
+        let mut sp = FrameLanczos {
+            pr: self,
+            st,
+            t,
+            circ: with_circ,
+            groups,
+            pp: st.alloc_zeros::<C32>(nx)?,
+            p,
+            q: if with_circ { Some(st.alloc_zeros::<C32>(nx)?) } else { None },
+            w: st.alloc_zeros::<C32>(nx)?,
+        };
+        crate::lanczos::lanczos(&mut sp, k)
     }
 
     /// Run `iters` iterations from `x` (in place). `denoise(x_host_stack)` is applied to the host copy; `report(k, x)`
@@ -1335,4 +1425,66 @@ pub fn run_objective_with(
         c.clear(name);
     }
     Ok(Outcome::Finished)
+}
+
+/// the p-form Lanczos space of one set (crate::lanczos): p_{j−1}, p_j, q_j = M p_j (absent without the metric: q = p), w
+struct FrameLanczos<'s, 'a, 'g> {
+    pr: &'s mut P2np<'a>,
+    st: &'s Arc<CudaStream>,
+    t: usize,
+    circ: bool,
+    groups: Option<&'g [(Vec<usize>, f64)]>,
+    pp: CudaSlice<C32>,
+    p: CudaSlice<C32>,
+    q: Option<CudaSlice<C32>>,
+    w: CudaSlice<C32>,
+}
+
+impl crate::lanczos::LanczosSpace for FrameLanczos<'_, '_, '_> {
+    type E = Error;
+    fn start(&mut self) -> Result<f64, Error> {
+        // p_0 = the start pattern (already in p), q_0 = M p_0
+        if let Some(q) = self.q.as_mut() {
+            self.pr.precond(self.st, self.t, &self.p, q, false)?;
+            return Ok(self.pr.op.kernels().dot(self.st, &self.p, q)?.re);
+        }
+        Ok(self.pr.op.kernels().dot(self.st, &self.p, &self.p)?.re)
+    }
+    fn scale(&mut self, c: f64) -> Result<(), Error> {
+        let k = self.pr.op.kernels();
+        let (z, c) = (Complex64::new(0.0, 0.0), Complex64::new(c, 0.0));
+        k.axpby(self.st, z, &self.w, c, &mut self.p)?;
+        if let Some(q) = self.q.as_mut() {
+            k.axpby(self.st, z, &self.w, c, q)?;
+        }
+        Ok(())
+    }
+    fn apply(&mut self) -> Result<f64, Error> {
+        let q = self.q.as_ref().unwrap_or(&self.p);
+        self.pr.normal_apply(self.st, self.t, q, &mut self.w, self.groups)?;
+        let q = self.q.as_ref().unwrap_or(&self.p);
+        Ok(self.pr.op.kernels().dot(self.st, q, &self.w)?.re)
+    }
+    fn advance(&mut self, alpha: f64, beta: f64) -> Result<f64, Error> {
+        let one = Complex64::new(1.0, 0.0);
+        {
+            let k = self.pr.op.kernels();
+            // s = w − α p_j − β p_{j−1} (= M⁻¹ r), in w
+            k.axpby(self.st, Complex64::new(-alpha, 0.0), &self.p, one, &mut self.w)?;
+            if beta != 0.0 {
+                k.axpby(self.st, Complex64::new(-beta, 0.0), &self.pp, one, &mut self.w)?;
+            }
+        }
+        // r = M s into q (q_j is no longer needed), ‖r‖²_{M⁻¹} = sᴴ r
+        let n2 = if let Some(q) = self.q.as_mut() {
+            self.pr.precond(self.st, self.t, &self.w, q, false)?;
+            self.pr.op.kernels().dot(self.st, &self.w, q)?.re
+        } else {
+            self.pr.op.kernels().dot(self.st, &self.w, &self.w)?.re
+        };
+        // p_{j−1} ← p_j, p_j ← s, w ← the free buffer
+        std::mem::swap(&mut self.pp, &mut self.p);
+        std::mem::swap(&mut self.p, &mut self.w);
+        Ok(n2)
+    }
 }

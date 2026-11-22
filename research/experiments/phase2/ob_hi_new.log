@@ -1,0 +1,105 @@
+=== hi_new: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_p2 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 (Fri Nov 20 03:19:13 PM CET 2026)
+locked 15:19:13 power limit 300.00 W
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.8 GiB free), PCIe pinned 21.7 / 20.4 GB/s (h2d / d2h), device 931 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 4.4 min (264 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 3340 rotations, GIRF ideal
+   23380 readouts × 3990 ADC samples (step 1), 93286200 samples; 112 static sets (samples per set 742140 / 833910 / 897750 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 15.9 s
+  model seg-full (temporal B-spline 3):
+    tile lists: 181440 tiles, 573218 items (62588 zero-count, 494275 split), 458954838 entries (3861.6 per nonempty tile); per knot window: entries 21544522 / 38246236 / 47724104 (min / mean / max), tiles with samples but an empty window 2408 / 3185 / 4645
+    [vs] VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 48: 30.986 ms (smem 76096 B, regs 254, local 0 B, 4 warps / SM)
+    [vs] VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 2, vxpad: 0 } sch 48: 28.358 ms (smem 82496 B, regs 236, local 0 B, 8 warps / SM)
+    [vs] VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 } VsCfg { nwc: 4, nws: 1, vxpad: 0 } sch 29: 27.410 ms (smem 49344 B, regs 254, local 32 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 1, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 32.266 ms (smem 29632 B, regs 126, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 1, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 65.890 ms (smem 55168 B, regs 161, local 32 B, spill 0 B, 4 warps / SM)
+    [ra] RaCfg { nxg: 1, cb: 1, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 55.137 ms (smem 29632 B, regs 93, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 1, cb: 1, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 111.833 ms (smem 55168 B, regs 119, local 32 B, spill 0 B, 4 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 31.342 ms (smem 29632 B, regs 126, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 60.585 ms (smem 55168 B, regs 158, local 32 B, spill 0 B, 4 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 53.295 ms (smem 25536 B, regs 93, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 63.551 ms (smem 46976 B, regs 124, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 1, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 98.330 ms (smem 25280 B, regs 79, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 1, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 119.731 ms (smem 46464 B, regs 79, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 30.597 ms (smem 29632 B, regs 128, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 60.009 ms (smem 55168 B, regs 126, local 32 B, spill 0 B, 4 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 4, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 52.483 ms (smem 25536 B, regs 93, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 4, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 62.480 ms (smem 46976 B, regs 124, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 3, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 75.723 ms (smem 25408 B, regs 93, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 3, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 90.911 ms (smem 46720 B, regs 93, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: skipped: spills on this device (smem 23232 B, regs 72, local 48 B, spill 12 B, 16 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: skipped: spills on this device (smem 42368 B, regs 72, local 48 B, spill 12 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 34.572 ms (smem 13328 B, regs 159, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 30.184 ms (smem 14192 B, regs 125, local 32 B, spill 0 B, 16 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 32.200 ms (smem 19792 B, regs 159, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 28.609 ms (smem 21088 B, regs 125, local 32 B, spill 0 B, 16 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 32.133 ms (smem 26256 B, regs 159, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 32.544 ms (smem 27984 B, regs 125, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 31.114 ms (smem 32720 B, regs 159, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 37.948 ms (smem 34880 B, regs 125, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 34.941 ms (smem 13328 B, regs 162, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 34.004 ms (smem 14192 B, regs 158, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 32.957 ms (smem 19792 B, regs 162, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 33.396 ms (smem 21088 B, regs 158, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 16 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 32.962 ms (smem 26256 B, regs 162, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 16 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 32.731 ms (smem 27984 B, regs 158, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 20 } RaVar { inplace: true, stages: 1, lbmin: 0 }: 31.526 ms (smem 32720 B, regs 162, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 2, cb: 4, chk: 20 } RaVar { inplace: true, stages: 2, lbmin: 0 }: 37.949 ms (smem 34880 B, regs 158, local 32 B, spill 0 B, 8 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 3 }: hint not kept: spills or fewer warps than unhinted (16) (smem 21088 B, regs 157, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: true, stages: 2, lbmin: 4 }: 28.697 ms (smem 21088 B, regs 125, local 32 B, spill 0 B, 16 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 3 }: hint not kept: spills or fewer warps than unhinted (16) (smem 14192 B, regs 157, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: true, stages: 2, lbmin: 4 }: 29.866 ms (smem 14192 B, regs 125, local 32 B, spill 0 B, 16 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 3 }: 31.175 ms (smem 29632 B, regs 157, local 32 B, spill 0 B, 12 warps / SM)
+    [ra] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 4 }: 31.666 ms (smem 29632 B, regs 127, local 32 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 1, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 64.680 ms (smem 26256 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 1, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 115.909 ms (smem 52112 B, regs 159, local 48 B, spill 0 B, 4 warps / SM)
+    [kl] RaCfg { nxg: 1, cb: 1, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 101.401 ms (smem 26256 B, regs 121, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 1, cb: 1, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 190.271 ms (smem 52112 B, regs 118, local 48 B, spill 0 B, 4 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 60.243 ms (smem 26256 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 103.888 ms (smem 52112 B, regs 159, local 48 B, spill 0 B, 4 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 87.599 ms (smem 22160 B, regs 121, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 110.754 ms (smem 43920 B, regs 119, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 1, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 153.954 ms (smem 21904 B, regs 93, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 1, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 193.433 ms (smem 43408 B, regs 93, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 60.409 ms (smem 26256 B, regs 160, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 101.929 ms (smem 52112 B, regs 157, local 48 B, spill 0 B, 4 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 4, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 85.552 ms (smem 22160 B, regs 121, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 4, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 107.815 ms (smem 43920 B, regs 119, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 3, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 120.607 ms (smem 22032 B, regs 123, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 3, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 150.895 ms (smem 43664 B, regs 123, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 2, chk: 16 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 154.409 ms (smem 19856 B, regs 80, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 2, chk: 32 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 197.500 ms (smem 39312 B, regs 80, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 8 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 68.822 ms (smem 13328 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 8 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 62.309 ms (smem 14192 B, regs 123, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 64.007 ms (smem 19792 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 59.055 ms (smem 21088 B, regs 123, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 16 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 61.967 ms (smem 27984 B, regs 123, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 20 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 59.516 ms (smem 32720 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 20 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 70.434 ms (smem 34880 B, regs 123, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 67.460 ms (smem 13328 B, regs 160, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 8 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 60.997 ms (smem 14192 B, regs 123, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 61.857 ms (smem 19792 B, regs 160, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 56.989 ms (smem 21088 B, regs 123, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 16 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 59.523 ms (smem 27984 B, regs 123, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: false, stages: 1, lbmin: 0 }: 57.742 ms (smem 32720 B, regs 160, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: false, stages: 2, lbmin: 0 }: 68.255 ms (smem 34880 B, regs 123, local 48 B, spill 0 B, 8 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 3 }: hint not kept: spills or fewer warps than unhinted (16) (smem 21088 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 4 }: 57.672 ms (smem 21088 B, regs 126, local 48 B, spill 0 B, 16 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: false, stages: 1, lbmin: 3 }: 56.638 ms (smem 32720 B, regs 160, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 4, cb: 7, chk: 20 } RaVar { inplace: false, stages: 1, lbmin: 4 }: 56.591 ms (smem 32720 B, regs 124, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 3 }: hint not kept: spills or fewer warps than unhinted (16) (smem 21088 B, regs 158, local 48 B, spill 0 B, 12 warps / SM)
+    [kl] RaCfg { nxg: 2, cb: 4, chk: 12 } RaVar { inplace: false, stages: 2, lbmin: 4 }: 57.696 ms (smem 21088 B, regs 126, local 48 B, spill 0 B, 16 warps / SM)
+    autotune 78.3 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }, adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }
+    autotune adjoint kernels (one coil batch, knot 0): tile 52.86 ms, ra 28.61 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 12 })) -> ra
+    autotune forward kernels (one coil batch, knot 0): tile 40.34 ms, vs 27.41 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 1, vxpad: 0 })) -> vs; adjoint 28.61 ms; vs tables 36.4 B/sample
+    autotune knot-path layout (adjoint of a representative knot incl. split-tile zeroing, one coil batch): engine adjoint all items 58.70 ms, skip empty tiles 55.15 ms, whole-tile kl kernel 56.59 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 20 })) -> skip
+    FFT column: k-support pruned grid FFT (50 ch, grid [288, 288, 140], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.655, x pass Some((16, 36)) lines × threads, two-pass L2 slabs of 1 z planes (33.2 MB), pad / crop fused into the x passes (not in this FFT time)) — forward 15.75 ms × 192, inverse 16.35 ms × 192 per call
+    encode 3 (all frames)        M  13326600: forward  12536.8 ms, adjoint  12993.0 ms, normal  25556.3 ms | kernels – / – ms, FFT 3023.0 / 3139.2 ms, pad/crop/rest – / – ms | tables 19.1 s, 262 B/sample on the GPU
+    engine 4.78 GiB (coil batch 5), segment tables 0.41 GiB per encode (0.4 s), resident problem 214.6 GiB (does not fit: data streamed from host), device part without data 115.5 GiB
+    per iteration: operator 178.71 s (forward + adjoint over 7 sets, 9.329e7 samples; FFT 24 %) + data streaming 1.47 s + prior round trip 2.89 s + ZMSHR1 vectors 0.33 s = 183.40 s; setup 981 s; 40 iterations ≈ 138.6 min
+    format error: memory plan: nothing fits — smallest placement needs 125.61 GiB of device memory, budget 22.34 GiB. Reduce the grid (--grid-scale / ROI), nodes (--vmodel), or coil batch (projection: everything streamed)
+
+  summary 4D flow 4.4 min (40 iterations):
+    model      L  o | s / iteration | total min | resident GiB
+    seg-full  10  3 |        183.40 |     138.6 |    214.6 (streamed)
+exit 0 15:24:48

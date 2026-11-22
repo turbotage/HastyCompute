@@ -1494,3 +1494,298 @@ The torso is 2–3× over the 5–6 h budget (memory: recon_compute_budget). Whe
 - The coarse levels may also need fewer segments: the samples inside a small k-ball come early in centre-out readouts,
   so the τ range is shorter. Not measured.
 - Keep W 10 / σ 1.25 at every level (NUFFT accuracy rule).
+
+## 23. FFT-side traffic (2026-11-19)
+
+Goal: cut the DRAM traffic around the grid FFTs of the segmented NUFFT. On the knot path that part was ≈ 60 % of a
+gradient and bandwidth-bound (fft_axis at 85–93 % of DRAM bandwidth, seg_pad 85 %, seg_crop 95 %). Every change is
+exact or f32-rounding-level against the previous path and sits behind an env switch; the previous paths stay selectable.
+
+**Setup.** RTX 4090, opbench, 2 mm thorax: image 225 × 225 × 112, fine grid 288 × 288 × 140, 10 virtual coils, L 10,
+order 2, coil batch 5, so one grid slot holds 50 channels (4.6 GB).
+- Knot case: `opbench --models seg-full --nseg 10 --vcoils 10 --order 2 --temporal cubic --knot --frames 20 --scan-min
+  0.44 --sets 1 --reps 3 --seq flow`. Cubic knot-major engine, 20 knots, 1.33 M samples (one encode, all frames). Per
+  gradient: 40 grid loads (pad + forward FFT) and 40 flushes (inverse FFT + crop).
+- Static case: the same without `--temporal` / `--knot` and `--frames 7`. One frame, 4.3 M samples, 2 loads and 2
+  flushes per gradient. It is tile-kernel bound (kernels 278 / 408 ms of 333 / 462 ms).
+
+Logs are in `research/experiments/fft_traffic/` (`t1_*` task 1, `t4_*` / `t6_*` / `t7_*` tasks 2 and 3, `t8_*` the final
+defaults, `tests_*` the correctness tests); nsys / ncu reports stay in the session scratchpad.
+
+### 23.1 opbench's FFT column
+
+The old column timed separate unpruned `FftPlan::new_partial` plans: 1251 ms per direction on the knot case, unchanged by
+pruning. It now times the engine's own transforms: `SegNufft::grid_fft_run` (forward / inverse of one coil batch on the
+engine's slot, the plan it uses for the current k-support). It multiplies by the transform count of one call, which the
+engine counts (`fft_calls`). opbench prints what it timed, for example:
+
+`FFT column: k-support pruned grid FFT (50 ch, grid [288, 288, 140], z-pass columns 0.849, kx / ky / kz ranges [1.000,
+1.000, 1.000], cells 0.641, x pass Some((16, 36)) lines × threads, whole-grid passes, pad / crop separate kernels) —
+forward 19.61 ms × 40, inverse 19.43 ms × 40 per call`
+
+Before the changes below: 784 / 777 ms per gradient direction on the knot case (48 % of the gradient, matching nsys).
+With fused pad / crop the hooked first and last passes include the pad / crop work, so the column then times the plain
+passes and says so.
+
+### 23.2 Bytes per grid load and flush (knot case, one coil batch of 50 channels, model)
+
+The pruned transform reads and writes only the image block and the k-support. The kx / ky / kz ranges are full here, the
+z-pass keeps 85 % of the columns and 64 % of the cells. At 400 B per cell (50 channels × 8 B):
+
+| pass | forward read / write (GB) | inverse read / write (GB) |
+|---|---|---|
+| pad: x, 5 coil maps, 10 segment diagonals → block | 0.73 / 2.27 | — |
+| x pass (225 × 112 lines, 225 ↔ 288 entries) | 2.27 / 2.90 | 2.90 / 2.27 |
+| y pass (288 × 112 lines, 225 ↔ 288) | 2.90 / 3.72 | 3.72 / 2.90 |
+| z pass (85 % of 288² columns, 112 ↔ kz range) | 3.15 / 2.98 | 2.98 / 3.15 |
+| crop: block + coil maps + segment diagonals → x (+=) | — | 3.00 / 0.05 |
+| **total** | **20.9** | **21.0** |
+| fused pad / crop (first pass reads 0.73 GB of image inputs, last pass writes x by atomics) | 16.4 | 16.5 |
+| two-pass L2 slabs (the x → y intermediate stays in L2: −2 × 2.90) | 15.1 | 15.2 |
+| both | 10.6 | 10.7 |
+| full-slot memset per adjoint knot × batch when tile lists are split (old path) | — | + 4.65, and read-modify-write instead of stores |
+
+ncu confirms the byte counts. The fused forward x pass reads 0.726 GB and writes 2.87 GB; the fused inverse x pass reads
+3.63 GB and writes 0.047 GB. The plain x pass reads 2.27 GB and writes 2.87 GB.
+
+### 23.3 Task 1: zero only the split tiles (`HASTY_SEG_ZERO=tiles|full`, default tiles)
+
+Old: when any tile list is split (above `max_item` = 1024 samples, which the dense k-space centre always is), the adjoint
+zeroed the whole slot and every item added, unsplit tiles with a read-modify-write. That is 4.65 GB of memset plus a read
+of every stored cell, per knot and coil batch.
+
+New:
+- `tile_lists` marks the first part of every split tile with `split = 2`. All kernels test `split` for truth only, so
+  nothing else changes. `Interval::nz` is the prefix of the heaviest-first items that holds every marked item.
+- A small kernel `seg_zero_split` zeroes the cells of those tiles (all channels).
+- The scatter then runs in store mode. Unsplit tiles have a single owner and store; split tiles add atomically onto the
+  zeroed cells, as before.
+- Covered paths: knot-major (`adjoint_knot`, `adjoint_source`), static / interval-major (`adjoint`, `adjoint_group`,
+  `adjoint_source`). In grouped calls the first member stores and later members add.
+- The multi-image kernels (order 3 interval-major, fat) keep their full `mzero`.
+
+Exactness: identical up to the order of the f32 atomics on split tiles. Test `seg_fft_traffic::split_tile_zeroing_matches_full_slot`
+(static, interval-major, knot; all sets split; adjoint, group, source) gives tiles vs full 2–5e-6 against full vs full
+2–5e-6.
+
+| knot case (ms) | forward | adjoint | gradient |
+|---|---|---|---|
+| before (full) | 1459.0 | 1765.0 | 3222.9 |
+| tiles | 1459.7 | 1500.6 | 2959.8 |
+
+Static case: 333.3 / 462.5 / 793.7 → 333.7 / 459.8 / 791.4. The adjoint gains 264 ms on the knot case, more than the
+memsets' 192 ms, because the unsplit tiles now store instead of read-modify-write.
+
+### 23.4 Task 2: pad fused into the first forward pass, crop into the last inverse pass (`HASTY_SEG_FUSE_PADCROP=1|gather|0`, default 1)
+
+**hasty-fft (generic).**
+- `IoHook` (codegen) holds caller CUDA code fused into a strided axis pass:
+  - `load`: an expression replacing `in[GIN(e)]` in the first stage;
+  - `prologue`: block code before the first stage, which may stage inputs into the second shared buffer (free until
+    stage 1);
+  - `epilogue`: the last stage writes its outputs to shared memory and this code consumes them, with the free buffer as
+    `spare`;
+  - extra kernel parameters, passed with `AxisPlan::launch_ext` / `KArg`.
+- `PrunedChanFft3::set_hooks` / `forward_hooked` / `inverse_hooked` build and run the hooked x passes. The z offset
+  `hz0` is appended per launch, for the slabs of §23.5.
+
+**hasty-nufft (`segnufft/fused.rs`).**
+- Pad hook: channel la = c · NSEG + l of grid (x, y, z) = S_c P_l x / φ̂. The prologue stages the line's x / φ̂ row, the
+  coil rows its 16-channel tile touches and the 10 segment rows (coalesced). The first stage reads them from shared memory.
+- Crop epilogue: the coil and segment rows are staged into the spare buffer. Two threads per x entry each sum 8 of the
+  tile's channels g · conj(S_c P_l) in a rotated order (no shared-memory bank conflicts), reduce with one group shuffle,
+  and one f32 atomic add per voxel and channel tile goes into x. That is the crop's x += Σ; the coil batches still
+  accumulate.
+- `HASTY_SEG_FUSE_PADCROP=gather` keeps the first version: per-element global loads, 16-lane shuffles.
+- Used on the plain single-image paths with the pruned transforms: knot, static, interval-major, grouped and source
+  calls. Not used for water + fat, the warp, or the multi-image kernels; those keep `seg_pad` / `seg_crop`.
+
+Exactness:
+- The fused pad's grid equals the separate pad's to 1.3e-7 (FMA contraction; `debug_fused_slot`).
+- The forward differs by 3.5–4e-6. The forward itself amplifies one-ulp input changes to that level: x moved by one ulp
+  gives 4.2e-6.
+- The adjoint matches within the run-to-run atomics spread (≤ 2e-6).
+- Adjointness of the fused pair equals the separate pair's (≈ 1e-7).
+- Tests: `seg_fft_traffic::fused_pad_crop_matches_separate_kernels`. It covers two x shapes (8 × 9 and 8 × 10 threads),
+  a short last coil batch, k-support and block pruning, static, interval-major and knot; staged and gather variants.
+
+ncu, x pass alone at ncu clocks (no slabs):
+
+| x pass | time | DRAM read / write | DRAM % of peak |
+|---|---|---|---|
+| plain forward / inverse | 5.61 / 5.59 ms | 2.27 / 2.87 GB, 2.90 / 2.24 GB | 93 % |
+| fused forward, gather / staged | 7.03 / 6.43 ms | 0.73 / 3.11, 0.73 / 2.87 GB | 56 / 57 % |
+| fused inverse, gather (16-lane shuffles) / staged (two threads per entry, final) | 6.88 / 5.44 ms | 3.63 / 0.05 GB | 54 / 69 % |
+
+The fused passes move the bytes as planned but are latency-bound. The x passes run one block per SM (73.7 KB of shared
+memory for 16 lines × 288 × 2 buffers), so the staging barrier and the reductions are not overlapped by other blocks. The
+fused pass still replaces pad + x pass (3.5 + 5.6 ms) or x pass + crop (5.6 + 3.3 ms).
+
+| knot case (ms), with tiles | forward | adjoint | gradient |
+|---|---|---|---|
+| separate pad / crop | 1459.7 | 1500.6 | 2959.8 |
+| fused, gather | 1350.8 | 1386.3 | 2737.1 |
+| fused, staged rows, 16-lane shuffle crop | 1327.1 | 1395.2 | 2721.2 |
+| fused, staged (final) | 1326.8 | 1344.1 | 2669.5 |
+
+Static case: 333.7 / 459.8 / 791.4 → 328.9 / 452.2 / 778.2.
+
+### 23.5 Task 3: two-pass FFT through L2 (`HASTY_SEG_FFT_SLAB=auto|0|<planes>`, default auto)
+
+`PrunedChanFft3::set_slab(dz)` runs the forward x and y passes slab by slab of dz z planes of the image block: x then y
+per slab, then the z pass over the whole grid. The inverse runs the z pass, then y then x per slab. The y pass then reads
+the x pass's output from L2 instead of DRAM, and the dirty lines are overwritten before eviction. The same kernels run on
+the same lines, launched per slab with an offset pointer and a line-group override (`AxisPlan::launch_lines`; uniform
+a-ranges and group-independent line tables only), so results are bit-identical
+(`chanfft::slab_passes_equal_whole_grid`, `seg_fft_traffic::fft_slabs_match_whole_grid`).
+
+Slab size:
+- `auto` (default) takes as many planes as fit `HASTY_SEG_FFT_L2FRAC` (default 0.5) of the device's L2
+  (`CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE`). If even one plane does not fit there, it uses one plane while that fits
+  `HASTY_SEG_FFT_L2MAX` (default 0.85) of the L2, else slabs are off. `0` turns slabs off; an integer sets the planes.
+- One plane here (all channels) is 33.2 MB. On the 4090 (72 MB) auto picks 1 plane, the 5090 (96 MB) 1, the H100
+  (50 MB) and A100 (40 MB) 1 through the 0.85 rule (not measured on those cards).
+- No L2 persistence control was needed: plain caching keeps one plane.
+
+FFT alone (opbench FFT column, ms per transform):
+
+| | forward | inverse |
+|---|---|---|
+| whole-grid passes | 19.56 | 19.40 |
+| slabs of 1 plane (33 MB) | 14.74 | 15.81 |
+| slabs of 2 planes (66 MB) | 15.41 | 15.94 |
+
+In the operator (nsys, 1-plane slabs, separate pad / crop): forward x + y 7.55 ms per load and inverse y + x 8.66 ms per
+flush, against 12.4 ms whole-grid.
+
+| knot case (ms), with tiles | forward | adjoint | gradient |
+|---|---|---|---|
+| no slabs, separate pad / crop | 1459.7 | 1500.6 | 2959.8 |
+| slabs 1, separate pad / crop | 1265.4 | 1356.0 | 2620.8 |
+| slabs 1, fused gather | 1227.4 | 1358.9 | 2586.5 |
+| slabs 2, fused gather | 1228.0 | 1354.5 | 2583.7 |
+| slabs 1, fused staged (final) | **1203.3** | **1311.5** | **2514.0** |
+
+Static case: slabs 1 separate 325.5 / 452.7 / 775.2; slabs 1 fused staged 322.6 / 451.2 / 770.4.
+
+### 23.6 Summary and switches
+
+Final check with the new defaults against all three switches set back (`t8_*`, same binary):
+
+| ms | knot forward | knot adjoint | knot gradient | static forward | static adjoint | static gradient |
+|---|---|---|---|---|---|---|
+| old paths (`ZERO=full FUSE_PADCROP=0 FFT_SLAB=0`) | 1459.3 | 1763.8 | 3224.3 | 333.9 | 462.3 | 795.1 |
+| defaults | 1201.8 | 1310.6 | 2511.7 | 322.1 | 450.5 | 771.4 |
+
+Knot case gradient −22 %. Static case −3 %: it is tile-kernel bound.
+
+Regression run with the new defaults (hasty-fft and hasty-nufft GPU test binaries):
+- All pass except three.
+- `seg_joint_chunks` (Φ CGEMM vs kernel forward 7.4e-5 > 1e-5) fails identically with all three switches off, so it is
+  not caused by these changes.
+- `seg_fat_union_gpu` fails one run in a few with its adjoint identity at 1.1e-5 against a 1e-5 bound. Its fat path
+  does not use these changes; the old paths reach 9.7e-6 on the same test.
+- `seg_pruned::pruned_grid_fft_and_fused_residual` and `seg_warp_gpu::warp_adjoint_gpu` compared the fused plain path
+  against separate-kernel paths. They now pin the separate kernels for the comparison, and both pass:
+  - seg_pruned: pruned vs full forward 1.5e-5 against a 1e-5 bound, from the fused pad's rounding;
+  - seg_warp_gpu: the fused plain operator's adjoint mismatch (7.5e-5) was smaller than the separate one's (4.2e-4),
+    which tightened the warped bound.
+
+| switch | values (default first) | old path |
+|---|---|---|
+| `HASTY_SEG_ZERO` | `tiles` / `full` | `full` (also `SegNufft::zero_tiles`) |
+| `HASTY_SEG_FUSE_PADCROP` | `1` (staged) / `gather` / `0` | `0` (also `SegNufft::fuse_padcrop`) |
+| `HASTY_SEG_FFT_SLAB` | `auto` / `0` / planes; `HASTY_SEG_FFT_L2FRAC` 0.5, `HASTY_SEG_FFT_L2MAX` 0.85 | `0` (also `SegNufft::set_fft_slab`) |
+| `HASTY_SEG_FFT_STORE` (§23.7) | `f32` / `bfp16` … `bfp24` | `f32` (also `SegNufft::set_fft_store`) |
+| `HASTY_SEG_FFT_BFP_LAYOUT` (§23.7) | `inplace` / `dense` | — (only with a BFP store) |
+
+Notes:
+- **New adjoint kernels.** `zero_tiles` assumes the scatter stores every unsplit tile (every tile has at least one item,
+  empty ones a zero-count item) and adds only split items atomically. A new adjoint variant that accumulates everywhere
+  must zero its slot itself, or run with `HASTY_SEG_ZERO=full`.
+- The fused crop adds into x with atomics. The adjoint was already order-nondeterministic through the split tiles.
+
+Next, ranked by expected gain:
+1. **The fused x passes are latency-bound** (55–69 % of DRAM bandwidth, one block per SM). The floor for the fused
+   forward x pass is ≈ 3.9 ms against ≈ 5.8 ms now. Options: prefetch the next line's staged rows (software pipelining),
+   or an in-place stage order (one shared buffer: two blocks per SM).
+2. **Channel sub-slabs for 1 mm grids.** A 1 mm torso plane is 480 × 480 × 50 × 8 B = 92 MB, more than any target
+   card's L2. `auto` then turns slabs off. A y-pass layout with lines (channel tile) × (kx, z) would allow slabs of
+   (plane, channel tile).
+3. **The z pass (7.1 ms per transform) is now the largest single pass.** Fusing z into the tile kernels (gather /
+   scatter over kz in shared memory) is the remaining large DRAM round trip.
+
+### 23.7 BFP y ↔ z intermediates (`HASTY_SEG_FFT_STORE`, 2026-11-20)
+
+The y → z and z → y intermediates can be stored as block floating point, in place in the grid slot. Only the
+exponent bytes are extra: 29 MB at the 288 × 288 × 140 grid with 50 channels. The x ↔ y intermediates stay f32 in the
+slabs. The default is off, and that path is bit-identical to the old one.
+- Model: 21.3 → 17.95 GB per grid load + flush (bfp20 … 24 in place, 3 of 4 sectors), about 0.97 s saved per 2-D-knot
+  gradient (192 pairs); keep threshold 0.58 s.
+- On ph0001 every error of bfp24 is at the operator's own f32 one-ulp floor.
+- Timing not measured yet.
+- Details, accuracy tables and tests: research/bfp_storage.md §8.1; handoff for the timing campaign:
+  research/experiments/bfp_fft/HANDOFF.md.
+
+## 24. Step size by Lanczos (2026-11-22)
+
+**What it is.** The step α = 1 / λ̂ of P²nP (frame mode: λ_max of the normal operator N, or of M N with the circulant
+metric M; knot / velocity mode: λ_max of M H with the Gauss–Newton Hessian H) was estimated by a plain power iteration
+from a fixed start (frame mode 12 iterations on set 0 and the middle set, for N *and* M N even when only one is used;
+velocity mode `--lam-iters` 12 per stage, + 3 × 8 with coil sampling). No safety margin, and the power iteration
+always underestimates. Now `--lam-method lanczos[:K]|power` (default `lanczos` = 8 steps; `power` = the old path,
+unchanged). Code: `hasty-recon/src/lanczos.rs` (driver, tridiagonal Ritz solve, dense CPU test),
+`P2np::step_norm_with` / `step_norm_sampled_with` (frame), `VelProblem::lambda_lanczos` / `lambda_lanczos_host`
+(velocity), recon_p2np (switch, `--lam-warm`, `--lam-compare`), opbench (`--lam-method` in the setup projection).
+
+**Method.** M N is self-adjoint in the M⁻¹ inner product, so Lanczos runs in that inner product without ever applying
+M⁻¹: carry q_j (M⁻¹-orthonormal) and p_j = M⁻¹ q_j; per step w = N q_j, α_j = Re q_jᴴ w, s = w − α_j p_j − β_j p_{j−1},
+r = M s, β_{j+1} = √(Re sᴴ r), q_{j+1} = r / β_{j+1}, p_{j+1} = s / β_{j+1} — one N and one M per step, four set-sized
+vectors (three without the metric; the power iteration used three). The velocity objective uses the equivalent form
+r = M w − α q_j − β q_{j−1} with M⁻¹ only inside the norm (as its power iteration did): device memory stays at the power
+iteration's two parameter stacks + chunk scratch, q_{j−1} goes to host memory (one stack down and up per step). No
+reorthogonalisation (K ≤ 10, only the top Ritz value). Output: the top Ritz value θ of the K × K tridiagonal and the
+residual bound b = β_{K+1} |s_K| of its Ritz pair; α = 1 / (θ + b). θ ≤ λ_max always; b brackets *an* eigenvalue, which
+is λ_max once the top Ritz value has separated (true in every case below). Checked on dense 40 × 40 problems against
+eig, plain and metric, p- and q-form identical (`cargo test -p hasty-recon --lib lanczos`).
+Unused λ: λ_max(N) is computed only when a non-metric precondition is in `--precond`, λ_max(M N) only for a metric one.
+Warm start (velocity): with `--lam-warm on|auto` the K Lanczos vectors are kept on the host and the next stage starts
+from this stage's top Ritz vector (auto: only when (K + 1) stacks fit min(HASTY_LAM_WARM_GB = 4, ¼ of MemAvailable) —
+not at the full shape, where a stack is several GiB).
+
+**Validation** (`research/experiments/lanczos/`, logs + script): data ph0001 sim_flow_10min, grid-scale 0.5
+(128 × 72 × 60), `--keep 16`, 8 virtual coils, L = 6 segments, GNL + concomitant degree 4, warm 3. Relative error
+against 100 power iterations (reference), applications of the operator in brackets:
+
+| operator | power 12 [12] | Lanczos 4: θ / θ+b [4] | Lanczos 6 | Lanczos 8 |
+|---|---|---|---|---|
+| frame N (set 0 + middle) | −1.3e-2 | −2.8e-1 / −1.0e-1 | −2.6e-2 / +8.4e-2 | −4.9e-4 / **+1.6e-2** |
+| frame M N | −1.9e-3 | −7.1e-2 / +9.1e-2 | −2.7e-3 / +2.8e-2 | −8.3e-5 / **+5.9e-3** |
+| velocity M H, stage 0 (ref + high VENC) | −2.4e-2 | −8.8e-2 / +4.0e-2 | −2.8e-2 / +4.2e-2 | −7.1e-3 / **+1.8e-2** |
+| velocity M H, stage 1 (all encodes), cold | −2.0e-2 | −8.1e-2 / +3.4e-2 | −2.1e-2 / +6.0e-2 | −9.0e-4 / **+1.5e-2** |
+| stage 1, warm from stage 0's Ritz vector | | −8.7e-3 / +3.6e-2 | −5.5e-4 / +1.3e-2 | |
+
+(The power-12 column for M N in frame mode is the old ‖M N v‖ growth estimate, not a Rayleigh quotient.)
+Read: the old step was 0.2–2.4 % too large (unguarded); Lanczos 8 gives an upper estimate 0.6–1.8 % above the
+reference with ⅔ of the operator applications per λ (velocity) and needs only the λ that is used (frame: 16 instead of
+48 set applications with one precondition, 32 instead of 48 with a metric and a non-metric one). Lanczos 6 is cheaper but its bound is loose
+(+3–8 %: a step that much smaller), hence the default 8.
+
+**Short recons** (3–4 iterations, same data; Lanczos 6, power 12): frame mode ZMSHR1-M f = 2.7231e14 vs 2.7234e14 at
+iteration 3, ZMSHR1 2.0443e14 vs 2.0444e14, velocity RMSE equal to 3 digits; velocity knots (4 × 8 knots, VENC
+continuation 2 + 2, ZMSHR1-M): λ 4.757e7 / 4.430e7 vs power 4.465e7 / 4.288e7, f after 4 iterations 4.1838e13 vs
+4.1795e13, velocity RMSE 0.695 vs 0.689 m/s (the 3–6 % smaller step; the initial states already differ by 0.003 m/s
+between the two runs). Stable, no change in behaviour beyond the step.
+λ time at this scale: frame 0.1 s vs 0.2 s (negligible here, segment build dominates); velocity stage 0 11.6 s vs
+21.7 s, stage 1 19.6 s vs 36.5 s (6 vs 12 Hessian-vector products).
+
+**Projection.** opbench's setup term was "15 power iterations on two sets" (645 s in the p17/p18 velocity-knot
+projection, arch_targets.md); recon_p2np actually ran 2 × 12 on two sets (N and M N). With Lanczos 8 on M N only:
+16 set normal operators instead of 30 projected (→ ≈ 344 s) or 48 run (≈ 1032 s at the same per-set cost).
+Velocity stages: 8 instead of 12 Hessian-vector products per stage (one Hv ≈ one gradient).
+
+**Open.** `knotncg::power_lmax` (splinerecon, finite-difference prior Hessian) and `cg::power_norm` (opval) still use
+the power iteration. The residual bound could be tightened (gap-based Kato–Temple bound) but needs an upper bound on
+λ_2, which Lanczos does not give. Warm start at the full velocity shape would need the basis in BFP host storage or a
+second pass; not done. The host-state velocity path (`lambda_lanczos_host`) needs one more host stack than the power
+iteration (three instead of two) — inside the planner's 4-stack host state for f32 stores, not for BFP stores.

@@ -1,0 +1,27 @@
+kernaudit: NVRTC 13.0, 608 jobs on 4 threads, out /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/arch_audit/out_p2base
+  25/608
+  50/608
+  75/608
+  100/608
+  125/608
+  150/608
+  175/608
+  200/608
+  225/608
+  250/608
+  275/608
+  300/608
+  325/608
+  350/608
+  375/608
+  400/608
+  425/608
+  450/608
+  475/608
+  500/608
+  525/608
+  550/608
+  575/608
+  600/608
+  608/608
+kernaudit: wrote 608 rows to /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/arch_audit/out_p2base

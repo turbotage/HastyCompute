@@ -1,0 +1,33 @@
+=== ph_static_o0: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 0 (2026-11-20 16:46:58)
+locked 16:52:22; power limit 300.00 W
+ph0001 scan /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: image [254, 144, 114] (2.0 mm voxels), 32 coils, 53144 readouts × 3990 ADC samples, 20 frames; loaded in 2.6 s
+  virtual coils 10 of 32: signal-region energy kept 0.926, eigenvalue ratio last / first 0.042; 2175329 support voxels
+
+thread 'main' (1182540) panicked at crates/hasty-recon/src/data.rs:562:37:
+range start index 6639360 out of range for slice of length 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 0"
+	User time (seconds): 40.70
+	System time (seconds): 3.59
+	Percent of CPU this job got: 126%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:35.06
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 4897528
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2436843
+	Voluntary context switches: 13037
+	Involuntary context switches: 452
+	Swaps: 0
+	File system inputs: 1005920
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 16:52:57

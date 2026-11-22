@@ -6,7 +6,7 @@ use cudarc::driver::{
 };
 use hasty_cuda::{CompileSettings, Device, Real};
 
-use crate::codegen::{generate, AxisCfg, DiagOp, KernelFormat};
+use crate::codegen::{generate, AxisCfg, BfpIo, DiagOp, IoHook, KernelFormat};
 use crate::factor::factorize;
 
 #[derive(Debug, thiserror::Error)]
@@ -108,6 +108,23 @@ pub struct LaunchPtrs {
     pub nppost: i32,
     pub pre: [u64; 4],
     pub post: [u64; 4],
+    /// BFP input of a pass built with [`AxisPlan::from_spec_bfp`]: (mantissa words, exponent bytes), offset to the
+    /// launch's first block
+    pub bin: [u64; 2],
+    /// BFP output: (mantissa words, exponent bytes)
+    pub bout: [u64; 2],
+    /// BFP output: lines with `la mod bch[0] ≥ bch[1]` are stored as zeros (unused channels); [0, 0]: every line
+    pub bch: [i64; 2],
+}
+
+/// One extra kernel argument of a hooked pass ([`IoHook::params`], [`AxisPlan::launch_ext`]), in parameter order.
+#[derive(Clone, Copy, Debug)]
+pub enum KArg {
+    /// a device pointer
+    Ptr(u64),
+    I32(i32),
+    I64(i64),
+    F32(f32),
 }
 
 /// Chirp and B̂ tables of a Bluestein pass (`bluestein.rs`).
@@ -136,6 +153,11 @@ pub struct AxisPlan<R: Real> {
     arange: Option<CudaSlice<i32>>,
     /// per-line entry ranges ([`AxisCfg::lrange_in`] / `lrange_out`, [`AxisPlan::set_lrange`]): table, div, stride
     lrange: Option<(CudaSlice<i32>, i64, i64)>,
+    /// every line group has the same `a` range (set_arange): sub-range launches ([`AxisPlan::launch_lines`]) see the
+    /// same table entries whatever their first group
+    arange_uniform: bool,
+    /// BFP block strides (input entry, input line group, output entry, output line group; [`crate::BfpIo`])
+    pub bfp_strides: [i64; 4],
 }
 
 const DEFAULT_SMEM: usize = 48 * 1024;
@@ -266,7 +288,50 @@ impl<R: Real> AxisPlan<R> {
     }
 
     pub fn from_spec(dev: &Device, spec: &AxisSpec) -> Result<Self, FftError> {
-        Self::from_spec_impl(dev, spec, false, false, false)
+        Self::from_spec_impl(dev, spec, false, false, false, None, (None, None))
+    }
+
+    /// As [`from_spec`](Self::from_spec) (`ranged`: as [`from_spec_ranged`](Self::from_spec_ranged) /
+    /// [`from_spec_ranged_lines`](Self::from_spec_ranged_lines) with `lin` / `lout`) with the input and / or the output
+    /// in a block-floating-point buffer ([`BfpIo`], [`AxisCfg::bfp_in`] / [`AxisCfg::bfp_out`]): f32 strided passes of
+    /// 16-line tiles and at least two radix stages, no diagonals or accumulation on the BFP side. Set the block strides
+    /// with [`bfp_strides`](Self::bfp_strides) and pass the buffers in [`LaunchPtrs::bin`] / [`LaunchPtrs::bout`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_spec_bfp(dev: &Device, spec: &AxisSpec, ranged: bool, lin: bool, lout: bool, bin: Option<BfpIo>, bout: Option<BfpIo>) -> Result<Self, FftError> {
+        let bad = |m: &str| Err(FftError::Invalid(format!("BFP pass (n = {}): {m}", spec.n)));
+        if R::IS_F64 {
+            return bad("f32 transforms only");
+        }
+        if spec.contiguous || spec.conv {
+            return bad("strided, non-conv passes only");
+        }
+        if bin.is_some() && (!spec.pre.is_empty() || spec.poly_pre) {
+            return bad("no pre diagonals on a BFP input");
+        }
+        if bout.is_some() && (!spec.post.is_empty() || spec.poly_post || spec.accumulate) {
+            return bad("no post diagonals or accumulation on a BFP output");
+        }
+        if [bin, bout].iter().flatten().any(|b| !(8..=24).contains(&b.bits)) {
+            return bad("mantissa bits outside 8 ..= 24");
+        }
+        if (lin || lout) && !ranged {
+            return bad("per-line ranges need a ranged pass");
+        }
+        let a = &spec.addr;
+        if (bin.is_some_and(|b| b.inplace) && a.in_la != 1) || (bout.is_some_and(|b| b.inplace) && a.out_la != 1) || ([bin, bout].iter().flatten().any(|b| b.inplace) && a.la_cnt % 16 != 0) {
+            return bad("in-place BFP needs stride-1 lines in whole 16-line tiles");
+        }
+        Self::from_spec_impl(dev, spec, ranged, lin, lout, None, (bin, bout))
+    }
+
+    /// As [`from_spec`](Self::from_spec) with caller code fused into the pass ([`IoHook`]: generated input and / or a
+    /// reducing epilogue; strided passes of a mixed-radix length with more than one stage). Launch with
+    /// [`launch_ext`](Self::launch_ext) and the hook's extra arguments.
+    pub fn from_spec_hooked(dev: &Device, spec: &AxisSpec, hook: IoHook) -> Result<Self, FftError> {
+        if spec.contiguous || spec.conv {
+            return Err(FftError::Invalid("IoHook: strided, non-conv passes only".into()));
+        }
+        Self::from_spec_impl(dev, spec, false, false, false, Some(hook), (None, None))
     }
 
     /// As [`from_spec`](Self::from_spec) for a strided pass whose line groups `lb` each transform only a wrapped range
@@ -275,7 +340,7 @@ impl<R: Real> AxisPlan<R> {
         if spec.contiguous {
             return Err(FftError::Invalid("a-range pruning needs a strided pass".into()));
         }
-        Self::from_spec_impl(dev, spec, true, false, false)
+        Self::from_spec_impl(dev, spec, true, false, false, None, (None, None))
     }
 
     /// As [`from_spec_ranged`](Self::from_spec_ranged), additionally restricting the entries read (`lin`) or written
@@ -284,7 +349,7 @@ impl<R: Real> AxisPlan<R> {
         if spec.contiguous {
             return Err(FftError::Invalid("a-range pruning needs a strided pass".into()));
         }
-        Self::from_spec_impl(dev, spec, true, lin, lout)
+        Self::from_spec_impl(dev, spec, true, lin, lout, None, (None, None))
     }
 
     /// Per-line entry ranges `(head, tail)` (≤ n), indexed q = lb · stride + la / div (see [`AxisCfg::lrange_in`]); the
@@ -307,12 +372,17 @@ impl<R: Real> AxisPlan<R> {
         }
         let flat: Vec<i32> = ranges.iter().flat_map(|&(h, t)| [h as i32, t as i32]).collect();
         self.arange = Some(stream.clone_htod(&flat)?);
-        let longest = ranges.iter().map(|&(h, t)| h + t).max().unwrap_or(0);
-        self.grid.0 = u32::try_from(longest.div_ceil(self.cfg.lpb).max(1)).map_err(|_| FftError::Invalid(format!("set_arange: {longest} lines exceed the grid x limit")))?;
+        self.arange_uniform = ranges.iter().all(|r| *r == ranges[0]);
+        // BFP passes: tiles aligned in the flat line index, the range rounded out to whole tiles (codegen)
+        let (lp, nt) = (self.cfg.lpb, self.addr.la_cnt.div_ceil(self.cfg.lpb));
+        let tiles = |(h, t): (usize, usize)| if self.cfg.bfp() { let th = h.div_ceil(lp); let ts = if t > 0 { (self.addr.la_cnt - t) / lp } else { nt }; th + nt - ts.max(th) } else { (h + t).div_ceil(lp) };
+        let longest = ranges.iter().map(|&r| tiles(r)).max().unwrap_or(0);
+        self.grid.0 = u32::try_from(longest.max(1)).map_err(|_| FftError::Invalid(format!("set_arange: {longest} lines exceed the grid x limit")))?;
         Ok(())
     }
 
-    fn from_spec_impl(dev: &Device, spec: &AxisSpec, arange: bool, lrange_in: bool, lrange_out: bool) -> Result<Self, FftError> {
+    #[allow(clippy::too_many_arguments)]
+    fn from_spec_impl(dev: &Device, spec: &AxisSpec, arange: bool, lrange_in: bool, lrange_out: bool, hook: Option<IoHook>, (bfp_in, bfp_out): (Option<BfpIo>, Option<BfpIo>)) -> Result<Self, FftError> {
         let n = spec.n;
         if spec.n_in + spec.n_in_tail > n || spec.n_out + spec.n_out_tail > n || spec.n_in == 0 || spec.n_out == 0 {
             return Err(FftError::Invalid(format!(
@@ -375,8 +445,19 @@ impl<R: Real> AxisPlan<R> {
             arange,
             lrange_in,
             lrange_out,
+            hook,
+            bfp_in,
+            bfp_out,
+            bfp_nopad: false,
         };
-        let smem = if blue { 2 * m * lpb * 2 * R::BYTES } else { cfg.smem_bytes(R::BYTES) };
+        let mut cfg = cfg;
+        let mut smem = if blue { 2 * m * lpb * 2 * R::BYTES } else { cfg.smem_bytes(R::BYTES) };
+        if cfg.bfp() && !blue && smem > max_smem {
+            // BFP passes pad each shared-memory entry by one complex (bank conflicts of the codec's runs); without the
+            // padding the tile still fits wherever the f32 pass fits
+            cfg.bfp_nopad = true;
+            smem = cfg.smem_bytes(R::BYTES);
+        }
         if smem > max_smem {
             return Err(FftError::SharedMemory {
                 n,
@@ -386,6 +467,12 @@ impl<R: Real> AxisPlan<R> {
         }
         if blue && arange {
             return Err(FftError::Invalid(format!("a-range pruning is not implemented for the Bluestein length {n}")));
+        }
+        if cfg.hook.is_some() && (blue || cfg.passes() < 2) {
+            return Err(FftError::Invalid(format!("IoHook: needs a mixed-radix length of more than one stage (n = {n})")));
+        }
+        if cfg.bfp() && (blue || cfg.passes() < 2 || cfg.lpb != 16) {
+            return Err(FftError::Invalid(format!("BFP pass: needs a mixed-radix length of more than one stage and 16-line tiles (n = {n}, {} lines per tile)", cfg.lpb)));
         }
         let src = if blue { crate::bluestein::generate(&cfg, m, &cfg.radices) } else { generate(&cfg) };
         // the generated source fully determines the kernel; the name only labels cache files / dumps
@@ -403,7 +490,7 @@ impl<R: Real> AxisPlan<R> {
         ) + &format!(
             "{:?}p{}q{}",
             spec.kfmt, spec.poly_pre as u8, spec.poly_post as u8
-        ) + &if spec.n_in_tail + spec.n_out_tail > 0 { format!("_t{}u{}", spec.n_in_tail, spec.n_out_tail) } else { String::new() } + &if blue { format!("_blu{m}") } else { String::new() } + if arange { "_ar" } else { "" } + if lrange_in { "_lri" } else { "" } + if lrange_out { "_lro" } else { "" };
+        ) + &if spec.n_in_tail + spec.n_out_tail > 0 { format!("_t{}u{}", spec.n_in_tail, spec.n_out_tail) } else { String::new() } + &if blue { format!("_blu{m}") } else { String::new() } + if arange { "_ar" } else { "" } + if lrange_in { "_lri" } else { "" } + if lrange_out { "_lro" } else { "" } + if cfg.hook.is_some() { "_hook" } else { "" } + &[("bi", bfp_in), ("bo", bfp_out)].iter().filter_map(|(t, b)| b.map(|b| format!("_{t}{}{}{}", b.bits, if b.compact { "c" } else { "" }, if b.inplace { "i" } else { "" }))).collect::<String>();
         let func = dev.load_function(
             &name,
             &src,
@@ -453,6 +540,8 @@ impl<R: Real> AxisPlan<R> {
             split: LineSplit::default(),
             arange: None,
             lrange: None,
+            arange_uniform: false,
+            bfp_strides: [0; 4],
         })
     }
 
@@ -462,10 +551,38 @@ impl<R: Real> AxisPlan<R> {
     }
 
     pub fn launch(&self, stream: &Arc<CudaStream>, p: &LaunchPtrs) -> Result<(), FftError> {
+        self.launch_ext(stream, p, &[])
+    }
+
+    /// [`launch`](Self::launch) with the extra arguments of a hooked pass ([`IoHook::params`], in order)
+    pub fn launch_ext(&self, stream: &Arc<CudaStream>, p: &LaunchPtrs, extra: &[KArg]) -> Result<(), FftError> {
+        self.launch_lines(stream, p, extra, None)
+    }
+
+    /// [`launch_ext`](Self::launch_ext) over a sub-range of the line groups: `sub = (lb_cnt, split)` replaces the
+    /// plan's line-group count and split for this launch (the caller offsets `p.inp` / `p.out` to the first group;
+    /// e.g. one slab of z planes of a pass). `arange` passes only with uniform ranges, and per-line tables
+    /// (`lrange`) only when they do not depend on the group (stride 0).
+    pub fn launch_lines(&self, stream: &Arc<CudaStream>, p: &LaunchPtrs, extra: &[KArg], sub: Option<(usize, LineSplit)>) -> Result<(), FftError> {
+        if (self.cfg.hook.is_some() || !extra.is_empty()) && extra.len() != self.cfg.hook.as_ref().map_or(0, |h| h.params.matches(',').count()) {
+            return Err(FftError::Invalid(format!("launch_ext: {} extra arguments for the hook's parameters", extra.len())));
+        }
+        if sub.is_some() && ((self.cfg.arange && !self.arange_uniform) || self.lrange.as_ref().is_some_and(|l| l.2 != 0)) {
+            return Err(FftError::Invalid("launch_lines: per-group a-ranges or line tables".into()));
+        }
         let (twm, _g1) = self.tw_m.device_ptr(stream);
         let (twp, _g2) = self.tw_p.device_ptr(stream);
         let a = &self.addr;
-        let (la_cnt, lb_cnt) = (a.la_cnt as i64, a.lb_cnt as i64);
+        let (la_cnt, lb_cnt) = (a.la_cnt as i64, sub.map_or(a.lb_cnt, |s| s.0) as i64);
+        let split = sub.map_or(self.split, |s| s.1);
+        let grid = match sub {
+            Some((n, _)) => {
+                let g = launch_grid(self.cfg.contiguous, a.la_cnt, n, self.cfg.lpb)?;
+                // a-range passes: grid x from the (uniform) range
+                if self.cfg.arange { (self.grid.0, g.1, g.2) } else { g }
+            }
+            None => self.grid,
+        };
         let (ila, ilb, isn, ola, olb, osn) = (
             a.in_la as i64,
             a.in_lb as i64,
@@ -475,7 +592,7 @@ impl<R: Real> AxisPlan<R> {
             a.out_sn as i64,
         );
         let cfg = LaunchConfig {
-            grid_dim: self.grid,
+            grid_dim: grid,
             block_dim: (self.cfg.block_threads() as u32, 1, 1),
             shared_mem_bytes: self.smem,
         };
@@ -503,7 +620,7 @@ impl<R: Real> AxisPlan<R> {
                 .arg(&ola)
                 .arg(&olb)
                 .arg(&osn);
-            let sp = &self.split;
+            let sp = &split;
             let sv: [i64; 7] = if sp.lb1_cnt > 0 {
                 [sp.lb1_cnt as i64, sp.lb1_hi as i64, sp.lb1_gap as i64, sp.lb2_hi as i64, sp.lb2_gap as i64, sp.in_lb2 as i64, sp.out_lb2 as i64]
             } else {
@@ -527,6 +644,35 @@ impl<R: Real> AxisPlan<R> {
             };
             if let Some(((lp, _), d, q)) = &lr {
                 b.arg(lp).arg(d).arg(q);
+            }
+            let bs = &self.bfp_strides;
+            let bch: (i64, i64) = if p.bch[0] > 0 { (p.bch[0], p.bch[1]) } else { (1, 1) };
+            let bch_ref = (&bch.0, &bch.1);
+            // block strides: per entry always, per line group when there is more than one group
+            let unset = |e: i64, g: i64| e == 0 || (g == 0 && lb_cnt > 1);
+            if (self.cfg.bfp_in.is_some() && unset(bs[0], bs[1])) || (self.cfg.bfp_out.is_some() && unset(bs[2], bs[3])) {
+                return Err(FftError::Invalid("BFP pass launched without its block strides (bfp_strides)".into()));
+            }
+            if self.cfg.bfp_in.is_some() {
+                if p.bin[0] == 0 || p.bin[1] == 0 {
+                    return Err(FftError::Invalid("BFP-input pass launched without its buffer".into()));
+                }
+                b.arg(&p.bin[0]).arg(&p.bin[1]).arg(&bs[0]).arg(&bs[1]);
+            }
+            if self.cfg.bfp_out.is_some() {
+                if p.bout[0] == 0 || p.bout[1] == 0 {
+                    return Err(FftError::Invalid("BFP-output pass launched without its buffer".into()));
+                }
+                b.arg(&p.bout[0]).arg(&p.bout[1]).arg(&bs[2]).arg(&bs[3]);
+                b.arg(bch_ref.0).arg(bch_ref.1);
+            }
+            for x in extra {
+                match x {
+                    KArg::Ptr(v) => b.arg(v),
+                    KArg::I32(v) => b.arg(v),
+                    KArg::I64(v) => b.arg(v),
+                    KArg::F32(v) => b.arg(v),
+                };
             }
             let guards = self.blue.as_ref().map(|t| (t.ch.device_ptr(stream), t.bh_f.device_ptr(stream), t.bh_i.device_ptr(stream)));
             if let Some(((ch, _), (bf, _), (bi, _))) = &guards {

@@ -1,0 +1,108 @@
+=== t05_seg_vs: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/wsp/bin/seg_vs --nocapture --test-threads 1 (2026-11-21 23:59:35)
+locked 23:59:35; power limit / draw / sm clock / memory used: 450.00 W, 63.35 W, 2565 MHz, 240 MiB
+
+running 5 tests
+test vs_autotune_choice ... Static: autotune tile 1.721 ms, vs 0.576 ms -> Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }))
+Knot1d: autotune tile 0.958 ms, vs 0.447 ms -> Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }))
+ok
+test vs_env_case ... ok
+test vs_knot_orders ... knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 5.7e-6 (tile shapes 5.2e-6), adjointness 1.1e-7 (tile 1.1e-7)
+knot1d o0 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.1e-5 (tile shapes 5.7e-5), adjointness 2.0e-6 (tile 2.3e-6)
+knot1d o0 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.1e-5 (tile shapes 5.7e-5), adjointness 2.0e-6 (tile 2.3e-6)
+knot1d o0 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.1e-5 (tile shapes 5.7e-5), adjointness 2.0e-6 (tile 2.3e-6)
+knot1d o0 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 6.1e-5 (tile shapes 5.7e-5), adjointness 2.0e-6 (tile 2.3e-6)
+knot2d o0 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 5.5e-6 (tile shapes 5.0e-6), adjointness 8.6e-8 (tile 8.8e-8)
+knot2d o0 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 5.5e-6 (tile shapes 5.0e-6), adjointness 8.6e-8 (tile 8.8e-8)
+knot2d o0 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 5.5e-6 (tile shapes 5.0e-6), adjointness 8.6e-8 (tile 8.8e-8)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 8x4 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.9e-6), adjointness 2.0e-7 (tile 2.0e-7)
+knot1d o1 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 8.0e-5 (tile shapes 8.1e-5), adjointness 1.3e-6 (tile 1.8e-6)
+knot1d o1 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 8.0e-5 (tile shapes 8.1e-5), adjointness 1.3e-6 (tile 1.8e-6)
+knot1d o1 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 8.0e-5 (tile shapes 8.1e-5), adjointness 1.3e-6 (tile 1.8e-6)
+knot1d o1 6(3)x5 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 8.0e-5 (tile shapes 8.1e-5), adjointness 1.3e-6 (tile 1.8e-6)
+knot2d o1 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.8e-6), adjointness 1.0e-7 (tile 1.1e-7)
+knot2d o1 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.8e-6), adjointness 1.0e-7 (tile 1.1e-7)
+knot2d o1 4x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.9e-6 (tile shapes 6.8e-6), adjointness 1.0e-7 (tile 1.1e-7)
+ok
+test vs_residual_sink_group ... Static: residual 7.4e-6, sink 7.4e-6, group 7.4e-6
+Knot1d: residual 7.2e-6, sink 7.2e-6, group 0.0e0
+ok
+test vs_static_orders ... static o0 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 5, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 4.6e-5 (tile shapes 4.0e-5), adjointness 6.3e-7 (tile 6.1e-7)
+static o0 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 5, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 4.6e-5 (tile shapes 4.0e-5), adjointness 6.3e-7 (tile 6.1e-7)
+static o0 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 7, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 4.6e-5 (tile shapes 4.0e-5), adjointness 6.3e-7 (tile 6.1e-7)
+static o0 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 7, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 4.6e-5 (tile shapes 4.0e-5), adjointness 6.3e-7 (tile 6.1e-7)
+static o0 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.1e-6), adjointness 4.8e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.1e-6), adjointness 4.8e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.1e-6), adjointness 4.8e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.1e-6), adjointness 4.8e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.0e-6), adjointness 4.7e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.0e-6), adjointness 4.7e-8 (tile 4.8e-8)
+static o0 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 5.6e-6 (tile shapes 5.0e-6), adjointness 4.7e-8 (tile 4.8e-8)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o0 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 7.1e-5 (tile shapes 6.7e-5), adjointness 2.5e-7 (tile 3.8e-7)
+static o1 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 5, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.4e-5 (tile shapes 6.1e-5), adjointness 8.1e-7 (tile 6.9e-7)
+static o1 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 5, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.4e-5 (tile shapes 6.1e-5), adjointness 8.1e-7 (tile 6.9e-7)
+static o1 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 7, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 6.4e-5 (tile shapes 6.1e-5), adjointness 8.1e-7 (tile 6.9e-7)
+static o1 10x10 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 7, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 6.4e-5 (tile shapes 6.1e-5), adjointness 8.1e-7 (tile 6.9e-7)
+static o1 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.4e-7 (tile 1.3e-7)
+static o1 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.4e-7 (tile 1.3e-7)
+static o1 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.4e-7 (tile 1.3e-7)
+static o1 12(4)x3 VsGeom { tx: 2, ty: 4, tz: 8, smax: 32 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.4e-7 (tile 1.3e-7)
+static o1 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.0e-7 (tile 8.5e-8)
+static o1 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.0e-7 (tile 8.5e-8)
+static o1 12(4)x3 VsGeom { tx: 4, ty: 2, tz: 8, smax: 48 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.1e-6 (tile shapes 7.1e-6), adjointness 1.0e-7 (tile 8.5e-8)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 1, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 0 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 2, vxpad: 0 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 1, vxpad: 1 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+static o1 20x1 VsGeom { tx: 4, ty: 4, tz: 16, smax: 64 } VsCfg { nwc: 2, nws: 4, vxpad: 1 }: vs forward vs tile kv 0 7.3e-5 (tile shapes 7.3e-5), adjointness 2.0e-6 (tile 2.0e-6)
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.36s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/wsp/bin/seg_vs --nocapture --test-threads 1"
+	User time (seconds): 15.37
+	System time (seconds): 1.15
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:16.40
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 211200
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 95313
+	Voluntary context switches: 3301
+	Involuntary context switches: 274
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 14312
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 23:59:52; power limit at end 450.00 W

@@ -1,0 +1,80 @@
+chain5 start Thu Nov 19 11:42:23 PM CET 2026
++ SP=/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad
++ OUT=/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout
++ BIN=/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3
++ cd /home/turbotage/Documents/GitHub/HastyCompute/rustlib
++ COMMON='--models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow'
++ declare -A C
++ C[k1_lo]='--order 3 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare'
++ C[k2_lo]='--order 3 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare'
++ C[k1_lo_o2]='--order 2 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare'
++ C[k2_lo_o2]='--order 2 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare'
++ C[k1_hi]='--order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --kl-compare'
++ C[k2_hi]='--order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --kl-compare'
++ C[k1_hi_cb2]='--order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 2 --kl-compare'
++ C[k1_hi_cb10]='--order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 10 --max-grid-gb 10 --kl-compare'
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_lo.done ']'
+++ date
++ echo '=== k1_lo: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare (Thu Nov 19 11:42:23 PM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_lo.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_lo.done ']'
+++ date
++ echo '=== k2_lo: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare (Thu Nov 19 11:44:28 PM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_lo.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_lo_o2.done ']'
+++ date
++ echo '=== k1_lo_o2: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 2 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare (Thu Nov 19 11:50:37 PM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 2 --temporal cubic --knot --frames 20 --scan-min 0.44 --reps 3 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_lo_o2.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_lo_o2.done ']'
+++ date
++ echo '=== k2_lo_o2: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 2 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare (Thu Nov 19 11:53:52 PM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 2 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_lo_o2.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi.done ']'
+++ date
++ echo '=== k1_hi: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --kl-compare (Fri Nov 20 12:02:48 AM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_hi.done ']'
+++ date
++ echo '=== k2_hi: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --kl-compare (Fri Nov 20 12:10:03 AM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k2_hi.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi_cb2.done ']'
+++ date
++ echo '=== k1_hi_cb2: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 2 --kl-compare (Fri Nov 20 12:18:54 AM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 2 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi_cb2.done
++ for k in ${CASES:-k1_lo k2_lo k1_lo_o2 k2_lo_o2 k1_hi k2_hi k1_hi_cb2 k1_hi_cb10}
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/STOP ']'
++ '[' -e /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi_cb10.done ']'
+++ date
++ echo '=== k1_hi_cb10: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 10 --max-grid-gb 10 --kl-compare (Fri Nov 20 12:27:15 AM CET 2026)'
++ flock /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gpu.lock timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl3 --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --temporal cubic --knot --frames 20 --scan-min 4.4 --reps 1 --cb-cap 10 --max-grid-gb 10 --kl-compare
++ echo 'exit 0'
++ touch /home/turbotage/Documents/GitHub/HastyCompute/research/experiments/knot_layout/kl3_k1_hi_cb10.done
+chain5 end Fri Nov 20 12:39:20 AM CET 2026

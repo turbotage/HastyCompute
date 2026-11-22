@@ -297,3 +297,67 @@ fn knot_velocity_model_gradient_streaming_and_recovery() {
     assert!(a_err < 0.05, "residual phase not recovered: rel error {a_err:.3e}");
     assert!(ev1 < 0.05 * ev0, "velocity not recovered with the residual phase: {ev0:.4} → {ev1:.4}");
 }
+
+/// The at-knots gradient through a gradient sink (`Objective::gradient_host_sink`, research/sample_kernels.md §20):
+/// into an f32 sink it equals the streamed `gradient_host` up to the operator's run-to-run spread (the same additions in the same order), also
+/// with coil groups (several vjp passes per set) and the static-tissue anchor; into a BFP sink of b bits the
+/// accumulated chunks carry ≈ √(sets) roundings of 2^−b (bound 4 · √(sets + 1) · 2^−b of ‖g‖).
+#[test]
+fn knot_velocity_gradient_sink() {
+    use hasty_recon::bfpstate::{Buf, GradSink, StackSink};
+    let dev = Device::new(0).unwrap();
+    let st = dev.default_stream();
+    let kern = Arc::new(Kernels::new(&dev).unwrap());
+    let s = VelSpec::at_knots(DIMS, kenc(), KR, MC, None);
+    let (tr, stat) = truth(&s);
+    let mut pb = build(&dev, &kern, &s, &tr, 0x53);
+    let model = VelModel::new(&dev, &st, s.clone()).unwrap();
+    let ys = std::mem::take(&mut pb.ys);
+    let mut pr = VelProblem::new(&st, kern.clone(), &mut pb.sets, ys, model, None).unwrap();
+    assert!(pr.has_gradient_sink(), "at-knots mode has a gradient sink");
+    let lens = s.lens();
+    let mut rng = Rng(0x7a);
+    let mut start = tr.clone();
+    for v in start.v.iter_mut() {
+        for x in v.iter_mut() {
+            for c in 0..3 {
+                x[c] += 0.1 * rng.n();
+            }
+        }
+    }
+    let th = Stack { v: start.pack(&s).iter().map(|c| st.clone_htod(c).unwrap()).collect() };
+    let thh = host_of(&st, &th);
+    for (case, groups, anchor) in [("plain", None, false), ("coil groups", Some(vec![(vec![0], 1.0), (vec![1, 2], 1.0)]), false), ("anchor", None, true)] {
+        pr.cur_groups = groups;
+        if anchor {
+            pr.set_anchor(&st, &stat, 0.3).unwrap();
+        }
+        let mut gh = HostStack::zeros(&lens);
+        let f = pr.gradient_host(&st, &thh, &mut gh).unwrap();
+        // the operator's run-to-run spread (atomic adds in the adjoint): the floor of every comparison
+        let mut gh2 = HostStack::zeros(&lens);
+        let f2 = pr.gradient_host(&st, &thh, &mut gh2).unwrap();
+        let spread = rel_host(&gh2, &gh);
+        let fspread = (f2 / f - 1.0).abs();
+        // f32 sink: the same additions in the same order, i.e. equal up to that spread
+        let mut gs = HostStack::zeros(&lens);
+        let fs = pr.gradient_host_sink(&st, &thh, &mut StackSink(&mut gs)).unwrap().expect("sink path");
+        let e32 = rel_host(&gs, &gh);
+        let b32 = (4.0 * spread).max(1e-6);
+        eprintln!("gradient sink ({case}): f32 sink f rel {:.1e} (spread {fspread:.1e}), g rel {e32:.1e} (run-to-run spread {spread:.1e}, bound {b32:.1e})", (fs / f - 1.0).abs());
+        assert!((fs / f - 1.0).abs() < (4.0 * fspread).max(1e-8) && e32 < b32, "{case}: f32 sink differs (f {fs:e} vs {f:e}, g rel {e32:e})");
+        // BFP sinks
+        for b in [24u32, 16] {
+            let mut bb = Buf::zeros(Some(hasty_bfp::Bfp::new(b)), &lens);
+            let fb = pr.gradient_host_sink(&st, &thh, &mut bb).unwrap().expect("sink path");
+            let mut back = HostStack::zeros(&lens);
+            for t in 0..lens.len() {
+                assert!(bb.get(t, back.chunk_mut(t)).unwrap());
+            }
+            let e = rel_host(&back, &gh);
+            let bound = 4.0 * ((s.ne() + 1) as f64).sqrt() * 2f64.powi(-(b as i32)) + 4.0 * spread;
+            eprintln!("gradient sink ({case}): bfp{b} g rel {e:.2e} (bound {bound:.1e}), f {:.1e} rel", (fb / f - 1.0).abs());
+            assert!(e < bound && (fb / f - 1.0).abs() < (4.0 * fspread).max(1e-6), "{case}: bfp{b} sink g rel {e:e} > {bound:e}");
+        }
+    }
+}

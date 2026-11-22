@@ -1,0 +1,27 @@
+
+running 1 test
+test kl_fused_and_slabs ... Knot1d o2 fuse true slab None ra None: layout on vs off 1.2e-6, adjointness 2.7e-7
+Knot1d o2 fuse true slab None ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 4.6e-7, adjointness 2.8e-7
+Knot1d o2 fuse true slab Some(0) ra None: layout on vs off 1.0e-6, adjointness 2.6e-7
+Knot1d o2 fuse true slab Some(0) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 5.9e-7, adjointness 2.8e-7
+Knot1d o2 fuse false slab None ra None: layout on vs off 1.1e-6, adjointness 2.6e-7
+Knot1d o2 fuse false slab None ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 6.3e-7, adjointness 2.8e-7
+Knot1d o2 fuse false slab Some(0) ra None: layout on vs off 9.4e-7, adjointness 2.7e-7
+Knot1d o2 fuse false slab Some(0) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 5.1e-7, adjointness 2.8e-7
+Knot1d o2 fuse true slab Some(2) ra None: layout on vs off 9.8e-7, adjointness 2.6e-7
+Knot1d o2 fuse true slab Some(2) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 4.6e-7, adjointness 2.8e-7
+Knot2d o3 fuse true slab None ra None: layout on vs off 1.3e-6, adjointness 1.2e-7
+Knot2d o3 fuse true slab None ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 1.4e-6, adjointness 9.7e-8
+Knot2d o3 fuse true slab Some(0) ra None: layout on vs off 1.3e-6, adjointness 1.1e-7
+Knot2d o3 fuse true slab Some(0) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 1.5e-6, adjointness 1.0e-7
+Knot2d o3 fuse false slab None ra None: layout on vs off 1.1e-6, adjointness 1.2e-7
+Knot2d o3 fuse false slab None ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 1.6e-6, adjointness 1.1e-7
+Knot2d o3 fuse false slab Some(0) ra None: layout on vs off 1.4e-6, adjointness 1.2e-7
+Knot2d o3 fuse false slab Some(0) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 1.7e-6, adjointness 1.0e-7
+Knot2d o3 fuse true slab Some(2) ra None: layout on vs off 1.1e-6, adjointness 1.2e-7
+Knot2d o3 fuse true slab Some(2) ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): layout on vs off 1.5e-6, adjointness 9.7e-8
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 3.12s
+
+exit 0

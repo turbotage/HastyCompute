@@ -1,0 +1,24 @@
+=== san_memcheck_seg: env HASTY_BFP_TEST_CASES=0,1,3,6 /usr/local/cuda/bin/compute-sanitizer --tool memcheck /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bin/seg_fft_store --test-threads 1 bfp22_engine_matches_f32 (2026-11-20 15:29:37)
+locked 15:32:12; power limit 300.00 W
+========= COMPUTE-SANITIZER
+
+running 1 test
+test bfp22_engine_matches_f32 ... FAILED
+
+failures:
+
+---- bfp22_engine_matches_f32 stdout ----
+
+thread 'bfp22_engine_matches_f32' (1121438) panicked at crates/hasty-nufft/tests/seg_fft_store.rs:183:9:
+Static order 0: forward after switching back to f32 differs from the first f32 forward
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    bfp22_engine_matches_f32
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.49s
+
+========= Target application returned an error
+========= ERROR SUMMARY: 0 errors
+exit 101 15:32:12

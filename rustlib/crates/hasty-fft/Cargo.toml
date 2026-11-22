@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 hasty-cuda = { path = "../hasty-cuda" }
+hasty-bfp = { path = "../hasty-bfp" }
 cudarc.workspace = true
 thiserror.workspace = true
 

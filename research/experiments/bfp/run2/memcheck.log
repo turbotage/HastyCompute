@@ -1,0 +1,11 @@
+========= COMPUTE-SANITIZER
+
+running 2 tests
+test gpu_matches_cpu_bit_for_bit ... ok
+test gpu_round_trip_large ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+exit 0

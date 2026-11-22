@@ -14,6 +14,7 @@
 //! | [`python`] | `HASTY_PYTHON` | `<repo>/rustlib/.venv/bin/python`, else `python3` on `PATH` |
 //! | [`scratch`] | `HASTY_SCRATCH` | none (node-local fast disk on clusters) |
 //! | [`kernel_cache`] | `HASTY_KERNEL_CACHE` | `<scratch>/hasty-kernels`, else `<repo>/rustlib/target/hasty-kernels` |
+//! | [`tune_cache`] | `HASTY_TUNE_CACHE` | next to the kernel cache: `<kernel_cache>/../hasty-tune` |
 //! | [`target`] | `HASTY_TARGET` | `<repo>/rustlib/target` |
 //!
 //! A container mirrors the repository layout under one prefix (`/opt/hasty/rustlib/{tools,.venv,target}`) and sets
@@ -100,6 +101,14 @@ pub fn kernel_cache() -> PathBuf {
     env_path("HASTY_KERNEL_CACHE")
         .or_else(|| scratch().map(|s| s.join("hasty-kernels")))
         .unwrap_or_else(|| target().join("hasty-kernels"))
+}
+
+/// Per-GPU cache of autotune choices (small JSON files, `hasty-nufft` segnufft/tune.rs): next to the kernel cache.
+pub fn tune_cache() -> PathBuf {
+    env_path("HASTY_TUNE_CACHE").unwrap_or_else(|| {
+        let k = kernel_cache();
+        k.parent().map_or_else(|| target().join("hasty-tune"), |p| p.join("hasty-tune"))
+    })
 }
 
 /// Bytes of RAM this process can still use: `MemAvailable`, capped by every enclosing memory cgroup's limit minus its

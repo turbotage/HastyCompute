@@ -1,0 +1,8 @@
+
+running 2 tests
+test water_fat_images_match_fat_maps_static ... ok
+test water_fat_images_match_fat_maps_temporal ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+exit 0

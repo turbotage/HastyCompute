@@ -1,0 +1,21 @@
+=== san_ra_o3: env [HASTY_NVRTC_LINEINFO=1] memcheck --mode adj --designs ra --m 100000 --ncb 4 --nseg 3 --order 3 --check 50 --reps 1 --each --fixed 4,4,4,2,4,16,2048;2,4,8,2,1,16,64;4,4,4,1,4,32,2048 (Thu Nov 19 06:38:57 PM CET 2026)
+========= COMPUTE-SANITIZER
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 12 (4 coils x 3 seg), order 3, M 100000
+trajectory: 100000 samples of 26 readouts (encode 0, rotations from 3796), |k|max 1564.1 rad/m -> 0.98 π
+  grid 0.72 GiB, y 0.00 GiB, 1200000000 useful complex MACs per pass
+  ra: 3 candidates
+  grid memset 0.81 ms (not included in the kernel times below)
+    tile lists [2, 4, 8] lmax 64: 3799686 entries (38.0 per sample), 96805 items (50215 split), 0.1 s
+    ra RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 16, lmax: 64 } smem  39040 regs  75 local 0 blocks/SM 2:   491.52 ms (0.0 %)
+    tile lists [4, 4, 4] lmax 2048: 3447485 entries (34.5 per sample), 66992 items (52 split), 0.1 s
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  33664 regs 128 local 8 blocks/SM 2:   371.33 ms (0.0 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 1, cb: 4, chk: 32, lmax: 2048 } smem  83712 regs 237 local 0 blocks/SM 1:   458.56 ms (0.0 %)
+  RES ra: regs 128, local 8 B, smem 33664 B, blocks/SM 2, warps/SM 8 of 48
+  CHECK ra: 371.68 ms (kernel; + memset 0.81 ms) RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } items 66992 | 3 G cMAC/s, 0.0 % of FP32 FMA peak (4 FMA/MAC) | rel err 9.88e-7 at 48 points x 12 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 4.18e-7 on 50 samples
+    tile lists [2, 4, 8] lmax 64: 3799686 entries (38.0 per sample), 96805 items (50215 split), 0.1 s
+  RES ra: regs 75, local 0 B, smem 39040 B, blocks/SM 2, warps/SM 16 of 48
+  CHECK ra: 490.86 ms (kernel; + memset 0.81 ms) RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 16, lmax: 64 } items 96805 | 2 G cMAC/s, 0.0 % of FP32 FMA peak (4 FMA/MAC) | rel err 7.91e-7 at 48 points x 12 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 4.32e-7 on 50 samples
+    tile lists [4, 4, 4] lmax 2048: 3447485 entries (34.5 per sample), 66992 items (52 split), 0.1 s
+  RES ra: regs 237, local 0 B, smem 83712 B, blocks/SM 1, warps/SM 4 of 48
+  CHECK ra: 458.85 ms (kernel; + memset 0.81 ms) RaCfg { tx: 4, ty: 4, tz: 4, nxg: 1, cb: 4, chk: 32, lmax: 2048 } items 66992 | 3 G cMAC/s, 0.0 % of FP32 FMA peak (4 FMA/MAC) | rel err 9.88e-7 at 48 points x 12 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 4.18e-7 on 50 samples
+========= ERROR SUMMARY: 0 errors

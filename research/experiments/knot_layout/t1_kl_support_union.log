@@ -1,0 +1,15 @@
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None zero_tiles true: half-ball set inside the union support, layout on vs off 3.3e-6
+Knot1d o1 ra None zero_tiles false: half-ball set inside the union support, layout on vs off 2.7e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles true: half-ball set inside the union support, layout on vs off 4.5e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles false: half-ball set inside the union support, layout on vs off 4.4e-6
+Knot2d o3 ra None zero_tiles true: half-ball set inside the union support, layout on vs off 6.3e-7
+Knot2d o3 ra None zero_tiles false: half-ball set inside the union support, layout on vs off 5.5e-7
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles true: half-ball set inside the union support, layout on vs off 9.1e-7
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles false: half-ball set inside the union support, layout on vs off 1.0e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 6.08s
+
+exit 0

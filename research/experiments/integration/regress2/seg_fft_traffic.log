@@ -1,0 +1,38 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/seg_fft_traffic.rs (target/release/deps/seg_fft_traffic-775c8abfc4cea666)
+
+running 4 tests
+test debug_fused_slot ... ignored
+test fft_slabs_match_whole_grid ... FAILED
+test fused_pad_crop_matches_separate_kernels ... ok
+test split_tile_zeroing_matches_full_slot ... ok
+
+failures:
+
+---- fft_slabs_match_whole_grid stdout ----
+[26, 22, 18] frames 1 fused false, slab 1: forward bit-equal false (2.1e-7), adjoint 7.3e-7 (spread 0.0e0)
+[26, 22, 18] frames 1 fused false, slab 4: forward bit-equal false (2.1e-7), adjoint 1.1e-6 (spread 0.0e0)
+
+thread 'fft_slabs_match_whole_grid' (9373) panicked at crates/hasty-nufft/tests/seg_fft_traffic.rs:219:17:
+slab 4: forward 2.1e-7, adjoint 1.1e-6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fft_slabs_match_whole_grid
+
+test result: FAILED. 2 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.90s
+
+error: test failed, to rerun pass `-p hasty-nufft --test seg_fft_traffic`

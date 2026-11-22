@@ -1,0 +1,51 @@
+=== r07_seg_tile_block: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_tile_block --test-threads 1 (2026-11-20 19:12:37)
+locked 19:12:37; power limit / draw / sm clock / memory used: 300.00 W, 66.19 W, 2565 MHz, 294 MiB
+
+running 4 tests
+test balanced_batches_and_defaults_vs_one_coil_batches ... FAILED
+test blocked_shapes_split_lists ... ok
+test knot_blocked_and_ragged_shapes ... ok
+test static_blocked_and_ragged_shapes ... ok
+
+failures:
+
+---- balanced_batches_and_defaults_vs_one_coil_batches stdout ----
+Static nseg 14 order 2: budget 7 coils → batch 4 (tiles fwd TileCfg { tt: 4, cpba: 4, cpbf: 4, ppf: 2, chunk: 12, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, adj TileCfg { tt: 4, cpba: 4, cpbf: 4, ppf: 2, chunk: 12, max_item: 1024, acb: 1, fsb: 1, fcb: 1, kv: 0 }, multi None)
+
+thread 'balanced_batches_and_defaults_vs_one_coil_batches' (1217139) panicked at crates/hasty-nufft/tests/seg_tile_block.rs:215:13:
+assertion `left == right` failed: balanced batch
+  left: 4
+ right: 6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    balanced_batches_and_defaults_vs_one_coil_batches
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.69s
+
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_tile_block --test-threads 1"
+	User time (seconds): 2.22
+	System time (seconds): 1.50
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:03.75
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 225112
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 50278
+	Voluntary context switches: 1131
+	Involuntary context switches: 106
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 1328
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 19:12:40; power limit at end 300.00 W

@@ -268,7 +268,7 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_k(const float4* _
     const int p = q / GN, c = (q / NSEG) % CPBF, l = q % NSEG;
     const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
     cx v = cx{0.f, 0.f};
-    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = g.p[0][(((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l];
+    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = GLOAD(g.p[0], (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l);
     gt[p * GTS + c * NSEG + l] = v;
   }
   constexpr int NR = (3 * CHUNK + NT_F - 1) / NT_F;
@@ -521,7 +521,7 @@ extern "C" __global__ void __launch_bounds__(NT_F) seg_forward_k(const float4* _
     const int p = q / GN, c = (q / NSEG) % CPBF, l = q % NSEG;
     const int gx = o0 + p % TT, gy = o1 + (p / TT) % TT, gz = o2 + p / (TT * TT);
     cx v = cx{0.f, 0.f};
-    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = g.p[0][(((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l];
+    if (cg + c < ncb && gx < d.nf0 && gy < d.nf1 && gz < d.nf2) v = GLOAD(g.p[0], (((size_t)gz * d.nf1 + gy) * d.nf0 + gx) * NCH + (cg + c) * NSEG + l);
     gt[p * GTS + c * NSEG + l] = v;
   }
   constexpr int NR = (3 * CHUNK + NT_F - 1) / NT_F;

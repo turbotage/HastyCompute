@@ -1,0 +1,113 @@
+output directory data/hasty/phantom/factory_arms/ph0001/lanczos_dev/V_pw (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch data/hasty/phantom/factory_arms/ph0001/lanczos_dev/V_pw/STOP to pause with a checkpoint)
+k-space data: 50.56 GiB raw coil data, 24.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [128, 72, 60] (native [254, 144, 114]), voxel [4.0, 4.0, 3.8] mm
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+knot basis (bellows): 4 linear knots at [-0.054, 0.264, 0.764, 1.575] × 8 cardiac knots degree 3
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 7 sets (13170990 samples) in 0.3s
+calibration region [24, 24, 24]: 88804 samples of encode 0, 32 coils (1.6s)
+coil compression (whitened calibration region): 8 of 32 virtual coils (fixed 8), 68.295 % energy kept; σ²/Σσ²: [1.5e-1, 1.2e-1, 1.0e-1, 7.8e-2, 6.6e-2, 6.0e-2, 5.6e-2, 5.1e-2, 4.3e-2, 3.5e-2, 3.4e-2, 3.0e-2, 2.6e-2, 2.0e-2, 1.8e-2, 1.6e-2, 1.5e-2, 1.4e-2, 1.2e-2, 1.0e-2, 8.0e-3, 6.3e-3, 6.0e-3, 5.9e-3, 3.9e-3, 3.5e-3, 2.6e-3, 2.1e-3, 1.7e-3, 1.2e-3, 7.6e-4, 5.5e-4]
+  k-space store: 7 / 7 sets (2s)
+k-space store built in 2.2s: dense in RAM: 7 sets × 8 coils, 0.79 GiB raw → 0.79 GiB stored (×1.00), 0.79 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 3001984 of 13170990 samples kept (22.79 %), ADC window 0..3989 of 3990 (1.600..9.578 ms), 391087 .. 458195 per set (0.0s)
+k-space crop: kept data 0.18 GiB read through a filtered view of the store
+device memory after loading and coil compression: 22.79 GiB free of 23.51 GiB
+7 sets (7 encodes x 4·8 knots (respiratory degree 1, cardiac degree 3)), 430..504 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 11.9s
+device memory after the data placement: 22.67 GiB free of 23.51 GiB
+warm start: 3 PCGLS iterations per encode (14s)
+device memory after the warm start: 21.86 GiB free of 23.51 GiB
+support 526431 voxels
+coil maps not masked (--coil-mask none): 552960 voxels; fit region 547451 voxels
+lumen 6165 voxels: 5714 in the support, 6165 in the masked maps
+warm-start velocity in the lumen: mean ["0.007", "0.043", "0.015"] m/s, truth (time average) ["0.012", "0.003", "-0.010"], RMSE 1.811 m/s
+device memory before the segment operator: 21.86 GiB free of 23.51 GiB
+monomial quadratic fit over 547451 voxels: rms 3.3e-4 / max 1.7e-3 m² (z², x²+y², xz, yz: ["1.2e-3", "1.7e-3", "1.1e-3", "9.3e-4"])
+  [build timer] monomial fit done: 0.1s since the build start
+monomial degree-4 fit (--conc-fit deg4): rms 6.4e-5 / max 4.4e-4 m² (["4.2e-4", "3.9e-4", "4.4e-4", "3.4e-4"]); degree 3/4 part to first order in the kernel (order 3)
+segment basis voxel weights: smoothed warm-start magnitude² × coil energy / median (182484 fit voxels)
+per-sample weights 1 + (E(n) + E_vol) / (C σ²), σ = 39.976: first 1.57e5, middle 3.94e1, last 2.38e4, mean 2.21e3; white floor E_vol / (C σ²) = 36.5
+knot grid slot (auto, sized by the knot ledger): coil batch 8 of 8 (1 passes), 0.41 GiB; estimated plan: state device, data device, tables device, device peak 6.91 GiB
+knot grid slot budget (auto): 0.41 GiB of 21.86 GiB free (work 3.32 GiB)
+  segment model error of the ratemap, encode 0: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 1: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 2: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 3: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 4: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 5: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  segment model error of the ratemap, encode 6: L = 6, relative 2.04e-2 (SNR-weighted over ADC time, signal energy over 20276 fit voxels)
+  [build timer] segment bases of all encodes done: 15.2s since the build start
+sample tables: 249 B/sample, 0.70 GiB for 7 sets → device
+  [build timer] sample tables (280 sets) done: 20.4s since the build start
+    [tune] hit autotune 5145ee7801031003 (file, /home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/hasty-tune/NVIDIA-GeForce-RTX-4090-cc89-drv580.178.04-nvrtc13.0/5145ee7801031003.json): choice loaded, no timing
+  [build timer] autotune done: 20.4s since the build start
+  autotune 0.0 s: timing launches 0.0 s (0 candidates), NVRTC compiles 0.0 s (0), cubin cache reads 0.0 s (4), module loads 0.0 s (4), rest 0.0 s (HASTY_TUNE=Reuse)
+SegNufft: L = 6, order 3, frames/set 64, coil batch 8, kernels 2.0/2.2 ms (set 0), max phase left out by the degree-4 fit 4.60e-2 rad, built in 20.4s
+host sample records released: 0.78 GiB
+memory after setup: RSS 3.6 GiB → 2.9 GiB (malloc_trim)
+velocity safeguards: box |v_a| ≤ 3.00 m/s, step trust region max_e |k'_e·Δv| ≤ 1 rad, start SNR gate 3.28
+spline velocity model (research/velocity_model_sr.md §F): m, ψ, v in the 4 × 8 basis; 16 cardiac operator frames per respiratory knot (cardiac cubic-spline interpolation between frames), 1 groups of 4 respiratory knots (64 operator images per encode, ×2.00 the 32 knots); encodes centred (k̄ = [-0.823, -0.823, -0.823] rad/(m/s))
+knot model: 4 × 8 = 32 knots (4 linear knots at [-0.054, 0.264, 0.764, 1.575] × 8 cardiac knots degree 3), 160 parameters per voxel, 0.33 GiB per parameter stack; temporal Gram of the samples: condition 241.8, diagonal 0.207..1.892 × mean (per-knot metric weights)
+config: differs from target: knots 4:1,8:3 (target 6:1,16:3); coils fixed 8 (target SV compression ≥ 99.9 %); --keep 16: 1/16 of the readouts; pyramid level (grid [128, 72, 60], kcrop ball |k·Δ| ≤ 1.000π)
+residual-phase init (robust static fit, degree 1): σ per encode [0.868, 0.842, 0.803, 0.873, 0.881, 0.826] rad, static mask 242281 voxels
+  init encode 0: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.704e-2 (6s)
+  init encode 1: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.389e-2 (13s)
+  init encode 2: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.603e-2 (20s)
+  init encode 3: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.238e-2 (27s)
+  init encode 4: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.008e-2 (34s)
+  init encode 5: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.157e-2 (41s)
+  init encode 6: 15 CGLS iterations on 32 complex knots, ‖s‖/‖s₀‖ → 8.182e-2 (47s)
+  start SNR gate 3.28: support voxel-knots decoded per knot 19.1 %, from the voxel's time mean 76.7 %, v = 0 4.2 %
+spline init: complex knot CGLS 15 (λ 0) + dual-VENC decode per knot + spline fit (49s)
+static-tissue anchor μ 1 (auto) on 242281 voxels
+knot-mode memory plan: state device, data device, sample tables device; device peak 6.44 GiB, host 2.40 GiB, predicted transfers 0.0 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device    2.09 GiB  host    0.00 GiB
+    set image / its adjoint (64 images × 552960 voxels, one set)   device    0.26 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.03 GiB  host    0.00 GiB
+    k-space data, resident                                         device    0.18 GiB  host    0.00 GiB
+    sample tables, resident                                        device    0.70 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    0.21 GiB  host    0.07 GiB
+    parameter state: 6 stacks on the device (x, g, step, x_prev, g_prev, w) device    1.98 GiB  host    0.33 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
+knot lock (--static-lock 20.0, Additive): from IT0 10 every 5; separable-metric mismatch 0.063, G-norm bound 1.241
+  seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5 stage 0 (reference + high-VENC encodes): 2 iterations, λ_max(M H) = 4.465e7 (21.7s, 12 Hessian-vector products, 1.8s each)
+    anchor off in this stage (auto: the static mask is refined by pulsatility after it; n̂ 2.158e3)
+  zmshr1m vk it   0: f(previous iterate) = — (initial state, not evaluated), velocity RMSE 0.847 m/s (rel 1.982; decoded from the interpolated model 0.850 / rel 1.990), wrapped 6.35 %, frames 0.78 0.79 1.01 1.07 1.01 1.01 0.92 0.83 0.78 0.77 0.77 0.80 0.82 0.80 0.78 0.77 0.77 0.76 0.78 0.81, 22s
+    score split: upper-half magnitude (support) rel 1.096, slope [0.067, 0.106, 0.138]; unwrapped components rel 1.259; outside the support rel 1.000
+    operator-frame approximation error of the model (2055 lumen voxels, all rows and encodes): relative 4.13e-2, p99.9 per sample 6.34e-1
+    step trust region (it 0): 31832 elements shrunk
+    step diag (it 0):; prior/lock |k'Δv| p99 2.03 max 6.08, > π 0.12 %; |v| > 3.0 m/s 0.00 %; phase per operator frame p99.9 6.50 max 10.56 rad
+  zmshr1m vk it   1: f(previous iterate) = 2.3450e13, velocity RMSE 0.772 m/s (rel 1.806; decoded from the interpolated model 0.775 / rel 1.814), wrapped 5.95 %, frames 0.69 0.70 0.94 1.01 0.95 0.95 0.85 0.75 0.70 0.69 0.68 0.72 0.75 0.72 0.70 0.69 0.68 0.68 0.69 0.73, 28s
+    score split: upper-half magnitude (support) rel 1.018, slope [0.076, 0.08, 0.125]; unwrapped components rel 1.234; outside the support rel 1.010
+    time it 0: gradient 1.7s, step 0.1s, prior 3.4s, report 0.4s
+    step trust region (it 1): 1221127 elements shrunk
+    step diag (it 1): gradient step |k'Δv| p99 1.00 max 1.00 rad, > 1 rad 1.29 %, > π 0.00 % (median m there 0.00 × median); prior/lock |k'Δv| p99 1.97 max 6.72, > π 0.10 %; |v| > 3.0 m/s 0.00 %; phase per operator frame p99.9 5.86 max 10.42 rad
+  zmshr1m vk it   2: f(previous iterate) = 2.3213e13, velocity RMSE 0.743 m/s (rel 1.738; decoded from the interpolated model 0.744 / rel 1.742), wrapped 5.72 %, frames 0.66 0.67 0.92 0.99 0.93 0.93 0.82 0.72 0.67 0.66 0.65 0.69 0.72 0.69 0.66 0.65 0.65 0.64 0.66 0.70, 34s
+    score split: upper-half magnitude (support) rel 1.011, slope [0.069, 0.076, 0.126]; unwrapped components rel 1.218; outside the support rel 1.005
+    time it 1: gradient 1.7s, step 0.1s, prior 3.0s, report 0.4s
+  anchor refined by pulsatility (std of v over the knots > 0.222 m/s, dilated 3): 17449 voxels
+  seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5 stage 1 (all encodes): 2 iterations, λ_max(M H) = 4.288e7 (36.5s, 12 Hessian-vector products, 3.0s each)
+    anchor λ 9.582e4 (n̂ 2.158e3)
+  zmshr1m vk it   2: f(previous iterate) = — (initial state, not evaluated), velocity RMSE 0.743 m/s (rel 1.738; decoded from the interpolated model 0.744 / rel 1.742), wrapped 5.72 %, frames 0.66 0.67 0.92 0.99 0.93 0.93 0.82 0.72 0.67 0.66 0.65 0.69 0.72 0.69 0.66 0.65 0.65 0.64 0.66 0.70, 72s
+    score split: upper-half magnitude (support) rel 1.011, slope [0.069, 0.076, 0.126]; unwrapped components rel 1.218; outside the support rel 1.005
+    operator-frame approximation error of the model (2055 lumen voxels, all rows and encodes): relative 2.56e-2, p99.9 per sample 5.49e-1
+    step trust region (it 0): 32490 elements shrunk
+    step diag (it 2):; prior/lock |k'Δv| p99 1.49 max 4.35, > π 0.01 %; |v| > 3.0 m/s 0.00 %; phase per operator frame p99.9 4.99 max 10.10 rad
+  zmshr1m vk it   3: f(previous iterate) = 4.1995e13, velocity RMSE 0.695 m/s (rel 1.627; decoded from the interpolated model 0.695 / rel 1.628), wrapped 5.45 %, frames 0.61 0.62 0.88 0.95 0.89 0.89 0.78 0.67 0.62 0.60 0.59 0.64 0.67 0.64 0.61 0.60 0.59 0.59 0.60 0.65, 80s
+    score split: upper-half magnitude (support) rel 0.998, slope [0.065, 0.057, 0.116]; unwrapped components rel 1.199; outside the support rel 1.007
+    time it 0: gradient 3.0s, step 0.1s, prior 3.4s, report 0.4s
+    step trust region (it 1): 341605 elements shrunk
+    step diag (it 3): gradient step |k'Δv| p99 0.99 max 1.00 rad, > 1 rad 0.49 %, > π 0.00 % (median m there 0.00 × median); prior/lock |k'Δv| p99 1.18 max 3.45, > π 0.00 %; |v| > 3.0 m/s 0.00 %; phase per operator frame p99.9 4.85 max 10.05 rad
+  zmshr1m vk it   4: f(previous iterate) = 4.1795e13, velocity RMSE 0.689 m/s (rel 1.614; decoded from the interpolated model 0.690 / rel 1.615), wrapped 5.37 %, frames 0.60 0.61 0.88 0.95 0.89 0.89 0.78 0.67 0.61 0.59 0.59 0.63 0.66 0.64 0.60 0.59 0.59 0.58 0.59 0.64, 86s
+    score split: upper-half magnitude (support) rel 0.991, slope [0.062, 0.059, 0.115]; unwrapped components rel 1.195; outside the support rel 1.009
+    operator-frame approximation error of the model (2055 lumen voxels, all rows and encodes): relative 2.20e-2, p99.9 per sample 5.30e-1
+    time it 1: gradient 3.0s, step 0.1s, prior 3.1s, report 1.1s
+  recovered residual phase (rad, Legendre order of vmodel::poly_exps): [[0.025, -0.051, 0.009, 0.007], [0.051, 0.056, 0.017, 0.014], [0.034, -0.044, 0.016, -0.098], [0.04, -0.032, 0.016, -0.084], [0.057, -0.03, 0.013, -0.085], [0.062, -0.044, 0.025, -0.06]]
+  seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5: outputs written (2s): vel_seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5, vparams_seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5.hv + vknots_seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5.json
+Traceback (most recent call last):
+  File "/home/turbotage/Documents/GitHub/HastyCompute/rustlib/tools/figs/run_figs.py", line 164, in <module>
+    rec = load_any(run / f"recon_{tag}.npy")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/turbotage/Documents/GitHub/HastyCompute/python/lib/hastycompute/store.py", line 137, in load_any
+    raise FileNotFoundError(f"{path} (nor its .npy / .hv sibling)")
+FileNotFoundError: data/hasty/phantom/factory_arms/ph0001/lanczos_dev/V_pw/recon_seg_zmshr1m_vk4x8_r1c3_p1_c2_llr1_dfws1-1_lockq20i10e5.npy (nor its .npy / .hv sibling)
+figure script failed (Ok(ExitStatus(unix_wait_status(256)))); run: /home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/bin/python -I /home/turbotage/Documents/GitHub/HastyCompute/rustlib/tools/figs/run_figs.py data/hasty/phantom/factory_arms/ph0001/lanczos_dev/V_pw

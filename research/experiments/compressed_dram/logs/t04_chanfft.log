@@ -1,0 +1,56 @@
+=== t04_chanfft: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-fft__chanfft --nocapture --test-threads 1 (2026-11-21 13:10:04)
+locked 13:10:04; power limit / draw / sm clock / memory used: 450.00 W, 61.53 W, 2565 MHz, 240 MiB
+
+running 5 tests
+test ksupport_matches_full ... n [20, 24, 30] × 3, block [(8, 8), (10, 9), (12, 12)], support columns 0.45, proj [0.77, 0.79, 0.85], cells 0.24: forward (support) 0.00e0, inverse (block) 1.52e-7
+n [20, 24, 30] × 3, block [(8, 8), (10, 9), (12, 12)], support columns 0.73, proj [0.83, 0.88, 0.95], cells 0.69: forward (support) 0.00e0, inverse (block) 1.66e-7
+n [16, 20, 24] × 8, block [(16, 0), (10, 10), (1, 0)], support columns 0.07, proj [0.38, 0.35, 0.31], cells 0.02: forward (support) 0.00e0, inverse (block) 1.08e-7
+n [20, 24, 30] × 2, block [(8, 8), (10, 9), (12, 12)], support columns 1.00, proj [1.00, 1.00, 1.00], cells 1.00: forward (support) 0.00e0, inverse (block) 1.68e-7
+ok
+test ksupport_timing ... [288, 240, 250] × 16: block only       forward 10.66 ms, inverse 10.50 ms (1.00× / 1.00× of block-only)
+[288, 240, 250] × 16: ball k-support   forward 8.74 ms, inverse 8.75 ms (1.22× / 1.20× of block-only), columns 0.81, proj [1.00, 1.00, 1.00], cells 0.55
+[288, 240, 250] × 16: half-extent cube forward 7.89 ms, inverse 7.87 ms (1.35× / 1.33× of block-only), columns 0.69, proj [0.84, 0.83, 0.83], cells 0.58
+ok
+test pruned_matches_full ... n [20, 24, 30] × 3 channels, block [(8, 8), (10, 9), (12, 12)]: forward 0.00e0, inverse (block) 1.72e-7
+n [16, 20, 24] × 8 channels, block [(16, 0), (10, 10), (1, 0)]: forward 0.00e0, inverse (block) 2.96e-7
+n [34, 20, 34] × 4 channels, block [(13, 13), (8, 7), (14, 13)]: forward 0.00e0, inverse (block) 2.42e-7
+ok
+test pruned_timing ... grid [50, 180, 180] × 16 (image [40, 144, 144]): forward memset + full 1.54 ms → pruned 0.97 ms (1.59×); inverse full 1.33 → pruned 0.95 ms (1.40×)
+grid [80, 288, 288] × 4 (image [40, 144, 144]): forward memset + full 1.61 ms → pruned 0.58 ms (2.79×); inverse full 1.38 → pruned 0.50 ms (2.78×)
+ok
+test slab_passes_equal_whole_grid ... slab 1 planes, k-support false: forward identical true, inverse identical true
+slab 3 planes, k-support false: forward identical true, inverse identical true
+slab 8 planes, k-support false: forward identical true, inverse identical true
+slab 100 planes, k-support false: forward identical true, inverse identical true
+slab 1 planes, k-support true: forward identical true, inverse identical true
+slab 3 planes, k-support true: forward identical true, inverse identical true
+slab 8 planes, k-support true: forward identical true, inverse identical true
+slab 100 planes, k-support true: forward identical true, inverse identical true
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.15s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-fft__chanfft --nocapture --test-threads 1"
+	User time (seconds): 2.36
+	System time (seconds): 0.79
+	Percent of CPU this job got: 98%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:03.20
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 151204
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 23900
+	Voluntary context switches: 289
+	Involuntary context switches: 41
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:10:07; power limit at end 450.00 W

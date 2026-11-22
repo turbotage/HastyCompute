@@ -1,0 +1,9 @@
+=== seg_kernel (2026-11-20 15:48:05); power.limit 300.00 W
+
+running 2 tests
+test kb_window_at_least_as_accurate_as_es ... ok
+test larger_grid_with_effective_sigma_is_not_less_accurate ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.39s
+
+exit 0 (2026-11-20 15:50:46)

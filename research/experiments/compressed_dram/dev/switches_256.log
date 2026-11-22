@@ -1,0 +1,17 @@
+450.00 W
+== X=1
+    autotune forward kernels (one coil batch): tile 72.62 ms, vs 57.11 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 1, vxpad: 0 })) -> vs; adjoint 47.09 ms; vs tables 4.8 B/sample
+    frame 4 encode 2             M   1516200: forward    210.2 ms, adjoint    179.3 ms, normal    394.7 ms | kernels 114.2 / 94.2 ms, FFT 84.6 / 83.6 ms, pad/crop/rest 11.4 / 1.5 ms | tables 1.5 s, 221 B/sample on the GPU
+    engine 13.60 GiB (coil batch 5), segment tables 1.25 GiB per encode (0.7 s), resident problem 133.1 GiB (does not fit: data streamed from host), device part without data 83.8 GiB
+== HASTY_SEG_GRID_STORE=bfp24
+    autotune forward kernels (one coil batch): tile 70.69 ms, vs 120.37 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 1, vxpad: 0 })) -> tile; adjoint 47.12 ms; vs tables 4.8 B/sample
+    frame 4 encode 2             M   1516200: forward    238.3 ms, adjoint    179.8 ms, normal    417.4 ms | kernels 141.4 / 94.2 ms, FFT 84.6 / 83.6 ms, pad/crop/rest 12.4 / 1.9 ms | tables 1.8 s, 221 B/sample on the GPU
+    engine 13.69 GiB (coil batch 5), segment tables 1.25 GiB per encode (0.7 s), resident problem 133.2 GiB (does not fit: data streamed from host), device part without data 83.9 GiB
+== HASTY_SEG_MAPS_STORE=bfp24 HASTY_SEG_DIAG_STORE=bfp24
+    autotune forward kernels (one coil batch): tile 68.76 ms, vs 54.13 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 1, vxpad: 0 })) -> vs; adjoint 47.18 ms; vs tables 4.8 B/sample
+    frame 4 encode 2             M   1516200: forward    210.5 ms, adjoint    181.3 ms, normal    397.2 ms | kernels 108.3 / 94.4 ms, FFT 84.5 / 83.6 ms, pad/crop/rest 17.7 / 3.3 ms | tables 1.6 s, 221 B/sample on the GPU
+    engine 13.60 GiB (coil batch 5), segment tables 2.19 GiB per encode (0.7 s), resident problem 139.7 GiB (does not fit: data streamed from host), device part without data 90.4 GiB
+== HASTY_SEG_MAPS_STORE=bfp16 HASTY_SEG_DIAG_STORE=bfp16
+    autotune forward kernels (one coil batch): tile 68.75 ms, vs 54.11 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 1, vxpad: 0 })) -> vs; adjoint 47.28 ms; vs tables 4.8 B/sample
+    frame 4 encode 2             M   1516200: forward    209.7 ms, adjoint    180.3 ms, normal    395.2 ms | kernels 108.2 / 94.6 ms, FFT 84.6 / 83.6 ms, pad/crop/rest 16.9 / 2.1 ms | tables 1.6 s, 221 B/sample on the GPU
+    engine 13.60 GiB (coil batch 5), segment tables 1.88 GiB per encode (0.7 s), resident problem 137.5 GiB (does not fit: data streamed from host), device part without data 88.2 GiB

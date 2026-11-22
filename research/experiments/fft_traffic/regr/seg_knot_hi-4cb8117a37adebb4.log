@@ -1,0 +1,12 @@
+
+running 7 tests
+test knot1d_order3_matches_emulation ... ok
+test knot1d_order3_matches_interval_major ... ok
+test knot1d_order3_split_lists ... ok
+test knot2d_order3_matches_emulation ... ok
+test knot2d_order3_variants ... ok
+test knot2d_order3_zero_equals_order2 ... ok
+test knot_order3_timing ... ignored
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 49.17s
+

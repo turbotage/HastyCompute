@@ -1,0 +1,112 @@
+== g240_c100_s0: 240 240 240 192 192 192 100 0 (08:44:45) power 300.00 W
+grid [240, 240, 240] block [192, 192, 192] nch 100 slab 0 (plane 46.1 MB): forward 55.793 ms (86 % of 1008 GB/s), inverse 54.912 ms (88 %), model 48.57 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-894d.qdstrm'
+[1/1] [0%                          ] g240_c100_s0.nsys-rep[1/1] [0%                          ] g240_c100_s0.nsys-rep[1/1] [12%                         ] g240_c100_s0.nsys-rep[1/1] [14%                         ] g240_c100_s0.nsys-rep[1/1] [=15%                        ] g240_c100_s0.nsys-rep[1/1] [============55%             ] g240_c100_s0.nsys-rep[1/1] [=======================94%  ] g240_c100_s0.nsys-rep[1/1] [=======================95%  ] g240_c100_s0.nsys-rep[1/1] [=======================96%  ] g240_c100_s0.nsys-rep[1/1] [========================100%] g240_c100_s0.nsys-rep[1/1] [========================100%] g240_c100_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g240_c100_s0.nsys-rep
+== g240_c100_s1: 240 240 240 192 192 192 100 1 (08:44:49) power 300.00 W
+grid [240, 240, 240] block [192, 192, 192] nch 100 slab 1 (plane 46.1 MB): forward 45.567 ms (75 % of 1008 GB/s), inverse 45.799 ms (75 %), model 34.42 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-4eb0.qdstrm'
+[1/1] [0%                          ] g240_c100_s1.nsys-rep[1/1] [0%                          ] g240_c100_s1.nsys-rep[1/1] [8%                          ] g240_c100_s1.nsys-rep[1/1] [=16%                        ] g240_c100_s1.nsys-rep[1/1] [===================79%      ] g240_c100_s1.nsys-rep[1/1] [========================100%] g240_c100_s1.nsys-rep[1/1] [========================100%] g240_c100_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g240_c100_s1.nsys-rep
+== g240_c20_s0: 240 240 240 192 192 192 20 0 (08:44:54) power 300.00 W
+grid [240, 240, 240] block [192, 192, 192] nch 20 slab 0 (plane 9.2 MB): forward 11.101 ms (87 % of 1008 GB/s), inverse 10.920 ms (88 %), model 9.71 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-cc3e.qdstrm'
+[1/1] [0%                          ] g240_c20_s0.nsys-rep[1/1] [0%                          ] g240_c20_s0.nsys-rep[1/1] [12%                         ] g240_c20_s0.nsys-rep[1/1] [14%                         ] g240_c20_s0.nsys-rep[1/1] [=16%                        ] g240_c20_s0.nsys-rep[1/1] [============56%             ] g240_c20_s0.nsys-rep[1/1] [=======================95%  ] g240_c20_s0.nsys-rep[1/1] [=======================96%  ] g240_c20_s0.nsys-rep[1/1] [========================100%] g240_c20_s0.nsys-rep[1/1] [========================100%] g240_c20_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g240_c20_s0.nsys-rep
+== g240_c20_s1: 240 240 240 192 192 192 20 1 (08:44:58) power 300.00 W
+grid [240, 240, 240] block [192, 192, 192] nch 20 slab 1 (plane 9.2 MB): forward 10.943 ms (62 % of 1008 GB/s), inverse 10.557 ms (65 %), model 6.88 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-5b1b.qdstrm'
+[1/1] [0%                          ] g240_c20_s1.nsys-rep[1/1] [0%                          ] g240_c20_s1.nsys-rep[1/1] [==============63%           ] g240_c20_s1.nsys-rep[1/1] [================71%         ] g240_c20_s1.nsys-rep[1/1] [===================79%      ] g240_c20_s1.nsys-rep[1/1] [========================100%] g240_c20_s1.nsys-rep[1/1] [========================100%] g240_c20_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g240_c20_s1.nsys-rep
+== g320_c50_s0: 320 320 320 256 256 256 50 0 (08:45:02) power 300.00 W
+grid [320, 320, 320] block [256, 256, 256] nch 50 slab 0 (plane 41.0 MB): forward 66.328 ms (86 % of 1008 GB/s), inverse 64.687 ms (88 %), model 57.57 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-31a8.qdstrm'
+[1/1] [0%                          ] g320_c50_s0.nsys-rep[1/1] [0%                          ] g320_c50_s0.nsys-rep[1/1] [14%                         ] g320_c50_s0.nsys-rep[1/1] [============54%             ] g320_c50_s0.nsys-rep[1/1] [=======================94%  ] g320_c50_s0.nsys-rep[1/1] [=======================95%  ] g320_c50_s0.nsys-rep[1/1] [=======================96%  ] g320_c50_s0.nsys-rep[1/1] [========================100%] g320_c50_s0.nsys-rep[1/1] [========================100%] g320_c50_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g320_c50_s0.nsys-rep
+== g320_c50_s1: 320 320 320 256 256 256 50 1 (08:45:06) power 300.00 W
+grid [320, 320, 320] block [256, 256, 256] nch 50 slab 1 (plane 41.0 MB): forward 51.350 ms (79 % of 1008 GB/s), inverse 53.594 ms (76 %), model 40.79 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-a339.qdstrm'
+[1/1] [0%                          ] g320_c50_s1.nsys-rep[1/1] [0%                          ] g320_c50_s1.nsys-rep[1/1] [6%                          ] g320_c50_s1.nsys-rep[1/1] [12%                         ] g320_c50_s1.nsys-rep[1/1] [==================78%       ] g320_c50_s1.nsys-rep[1/1] [========================100%] g320_c50_s1.nsys-rep[1/1] [========================100%] g320_c50_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g320_c50_s1.nsys-rep
+== g320_c20_s1: 320 320 320 256 256 256 20 1 (08:45:11) power 300.00 W
+grid [320, 320, 320] block [256, 256, 256] nch 20 slab 1 (plane 16.4 MB): forward 22.650 ms (71 % of 1008 GB/s), inverse 22.407 ms (72 %), model 16.32 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-1ab0.qdstrm'
+[1/1] [0%                          ] g320_c20_s1.nsys-rep[1/1] [0%                          ] g320_c20_s1.nsys-rep[1/1] [===============65%          ] g320_c20_s1.nsys-rep[1/1] [=================72%        ] g320_c20_s1.nsys-rep[1/1] [==================78%       ] g320_c20_s1.nsys-rep[1/1] [========================100%] g320_c20_s1.nsys-rep[1/1] [========================100%] g320_c20_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g320_c20_s1.nsys-rep
+== g400_c30_s0: 400 400 400 320 320 320 30 0 (08:45:15) power 300.00 W
+grid [400, 400, 400] block [320, 320, 320] nch 30 slab 0 (plane 38.4 MB): forward 75.685 ms (88 % of 1008 GB/s), inverse 74.728 ms (90 %), model 67.46 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-6050.qdstrm'
+[1/1] [0%                          ] g400_c30_s0.nsys-rep[1/1] [0%                          ] g400_c30_s0.nsys-rep[1/1] [12%                         ] g400_c30_s0.nsys-rep[1/1] [=15%                        ] g400_c30_s0.nsys-rep[1/1] [=17%                        ] g400_c30_s0.nsys-rep[1/1] [============55%             ] g400_c30_s0.nsys-rep[1/1] [=======================94%  ] g400_c30_s0.nsys-rep[1/1] [=======================95%  ] g400_c30_s0.nsys-rep[1/1] [=======================96%  ] g400_c30_s0.nsys-rep[1/1] [========================100%] g400_c30_s0.nsys-rep[1/1] [========================100%] g400_c30_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g400_c30_s0.nsys-rep
+== g400_c30_s1: 400 400 400 320 320 320 30 1 (08:45:20) power 300.00 W
+grid [400, 400, 400] block [320, 320, 320] nch 30 slab 1 (plane 38.4 MB): forward 69.637 ms (68 % of 1008 GB/s), inverse 67.173 ms (71 %), model 47.80 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-d3d3.qdstrm'
+[1/1] [0%                          ] g400_c30_s1.nsys-rep[1/1] [0%                          ] g400_c30_s1.nsys-rep[1/1] [===============67%          ] g400_c30_s1.nsys-rep[1/1] [=================72%        ] g400_c30_s1.nsys-rep[1/1] [==================77%       ] g400_c30_s1.nsys-rep[1/1] [========================100%] g400_c30_s1.nsys-rep[1/1] [========================100%] g400_c30_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g400_c30_s1.nsys-rep
+== g400_c10_s1: 400 400 400 320 320 320 10 1 (08:45:25) power 300.00 W
+grid [400, 400, 400] block [320, 320, 320] nch 10 slab 1 (plane 12.8 MB): forward 25.922 ms (61 % of 1008 GB/s), inverse 24.587 ms (64 %), model 15.93 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-0e13.qdstrm'
+[1/1] [0%                          ] g400_c10_s1.nsys-rep[1/1] [0%                          ] g400_c10_s1.nsys-rep[1/1] [5%                          ] g400_c10_s1.nsys-rep[1/1] [10%                         ] g400_c10_s1.nsys-rep[1/1] [==================77%       ] g400_c10_s1.nsys-rep[1/1] [========================100%] g400_c10_s1.nsys-rep[1/1] [========================100%] g400_c10_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g400_c10_s1.nsys-rep
+== g640_c2_s0: 640 640 640 512 512 512 2 0 (08:45:29) power 300.00 W
+grid [640, 640, 640] block [512, 512, 512] nch 2 slab 0 (plane 6.6 MB): forward 21.007 ms (87 % of 1008 GB/s), inverse 20.757 ms (88 %), model 18.42 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-2a77.qdstrm'
+[1/1] [0%                          ] g640_c2_s0.nsys-rep[1/1] [0%                          ] g640_c2_s0.nsys-rep[1/1] [13%                         ] g640_c2_s0.nsys-rep[1/1] [=15%                        ] g640_c2_s0.nsys-rep[1/1] [=17%                        ] g640_c2_s0.nsys-rep[1/1] [============56%             ] g640_c2_s0.nsys-rep[1/1] [=======================95%  ] g640_c2_s0.nsys-rep[1/1] [=======================96%  ] g640_c2_s0.nsys-rep[1/1] [========================100%] g640_c2_s0.nsys-rep[1/1] [========================100%] g640_c2_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g640_c2_s0.nsys-rep
+== g640_c4_s0: 640 640 640 512 512 512 4 0 (08:45:33) power 300.00 W
+grid [640, 640, 640] block [512, 512, 512] nch 4 slab 0 (plane 13.1 MB): forward 42.321 ms (86 % of 1008 GB/s), inverse 41.873 ms (87 %), model 36.84 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-62b6.qdstrm'
+[1/1] [0%                          ] g640_c4_s0.nsys-rep[1/1] [0%                          ] g640_c4_s0.nsys-rep[1/1] [6%                          ] g640_c4_s0.nsys-rep[1/1] [==18%                       ] g640_c4_s0.nsys-rep[1/1] [============56%             ] g640_c4_s0.nsys-rep[1/1] [=======================94%  ] g640_c4_s0.nsys-rep[1/1] [=======================95%  ] g640_c4_s0.nsys-rep[1/1] [=======================96%  ] g640_c4_s0.nsys-rep[1/1] [========================100%] g640_c4_s0.nsys-rep[1/1] [========================100%] g640_c4_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g640_c4_s0.nsys-rep
+== g640_c4_s2: 640 640 640 512 512 512 4 2 (08:45:37) power 300.00 W
+grid [640, 640, 640] block [512, 512, 512] nch 4 slab 2 (plane 13.1 MB): forward 35.187 ms (74 % of 1008 GB/s), inverse 36.492 ms (71 %), model 26.11 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-82b7.qdstrm'
+[1/1] [0%                          ] g640_c4_s2.nsys-rep[1/1] [0%                          ] g640_c4_s2.nsys-rep[1/1] [===============65%          ] g640_c4_s2.nsys-rep[1/1] [================71%         ] g640_c4_s2.nsys-rep[1/1] [==================77%       ] g640_c4_s2.nsys-rep[1/1] [==================78%       ] g640_c4_s2.nsys-rep[1/1] [========================100%] g640_c4_s2.nsys-rep[1/1] [========================100%] g640_c4_s2.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g640_c4_s2.nsys-rep
+== g800_c10_s0: 800 480 400 640 384 320 10 0 (08:45:41) power 300.00 W
+grid [800, 480, 400] block [640, 384, 320] nch 10 slab 0 (plane 30.7 MB): forward 61.329 ms (87 % of 1008 GB/s), inverse 60.131 ms (89 %), model 53.97 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-9812.qdstrm'
+[1/1] [0%                          ] g800_c10_s0.nsys-rep[1/1] [0%                          ] g800_c10_s0.nsys-rep[1/1] [=16%                        ] g800_c10_s0.nsys-rep[1/1] [============54%             ] g800_c10_s0.nsys-rep[1/1] [======================91%   ] g800_c10_s0.nsys-rep[1/1] [======================92%   ] g800_c10_s0.nsys-rep[1/1] [=======================93%  ] g800_c10_s0.nsys-rep[1/1] [=======================94%  ] g800_c10_s0.nsys-rep[1/1] [=======================95%  ] g800_c10_s0.nsys-rep[1/1] [=======================96%  ] g800_c10_s0.nsys-rep[1/1] [========================100%] g800_c10_s0.nsys-rep[1/1] [========================100%] g800_c10_s0.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g800_c10_s0.nsys-rep
+== g800_c10_s1: 800 480 400 640 384 320 10 1 (08:45:46) power 300.00 W
+grid [800, 480, 400] block [640, 384, 320] nch 10 slab 1 (plane 30.7 MB): forward 51.661 ms (73 % of 1008 GB/s), inverse 53.469 ms (71 %), model 38.24 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-f6b1.qdstrm'
+[1/1] [0%                          ] g800_c10_s1.nsys-rep[1/1] [0%                          ] g800_c10_s1.nsys-rep[1/1] [5%                          ] g800_c10_s1.nsys-rep[1/1] [10%                         ] g800_c10_s1.nsys-rep[1/1] [==================77%       ] g800_c10_s1.nsys-rep[1/1] [========================100%] g800_c10_s1.nsys-rep[1/1] [========================100%] g800_c10_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g800_c10_s1.nsys-rep
+== g800_c5_s1: 800 480 400 640 384 320 5 1 (08:45:51) power 300.00 W
+grid [800, 480, 400] block [640, 384, 320] nch 5 slab 1 (plane 15.4 MB): forward 28.202 ms (67 % of 1008 GB/s), inverse 28.610 ms (66 %), model 19.12 GB per transform
+Collecting data...
+Generating '/tmp/nsys-report-c476.qdstrm'
+[1/1] [0%                          ] g800_c5_s1.nsys-rep[1/1] [0%                          ] g800_c5_s1.nsys-rep[1/1] [5%                          ] g800_c5_s1.nsys-rep[1/1] [10%                         ] g800_c5_s1.nsys-rep[1/1] [==================77%       ] g800_c5_s1.nsys-rep[1/1] [========================100%] g800_c5_s1.nsys-rep[1/1] [========================100%] g800_c5_s1.nsys-rep
+Generated:
+	/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/gs/nsys/g800_c5_s1.nsys-rep

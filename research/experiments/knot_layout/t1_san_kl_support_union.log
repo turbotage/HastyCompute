@@ -1,0 +1,17 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None zero_tiles true: half-ball set inside the union support, layout on vs off 6.2e-6
+Knot1d o1 ra None zero_tiles false: half-ball set inside the union support, layout on vs off 6.1e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles true: half-ball set inside the union support, layout on vs off 6.7e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles false: half-ball set inside the union support, layout on vs off 6.8e-6
+Knot2d o3 ra None zero_tiles true: half-ball set inside the union support, layout on vs off 1.2e-6
+Knot2d o3 ra None zero_tiles false: half-ball set inside the union support, layout on vs off 9.9e-7
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles true: half-ball set inside the union support, layout on vs off 1.4e-6
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero_tiles false: half-ball set inside the union support, layout on vs off 1.3e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 17.16s
+
+========= ERROR SUMMARY: 0 errors
+exit 0

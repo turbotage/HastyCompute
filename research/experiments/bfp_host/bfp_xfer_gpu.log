@@ -1,0 +1,19 @@
+
+running 2 tests
+test stager_uploads_packed_and_decodes_on_the_device ...          bfp: packed staging = host reference; 1099475 bytes up for 2163920 f32 bytes (0.508), decode 0.000s
+         bfp: resident packed: 1099475 device bytes for 2163920 f32 (0.508)
+ zstd1+q0.25: packed staging = host reference; 1099475 bytes up for 2163920 f32 bytes (0.508), decode 0.002s
+ zstd1+q0.25: resident packed: 1099475 device bytes for 2163920 f32 (0.508)
+         lz4: packed staging = host reference; 1099475 bytes up for 2163920 f32 bytes (0.508), decode 0.002s
+         lz4: resident packed: 1099475 device bytes for 2163920 f32 (0.508)
+ok
+test streamer_packs_gradients_on_the_device ... bfp12: device-packed gradient download = host encode (5 sets, order [3, 0, 4, 1, 2]); 1072120 bytes down vs 2800040 as f32 (0.383)
+bfp16: device-packed gradient download = host encode (5 sets, order [3, 0, 4, 1, 2]); 1422200 bytes down vs 2800040 as f32 (0.508)
+bfp20: device-packed gradient download = host encode (5 sets, order [3, 0, 4, 1, 2]); 1772280 bytes down vs 2800040 as f32 (0.633)
+bfp24: device-packed gradient download = host encode (5 sets, order [3, 0, 4, 1, 2]); 2122360 bytes down vs 2800040 as f32 (0.758)
+packed slots on the device: 848944 bytes
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+exit 0

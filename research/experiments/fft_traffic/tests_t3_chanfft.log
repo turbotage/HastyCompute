@@ -1,0 +1,14 @@
+
+running 1 test
+test slab_passes_equal_whole_grid ... slab 1 planes, k-support false: forward identical true, inverse identical true
+slab 3 planes, k-support false: forward identical true, inverse identical true
+slab 8 planes, k-support false: forward identical true, inverse identical true
+slab 100 planes, k-support false: forward identical true, inverse identical true
+slab 1 planes, k-support true: forward identical true, inverse identical true
+slab 3 planes, k-support true: forward identical true, inverse identical true
+slab 8 planes, k-support true: forward identical true, inverse identical true
+slab 100 planes, k-support true: forward identical true, inverse identical true
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.37s
+

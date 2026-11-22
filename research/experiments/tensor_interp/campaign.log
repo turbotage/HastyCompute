@@ -1,0 +1,24 @@
+=== run.sh start 2026-11-21 17:27:09, binaries frozen at 2026-11-21 17:27:09
+start t01_p2_vtc 2026-11-21 17:27:09
+done  t01_p2_vtc: exit 0, peak RSS 164148 kB (2026-11-21 17:27:11)
+start t02_p2_vs 2026-11-21 17:27:11
+done  t02_p2_vs: exit 0, peak RSS 314784 kB (2026-11-21 17:32:45)
+start t03_p2_ra_new 2026-11-21 17:32:45
+done  t03_p2_ra_new: exit 124, peak RSS 247852 kB (2026-11-21 17:47:45)
+start t04_p2_kl_auto 2026-11-21 17:47:45
+done  t04_p2_kl_auto: exit 0, peak RSS 291212 kB (2026-11-21 17:53:52)
+start t05_seg_vs 2026-11-21 17:53:52
+done  t05_seg_vs: exit 0, peak RSS 230544 kB (2026-11-21 17:54:28)
+start t06_seg_ra_vt 2026-11-21 17:54:28
+done  t06_seg_ra_vt: exit 0, peak RSS 298144 kB (2026-11-21 18:04:04)
+start t07_seg_kl 2026-11-21 18:04:04
+done  t07_seg_kl: exit 0, peak RSS 313744 kB (2026-11-21 18:10:19)
+start t08_seg_split 2026-11-21 18:10:19
+done  t08_seg_split: exit 0, peak RSS 293476 kB (2026-11-21 18:21:40)
+start r01_256_ra_s2 2026-11-21 18:21:40
+done  r01_256_ra_s2: exit 0, peak RSS 3280776 kB (2026-11-21 18:24:06)
+start r02_256_ra_s3 2026-11-21 18:24:06
+done  r02_256_ra_s3: exit 0, peak RSS 3347224 kB (2026-11-21 18:26:30)
+start r03_256_ra_s4 2026-11-21 18:26:30
+done  r03_256_ra_s4: exit 0, peak RSS 3271140 kB (2026-11-21 18:28:53)
+=== all cases done 2026-11-21 18:28:53

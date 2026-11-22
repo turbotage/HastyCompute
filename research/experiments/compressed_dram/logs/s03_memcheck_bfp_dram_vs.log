@@ -1,0 +1,38 @@
+=== s03_memcheck_bfp_dram_vs: env HASTY_BFP_TEST_CASES=0,4 HASTY_SEG_VS=1 HASTY_SEG_VT=1 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_grid (2026-11-21 13:11:14)
+locked 13:11:14; power limit / draw / sm clock / memory used: 450.00 W, 142.47 W, 2565 MHz, 240 MiB
+========= COMPUTE-SANITIZER
+
+running 1 test
+test bfp_grid_matches_f32 ... Static order 0 kprune true slab 390 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.02e-3 (66.58), adjoint 2.1e-5 (spread 2.1e-5), gradient 5.51e-4 (36.10; one ulp 8.6e-6, spread 1.2e-5); forward one ulp 3.5e-6, κ 21.3; adjointness 3.0e-6
+Static order 0 kprune true slab 390 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.20e-6 (70.40), adjoint 2.4e-5 (spread 2.1e-5), gradient 1.53e-5 (256.71; one ulp 8.6e-6, spread 1.2e-5); forward one ulp 3.5e-6, κ 21.3; adjointness 7.0e-8
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.17e-3 (76.50), adjoint 9.4e-6 (spread 9.4e-6), gradient 7.28e-4 (47.71; one ulp 6.4e-6, spread 5.2e-6); forward one ulp 3.8e-6, κ 23.1; adjointness 6.0e-6
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 5.03e-6 (84.38), adjoint 9.9e-6 (spread 9.4e-6), gradient 8.43e-6 (141.37; one ulp 6.4e-6, spread 5.2e-6); forward one ulp 3.8e-6, κ 23.1; adjointness 1.7e-7
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 27.16s
+
+========= ERROR SUMMARY: 0 errors
+	Command being timed: "timeout 900 env HASTY_BFP_TEST_CASES=0,4 HASTY_SEG_VS=1 HASTY_SEG_VT=1 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_grid"
+	User time (seconds): 25.82
+	System time (seconds): 1.79
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:27.35
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 367436
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 144212
+	Voluntary context switches: 4845
+	Involuntary context switches: 843
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 26848
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:11:42; power limit at end 450.00 W

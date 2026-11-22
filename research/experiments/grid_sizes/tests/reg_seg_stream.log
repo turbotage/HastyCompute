@@ -1,0 +1,10 @@
+=== seg_stream (2026-11-20 15:41:29); power.limit 300.00 W
+
+running 3 tests
+test packed_tables_match_resident ... ok
+test streamed_tables_joint_fat ... ok
+test streamed_tables_match_resident ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+exit 0 (2026-11-20 15:41:37)

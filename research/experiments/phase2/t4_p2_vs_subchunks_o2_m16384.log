@@ -1,0 +1,30 @@
+== p2_vs_subchunks orders 2 mi 16384 14:06:27
+locked 14:06:59 power limit 300.00 W
+
+running 1 test
+test p2_vs_subchunks ... vt static o2 10x10 miSome(16384) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 8 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 6.3e-6, adjointness vs tile adjoint 1.7e-7, vs ra cp.async 2.4e-7 (one-pass 1.7e-7 / 2.4e-7, tile pair 1.6e-7)
+vt static o2 10x10 miSome(16384) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 13 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 6.3e-6, adjointness vs tile adjoint 1.7e-7, vs ra cp.async 2.4e-7 (one-pass 1.7e-7 / 2.4e-7, tile pair 1.6e-7)
+vt static o2 10x10 miSome(16384) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 24 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 6.3e-6, adjointness vs tile adjoint 1.7e-7, vs ra cp.async 2.4e-7 (one-pass 1.7e-7 / 2.4e-7, tile pair 1.6e-7)
+vt static o2 10x10 miSome(16384) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 47 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 6.3e-6, adjointness vs tile adjoint 1.7e-7, vs ra cp.async 2.4e-7 (one-pass 1.7e-7 / 2.4e-7, tile pair 1.6e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 8 (regs 254, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 13 (regs 254, local 32 B, spill 0 B, 6 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 24 (regs 254, local 32 B, spill 0 B, 3 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 47 (regs 254, local 32 B, spill 0 B, 2 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 8 (regs 240, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 13 (regs 240, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 24 (regs 240, local 32 B, spill 0 B, 6 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+vt knot1d o2 6(3)x5 miSome(16384) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 47 (regs 240, local 32 B, spill 0 B, 4 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 7.3e-6, adjointness vs tile adjoint 3.8e-7, vs ra cp.async 3.9e-7 (one-pass 3.8e-7 / 3.9e-7, tile pair 3.9e-7)
+
+thread 'p2_vs_subchunks' (1059303) panicked at crates/hasty-nufft/tests/seg_phase2.rs:142:30:
+called `Result::unwrap()` on an `Err` value: Driver(DriverError(CUDA_ERROR_INVALID_VALUE, "invalid argument"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    p2_vs_subchunks
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 3.86s
+
+== exit 101 14:07:03

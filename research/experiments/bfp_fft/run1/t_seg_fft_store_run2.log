@@ -1,0 +1,23 @@
+=== t_seg_fft_store: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bin/seg_fft_store --nocapture --test-threads 1 (2026-11-20 15:39:53)
+locked 15:40:23; power limit 300.00 W
+
+running 2 tests
+test bfp22_engine_matches_f32 ... Static order 0, kprune true, fused true, slab 390: bfp22 vs f32 forward 6.39e-6 (26.80 · 2^-22), adjoint 6.51e-6 (27.32), gradient 8.55e-6 (35.87); f32 run-to-run adjoint 1.4e-6, gradient 3.0e-6; adjointness f32 6.8e-8, bfp22 1.3e-7
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 390 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (0.00 GB buffer))
+
+thread 'bfp22_engine_matches_f32' (1128848) panicked at crates/hasty-nufft/tests/seg_fft_store.rs:200:9:
+Static order 0: forward 6.39e-6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test switch_off_bit_identical ... Static order 0: loaded slot f32 before / after a bfp22 round trip: fused pad bit-identical true, separate pad true; bfp22 vs f32 4.35e-7
+Knot2d { mc: 6, kr: 3 } order 3: loaded slot f32 before / after a bfp22 round trip: fused pad bit-identical true, separate pad true; bfp22 vs f32 4.35e-7
+ok
+
+failures:
+
+failures:
+    bfp22_engine_matches_f32
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.50s
+
+exit 101 15:40:25

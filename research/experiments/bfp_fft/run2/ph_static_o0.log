@@ -1,0 +1,35 @@
+=== ph_static_o0 (rerun, load_set without data)
+locked 17:03:30
+ph0001 scan /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: image [254, 144, 114] (2.0 mm voxels), 32 coils, 53144 readouts × 3990 ADC samples, 20 frames; loaded in 2.6 s
+  virtual coils 10 of 32: signal-region energy kept 0.926, eigenvalue ratio last / first 0.042; 2175329 support voxels
+  encode 3: 379 readouts, 1512210 samples; L 10 segments over τ ∈ [1.60, 9.58] ms; order 0
+  engine: 1 image(s), coil batch 5 (50 channels), k-support pruned grid FFT (50 ch, grid [320, 180, 144], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.635, x pass Some((16, 40)) lines × threads, two-pass L2 slabs of 1 z planes (23.0 MB), pad / crop fused into the x passes (not in this FFT time))
+  f32 run to run: forward 2.0e-8, early gradient 3.4e-6, converged gradient 2.8e-6
+  static order 0, bfp22 (in place): loaded slot NaN (NaN · 2^-b), forward 4.45e-7 (1.87), early gradient Aᴴ A x 1.08e-5 (45.14), converged gradient Aᴴ(Ax − y) 8.36e-5 (350.80 · 2^-b)
+  static order 0, bfp20 (in place): loaded slot NaN (NaN · 2^-b), forward 8.72e-7 (0.91), early gradient Aᴴ A x 4.02e-5 (42.20), converged gradient Aᴴ(Ax − y) 1.96e-4 (205.37 · 2^-b)
+  static order 0, bfp24 (in place): loaded slot NaN (NaN · 2^-b), forward 3.91e-7 (6.56), early gradient Aᴴ A x 5.38e-6 (90.33), converged gradient Aᴴ(Ax − y) 9.52e-5 (1597.32 · 2^-b)
+  f32 after the BFP runs vs the first f32 forward: 2.0e-8; total 58.4 s
+	Command being timed: "timeout 900 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bfi/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 0"
+	User time (seconds): 145.79
+	System time (seconds): 8.39
+	Percent of CPU this job got: 261%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:59.02
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11873336
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 6179838
+	Voluntary context switches: 994
+	Involuntary context switches: 727
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 1440
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0

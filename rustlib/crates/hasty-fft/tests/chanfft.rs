@@ -208,3 +208,34 @@ fn ksupport_timing() {
         eprintln!("{nf:?} × {nch}: {name:<16} forward {:.2} ms, inverse {:.2} ms ({:.2}× / {:.2}× of block-only){}", best[k][0], best[k][1], best[0][0] / best[k][0], best[0][1] / best[k][1], fr.map_or(String::new(), |((c, p), v)| format!(", columns {c:.2}, proj {p:.2?}, cells {v:.2}")));
     }
 }
+
+/// two-pass L2 slabs (`set_slab`): the same kernels on the same lines slab by slab, so forward and inverse equal the
+/// whole-grid passes bit for bit, block-pruned and k-support pruned, slab sizes that do and do not divide the block's
+/// head / tail z ranges
+#[test]
+fn slab_passes_equal_whole_grid() {
+    let dev = Device::new(0).expect("CUDA device");
+    let st = dev.default_stream();
+    let (n, nch, keep) = ([20usize, 24, 30], 3usize, [(8usize, 8usize), (10, 9), (12, 12)]);
+    for ks in [None, Some(ksup([30, 24, 20], [11.0, 9.5, 8.0], true))] {
+        let mut pr = PrunedChanFft3::<f32>::new_ksupport(&dev, n, nch, keep, 1.0, ks.as_ref()).unwrap();
+        let len = pr.len();
+        let val: Vec<C32> = (0..len).map(|q| C32::new(((q as f32) * 0.37).sin(), ((q as f32) * 0.11 + 0.3).cos())).collect();
+        let run = |pr: &PrunedChanFft3<f32>| {
+            let mut a = st.clone_htod(&val).unwrap();
+            pr.forward(&st, &mut a).unwrap();
+            let f = st.clone_dtoh(&a).unwrap();
+            let mut b = st.clone_htod(&val).unwrap();
+            pr.inverse(&st, &mut b).unwrap();
+            (f, st.clone_dtoh(&b).unwrap())
+        };
+        let (f0, i0) = run(&pr);
+        for dz in [1usize, 3, 8, 100] {
+            pr.set_slab(dz);
+            let (f, i) = run(&pr);
+            let same = |x: &[C32], y: &[C32]| x.iter().zip(y).all(|(a, b)| a.re.to_bits() == b.re.to_bits() && a.im.to_bits() == b.im.to_bits());
+            eprintln!("slab {dz} planes, k-support {}: forward identical {}, inverse identical {}", ks.is_some(), same(&f, &f0), same(&i, &i0));
+            assert!(same(&f, &f0) && same(&i, &i0), "slab {dz}: results differ from the whole-grid passes");
+        }
+    }
+}

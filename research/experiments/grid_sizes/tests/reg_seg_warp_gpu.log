@@ -1,0 +1,25 @@
+=== seg_warp_gpu (2026-11-20 15:59:33); power.limit 300.00 W
+
+running 5 tests
+test warp_adjoint_correction_matches_cpu ... ok
+test warp_adjoint_gpu ... FAILED
+test warp_correction_matches_cpu ... ok
+test warp_cost_realistic ... ignored
+test warp_moving_vessel_gpu ... ok
+
+failures:
+
+---- warp_adjoint_gpu stdout ----
+frames 1: adjoint mismatch plain 5.5e-5, warped 2.0e-4 (max of 4 runs)
+
+thread 'warp_adjoint_gpu' (1152991) panicked at crates/hasty-nufft/tests/seg_warp_gpu.rs:156:9:
+warp adjoint mismatch 0.00020268398066731604 vs plain 0.000055468691820081546
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    warp_adjoint_gpu
+
+test result: FAILED. 3 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 5.01s
+
+exit 101 (2026-11-20 16:03:18)

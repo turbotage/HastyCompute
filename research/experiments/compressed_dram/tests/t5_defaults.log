@@ -1,0 +1,70 @@
+warning: unused variable: `store_pack`
+   --> crates/hasty-fft/src/codegen.rs:610:9
+    |
+610 |     let store_pack = bfp_store_pack() && !store_fused;
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_store_pack`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-fft` (lib) generated 1 warning (run `cargo fix --lib -p hasty-fft` to apply 1 suggestion)
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+     Running tests/seg_defaults.rs (target/release/deps/seg_defaults-912beb99adee68eb)
+
+running 3 tests
+test fft_store_default_and_rebudget ... grid [30, 28, 30], coil batch 3, default store with whole-grid passes f32 (f32: lines not whole 16-line tiles, 0 B extra)
+bfp24 default vs f32: forward 1.6e-7 (bound 8.0e-6), adjoint 2.1e-6 (bound 7.9e-6)
+    [fft_store] coil batch 3 → 1 (re-budget for the bfp22 intermediates): launch shapes and kernel variants back to their defaults (autotune again)
+set_fft_store(bfp22) on a 3-coil budget: coil batch 1 (358848 B of BFP buffer)
+  bfp22 after re-budget vs f32: forward 2.9e-6 (bound 2.0e-5), adjoint 3.5e-6 (bound 2.0e-5)
+    [fft_store] coil batch 1 → 3 (re-budget for the f32 intermediates): launch shapes and kernel variants back to their defaults (autotune again)
+  f32 after re-budget vs f32: forward 1.6e-7, adjoint 1.9e-6
+ok
+test one_bin_fallback_calls ... order 3 Order3: multi fwd K1 w: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: multi fwd K2: one bin vs static 1.8e-7 (bound 3.0e-5)
+order 3 Order3: multi adj K2 img0: one bin vs static 3.2e-6 (bound 3.0e-5)
+order 3 Order3: multi adj K2 img1: one bin vs static 2.8e-6 (bound 3.0e-5)
+order 3 Order3: group fwd 0: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: group fwd 1: one bin vs static 2.2e-7 (bound 3.0e-5)
+order 3 Order3: group residual 1: one bin vs static 2.2e-7 (bound 3.0e-5)
+order 3 Order3: group adj: one bin vs static 4.0e-6 (bound 3.0e-5)
+order 3 Order3: fat fwd: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: fat adj: one bin vs static 3.4e-6 (bound 3.0e-5)
+order 3 Order3: fat group fwd 1: one bin vs static 2.3e-7 (bound 3.0e-5)
+order 3 Order3: fat group adj: one bin vs static 4.3e-6 (bound 3.0e-5)
+order 3 Order3: plain fwd: one bin vs static 1.8e-6 (bound 3.0e-5)
+order 2 Always: multi fwd K1 w: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: multi fwd K2: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: multi adj K2 img0: one bin vs static 1.9e-6 (bound 3.0e-5)
+order 2 Always: multi adj K2 img1: one bin vs static 1.8e-6 (bound 3.0e-5)
+order 2 Always: group fwd 0: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group fwd 1: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group residual 1: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group adj: one bin vs static 2.5e-6 (bound 3.0e-5)
+order 2 Always: fat fwd: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: fat adj: one bin vs static 1.9e-6 (bound 3.0e-5)
+order 2 Always: fat group fwd 1: one bin vs static 1.7e-7 (bound 3.0e-5)
+order 2 Always: fat group adj: one bin vs static 2.5e-6 (bound 3.0e-5)
+order 2 Always: plain fwd: one bin vs static 9.3e-7 (bound 3.0e-5)
+ok
+test static_o3_one_bin_default ... order 0 default (static) vs static: forward 5.6e-7 (bound 6.3e-5), adjoint 2.1e-5 (bound 7.7e-5), residual 5.7e-7
+order 0 default (static) vs static, autotuned: forward 4.8e-6 (bound 6.3e-5), adjoint 3.6e-5 (bound 7.7e-5), residual 4.8e-6
+order 2 default (static) vs static: forward 1.6e-7 (bound 3.0e-5), adjoint 1.8e-6 (bound 3.0e-5), residual 1.6e-7
+order 2 default (static) vs static, autotuned: forward 9.6e-7 (bound 3.0e-5), adjoint 1.8e-6 (bound 3.0e-5), residual 9.6e-7
+order 3 default (one bin) vs static: forward 1.6e-6 (bound 3.0e-5), adjoint 5.7e-6 (bound 3.0e-5), residual 1.6e-6
+order 3 default (one bin) vs static, autotuned: forward 1.9e-6 (bound 3.0e-5), adjoint 5.7e-6 (bound 3.0e-5), residual 1.9e-6
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 308.45s
+

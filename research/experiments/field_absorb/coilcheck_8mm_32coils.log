@@ -1,0 +1,9 @@
+coil energy: all 32 whitened true maps
+today's rule (static field, phase only, as recon_p2np --ratemap truth-bc): L per encode [8, 8, 8, 8, 8, 8, 8] → L = 8
+  knot   0 enc 0: a 11/12/15
+  knot   0 enc 1: a 11/12/15
+  knot   0 enc 2: a 11/12/15
+  knot   0 enc 3: a 11/12/15
+  knot   0 enc 4: a 11/12/15
+  knot   0 enc 5: a 11/12/15
+  knot   0 enc 6: a 11/12/15

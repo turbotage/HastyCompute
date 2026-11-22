@@ -1,0 +1,23 @@
+
+running 2 tests
+test fat_union_per_frame_maps_match_direct_sum ... FAILED
+test fat_union_with_complex_rates_matches_direct_sum ... ok
+
+failures:
+
+---- fat_union_per_frame_maps_match_direct_sum stdout ----
+water + fat  L  8 frame 0 (cond 2.7): GPU vs exact fwd 1.13e-1 adj 9.48e-2 | model 1.13e-1 / 9.48e-2 | impl 1.14e-4 / 5.76e-4 | adjoint identity 3.3e-6 (of |<y, Ax>|: 4.2e-4)
+water + fat  L  8 frame 1 (cond 2.7): GPU vs exact fwd 1.37e-1 adj 1.12e-1 | model 1.37e-1 / 1.12e-1 | impl 1.15e-4 / 5.74e-4 | adjoint identity 3.3e-6 (of |<y, Ax>|: 5.4e-4)
+water + fat  L  8 frame 2 (cond 2.7): GPU vs exact fwd 1.62e-1 adj 1.30e-1 | model 1.62e-1 / 1.30e-1 | impl 1.13e-4 / 5.69e-4 | adjoint identity 3.7e-6 (of |<y, Ax>|: 8.7e-4)
+water + fat  L 12 frame 0 (cond 3.0): GPU vs exact fwd 1.03e-3 adj 1.64e-3 | model 1.02e-3 / 1.07e-3 | impl 1.12e-4 / 1.24e-3 | adjoint identity 1.1e-5 (of |<y, Ax>|: 1.3e-3)
+
+thread 'fat_union_per_frame_maps_match_direct_sum' (915911) panicked at crates/hasty-nufft/tests/seg_fat_union_gpu.rs:178:13:
+adjoint identity 1.1e-5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fat_union_per_frame_maps_match_direct_sum
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.10s
+

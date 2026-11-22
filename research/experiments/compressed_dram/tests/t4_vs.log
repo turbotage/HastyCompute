@@ -1,0 +1,59 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+warning: function `bit_equal` is never used
+  --> crates/hasty-nufft/tests/seg_bfp_dram.rs:33:4
+   |
+33 | fn bit_equal(a: &[C32], b: &[C32]) -> bool {
+   |    ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (test "seg_bfp_dram") generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/seg_bfp_dram.rs (/home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/release/deps/seg_bfp_dram-bcc7115e2f700abc)
+
+running 3 tests
+test bfp_grid_matches_f32 ... Static order 0 kprune true slab 390 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.01e-3 (66.45), adjoint 2.8e-5 (spread 2.8e-5), gradient 5.55e-4 (36.36; one ulp 6.8e-6, spread 9.3e-6); forward one ulp 3.6e-6, κ 16.6; adjointness 2.0e-6
+Static order 0 kprune true slab 390 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.15e-6 (69.61), adjoint 2.6e-5 (spread 2.8e-5), gradient 1.11e-5 (185.72; one ulp 6.8e-6, spread 9.3e-6); forward one ulp 3.6e-6, κ 16.6; adjointness 7.9e-8
+Static order 0 kprune false slab 0 fused false forward kernel vs / vt: grid bfp16: 18126 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.02e-3 (66.73), adjoint 2.4e-5 (spread 2.2e-5), gradient 5.52e-4 (36.19; one ulp 7.2e-6, spread 9.2e-6); forward one ulp 3.5e-6, κ 16.4; adjointness 2.6e-6
+Static order 0 kprune false slab 0 fused false forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.12e-6 (69.19), adjoint 2.4e-5 (spread 2.2e-5), gradient 9.74e-6 (163.35; one ulp 7.2e-6, spread 9.2e-6); forward one ulp 3.5e-6, κ 16.4; adjointness 8.8e-9
+Static order 3 kprune true slab 0 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.01e-3 (66.45), adjoint 2.0e-5 (spread 2.2e-5), gradient 5.54e-4 (36.33; one ulp 7.4e-6, spread 1.2e-5); forward one ulp 3.6e-6, κ 16.7; adjointness 2.0e-6
+Static order 3 kprune true slab 0 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.15e-6 (69.69), adjoint 2.1e-5 (spread 2.2e-5), gradient 1.40e-5 (235.17; one ulp 7.4e-6, spread 1.2e-5); forward one ulp 3.6e-6, κ 16.7; adjointness 1.7e-7
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 390 fused false forward kernel vs / vt: grid bfp16: 18126 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.17e-3 (76.44), adjoint 6.3e-6 (spread 6.2e-6), gradient 7.28e-4 (47.69; one ulp 6.9e-6, spread 3.5e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 6.4e-6
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 390 fused false forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 5.02e-6 (84.19), adjoint 6.3e-6 (spread 6.2e-6), gradient 7.72e-6 (129.47; one ulp 6.9e-6, spread 3.5e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 6.1e-8
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.17e-3 (76.40), adjoint 8.0e-6 (spread 9.2e-6), gradient 7.24e-4 (47.46; one ulp 7.0e-6, spread 4.8e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 6.6e-6
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.95e-6 (83.13), adjoint 8.1e-6 (spread 9.2e-6), gradient 9.06e-6 (151.99; one ulp 7.0e-6, spread 4.8e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 2.1e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune false slab 0 fused true forward kernel vs / vt: grid bfp16: 18127 whole blocks compared, 0 differ from the host codec; slot 2.88e-5 (1.89 · 2^-b); forward 1.17e-3 (76.40), adjoint 8.1e-6 (spread 8.4e-6), gradient 7.24e-4 (47.46; one ulp 7.0e-6, spread 4.4e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 6.6e-6
+Knot2d { mc: 6, kr: 3 } order 3 kprune false slab 0 fused true forward kernel vs / vt: grid bfp24: 18144 whole blocks compared, 0 differ from the host codec; slot 1.18e-7 (1.98 · 2^-b); forward 4.95e-6 (83.13), adjoint 7.7e-6 (spread 8.4e-6), gradient 8.81e-6 (147.77; one ulp 7.0e-6, spread 4.4e-6); forward one ulp 3.9e-6, κ 18.1; adjointness 2.1e-7
+ok
+test bfp_maps_match_f32 ... Static order 0 kprune true slab 390: maps bfp16 diag f32: forward 2.31e-5 (1.51 · 2^-b), adjoint 3.07e-5 (2.01), gradient 2.34e-5 (1.53); one ulp 3.6e-6 / 6.6e-6 / 8.5e-6; spread 2.2e-5 / 9.8e-6; adjointness f32 9.8e-8, bfp 2.8e-8
+Static order 0 kprune true slab 390: maps f32 diag bfp16: forward 1.51e-5 (0.99 · 2^-b), adjoint 2.72e-5 (1.78), gradient 1.97e-5 (1.29); one ulp 3.6e-6 / 6.6e-6 / 8.5e-6; spread 2.2e-5 / 9.8e-6; adjointness f32 9.8e-8, bfp 7.2e-8
+Static order 0 kprune true slab 390: maps bfp16 diag bfp16: forward 2.71e-5 (1.78 · 2^-b), adjoint 3.66e-5 (2.40), gradient 2.87e-5 (1.88); one ulp 3.6e-6 / 6.6e-6 / 8.5e-6; spread 2.2e-5 / 9.8e-6; adjointness f32 9.8e-8, bfp 5.7e-8
+Static order 0 kprune true slab 390: maps bfp24 diag bfp24: forward 3.72e-6 (62.38 · 2^-b), adjoint 2.15e-5 (360.60), gradient 1.14e-5 (191.76); one ulp 3.6e-6 / 6.6e-6 / 8.5e-6; spread 2.2e-5 / 9.8e-6; adjointness f32 9.8e-8, bfp 1.1e-8
+Static order 3 kprune false slab 0: maps bfp16 diag f32: forward 2.31e-5 (1.51 · 2^-b), adjoint 3.25e-5 (2.13), gradient 2.27e-5 (1.49); one ulp 3.6e-6 / 6.3e-6 / 8.9e-6; spread 2.2e-5 / 1.3e-5; adjointness f32 3.2e-8, bfp 1.3e-8
+Static order 3 kprune false slab 0: maps f32 diag bfp16: forward 1.51e-5 (0.99 · 2^-b), adjoint 3.39e-5 (2.22), gradient 1.96e-5 (1.29); one ulp 3.6e-6 / 6.3e-6 / 8.9e-6; spread 2.2e-5 / 1.3e-5; adjointness f32 3.2e-8, bfp 1.2e-7
+Static order 3 kprune false slab 0: maps bfp16 diag bfp16: forward 2.72e-5 (1.78 · 2^-b), adjoint 3.83e-5 (2.51), gradient 2.77e-5 (1.82); one ulp 3.6e-6 / 6.3e-6 / 8.9e-6; spread 2.2e-5 / 1.3e-5; adjointness f32 3.2e-8, bfp 8.7e-8
+Static order 3 kprune false slab 0: maps bfp24 diag bfp24: forward 3.73e-6 (62.51 · 2^-b), adjoint 2.60e-5 (435.45), gradient 1.13e-5 (189.24); one ulp 3.6e-6 / 6.3e-6 / 8.9e-6; spread 2.2e-5 / 1.3e-5; adjointness f32 3.2e-8, bfp 5.8e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp16 diag f32: forward 2.35e-5 (1.54 · 2^-b), adjoint 2.44e-5 (1.60), gradient 2.28e-5 (1.49); one ulp 3.9e-6 / 5.3e-6 / 6.9e-6; spread 6.8e-6 / 3.6e-6; adjointness f32 1.6e-8, bfp 4.7e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps f32 diag bfp16: forward 1.55e-5 (1.02 · 2^-b), adjoint 1.62e-5 (1.06), gradient 2.06e-5 (1.35); one ulp 3.9e-6 / 5.3e-6 / 6.9e-6; spread 6.8e-6 / 3.6e-6; adjointness f32 1.6e-8, bfp 6.9e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp16 diag bfp16: forward 2.78e-5 (1.82 · 2^-b), adjoint 2.87e-5 (1.88), gradient 2.98e-5 (1.95); one ulp 3.9e-6 / 5.3e-6 / 6.9e-6; spread 6.8e-6 / 3.6e-6; adjointness f32 1.6e-8, bfp 6.7e-8
+Knot2d { mc: 6, kr: 3 } order 0 kprune true slab 0: maps bfp24 diag bfp24: forward 4.06e-6 (68.06 · 2^-b), adjoint 6.97e-6 (116.89), gradient 7.47e-6 (125.27); one ulp 3.9e-6 / 5.3e-6 / 6.9e-6; spread 6.8e-6 / 3.6e-6; adjointness f32 1.6e-8, bfp 6.9e-8
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp16 diag f32: forward 2.36e-5 (1.54 · 2^-b), adjoint 2.49e-5 (1.63), gradient 2.31e-5 (1.51); one ulp 3.9e-6 / 4.7e-6 / 7.1e-6; spread 7.8e-6 / 4.2e-6; adjointness f32 1.9e-7, bfp 1.1e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps f32 diag bfp16: forward 1.55e-5 (1.02 · 2^-b), adjoint 1.70e-5 (1.12), gradient 2.11e-5 (1.38); one ulp 3.9e-6 / 4.7e-6 / 7.1e-6; spread 7.8e-6 / 4.2e-6; adjointness f32 1.9e-7, bfp 1.8e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp16 diag bfp16: forward 2.78e-5 (1.82 · 2^-b), adjoint 2.90e-5 (1.90), gradient 3.00e-5 (1.97); one ulp 3.9e-6 / 4.7e-6 / 7.1e-6; spread 7.8e-6 / 4.2e-6; adjointness f32 1.9e-7, bfp 1.2e-7
+Knot2d { mc: 6, kr: 3 } order 3 kprune true slab 390: maps bfp24 diag bfp24: forward 4.08e-6 (68.42 · 2^-b), adjoint 7.74e-6 (129.79), gradient 8.28e-6 (138.97); one ulp 3.9e-6 / 4.7e-6 / 7.1e-6; spread 7.8e-6 / 4.2e-6; adjointness f32 1.9e-7, bfp 1.5e-7
+ok
+test debug_grid_adjoint ... ignored
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.83s
+

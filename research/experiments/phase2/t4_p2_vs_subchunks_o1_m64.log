@@ -1,0 +1,21 @@
+== p2_vs_subchunks orders 1 mi 64 14:45:31
+locked 14:47:49 power limit 300.00 W
+
+running 1 test
+test p2_vs_subchunks ... vs static o1 10x10 miSome(64) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 8 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 1.9e-5, adjointness vs tile adjoint 2.3e-7, vs ra cp.async 2.0e-7 (one-pass 2.3e-7 / 2.0e-7, tile pair 2.6e-7)
+vs static o1 10x10 miSome(64) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 13 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 1.9e-5, adjointness vs tile adjoint 2.3e-7, vs ra cp.async 2.0e-7 (one-pass 2.3e-7 / 2.0e-7, tile pair 2.6e-7)
+vs static o1 10x10 miSome(64) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 16 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 1.9e-5, adjointness vs tile adjoint 2.3e-7, vs ra cp.async 2.0e-7 (one-pass 2.3e-7 / 2.0e-7, tile pair 2.6e-7)
+vs static o1 10x10 miSome(64) VsCfg { nwc: 7, nws: 1, vxpad: 0 } sch 31 (regs 254, local 32 B, spill 0 B, 7 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 1.9e-5, adjointness vs tile adjoint 2.3e-7, vs ra cp.async 2.0e-7 (one-pass 2.3e-7 / 2.0e-7, tile pair 2.6e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 8 (regs 255, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 13 (regs 255, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 16 (regs 255, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 1, vxpad: 0 } sch 31 (regs 255, local 32 B, spill 0 B, 4 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 8 (regs 168, local 32 B, spill 0 B, 12 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 13 (regs 168, local 32 B, spill 0 B, 12 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 16 (regs 168, local 32 B, spill 0 B, 12 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+vs knot2d o1 4x3 miSome(64) VsCfg { nwc: 1, nws: 2, vxpad: 0 } sch 31 (regs 168, local 32 B, spill 0 B, 8 warps): vs one-pass 0.0e0 bitwise, one-pass vs tile 2.0e-5, adjointness vs tile adjoint 2.8e-7, vs ra cp.async 1.1e-7 (one-pass 2.8e-7 / 1.1e-7, tile pair 1.8e-7)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.32s
+
+== exit 0 14:47:50

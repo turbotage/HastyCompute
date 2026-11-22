@@ -1,0 +1,12 @@
+== run 1 16:52:35 power 300.00 W
+test warp_adjoint_gpu ... frames 1: adjoint mismatch plain 3.9e-4, warped 6.0e-4 (max of 4 runs)
+frames 3: adjoint mismatch plain 1.4e-4, warped 1.9e-4 (max of 4 runs)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.32s
+== run 2 17:02:20 power 300.00 W
+test warp_adjoint_gpu ... frames 1: adjoint mismatch plain 1.5e-4, warped 2.0e-4 (max of 4 runs)
+frames 3: adjoint mismatch plain 6.5e-5, warped 1.0e-4 (max of 4 runs)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.26s
+== run 3 17:12:35 power 300.00 W
+test warp_adjoint_gpu ... frames 1: adjoint mismatch plain 4.5e-4, warped 5.6e-4 (max of 4 runs)
+frames 3: adjoint mismatch plain 2.1e-5, warped 5.4e-5 (max of 4 runs)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.32s

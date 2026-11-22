@@ -1,0 +1,62 @@
+running 2 tests
+test vknot::tests::ledger_bfp_state_and_kspace_1mm_box ... f32 host state: knot mode: no placement fits (device budget 23.00 GiB, host 57.88 GiB available):
+  state host, data device, tables device: device 32.51 / 23.00 GiB, host 73.23 / 57.88 GiB
+  state host, data device, tables host: device 23.29 / 23.00 GiB, host 73.23 / 57.88 GiB
+  state host, data host, tables device: device 24.85 / 23.00 GiB, host 73.23 / 57.88 GiB
+  state host, data host, tables host: device 15.64 / 23.00 GiB, host 73.23 / 57.88 GiB
+  knot-mode memory plan: state host (θ streamed knot by knot), data host (staged per set), sample tables host (streamed per set); device peak 15.64 GiB, host 73.23 GiB, predicted transfers 8.5 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device   13.40 GiB  host    0.00 GiB
+    set image / its adjoint (1 images × 8530000 voxels, one set)   device    0.06 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.04 GiB  host    0.00 GiB
+    k-space data: one set staged                                   device    0.04 GiB  host    0.00 GiB
+    sample tables: two streaming slots                             device    0.09 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    1.02 GiB  host    0.03 GiB
+    parameter state: x, g, x_prev, g_prev (host)                   device    0.00 GiB  host   71.20 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
+bfp16 record only (no gradient sink): knot mode: no placement fits (device budget 23.00 GiB, host 57.88 GiB available):
+  state host, data device, tables device: device 32.51 / 23.00 GiB, host 64.53 / 57.88 GiB
+  state host, data device, tables host: device 23.29 / 23.00 GiB, host 64.53 / 57.88 GiB
+  state host, data host, tables device: device 24.85 / 23.00 GiB, host 64.53 / 57.88 GiB
+  state host, data host, tables host: device 15.64 / 23.00 GiB, host 64.53 / 57.88 GiB
+  knot-mode memory plan: state host (θ streamed knot by knot), data host (staged per set), sample tables host (streamed per set); device peak 15.64 GiB, host 64.53 GiB, predicted transfers 8.5 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device   13.40 GiB  host    0.00 GiB
+    set image / its adjoint (1 images × 8530000 voxels, one set)   device    0.06 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.04 GiB  host    0.00 GiB
+    k-space data: one set staged                                   device    0.04 GiB  host    0.00 GiB
+    sample tables: two streaming slots                             device    0.09 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    1.02 GiB  host    0.03 GiB
+    parameter state (x f32 (master), g and g_prev f32, secant step bfp16; host) device    0.00 GiB  host   62.50 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
+bfp16 host state:
+knot-mode memory plan: state host (θ streamed knot by knot), data host (staged per set), sample tables host (streamed per set); device peak 15.64 GiB, host 47.01 GiB, predicted transfers 7.5 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device   13.40 GiB  host    0.00 GiB
+    set image / its adjoint (1 images × 8530000 voxels, one set)   device    0.06 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.04 GiB  host    0.00 GiB
+    k-space data: one set staged                                   device    0.04 GiB  host    0.00 GiB
+    sample tables: two streaming slots                             device    0.09 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    1.02 GiB  host    0.03 GiB
+    parameter state (x f32 (master), g and g_prev bfp16, secant step bfp16; host) device    0.00 GiB  host   44.98 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
++ packed k-space staging:
+knot-mode memory plan: state host (θ streamed knot by knot), data host (staged per set), sample tables host (streamed per set); device peak 15.66 GiB, host 47.01 GiB, predicted transfers 7.4 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device   13.40 GiB  host    0.00 GiB
+    set image / its adjoint (1 images × 8530000 voxels, one set)   device    0.06 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.04 GiB  host    0.00 GiB
+    k-space data: one set staged packed (BFP, 0.570 of f32), decoded on the device device    0.06 GiB  host    0.00 GiB
+    sample tables: two streaming slots                             device    0.09 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    1.02 GiB  host    0.03 GiB
+    parameter state (x f32 (master), g and g_prev bfp16, secant step bfp16; host) device    0.00 GiB  host   44.98 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
++ resident packed k-space:
+knot-mode memory plan: state host (θ streamed knot by knot), data host (staged per set), sample tables host (streamed per set); device peak 20.02 GiB, host 47.01 GiB, predicted transfers 7.2 s / gradient
+    operator (coil maps, segments, fine grids, FFT plans), resident device   13.40 GiB  host    0.00 GiB
+    set image / its adjoint (1 images × 8530000 voxels, one set)   device    0.06 GiB  host    0.00 GiB
+    residual of the largest set                                    device    0.04 GiB  host    0.00 GiB
+    k-space data: all sets packed on the device (BFP, 0.570 of f32) + one decoded set device    4.42 GiB  host    0.00 GiB
+    sample tables: two streaming slots                             device    0.09 GiB  host    0.00 GiB
+    model scratch (node images, accumulators, metric weights)      device    1.02 GiB  host    0.03 GiB
+    parameter state (x f32 (master), g and g_prev bfp16, secant step bfp16; host) device    0.00 GiB  host   44.98 GiB
+    margin (allocator, kernels)                                    device    1.00 GiB  host    2.00 GiB
+ok
+test vknot::tests::ledger_prefers_device_and_refuses_clearly ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 79 filtered out; finished in 0.00s

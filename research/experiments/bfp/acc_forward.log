@@ -1,0 +1,11 @@
+12:22:25 image (114, 144, 254) signal voxels 2175329 field Hz p1/p50/p99 in signal [-206.3   21.8  282.5]
+12:22:26 virtual coils: energy kept 0.6698398271983929 eig ratio last/first 0.2515187704601422
+12:22:32 grid (144, 180, 320) channels 50
+12:24:47 stage xy {'f32': '2.53e-08', 'fp24': '6.48e-06', 'bf16': '1.66e-03', 'bfp8': '7.91e-03', 'bfp10': '1.97e-03', 'bfp12': '4.93e-04', 'bfp14': '1.23e-04', 'bfp16': '3.08e-05', 'bfp18': '7.70e-06', 'bfp20': '1.93e-06', 'bfp22': '4.81e-07', 'bfp24': '1.20e-07'} 128 s
+12:26:53 stage yz {'f32': '2.53e-08', 'fp24': '6.47e-06', 'bf16': '1.66e-03', 'bfp8': '7.63e-03', 'bfp10': '1.90e-03', 'bfp12': '4.75e-04', 'bfp14': '1.19e-04', 'bfp16': '2.97e-05', 'bfp18': '7.42e-06', 'bfp20': '1.85e-06', 'bfp22': '4.64e-07', 'bfp24': '1.16e-07'} 122 s
+12:28:57 stage grid {'f32': '2.54e-08', 'fp24': '6.50e-06', 'bf16': '1.66e-03', 'bfp8': '7.73e-03', 'bfp10': '1.92e-03', 'bfp12': '4.82e-04', 'bfp14': '1.20e-04', 'bfp16': '3.00e-05', 'bfp18': '7.53e-06', 'bfp20': '1.88e-06', 'bfp22': '4.70e-07', 'bfp24': '1.18e-07'} 121 s
+12:29:08 grid rms in ball / sigma_k 7.357600486860011
+12:29:47 chained 16 {'chained': 5.225994946174863e-05, 'quadrature_of_stages': 5.22642450881871e-05, 'rms_err_over_sigma_k': np.float64(0.0002094500446802167)}
+12:30:25 chained 20 {'chained': 3.267975611295966e-06, 'quadrature_of_stages': 3.268706169160659e-06, 'rms_err_over_sigma_k': np.float64(1.3097556443310342e-05)}
+12:31:05 chained 24 {'chained': 2.04307376117398e-07, 'quadrature_of_stages': 2.0428268058271108e-07, 'rms_err_over_sigma_k': np.float64(8.188333417277479e-07)}
+12:31:05 phase forward done in 520 s

@@ -1,0 +1,11 @@
+12:48:22 image (114, 144, 254) signal voxels 2175329 field Hz p1/p50/p99 in signal [-206.3   21.8  282.5]
+12:48:23 virtual coils: energy kept 0.6698398271983929 eig ratio last/first 0.2515187704601422
+12:49:25 e2e proposed_b16 1.795e-05 55 s
+12:50:20 e2e proposed_b20 1.501e-06 55 s
+12:51:15 e2e proposed_b22 1.043e-06 55 s
+12:52:10 e2e proposed_b24 1.008e-06 56 s
+12:53:23 e2e all_b16 2.517e-05 73 s
+12:54:35 e2e all_b20 1.569e-06 72 s
+12:55:48 e2e all_b24 9.807e-08 73 s
+12:56:24 e2e all_f32 3.965e-08 36 s
+12:56:24 phase e2e done in 483 s

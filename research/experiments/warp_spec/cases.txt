@@ -1,0 +1,18 @@
+# research/sample_kernels.md §22 campaign: name|env|command ($B frozen binaries, $SP scratchpad). About 30 min at 450 W (t02 ≈ 6–9 min with a cold kernel cache).
+# 256^3 image = fine grid 320^3, one set of 1.52 M samples, order 3, 10 coils x 10 segments, coil batch 5 = 50 channels.
+# ── regression (1–5 min each): vw 1 / vw 2 bitwise vs the FMA vt; ra stages 5 / 6 bitwise vs the base ra (no split
+#    lists) or within its floors (split lists); the vs tests and the autotune with the vw candidates in the default set
+t01_p2_vw||$B/seg_phase2 p2_vw --exact --nocapture --test-threads 1
+#SKIP t02_p2_ra_ws_knot_o01|P2_RA_VARS=ws|$B/seg_phase2 p2_ra_knot_o01 --exact --nocapture --test-threads 1
+#SKIP done in dev (8.9 min, 342 checks pass; scratchpad vw/t4.log): t03_p2_ra_ws_knot_o23|P2_RA_VARS=ws|$B/seg_phase2 p2_ra_knot_o23 --exact --nocapture --test-threads 1
+#SKIP (≈ 9 min, over budget; run alone if wanted): t04_p2_ra_ws_static_o2|P2_RA_VARS=ws|$B/seg_phase2 p2_ra_static_o2 --exact --nocapture --test-threads 1
+t05_seg_vs||$B/seg_vs --nocapture --test-threads 1
+# ── timing + added error at the 50-channel shape: the active shapes pinned (FMA vt 4,1,0 sub-chunk 29 = the autotune's
+#    choice; ra nxg 4, cb 7, chk 14, cp.async = the autotune's choice), then every vw / ra-ws shape against them
+#SKIP o01_256_ws_cmp|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0,29 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,2,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --no-tune --ws-compare
+#SKIP o02_192_ws_cmp|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0,29 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,2,0|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 192,192,192 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14 --no-tune --ws-compare
+# ── the default autotune with every new candidate logged (vw 1 is in the default set; ra stages 5 / 6 opted in)
+#SKIP o03_256_tune_all|HASTY_SEG_VT_WS=all HASTY_SEG_VSA_WS=auto HASTY_SEG_SPILLSKIP=0 HASTY_SEG_VS_LOG=1 HASTY_SEG_VSA_LOG=1|$B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 3 --cb-cap 5 --max-grid-gb 14
+# ── Nsight Compute, one launch each, targeted sections (never the full set on multi-GB grids)
+#SKIP n01_vw1|HASTY_SEG_VT=1 HASTY_SEG_VW_CFG=4,10,3,2,24,3 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/ncu --section LaunchStats --section Occupancy --section SpeedOfLight --section WarpStateStats --section MemoryWorkloadAnalysis --section InstructionStats --section SourceCounters -k regex:seg_forward_vs --launch-skip 1 --launch-count 1 -f -o $SP/wsp/ncu/vw1 $B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 1 --cb-cap 5 --max-grid-gb 14 --no-tune
+#SKIP n02_ra_ws4|HASTY_SEG_VT=1 HASTY_SEG_VS_CFG=4,1,0,29 HASTY_SEG_VSA=1 HASTY_SEG_VSA_CFG=4,7,14,1,5,0 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/ncu --section LaunchStats --section Occupancy --section SpeedOfLight --section WarpStateStats --section InstructionStats --section SourceCounters -k regex:seg_adjoint_ra --launch-skip 1 --launch-count 1 -f -o $SP/wsp/ncu/ra_ws4 $B/opbench --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow --matrix 256,256,256 --no-gnl --reps 1 --cb-cap 5 --max-grid-gb 14 --no-tune

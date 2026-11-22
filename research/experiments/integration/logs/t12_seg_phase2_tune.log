@@ -1,0 +1,39 @@
+=== t12_seg_phase2_tune: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_phase2 --nocapture --test-threads 1 p2_autotune p2_spill_screen (2026-11-20 19:10:41)
+locked 19:10:41; power limit / draw / sm clock / memory used: 300.00 W, 153.59 W, 2805 MHz, 294 MiB
+
+running 2 tests
+test p2_autotune ... Static o2: ra Some((RaCfg { nxg: 4, cb: 13, chk: 12 }, RaVar { inplace: true, stages: 1, lbmin: 3 }, KernRes { regs: 163, local: 32, spill: 0, blocks: 3, warps: 12 })) (times Some((3.393536, 1.600512))), kl None (times None), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((2.18784, 1.256448)))
+Knot2d o3: ra Some((RaCfg { nxg: 4, cb: 13, chk: 24 }, RaVar { inplace: true, stages: 1, lbmin: 0 }, KernRes { regs: 222, local: 32, spill: 0, blocks: 2, warps: 8 })) (times Some((2.06848, 1.399808))), kl None (times Some((1.486528, 1.4848, 4.133888))), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((1.978368, 1.040384)))
+Knot1d o3: ra Some((RaCfg { nxg: 4, cb: 13, chk: 24 }, RaVar { inplace: true, stages: 1, lbmin: 0 }, KernRes { regs: 218, local: 32, spill: 0, blocks: 2, warps: 8 })) (times Some((1.992704, 1.338368))), kl None (times Some((1.416192, 1.411296, 3.848192))), vs Some((VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }, VsCfg { nwc: 7, nws: 1, vxpad: 0 }, 48, KernRes { regs: 252, local: 0, spill: 0, blocks: 1, warps: 7 })) (times Some((1.97632, 1.06496)))
+ok
+test p2_spill_screen ... sm_89: ra 48x1 nxg 2 cb 3: KernRes { regs: 128, local: 56, spill: 20, blocks: 4, warps: 16 }; nxg 4 cb 3: KernRes { regs: 111, local: 32, spill: 0, blocks: 4, warps: 16 }
+sm_89: same with __launch_bounds__(128, 4): KernRes { regs: 126, local: 32, spill: 0, blocks: 4, warps: 16 }
+repeat query 0.2 ms
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 59.10s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_phase2 --nocapture --test-threads 1 p2_autotune p2_spill_screen"
+	User time (seconds): 57.99
+	System time (seconds): 1.13
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:59.14
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 265956
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 345139
+	Voluntary context switches: 2460
+	Involuntary context switches: 583
+	Swaps: 0
+	File system inputs: 77592
+	File system outputs: 21760
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 19:11:40; power limit at end 300.00 W

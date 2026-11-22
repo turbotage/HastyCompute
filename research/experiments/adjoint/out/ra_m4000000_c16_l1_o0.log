@@ -1,0 +1,35 @@
+=== ra_m4000000_c16_l1_o0: env [] --mode adj --designs ra --m 4000000 --ncb 16 --nseg 1 --order 0 --check 1000 --reps 5 (Thu Nov 19 07:01:53 PM CET 2026)
+device 128 SMs, clock 2.56 GHz, FP32 FMA peak 42.0 T/s, smem opt-in 101376 B; grid 200^3, NCH 16 (16 coils x 1 seg), order 0, M 4000000
+trajectory: 4000000 samples of 1003 readouts (encode 0, rotations from 3796), |k|max 1569.1 rad/m -> 0.98 π
+  grid 0.95 GiB, y 0.48 GiB, 64000000000 useful complex MACs per pass
+  ra: 22 candidates
+  grid memset 1.09 ms (not included in the kernel times below)
+    tile lists [2, 4, 8] lmax 2048: 151898977 entries (38.0 per sample), 124500 items (84711 split), 3.3 s
+    ra RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 16, lmax: 2048 } smem   7936 regs  48 local 0 blocks/SM 5:    53.67 ms (5.7 %)
+    ra RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 32, lmax: 2048 } smem  15872 regs  55 local 0 blocks/SM 4:    51.71 ms (5.9 %)
+    tile lists [2, 8, 8] lmax 2048: 99120954 entries (24.8 per sample), 72547 items (58920 split), 2.9 s
+    ra RaCfg { tx: 2, ty: 8, tz: 8, nxg: 2, cb: 1, chk: 16, lmax: 2048 } smem   8192 regs  48 local 0 blocks/SM 5:    46.04 ms (6.6 %)
+    ra RaCfg { tx: 2, ty: 8, tz: 8, nxg: 2, cb: 1, chk: 32, lmax: 2048 } smem  16384 regs  56 local 0 blocks/SM 4:    46.06 ms (6.6 %)
+    tile lists [4, 4, 4] lmax 2048: 137768208 entries (34.4 per sample), 109007 items (55829 split), 3.2 s
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 1, chk: 16, lmax: 2048 } smem   7680 regs  61 local 0 blocks/SM 8:    34.85 ms (8.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 1, chk: 32, lmax: 2048 } smem  15360 regs  63 local 0 blocks/SM 6:    35.57 ms (8.6 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 1, chk: 16, lmax: 2048 } smem   4736 regs  48 local 0 blocks/SM 10:    54.65 ms (5.6 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 1, chk: 32, lmax: 2048 } smem   9472 regs  48 local 0 blocks/SM 9:    50.40 ms (6.0 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 2, chk: 16, lmax: 2048 } smem   5632 regs  56 local 0 blocks/SM 9:    33.26 ms (9.2 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 2, chk: 32, lmax: 2048 } smem  11264 regs  56 local 0 blocks/SM 8:    32.27 ms (9.4 %)
+    tile lists [4, 4, 8] lmax 2048: 89852700 entries (22.5 per sample), 70143 items (55999 split), 2.8 s
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 16, lmax: 2048 } smem   7936 regs  48 local 8 blocks/SM 5:    33.99 ms (9.0 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 1, chk: 32, lmax: 2048 } smem  15872 regs  64 local 0 blocks/SM 4:    34.69 ms (8.8 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 4, cb: 1, chk: 16, lmax: 2048 } smem   4992 regs  47 local 0 blocks/SM 5:    57.88 ms (5.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 4, cb: 1, chk: 32, lmax: 2048 } smem   9984 regs  54 local 0 blocks/SM 4:    53.73 ms (5.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 4, cb: 2, chk: 16, lmax: 2048 } smem   5888 regs  48 local 0 blocks/SM 5:    32.66 ms (9.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 4, cb: 2, chk: 32, lmax: 2048 } smem  11776 regs  56 local 0 blocks/SM 4:    32.48 ms (9.4 %)
+    tile lists [4, 8, 4] lmax 2048: 89863007 entries (22.5 per sample), 70091 items (55927 split), 2.8 s
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 2, cb: 1, chk: 16, lmax: 2048 } smem   7936 regs  80 local 0 blocks/SM 6:    32.56 ms (9.4 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 2, cb: 1, chk: 32, lmax: 2048 } smem  15872 regs  78 local 0 blocks/SM 6:    31.38 ms (9.7 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 1, chk: 16, lmax: 2048 } smem   4992 regs  55 local 0 blocks/SM 9:    47.72 ms (6.4 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 1, chk: 32, lmax: 2048 } smem   9984 regs  56 local 0 blocks/SM 9:    46.72 ms (6.5 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 2, chk: 16, lmax: 2048 } smem   5888 regs  70 local 0 blocks/SM 7:    31.02 ms (9.8 %)
+    ra RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 2, chk: 32, lmax: 2048 } smem  11776 regs  72 local 0 blocks/SM 7:    31.08 ms (9.8 %)
+  RES ra: regs 70, local 0 B, smem 5888 B, blocks/SM 7, warps/SM 28 of 48
+  BEST ra: 30.97 ms (kernel; + memset 1.09 ms) RaCfg { tx: 4, ty: 8, tz: 4, nxg: 4, cb: 2, chk: 16, lmax: 2048 } items 70091 | 2066 G cMAC/s, 9.8 % of FP32 FMA peak (2 FMA/MAC) | rel err 1.17e-6 at 48 points x 16 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 1.21e-6 on 1000 samples

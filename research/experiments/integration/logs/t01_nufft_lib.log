@@ -1,0 +1,46 @@
+=== t01_nufft_lib: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__lib --test-threads 1 (2026-11-20 19:03:23)
+locked 19:03:23; power limit / draw / sm clock / memory used: 300.00 W, 23.05 W, 210 MHz, 294 MiB
+
+running 15 tests
+test kernel::tests::cheb_mono_roundtrip ... ok
+test kernel::tests::fseries_matches_direct_sum ... ok
+test kernel::tests::gl_integrates_polynomials ... ok
+test kernel::tests::kb_poly_fits_and_derivatives ... ok
+test kernel::tests::kb_poly_interpolation_errors ... ok
+test kernel::tests::smooth ... ok
+test segnufft::multi_tests::multi_plan_counts_fft_store_bytes ... ok
+test segnufft::multi_tests::multi_plan_respects_budget_and_prefers_shared_passes ... ok
+test segnufft::multi_tests::multi_sources_are_generated ... ok
+test segnufft::multi_tests::multi_tile_shapes_fit_shared_memory ... ok
+test segnufft::multi_tests::prefer_inplace_rule ... ok
+test segnufft::seg_build_tests::parallel_segments_equal_serial ... ok
+test segnufft::shape_tests::default_shapes_do_not_collapse ... ok
+test segnufft::shape_tests::pick_group_rules ... ok
+test segsplit::tests::plan_batch_rules ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.94s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__lib --test-threads 1"
+	User time (seconds): 6.39
+	System time (seconds): 0.01
+	Percent of CPU this job got: 107%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:05.95
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 9532
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2834
+	Voluntary context switches: 257
+	Involuntary context switches: 96
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 19:03:29; power limit at end 300.00 W

@@ -1,0 +1,36 @@
+  fft_axis               (4, 32768, 2)      x   1   17.53 ms R   2.148 W   8.392 GB
+  fft_axis               (1000, 256, 1)     x   1   17.80 ms R   8.389 W   6.720 GB
+  --
+  fft_axis               (1000, 320, 1)     x   1   17.61 ms R   6.715 W   7.814 GB
+  --
+  seg_forward_vs         (73978, 1, 1)      x   1   65.37 ms R  17.309 W   0.112 GB
+  --
+  fft_axis               (4, 32768, 2)      x   1   17.45 ms R   2.148 W   8.401 GB
+  fft_axis               (1000, 256, 1)     x   1   17.82 ms R   8.389 W   6.721 GB
+  --
+  fft_axis               (1000, 320, 1)     x   1   17.59 ms R   6.717 W   7.814 GB
+  --
+  seg_forward_vs         (73978, 1, 1)      x   1   65.19 ms R  17.314 W   0.112 GB
+  --
+  seg_zero_split         (1842, 1, 1)       x   1    0.02 ms R   0.000 W   0.016 GB
+  --
+  seg_zero_empty         (206454, 1, 1)     x   1    0.19 ms R   0.003 W   0.010 GB
+  --
+  seg_adjoint_ra         (307419, 1, 1)     x   1   57.40 ms R   3.880 W   7.818 GB
+  --
+  fft_axis               (1000, 320, 1)     x   1   17.46 ms R   7.825 W   6.732 GB
+  --
+  fft_axis               (1000, 256, 1)     x   1   16.91 ms R   6.714 W   8.379 GB
+  fft_axis               (4, 32768, 2)      x   1   15.18 ms R  10.536 W   0.170 GB
+  --
+  seg_zero_split         (1842, 1, 1)       x   1    0.01 ms R   0.000 W   0.000 GB
+  --
+  seg_zero_empty         (206454, 1, 1)     x   1    0.19 ms R   0.003 W   0.000 GB
+  --
+  seg_adjoint_ra         (307419, 1, 1)     x   1   57.40 ms R   3.879 W   7.799 GB
+  --
+  fft_axis               (1000, 320, 1)     x   1   17.43 ms R   7.826 W   6.730 GB
+  --
+  fft_axis               (1000, 256, 1)     x   1   16.90 ms R   6.714 W   8.378 GB
+  fft_axis               (4, 32768, 2)      x   1   15.12 ms R  10.536 W   0.171 GB
+  --

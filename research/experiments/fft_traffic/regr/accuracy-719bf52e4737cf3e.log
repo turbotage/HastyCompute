@@ -1,0 +1,9 @@
+
+running 4 tests
+test adjointness ... ok
+test batched_clustered_odd_sizes ... ok
+test f32_accuracy_and_low_sigma ... ok
+test f64_matches_ndft_1d_2d_3d ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.09s
+

@@ -1,0 +1,9 @@
+== 00:44:16 /home/turbotage/Documents/GitHub/HastyCompute/rustlib/.venv/bin/python3 joint_rank.py
+165493 voxels (103198 kept + 62295 sampled), states 12 x 50
+pull-back 30 s; max displacement 14.0 mm
+continuous-motion magnitude ready 881 s
+frame 0 893 s
+frame 20 1025 s
+frame 40 1158 s
+frame 60 1266 s
+frame 80 1338 s

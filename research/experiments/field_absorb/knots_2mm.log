@@ -1,0 +1,68 @@
+data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: grid [254, 144, 114] (native [254, 144, 114]), voxel [2.0, 2.0, 2.0] mm, 32 coils, 3990 ADC samples
+physics grid (GNL-aware) 34s
+support 4169664 voxels, fit region 4169664 voxels; the run's mask_fit: 4169664 voxels, agreement 1.00000
+coil energy: whitened true maps compressed by their fit-region Gram: 12 of 32 virtual coils (fixed 12), 77.005 % energy kept; σ²/Σσ²: [1.3e-1, 1.2e-1, 8.9e-2, 6.7e-2, 6.7e-2, 6.0e-2, 5.6e-2, 4.4e-2, 3.7e-2, 3.4e-2, 3.3e-2, 2.9e-2, 2.7e-2, 2.4e-2, 2.1e-2, 1.8e-2, 1.7e-2, 1.5e-2, 1.4e-2, 1.4e-2, 1.3e-2, 1.1e-2, 1.1e-2, 9.8e-3, 7.8e-3, 6.7e-3, 5.7e-3, 5.3e-3, 3.7e-3, 2.9e-3, 2.4e-3, 1.8e-3]
+segment-rule voxels: 347472 (fit region stride 12)
+per-sample weights (σ = 39.976): first 1.57e5, middle 3.94e1, last 2.38e4; white floor 36.5; time grid 95 points; noise rule: relative weighted error ≤ 2.832e-3 (gain 47.1, margin 1.5) (1s)
+encode-mean concomitant coefficients of 2 encodes (5s)
+knot basis (bellows): 6 linear knots at [-0.054, 0.097, 0.347, 0.668, 0.94, 1.577] × 16 cardiac knots degree 3
+truth ratemap states: 6 breathing × 20 cardiac, 2405028 mask voxels of [254, 144, 114] (6s)
+global fit (--b0-absorb 1): 272.6 Hz + [26.9, 252.3, -1129.7] Hz/m; max shift [0.16, 0.87, 3.08] cells at τ = 9.58 ms
+today's rule (static field, phase only, as recon_p2np --ratemap truth-bc): L per encode [8, 8] → L = 8
+conc0 encode 0: constant part ≤ 0.592 rad, linear part ≤ [0.008, 0.005, 0.109] cells (shift); signal-weighted 0.1–99.9 % phase span over the readout: 1.862 rad → 1.867 rad without const + lin → 0.1185 rad without quad; quad Taylor |ΔQ| ≤ 0.882 rad
+conc0 encode 3: constant part ≤ 0.603 rad, linear part ≤ [0.007, 0.012, 0.101] cells (shift); signal-weighted 0.1–99.9 % phase span over the readout: 1.790 rad → 1.982 rad without const + lin → 0.1111 rad without quad; quad Taylor |ΔQ| ≤ 0.882 rad
+control encode 0: zero field L 3/5/7 (noise / 1e-3 / 1e-4); synthetic const + lin field, no absorption 10/12/13; after per-knot absorption 3/5/7; weighted tails above 1e-6 differ by ≤ 1.9e-5 relative
+control encode 3: zero field L 3/5/7 (noise / 1e-3 / 1e-4); synthetic const + lin field, no absorption 10/12/13; after per-knot absorption 3/5/7; weighted tails above 1e-6 differ by ≤ 8.8e-6 relative
+  knot   0 enc 0: a 11/12/15 a_nofat 8/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/15 e 11/12/15 e_nofat 8/10/12 g 11/12/15 h 11/12/15
+    h (tail-optimal linear term at L = 10): tail a 3.554e-3, LSQ 4.492e-3, optimum 3.146e-3 at [32.5, 64.3, -21.4] Hz across the FOV (82 spectra)
+  knot   0 enc 3: a 11/12/15 a_nofat 8/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/15 e 11/12/15 e_nofat 8/10/12 g 11/12/15
+knot   0 (r 0.032, c 0.027 s, weight 290): fit 270.8 Hz + [23.5, 261.6, -1100.4] Hz/m, shift [0.14, 0.90, 3.00] cells (τ from excitation; [0.06, 0.38, 1.25] from the readout centre); field 0.1–99.9 % -114..511 Hz → b -440..203, c -436..205, d -307..244, g -515..109; quad Taylor 14.687 rad (99.9 % 12.709) (189.0s)
+  knot   6 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+  knot   6 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+knot   6 (r 0.034, c 0.346 s, weight 316): fit 271.2 Hz + [25.6, 259.5, -1104.5] Hz/m, shift [0.16, 0.89, 3.01] cells (τ from excitation; [0.06, 0.37, 1.26] from the readout centre); field 0.1–99.9 % -114..512 Hz → b -440..204, c -437..205, d -307..243, g -515..110; quad Taylor 14.618 rad (99.9 % 12.651) (41.3s)
+  knot  12 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+  knot  12 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+knot  12 (r 0.037, c 0.666 s, weight 299): fit 271.0 Hz + [24.6, 260.8, -1102.1] Hz/m, shift [0.15, 0.90, 3.01] cells (τ from excitation; [0.06, 0.37, 1.25] from the readout centre); field 0.1–99.9 % -114..512 Hz → b -440..204, c -436..206, d -306..244, g -515..110; quad Taylor 14.678 rad (99.9 % 12.700) (40.8s)
+  knot  18 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+  knot  18 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+knot  18 (r 0.119, c 0.133 s, weight 735): fit 270.8 Hz + [24.6, 261.3, -1100.3] Hz/m, shift [0.15, 0.90, 3.00] cells (τ from excitation; [0.06, 0.38, 1.25] from the readout centre); field 0.1–99.9 % -114..512 Hz → b -440..204, c -436..206, d -306..244, g -514..109; quad Taylor 14.711 rad (99.9 % 12.730) (34.3s)
+  knot  24 enc 0: a 11/12/15 a_nofat 8/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/15 e 11/12/15 e_nofat 8/10/12 g 11/12/15 h 11/12/15
+    h (tail-optimal linear term at L = 10): tail a 3.560e-3, LSQ 4.541e-3, optimum 3.170e-3 at [35.0, 63.4, -20.3] Hz across the FOV (85 spectra)
+  knot  24 enc 3: a 11/12/15 a_nofat 8/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/15 e 11/12/15 e_nofat 8/10/12 g 11/12/15
+knot  24 (r 0.108, c 0.453 s, weight 694): fit 271.0 Hz + [25.5, 260.2, -1102.5] Hz/m, shift [0.15, 0.90, 3.01] cells (τ from excitation; [0.06, 0.37, 1.25] from the readout centre); field 0.1–99.9 % -114..512 Hz → b -440..204, c -436..205, d -306..243, g -515..109; quad Taylor 14.657 rad (99.9 % 12.688) (188.3s)
+  knot  30 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+  knot  30 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+knot  30 (r 0.118, c 0.773 s, weight 753): fit 270.7 Hz + [24.0, 261.8, -1099.2] Hz/m, shift [0.15, 0.90, 3.00] cells (τ from excitation; [0.06, 0.38, 1.25] from the readout centre); field 0.1–99.9 % -115..512 Hz → b -440..203, c -436..206, d -306..244, g -515..109; quad Taylor 14.720 rad (99.9 % 12.739) (42.1s)
+  knot  36 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+  knot  36 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/15 e 11/12/15 g 11/12/15
+knot  36 (r 0.356, c 0.240 s, weight 662): fit 267.8 Hz + [23.2, 279.0, -1052.3] Hz/m, shift [0.14, 0.96, 2.87] cells (τ from excitation; [0.06, 0.40, 1.20] from the readout centre); field 0.1–99.9 % -126..509 Hz → b -450..193, c -439..197, d -308..241, g -519..96; quad Taylor 15.122 rad (99.9 % 13.060) (41.8s)
+  knot  42 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  42 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  42 (r 0.349, c 0.559 s, weight 647): fit 267.6 Hz + [21.0, 280.5, -1049.5] Hz/m, shift [0.13, 0.97, 2.86] cells (τ from excitation; [0.05, 0.40, 1.19] from the readout centre); field 0.1–99.9 % -126..509 Hz → b -450..192, c -438..196, d -308..242, g -518..96; quad Taylor 15.147 rad (99.9 % 13.084) (40.5s)
+  knot  48 enc 0: a 11/12/15 a_nofat 9/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/16 e 11/12/15 e_nofat 8/10/12 g 11/12/15 h 11/12/15
+    h (tail-optimal linear term at L = 10): tail a 4.317e-3, LSQ 4.774e-3, optimum 3.668e-3 at [6.4, 66.1, -24.0] Hz across the FOV (85 spectra)
+  knot  48 enc 3: a 11/12/15 a_nofat 9/10/12 b 11/12/15 c 11/12/15 c_nofat 8/10/12 d 11/12/16 e 11/12/15 e_nofat 8/10/12 g 11/12/15
+knot  48 (r 0.624, c 0.026 s, weight 674): fit 263.2 Hz + [15.8, 306.6, -983.7] Hz/m, shift [0.10, 1.06, 2.69] cells (τ from excitation; [0.04, 0.44, 1.12] from the readout centre); field 0.1–99.9 % -138..507 Hz → b -461..186, c -437..189, d -309..242, g -520..83; quad Taylor 15.683 rad (99.9 % 13.500) (195.7s)
+  knot  54 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  54 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  54 (r 0.605, c 0.346 s, weight 625): fit 263.8 Hz + [20.3, 302.7, -990.5] Hz/m, shift [0.12, 1.04, 2.70] cells (τ from excitation; [0.05, 0.43, 1.13] from the readout centre); field 0.1–99.9 % -138..508 Hz → b -461..187, c -438..192, d -310..241, g -522..87; quad Taylor 15.596 rad (99.9 % 13.421) (40.7s)
+  knot  60 enc 0: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  60 enc 3: a 11/12/15 b 11/12/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  60 (r 0.632, c 0.667 s, weight 662): fit 263.3 Hz + [17.2, 305.6, -985.4] Hz/m, shift [0.10, 1.05, 2.69] cells (τ from excitation; [0.04, 0.44, 1.12] from the readout centre); field 0.1–99.9 % -138..508 Hz → b -461..187, c -437..190, d -309..242, g -521..85; quad Taylor 15.664 rad (99.9 % 13.480) (35.3s)
+  knot  66 enc 0: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  66 enc 3: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  66 (r 0.889, c 0.133 s, weight 848): fit 258.2 Hz + [14.0, 336.6, -907.0] Hz/m, shift [0.09, 1.16, 2.48] cells (τ from excitation; [0.04, 0.48, 1.03] from the readout centre); field 0.1–99.9 % -150..507 Hz → b -475..186, c -436..189, d -310..244, g -526..80; quad Taylor 16.166 rad (99.9 % 13.842) (40.4s)
+  knot  72 enc 0: a 11/12/15 a_nofat 9/10/12 b 11/13/15 c 11/12/15 c_nofat 8/10/12 d 11/12/16 e 11/12/15 e_nofat 8/10/12 g 11/12/15 h 11/12/15
+    h (tail-optimal linear term at L = 10): tail a 4.518e-3, LSQ 4.788e-3, optimum 3.741e-3 at [-1.1, 73.8, -23.6] Hz across the FOV (85 spectra)
+  knot  72 enc 3: a 11/12/15 a_nofat 9/10/12 b 11/13/15 c 11/12/15 c_nofat 8/10/12 d 11/12/16 e 11/12/15 e_nofat 8/10/12 g 11/12/15
+knot  72 (r 0.887, c 0.453 s, weight 855): fit 258.6 Hz + [16.7, 334.3, -911.2] Hz/m, shift [0.10, 1.15, 2.49] cells (τ from excitation; [0.04, 0.48, 1.04] from the readout centre); field 0.1–99.9 % -150..508 Hz → b -475..186, c -437..190, d -310..245, g -526..82; quad Taylor 16.118 rad (99.9 % 13.801) (183.9s)
+  knot  78 enc 0: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  78 enc 3: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  78 (r 0.882, c 0.773 s, weight 838): fit 258.1 Hz + [13.3, 337.2, -906.1] Hz/m, shift [0.08, 1.16, 2.47] cells (τ from excitation; [0.03, 0.48, 1.03] from the readout centre); field 0.1–99.9 % -150..507 Hz → b -475..186, c -435..189, d -310..245, g -526..80; quad Taylor 16.173 rad (99.9 % 13.850) (32.6s)
+  knot  84 enc 0: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  84 enc 3: a 11/12/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  84 (r 1.042, c 0.240 s, weight 161): fit 258.1 Hz + [15.5, 337.1, -904.6] Hz/m, shift [0.09, 1.16, 2.47] cells (τ from excitation; [0.04, 0.48, 1.03] from the readout centre); field 0.1–99.9 % -150..507 Hz → b -475..186, c -435..190, d -310..245, g -526..81; quad Taylor 16.190 rad (99.9 % 13.858) (31.8s)
+  knot  90 enc 0: a 11/13/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+  knot  90 enc 3: a 11/13/15 b 11/13/15 c 11/12/15 d 11/12/16 e 11/12/15 g 11/12/15
+knot  90 (r 1.051, c 0.560 s, weight 161): fit 257.8 Hz + [13.5, 338.8, -901.6] Hz/m, shift [0.08, 1.17, 2.46] cells (τ from excitation; [0.03, 0.49, 1.02] from the readout centre); field 0.1–99.9 % -150..507 Hz → b -475..185, c -435..189, d -310..245, g -526..79; quad Taylor 16.221 rad (99.9 % 13.888) (36.8s)
+16 knots in 1216s; done in 1301s

@@ -1,0 +1,133 @@
+=== t05_seg_split: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_split --nocapture --test-threads 1 (2026-11-20 19:07:10)
+locked 19:07:10; power limit / draw / sm clock / memory used: 300.00 W, 133.99 W, 2805 MHz, 294 MiB
+
+running 4 tests
+test one_bin_knot_matches_static ... one bin o0 nc 3 L 5 cb 3 tile kernels: forward 6.6e-7 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 1.7e-7 (static 3.6e-7)
+one bin o0 nc 3 L 5 cb 3 autotune (vs None, ra None, kl true None): forward 5.7e-6 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 1.6e-7 (static 3.6e-7)
+one bin o0 nc 3 L 5 cb 3 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 6.8e-6 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 1.9e-7 (static 3.6e-7)
+one bin o0 nc 3 L 5 cb 3 ra Some(RaCfg { nxg: 4, cb: 2, chk: 32 }): forward 6.8e-6 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 2.4e-7 (static 3.6e-7)
+one bin o0 nc 3 L 5 cb 3 ra + skip empty tiles: forward 6.8e-6 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 2.4e-7 (static 3.6e-7)
+one bin o0 nc 3 L 5 cb 3 kl kernel Some(RaCfg { nxg: 4, cb: 2, chk: 32 }): forward 6.8e-6 (bound 7.5e-5), adjoint 4.3e-5 (bound 8.1e-5), adjointness 2.4e-7 (static 3.6e-7)
+one bin o0 nc 4 L 3 cb 2 tile kernels: forward 6.0e-7 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 1.7e-7 (static 2.1e-7)
+one bin o0 nc 4 L 3 cb 2 autotune (vs None, ra None, kl true None): forward 4.5e-6 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 1.7e-7 (static 2.1e-7)
+one bin o0 nc 4 L 3 cb 2 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 5.6e-6 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 1.8e-7 (static 2.1e-7)
+one bin o0 nc 4 L 3 cb 2 ra Some(RaCfg { nxg: 2, cb: 1, chk: 29 }): forward 5.6e-6 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 2.0e-7 (static 2.1e-7)
+one bin o0 nc 4 L 3 cb 2 ra + skip empty tiles: forward 5.6e-6 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 2.0e-7 (static 2.1e-7)
+one bin o0 nc 4 L 3 cb 2 kl kernel Some(RaCfg { nxg: 4, cb: 1, chk: 32 }): forward 5.6e-6 (bound 6.3e-5), adjoint 3.5e-5 (bound 7.2e-5), adjointness 2.0e-7 (static 2.1e-7)
+one bin o1 nc 3 L 5 cb 3 tile kernels: forward 2.4e-7 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.4e-8 (static 2.8e-8)
+one bin o1 nc 3 L 5 cb 3 autotune (vs Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }), ra None, kl false None): forward 2.7e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.9e-8 (static 2.8e-8)
+one bin o1 nc 3 L 5 cb 3 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 2.7e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.9e-8 (static 2.8e-8)
+one bin o1 nc 3 L 5 cb 3 ra Some(RaCfg { nxg: 4, cb: 2, chk: 16 }): forward 2.7e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.7e-8 (static 2.8e-8)
+one bin o1 nc 3 L 5 cb 3 ra + skip empty tiles: forward 2.7e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.7e-8 (static 2.8e-8)
+one bin o1 nc 3 L 5 cb 3 kl kernel Some(RaCfg { nxg: 4, cb: 2, chk: 16 }): forward 2.7e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 2.7e-8 (static 2.8e-8)
+one bin o1 nc 4 L 3 cb 2 tile kernels: forward 2.6e-7 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.5e-8 (static 5.3e-8)
+one bin o1 nc 4 L 3 cb 2 autotune (vs None, ra None, kl false None): forward 2.1e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.1e-8 (static 5.3e-8)
+one bin o1 nc 4 L 3 cb 2 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 2.5e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.7e-8 (static 5.3e-8)
+one bin o1 nc 4 L 3 cb 2 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }): forward 2.5e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.6e-8 (static 5.3e-8)
+one bin o1 nc 4 L 3 cb 2 ra + skip empty tiles: forward 2.5e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.6e-8 (static 5.3e-8)
+one bin o1 nc 4 L 3 cb 2 kl kernel Some(RaCfg { nxg: 4, cb: 1, chk: 16 }): forward 2.5e-6 (bound 3.0e-5), adjoint 1.3e-5 (bound 3.0e-5), adjointness 4.6e-8 (static 5.3e-8)
+one bin o2 nc 3 L 5 cb 3 tile kernels: forward 1.6e-7 (bound 3.0e-5), adjoint 4.6e-6 (bound 3.0e-5), adjointness 9.4e-9 (static 4.1e-8)
+one bin o2 nc 3 L 5 cb 3 autotune (vs None, ra None, kl true None): forward 1.6e-7 (bound 3.0e-5), adjoint 4.6e-6 (bound 3.0e-5), adjointness 1.0e-8 (static 4.1e-8)
+one bin o2 nc 3 L 5 cb 3 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 1.2e-6 (bound 3.0e-5), adjoint 4.6e-6 (bound 3.0e-5), adjointness 5.6e-9 (static 4.1e-8)
+one bin o2 nc 3 L 5 cb 3 ra Some(RaCfg { nxg: 2, cb: 1, chk: 16 }): forward 1.2e-6 (bound 3.0e-5), adjoint 4.7e-6 (bound 3.0e-5), adjointness 1.4e-9 (static 4.1e-8)
+one bin o2 nc 3 L 5 cb 3 ra + skip empty tiles: forward 1.2e-6 (bound 3.0e-5), adjoint 4.7e-6 (bound 3.0e-5), adjointness 1.4e-9 (static 4.1e-8)
+one bin o2 nc 3 L 5 cb 3 kl kernel Some(RaCfg { nxg: 4, cb: 2, chk: 16 }): forward 1.2e-6 (bound 3.0e-5), adjoint 4.7e-6 (bound 3.0e-5), adjointness 1.4e-9 (static 4.1e-8)
+one bin o2 nc 4 L 3 cb 2 tile kernels: forward 1.5e-7 (bound 3.0e-5), adjoint 4.3e-6 (bound 3.0e-5), adjointness 1.4e-8 (static 2.1e-8)
+one bin o2 nc 4 L 3 cb 2 autotune (vs None, ra None, kl true None): forward 8.9e-7 (bound 3.0e-5), adjoint 4.3e-6 (bound 3.0e-5), adjointness 1.1e-8 (static 2.1e-8)
+one bin o2 nc 4 L 3 cb 2 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 1.1e-6 (bound 3.0e-5), adjoint 4.3e-6 (bound 3.0e-5), adjointness 3.3e-9 (static 2.1e-8)
+one bin o2 nc 4 L 3 cb 2 ra Some(RaCfg { nxg: 2, cb: 1, chk: 16 }): forward 1.1e-6 (bound 3.0e-5), adjoint 4.5e-6 (bound 3.0e-5), adjointness 1.2e-8 (static 2.1e-8)
+one bin o2 nc 4 L 3 cb 2 ra + skip empty tiles: forward 1.1e-6 (bound 3.0e-5), adjoint 4.5e-6 (bound 3.0e-5), adjointness 1.2e-8 (static 2.1e-8)
+one bin o2 nc 4 L 3 cb 2 kl kernel Some(RaCfg { nxg: 4, cb: 1, chk: 16 }): forward 1.1e-6 (bound 3.0e-5), adjoint 4.5e-6 (bound 3.0e-5), adjointness 1.2e-8 (static 2.1e-8)
+one bin o3 nc 3 L 5 cb 3 tile kernels: forward 1.9e-6 (bound 3.0e-5), adjoint 7.4e-6 (bound 3.0e-5), adjointness 2.8e-8 (static 1.6e-8)
+one bin o3 nc 3 L 5 cb 3 autotune (vs None, ra None, kl false None): forward 1.9e-6 (bound 3.0e-5), adjoint 7.4e-6 (bound 3.0e-5), adjointness 2.7e-8 (static 1.6e-8)
+one bin o3 nc 3 L 5 cb 3 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 2.2e-6 (bound 3.0e-5), adjoint 7.4e-6 (bound 3.0e-5), adjointness 2.9e-8 (static 1.6e-8)
+one bin o3 nc 3 L 5 cb 3 ra Some(RaCfg { nxg: 2, cb: 1, chk: 16 }): forward 2.2e-6 (bound 3.0e-5), adjoint 7.6e-6 (bound 3.0e-5), adjointness 2.9e-8 (static 1.6e-8)
+one bin o3 nc 3 L 5 cb 3 ra + skip empty tiles: forward 2.2e-6 (bound 3.0e-5), adjoint 7.6e-6 (bound 3.0e-5), adjointness 2.9e-8 (static 1.6e-8)
+one bin o3 nc 3 L 5 cb 3 kl kernel Some(RaCfg { nxg: 4, cb: 2, chk: 16 }): forward 2.2e-6 (bound 3.0e-5), adjoint 7.6e-6 (bound 3.0e-5), adjointness 2.9e-8 (static 1.6e-8)
+one bin o3 nc 4 L 3 cb 2 tile kernels: forward 2.2e-6 (bound 3.0e-5), adjoint 6.3e-6 (bound 3.0e-5), adjointness 2.4e-8 (static 3.5e-8)
+one bin o3 nc 4 L 3 cb 2 autotune (vs None, ra None, kl false None): forward 2.4e-6 (bound 3.0e-5), adjoint 6.3e-6 (bound 3.0e-5), adjointness 3.0e-8 (static 3.5e-8)
+one bin o3 nc 4 L 3 cb 2 vs/vt Some(VsCfg { nwc: 1, nws: 2, vxpad: 0 }): forward 2.6e-6 (bound 3.0e-5), adjoint 6.3e-6 (bound 3.0e-5), adjointness 3.4e-8 (static 3.5e-8)
+one bin o3 nc 4 L 3 cb 2 ra Some(RaCfg { nxg: 4, cb: 1, chk: 16 }): forward 2.6e-6 (bound 3.0e-5), adjoint 6.0e-6 (bound 3.0e-5), adjointness 5.0e-8 (static 3.5e-8)
+one bin o3 nc 4 L 3 cb 2 ra + skip empty tiles: forward 2.6e-6 (bound 3.0e-5), adjoint 6.0e-6 (bound 3.0e-5), adjointness 5.0e-8 (static 3.5e-8)
+one bin o3 nc 4 L 3 cb 2 kl kernel Some(RaCfg { nxg: 4, cb: 1, chk: 16 }): forward 2.6e-6 (bound 3.0e-5), adjoint 6.0e-6 (bound 3.0e-5), adjointness 5.0e-8 (static 3.5e-8)
+ok
+test one_bin_sanitize ... sanitize o0 tile: forward 7.1e-7, adjoint 2.5e-5
+sanitize o0 vs: forward 5.9e-6, adjoint 2.5e-5
+sanitize o0 ra: forward 6.9e-7, adjoint 2.5e-5
+sanitize o0 ra skip: forward 7.0e-7, adjoint 2.5e-5
+sanitize o0 kl kernel: forward 7.1e-7, adjoint 2.5e-5
+sanitize o0 split 2 x 2: forward 7.0e-6, adjoint 2.3e-5
+sanitize o3 tile: forward 1.6e-6, adjoint 3.3e-6
+sanitize o3 vs: forward 1.9e-6, adjoint 3.3e-6
+sanitize o3 ra: forward 1.6e-6, adjoint 3.3e-6
+sanitize o3 ra skip: forward 1.6e-6, adjoint 3.3e-6
+sanitize o3 kl kernel: forward 1.6e-6, adjoint 3.3e-6
+sanitize o3 split 2 x 2: forward 1.7e-6, adjoint 3.5e-6
+ok
+test split_matches_plain ... Static o0 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 1.2e-5 (bound 6.9e-5), adjoint 2.4e-5 (bound 7.8e-5), residual 1.2e-5, accumulate 2.4e-5, adjointness 1.6e-7 (plain 2.2e-7)
+Static o0 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 1.1e-5 (bound 6.9e-5), adjoint 2.3e-5 (bound 7.8e-5), residual 1.1e-5, accumulate 2.3e-5, adjointness 1.3e-7 (plain 2.2e-7)
+Static o0 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 1.1e-5 (bound 6.9e-5), adjoint 2.4e-5 (bound 7.8e-5), residual 1.1e-5, accumulate 2.4e-5, adjointness 1.4e-7 (plain 2.2e-7)
+Static o0 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 1.1e-5 (bound 6.9e-5), adjoint 2.3e-5 (bound 7.0e-5), residual 1.1e-5, accumulate 2.3e-5, adjointness 4.1e-8 (plain 2.1e-8)
+Static o0 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 7.9e-6 (bound 6.9e-5), adjoint 2.1e-5 (bound 7.0e-5), residual 7.9e-6, accumulate 2.1e-5, adjointness 1.4e-7 (plain 2.1e-8)
+Static o0 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 7.5e-6 (bound 6.9e-5), adjoint 2.3e-5 (bound 7.0e-5), residual 7.5e-6, accumulate 2.3e-5, adjointness 1.5e-7 (plain 2.1e-8)
+Static o2 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 1.5e-6 (bound 3.0e-5), adjoint 2.3e-6 (bound 3.0e-5), residual 1.5e-6, accumulate 2.3e-6, adjointness 1.2e-8 (plain 1.1e-8)
+Static o2 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 1.5e-6 (bound 3.0e-5), adjoint 2.6e-6 (bound 3.0e-5), residual 1.5e-6, accumulate 2.6e-6, adjointness 2.2e-8 (plain 1.1e-8)
+Static o2 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 1.5e-6 (bound 3.0e-5), adjoint 2.1e-6 (bound 3.0e-5), residual 1.5e-6, accumulate 2.1e-6, adjointness 4.1e-9 (plain 1.1e-8)
+Static o2 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 1.4e-6 (bound 3.0e-5), adjoint 2.6e-6 (bound 3.0e-5), residual 1.5e-6, accumulate 2.6e-6, adjointness 1.7e-8 (plain 1.4e-8)
+Static o2 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 9.9e-7 (bound 3.0e-5), adjoint 2.4e-6 (bound 3.0e-5), residual 1.0e-6, accumulate 2.4e-6, adjointness 1.2e-8 (plain 1.4e-8)
+Static o2 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 9.3e-7 (bound 3.0e-5), adjoint 2.3e-6 (bound 3.0e-5), residual 9.3e-7, accumulate 2.3e-6, adjointness 7.2e-9 (plain 1.4e-8)
+Static o3 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 1.9e-6 (bound 3.0e-5), adjoint 6.2e-6 (bound 3.0e-5), residual 1.9e-6, accumulate 6.2e-6, adjointness 2.5e-8 (plain 1.1e-8)
+Static o3 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 2.2e-6 (bound 3.0e-5), adjoint 6.2e-6 (bound 3.0e-5), residual 2.2e-6, accumulate 6.2e-6, adjointness 2.5e-8 (plain 1.1e-8)
+Static o3 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 2.2e-6 (bound 3.0e-5), adjoint 6.1e-6 (bound 3.0e-5), residual 2.2e-6, accumulate 6.1e-6, adjointness 2.4e-8 (plain 1.1e-8)
+Static o3 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 2.1e-6 (bound 3.0e-5), adjoint 6.3e-6 (bound 3.0e-5), residual 2.1e-6, accumulate 6.3e-6, adjointness 8.0e-9 (plain 1.4e-8)
+Static o3 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 2.0e-6 (bound 3.0e-5), adjoint 6.3e-6 (bound 3.0e-5), residual 2.0e-6, accumulate 6.3e-6, adjointness 1.3e-8 (plain 1.4e-8)
+Static o3 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 2.0e-6 (bound 3.0e-5), adjoint 6.0e-6 (bound 3.0e-5), residual 2.0e-6, accumulate 6.0e-6, adjointness 9.3e-9 (plain 1.4e-8)
+Knot1d o0 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 1.1e-5 (bound 6.6e-5), adjoint 1.2e-5 (bound 6.1e-5), residual 1.1e-5, accumulate 1.2e-5, adjointness 2.2e-7 (plain 2.6e-7)
+Knot1d o0 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 1.0e-5 (bound 6.6e-5), adjoint 1.0e-5 (bound 6.1e-5), residual 1.0e-5, accumulate 1.0e-5, adjointness 2.4e-7 (plain 2.6e-7)
+Knot1d o0 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 1.0e-5 (bound 6.6e-5), adjoint 1.1e-5 (bound 6.1e-5), residual 1.0e-5, accumulate 1.1e-5, adjointness 2.9e-7 (plain 2.6e-7)
+Knot1d o0 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 1.0e-5 (bound 6.6e-5), adjoint 1.1e-5 (bound 6.4e-5), residual 1.0e-5, accumulate 1.1e-5, adjointness 2.0e-7 (plain 2.3e-7)
+Knot1d o0 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 7.6e-6 (bound 6.6e-5), adjoint 1.1e-5 (bound 6.4e-5), residual 7.6e-6, accumulate 1.1e-5, adjointness 1.8e-7 (plain 2.3e-7)
+Knot1d o0 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 7.1e-6 (bound 6.6e-5), adjoint 1.1e-5 (bound 6.4e-5), residual 7.1e-6, accumulate 1.1e-5, adjointness 2.1e-7 (plain 2.3e-7)
+Knot1d o3 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 2.3e-6 (bound 3.0e-5), adjoint 2.5e-6 (bound 3.0e-5), residual 2.3e-6, accumulate 2.5e-6, adjointness 2.6e-8 (plain 3.4e-8)
+Knot1d o3 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 2.3e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 2.3e-6, accumulate 2.7e-6, adjointness 2.9e-8 (plain 3.4e-8)
+Knot1d o3 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 2.3e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 2.3e-6, accumulate 2.7e-6, adjointness 3.7e-8 (plain 3.4e-8)
+Knot1d o3 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 2.3e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 2.2e-6, accumulate 2.7e-6, adjointness 1.9e-8 (plain 4.1e-8)
+Knot1d o3 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 1.4e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 1.4e-6, accumulate 2.7e-6, adjointness 3.8e-8 (plain 4.1e-8)
+Knot1d o3 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 1.3e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 1.3e-6, accumulate 2.7e-6, adjointness 3.1e-8 (plain 4.1e-8)
+OneBin o3 cb_cap 1 lb 1 (5 groups of 1, engine cb 1): forward 2.1e-6 (bound 3.0e-5), adjoint 2.8e-6 (bound 3.0e-5), residual 2.1e-6, accumulate 2.8e-6, adjointness 4.4e-8 (plain 2.7e-8)
+OneBin o3 cb_cap 1 lb 2 (3 groups of 2, padded, engine cb 1): forward 2.2e-6 (bound 3.0e-5), adjoint 3.9e-6 (bound 3.0e-5), residual 2.2e-6, accumulate 3.9e-6, adjointness 2.4e-8 (plain 2.7e-8)
+OneBin o3 cb_cap 1 lb 3 (2 groups of 3, padded, engine cb 1): forward 2.1e-6 (bound 3.0e-5), adjoint 2.7e-6 (bound 3.0e-5), residual 2.1e-6, accumulate 2.7e-6, adjointness 5.2e-8 (plain 2.7e-8)
+OneBin o3 cb_cap 3 lb 1 (5 groups of 1, engine cb 3): forward 2.1e-6 (bound 3.0e-5), adjoint 3.1e-6 (bound 3.0e-5), residual 2.1e-6, accumulate 3.1e-6, adjointness 3.8e-8 (plain 4.1e-8)
+OneBin o3 cb_cap 3 lb 2 (3 groups of 2, padded, engine cb 3): forward 1.4e-6 (bound 3.0e-5), adjoint 3.0e-6 (bound 3.0e-5), residual 1.4e-6, accumulate 3.0e-6, adjointness 3.2e-8 (plain 4.1e-8)
+OneBin o3 cb_cap 3 lb 3 (2 groups of 3, padded, engine cb 3): forward 1.3e-6 (bound 3.0e-5), adjoint 2.8e-6 (bound 3.0e-5), residual 1.3e-6, accumulate 2.8e-6, adjointness 1.2e-8 (plain 4.1e-8)
+ok
+test static_knot_env_switch ... HASTY_SEG_STATIC_KNOT=1 o0: forward 6.4e-7, adjoint 3.4e-5
+HASTY_SEG_STATIC_KNOT=1 o3: forward 1.7e-6, adjoint 5.2e-6
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.56s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_split --nocapture --test-threads 1"
+	User time (seconds): 12.03
+	System time (seconds): 0.80
+	Percent of CPU this job got: 101%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:12.63
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 217296
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 97223
+	Voluntary context switches: 5191
+	Involuntary context switches: 213
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 10584
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 19:07:23; power limit at end 300.00 W

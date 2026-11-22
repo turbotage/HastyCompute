@@ -193,3 +193,107 @@ How to get this to seconds. It is a dense, embarrassingly parallel evaluation of
 - Knot-major tables: one interval-sorted tile list per unit (resp bin × encode). A 1 mm unit merges 20 cardiac sets:
   3.34 M samples, 0.7 GB of tables. That is the same total as the per-set tables, but one unit must be resident (or
   streamed) at once.
+
+## 8. Update 2026-11-20: BFP storage in the ledger (research/bfp_storage.md §9)
+
+Block floating point (`hasty_bfp`) shrinks three ledger entries. Each one is switchable, and the default is f32 (the plan
+is then the same entry for entry as before; a unit test checks this).
+
+- **Host solver state** (`--state-store` / `HASTY_STATE_STORE`, `hasty_recon::bfpstate`):
+  - x stays f32 (the master copy); g, g_prev and the secant record are BFP.
+  - Size per stack: `Bfp::bytes`, i.e. (4b + 1) / 16 bytes per complex value, 4.06 B at bfp16 against 8 B.
+  - The set-sized f32 temporaries of the metric steps go from two to three.
+  - This is the §3.1 item ("store s and y instead of x_prev and g_prev, in reduced precision"). It is done with
+    BFP, and the secant step is stored as the exact difference x_new − x_old whenever there is no post-step denoiser.
+- **Gradient download:** the device packs each set's gradient before the copy (`hasty_bfp::xfer`), so the PCIe bytes
+  of g fall to the same size.
+- **k-space data** (`--kstage` / `HASTY_KSTAGE`, `kstage::Stager`):
+  - Packed staging: the upload is BFP with the width from the σ rule, decoded on the device. Device bytes per staged
+    set: the f32 set plus its packed upload.
+  - `:resident` keeps every set packed on the device: the BFP size of all data plus one decoded set.
+  - `--kstore bfp` is the host-RAM form of the same bytes. It needs no host decode, but zstd + q stays 3–4 × tighter
+    for host or disk.
+- **Ledger:** `vknot::plan_with(n, store, kstage, …)` holds these sizes; `plan` reads the two switches.
+
+### 8.1 Dry plan, 1 mm box (R2 sizes of §3; `vknot::tests::ledger_bfp_state_and_kspace_1mm_box`)
+
+Inputs to the plan:
+- 280 sets of 8.53 M voxels; one stack 17.8 GiB;
+- k-space 7.69 GiB, tables 9.30 GiB, the operator 13.4 GiB resident;
+- a 23 GiB card;
+- host headroom 57.9 GiB (80 G cgroup less the 16.6 GiB setup residue).
+
+Log: `research/experiments/bfp_host/ledger_1mm.log`.
+
+| configuration | host state | host peak | fits the host? | device peak |
+|---|---|---|---|---|
+| f32 (today) | 4 × 17.8 = 71.2 GiB | 73.2 GiB | no (R0 attempt 2) | 15.6 GiB |
+| bfp16, objective with a gradient sink (P2np per-frame streaming) | 17.8 + 3 × 9.04 = 45.0 GiB | 47.0 GiB | yes | 15.6 GiB |
+| bfp16, objective without a sink (velocity model, temporal subspace: g, g_prev stay f32) | 3 × 17.8 + 9.04 = 62.5 GiB | 64.5 GiB | no | 15.6 GiB |
+| bfp16 + packed k-space staging | 45.0 GiB | 47.0 GiB | yes | 15.7 GiB |
+| bfp16 + k-space packed resident on the device | 45.0 GiB | 47.0 GiB | yes | 20.0 GiB (k-space 4.42 GiB instead of 7.69) |
+
+So the §1 failure (R0 attempt 2, 88 GB host) fits with the BFP state. It does so only for an objective that hands
+its gradient over set by set. The velocity objective (`vobj::VelProblem`) needs that path too
+(`Objective::gradient_host_sink`); until then the knot-mode plan counts its g and g_prev as f32. With resident packed
+k-space, the data no longer need the PCIe at all and still fit the 23 GiB card next to the 1 mm operator. The f32
+resident copy does not: 23.3 GiB peak with the tables streamed.
+
+Planning assumption: a σ-rule store is planned at 18 bits (0.570 of f32). On ph0001 the rule picks 15 bits
+(0.477, §9 of the BFP doc).
+
+## 9. Update 2026-11-20: BFP grid-FFT intermediates (research/bfp_storage.md §8.1)
+
+`HASTY_SEG_FFT_STORE = bfpN` stores the y ↔ z intermediates of the engine's grid FFT as block floating point.
+
+| entry | size | where it is counted |
+|---|---|---|
+| in place (default when a plane's lines n0 · nch are a multiple of 16) | exponent bytes only: (block z planes) × n1 × ⌈n0 · nch / 16⌉ bytes, about 1/128 of the slot's image-block planes (29 MB at the 288 × 288 × 140 grid, 50 channels) | engine coil-batch budget (`fused::fit_store_budget` inside `max_grid_bytes`); the knot ledger's `fixed` term, which is measured from device memory after the operator is built |
+| dense (`HASTY_SEG_FFT_BFP_LAYOUT=dense`, or n0 · nch not a multiple of 16) | (block z planes) × n1 × ⌈n0 · nch / 16⌉ × (4b + 1) bytes: 0.56 of a slot at bfp22, σ 1.25 (2.58 GB at that grid) | the same two places |
+
+Formula for planners: `PrunedChanFft3::store_bytes_for(store, dense, [n2, n1, n0], nch, block z planes)`.
+
+Not counted yet:
+- the extra grid transforms of the multi-image passes (`multi_plan`, one exponent array or dense buffer each);
+- a store switched after construction (`SegNufft::set_fft_store` does not re-budget the coil batch).
+
+With in place both gaps are a few tens of MB; with dense they are a slot fraction each.
+
+## 10. Update 2026-11-20: the grid slot as a ledger entry; the velocity objective's gradient sink (research/sample_kernels.md §20)
+
+- **Knot grid slot sized by the ledger** (recon_p2np `--grid-budget auto`, now the default; `legacy` keeps the
+  (free − work) / 3 ≤ 6 GiB rule). Before the knot engine is built, `hasty_recon::vknot::slot_budget` runs the knot
+  plan with the operator WITHOUT its slot (resident now + coil maps + segment diagonals, per-knot ratemaps: every
+  knot's + 0.5 GiB of plans / kernels), the data and tables from the sample counts (220 B of tables per sample), the
+  velocity model's parameter stack, and the slot of `cb` coils as one more entry (`hasty_nufft::seg_slot_bytes`: cb × L
+  channels of the fine grid plus the default store's BFP bytes). The largest batch whose plan fits (5 % of the device
+  kept free for the estimate's error) bounds the choice; under it the engine planner's rule picks (fewest transformed
+  channels, then passes; no ragged last batch). The real ledger still checks the measured plan before the solver; if
+  the estimate refuses, the legacy budget is used.
+- **In-place BFP exponents are not in `max_grid_bytes`.** The engine's own y ↔ z intermediates in place cost only the
+  exponent bytes (≤ 1/128 of a slot); they live outside the coil-batch budget like the FFT plans' buffers, so a budget
+  of exactly n coils keeps n coils. A dense buffer (n0 · nch not a multiple of 16, or `HASTY_SEG_FFT_BFP_LAYOUT=dense`)
+  is counted in full. A multi-image pass with its own transform (cbm ≠ cb) counts that transform's bytes in full
+  (`multi_plan_with`). `seg_slot_bytes` (planners) counts the exponents too. The knot ledger measures all of them in
+  `fixed`.
+- **Velocity objective with a gradient sink** (`VelProblem::gradient_host_sink`, at-knots mode): with a BFP host state
+  (`--state-store bfpN`) g and g_prev are now stored at their width in knot mode too. `vknot::plan_sink(n, has_sink, …)`
+  plans them so; the 1 mm knot-mode row of §8.1 (62.5 GiB with bfp16 because g, g_prev stayed f32) becomes the
+  sink row, 45.0 GiB with bfp16 (58.3 GiB with bfp24, the P²nP recommendation). Spline mode (operator frames) keeps g
+  f32 (no sink path there yet). The host state default stays f32.
+
+## 11. Update 2026-11-21: compressed-DRAM switches (research/bfp_storage.md §10)
+
+- **Defaults: every on-device store is f32 again** (`HASTY_SEG_FFT_STORE` default f32): no exponent bytes. The slab
+  discard (`HASTY_FFT_SLAB_DISCARD`) allocates nothing. With `HASTY_SEG_FFT_STORE=bfp24` or `=auto`, the in-place
+  exponent bytes are 1/128 of the slot, as before.
+- **`HASTY_SEG_GRID_STORE=bfpN`.**
+  - Every grid slot grows by its exponent tail: cells / 16 bytes, 1/128 of the slot (82 MB at 320³ × 50 channels).
+  - `seg_slot_bytes` counts it.
+  - The engine's coil-batch budget does not; it is below the 5 % margin.
+- **`HASTY_SEG_MAPS_STORE` / `HASTY_SEG_DIAG_STORE`=bfpN.**
+  - A dense BFP copy is kept next to the f32 maps, at (4b + 1) / 128 of their size: 0.76 × at bfp24, 0.51 × at bfp16.
+  - Examples: 256³, 10 coils: maps +1.0 GB, diagonals +1.0 GB per encode at bfp24. 640 × 384 × 320: diagonals +4.8 GB
+    per encode at bfp24.
+  - The ledger's maps and diagonals entries must add these when the switches are on. They are off by default.
+  - Dropping the f32 copies (VRAM −0.24 × / −0.49 × instead of +0.76 × / +0.51 ×) needs every pad / crop variant to decode.

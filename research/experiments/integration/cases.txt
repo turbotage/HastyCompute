@@ -1,0 +1,65 @@
+# research/sample_kernels.md §20 campaign: one case per line "name|env|command" (command relative to $B = frozen bins,
+# $S = ph0001 scan dir); run from rustlib/. Lines starting with # are skipped. Order: correctness, sanitizers, accuracy,
+# performance.
+# ── correctness: the new tests
+t01_nufft_lib||$B/hasty-nufft__lib --test-threads 1
+t02_recon_ledger||$B/hasty-recon__lib ledger --test-threads 1
+t03_seg_defaults||$B/hasty-nufft__seg_defaults --nocapture --test-threads 1
+t04_vknot||$B/hasty-recon__vknot --nocapture --test-threads 1
+# ── correctness: the existing suites of the parts made default
+t05_seg_split||$B/hasty-nufft__seg_split --nocapture --test-threads 1
+t06_seg_fft_store||$B/hasty-nufft__seg_fft_store --nocapture --test-threads 1
+t07_seg_fft_store_dense|HASTY_SEG_FFT_BFP_LAYOUT=dense|$B/hasty-nufft__seg_fft_store --nocapture --test-threads 1 bfp22_engine_matches_f32
+t08_bfp_store||$B/hasty-fft__bfp_store --nocapture --test-threads 1
+t09_chanfft||$B/hasty-fft__chanfft --nocapture --test-threads 1 pruned_matches_full ksupport_matches_full slab_passes_equal_whole_grid
+t10_seg_kl||$B/hasty-nufft__seg_kl --nocapture --test-threads 1
+t11_seg_ra_vt||$B/hasty-nufft__seg_ra_vt --nocapture --test-threads 1
+t12_seg_phase2_tune||$B/hasty-nufft__seg_phase2 --nocapture --test-threads 1 p2_autotune p2_spill_screen
+# ── regression: the seg_* GPU suite and the recon tests on the engine, new defaults
+r01_segnufft||$B/hasty-nufft__segnufft --test-threads 1
+r02_seg_vs||$B/hasty-nufft__seg_vs --test-threads 1
+r03_seg_knot_kv||$B/hasty-nufft__seg_knot_kv --test-threads 1
+r04_seg_knot_hi||$B/hasty-nufft__seg_knot_hi --test-threads 1
+r05_seg_knot||$B/hasty-nufft__seg_knot --test-threads 1
+r06_seg_knot2d||$B/hasty-nufft__seg_knot2d --test-threads 1
+r07_seg_tile_block||$B/hasty-nufft__seg_tile_block --test-threads 1
+r08_seg_stream||$B/hasty-nufft__seg_stream --test-threads 1
+r09_seg_fft_traffic||$B/hasty-nufft__seg_fft_traffic --test-threads 1
+r10_seg_pruned||$B/hasty-nufft__seg_pruned --test-threads 1
+r11_seg_multi||$B/hasty-nufft__seg_multi --test-threads 1
+r12_seg_frames||$B/hasty-nufft__seg_frames --test-threads 1
+r13_seg_kernel||$B/hasty-nufft__seg_kernel --test-threads 1
+r14_seg_b0_direct||$B/hasty-nufft__seg_b0_direct --test-threads 1
+r15_seg_wf||$B/hasty-nufft__seg_wf --test-threads 1
+r16_seg_joint||$B/hasty-nufft__seg_joint --test-threads 1
+r17_seg_fat_union_gpu||$B/hasty-nufft__seg_fat_union_gpu --test-threads 1
+r18_accuracy||$B/hasty-nufft__accuracy --test-threads 1
+r19_seg_joint_chunks||$B/hasty-nufft__seg_joint_chunks --test-threads 1
+r20_seg_warp_gpu||$B/hasty-nufft__seg_warp_gpu --test-threads 1
+r21_grouped_sets||$B/hasty-recon__grouped_sets --test-threads 1
+r22_fat_direct||$B/hasty-recon__fat_direct --test-threads 1
+r23_bfp_state||$B/hasty-recon__bfp_state --test-threads 1
+r24_lagged||$B/hasty-recon__lagged --test-threads 1
+r25_stream_tables||$B/hasty-recon__stream_tables --test-threads 1
+r26_op||$B/hasty-recon__op --test-threads 1
+# ── sanitizers (new defaults; small cases; racecheck / synccheck filtered to the kernels of the new defaults)
+s01_memcheck_onebin|HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-nufft__seg_defaults --exact static_o3_one_bin_default --nocapture --test-threads 1
+s02_memcheck_fallback|HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-nufft__seg_defaults --exact one_bin_fallback_calls --nocapture --test-threads 1
+s03_memcheck_store|HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-nufft__seg_defaults --exact fft_store_default_and_rebudget --nocapture --test-threads 1
+s04_racecheck_ra_knot2d|P2_SAN=1 P2_SAN_KIND=3 P2_SAN_FAM=ra P2_SAN_PAIRS=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=seg_adjoint_ra $B/hasty-nufft__seg_phase2 p2_sanitizer_case --exact --nocapture --test-threads 1
+s05_racecheck_fft_knot2d|HASTY_BFP_TEST_CASES=6 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=fft_axis $B/hasty-nufft__seg_fft_store bfp22_engine_matches_f32 --nocapture --test-threads 1
+s06_synccheck_kl_knot2d|P2_SAN=1 P2_SAN_KIND=3 P2_SAN_FAM=kl P2_SAN_PAIRS=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool synccheck --print-limit 20 --kernel-name kns=seg_adjoint_kl $B/hasty-nufft__seg_phase2 p2_sanitizer_case --exact --nocapture --test-threads 1
+# ── accuracy on ph0001 (whole operator, new defaults vs every switch back, against the one-ulp floor)
+a01_static_o3|RAYON_NUM_THREADS=8|$B/bfp_phantom $S --order 3 --compare-defaults
+a02_knot2d_o3|RAYON_NUM_THREADS=8|$B/bfp_phantom $S --order 3 --knots2d 3:1,8:3 --readouts 340 --compare-defaults
+# ── performance: whole gradient, old paths vs new defaults, one invocation each (300 W as set by the user)
+p01_vel_old|$OLD|$B/opbench --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --jsonl $D/perf.jsonl
+p02_vel_new||$B/opbench --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --jsonl $D/perf.jsonl
+p03_256_old|$OLD|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p04_256_new||$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p05_640_old|$OLD|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+p06_640_new||$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+# ── reruns after the 19:10 test-setup fixes (refrozen binaries)
+t04_vknot||$B/hasty-recon__vknot --nocapture --test-threads 1
+t06_seg_fft_store||$B/hasty-nufft__seg_fft_store --nocapture --test-threads 1
+t07_seg_fft_store_dense|HASTY_SEG_FFT_BFP_LAYOUT=dense|$B/hasty-nufft__seg_fft_store --nocapture --test-threads 1 bfp22_engine_matches_f32

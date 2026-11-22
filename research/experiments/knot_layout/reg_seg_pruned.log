@@ -1,0 +1,8 @@
+
+running 2 tests
+test kpruned_grid_fft_matches_block_pruned ... ok
+test pruned_grid_fft_and_fused_residual ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.54s
+
+exit 0

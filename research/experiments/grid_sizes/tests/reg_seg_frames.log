@@ -1,0 +1,8 @@
+=== seg_frames (2026-11-20 15:45:32); power.limit 300.00 W
+
+running 1 test
+test per_frame_segments_match_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+exit 0 (2026-11-20 15:48:05)

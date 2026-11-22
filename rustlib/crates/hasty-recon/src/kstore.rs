@@ -10,6 +10,12 @@
 //!   REL·σ (σ = noise std per real component of the whitened data). Lossy by a known amount: the rounding adds
 //!   noise of variance REL²/12 · σ² (REL 0.25 → +0.52 % noise variance, +0.26 % noise std), and Gaussian noise in
 //!   steps of σ/4 needs ≈ 4–6 bits per component instead of 32.
+//! - `bfp` / `bfpN` / `bfp+qREL` (RAM only): block floating point (`hasty_bfp`, 16 complex values per block along
+//!   the samples of one coil, each coil row its own block sequence). `bfp`: the width per set from the noise rule
+//!   of research/bfp_storage.md §3.6, the smallest b whose step in the set's peak block is ≤ REL · σ (REL 0.25
+//!   default: b ≥ log2(peak / σ) + 4); `bfpN`: N bits. No entropy coding (zstd + q packs the host copy 3–4 × tighter),
+//!   but no host decode either: `kstage::Stager` uploads the packed words as they are and decodes on the device,
+//!   so the PCIe bytes and the staging CPU time both fall (4.06 B per complex at bfp16 instead of 8).
 //!
 //! The device keeps whatever fits (resident `CudaSlice`s, as before); the rest is staged per set from a store by
 //! `kstage::Stager`. Reads take `&self` and are lock-free (positional file reads, `OnceLock` sets): several GPU
@@ -34,6 +40,36 @@ use crate::Error;
 /// decode of one set and cheap coil subsets.
 pub const DEFAULT_BLOCK: usize = 32768;
 
+/// Width rule of a BFP k-space representation
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BfpRule {
+    /// the smallest b with the peak block's step ≤ q σ (σ: noise std per real component of the stored data)
+    Sigma { q: f64 },
+    /// a fixed width
+    Bits(u32),
+}
+
+impl BfpRule {
+    /// the width for a set whose largest |component| is `peak`, at noise std `sigma` per component
+    pub fn bits(&self, peak: f32, sigma: Option<f64>) -> Result<hasty_bfp::Bfp, Error> {
+        match *self {
+            BfpRule::Bits(b) => Ok(hasty_bfp::Bfp::new(b)),
+            BfpRule::Sigma { q } => {
+                let s = sigma.filter(|s| *s > 0.0).ok_or_else(|| Error::Format("k-space BFP: the σ rule needs the noise level (noise-free data: give a width, bfpN)".into()))?;
+                // an all-zero or tiny set: 8 bits already meet the rule
+                let b = hasty_bfp::Bfp::bits_for_step(peak, q * s).ok_or_else(|| Error::Format(format!("k-space BFP: peak / σ = {:.3e} needs more than 24 bits for steps ≤ {q} σ", peak as f64 / s)))?;
+                Ok(hasty_bfp::Bfp::new(b))
+            }
+        }
+    }
+    pub fn describe(&self) -> String {
+        match self {
+            BfpRule::Sigma { q } => format!("BFP, width per set from the noise rule (peak block step ≤ {q} σ)"),
+            BfpRule::Bits(b) => format!("BFP{b}"),
+        }
+    }
+}
+
 /// Representation of a [`KStore`] (see the module docs for the string form).
 #[derive(Clone, Debug, PartialEq)]
 pub struct StoreSpec {
@@ -45,11 +81,13 @@ pub struct StoreSpec {
     pub quant_rel: Option<f64>,
     /// samples per coil and block
     pub block: usize,
+    /// block floating point instead of the codec (RAM only); `quant_rel` is then None
+    pub bfp: Option<BfpRule>,
 }
 
 impl StoreSpec {
     pub fn dense() -> Self {
-        Self { file: None, codec: Codec::None, quant_rel: None, block: DEFAULT_BLOCK }
+        Self { file: None, codec: Codec::None, quant_rel: None, block: DEFAULT_BLOCK, bfp: None }
     }
 
     /// `[disk[=PATH]:]CODEC[+qREL]` with CODEC ram | raw | lz4 | zstd | zstdN (N = level). `disk` without a path
@@ -63,7 +101,35 @@ impl StoreSpec {
             _ => (None, s),
         };
         let mut parts = rest.split('+');
-        let codec = match parts.next().unwrap_or("") {
+        let head = parts.next().unwrap_or("");
+        if let Some(w) = head.strip_prefix("bfp") {
+            if file.is_some() {
+                return Err(bad("bfp is a RAM representation (the disk tiers keep zstd + q)"));
+            }
+            let mut rule = if w.is_empty() {
+                BfpRule::Sigma { q: 0.25 }
+            } else {
+                let b: u32 = w.parse().map_err(|_| bad("bfp width"))?;
+                if !(8..=24).contains(&b) {
+                    return Err(bad("bfp width must be in 8..=24"));
+                }
+                BfpRule::Bits(b)
+            };
+            for p in parts {
+                match (p.strip_prefix('q'), &mut rule) {
+                    (Some(v), BfpRule::Sigma { q }) => {
+                        let r: f64 = if v.is_empty() { 0.25 } else { v.parse().map_err(|_| bad("bfp step bound"))? };
+                        if !(r > 0.0 && r <= 4.0) {
+                            return Err(bad("bfp step bound must be in (0, 4]"));
+                        }
+                        *q = r;
+                    }
+                    _ => return Err(bad("suffix (bfp takes +qREL only without a fixed width)")),
+                }
+            }
+            return Ok(Self { file: None, codec: Codec::None, quant_rel: None, block: DEFAULT_BLOCK, bfp: Some(rule) });
+        }
+        let codec = match head {
             "ram" | "raw" | "none" | "dense" => Codec::None,
             "lz4" => Codec::Lz4,
             "zstd" => Codec::Zstd(3),
@@ -83,15 +149,18 @@ impl StoreSpec {
                 None => return Err(bad("suffix")),
             }
         }
-        Ok(Self { file, codec, quant_rel, block: DEFAULT_BLOCK })
+        Ok(Self { file, codec, quant_rel, block: DEFAULT_BLOCK, bfp: None })
     }
 
     /// dense in RAM (no blocks)
     pub fn is_dense(&self) -> bool {
-        self.file.is_none() && self.codec == Codec::None && self.quant_rel.is_none()
+        self.file.is_none() && self.codec == Codec::None && self.quant_rel.is_none() && self.bfp.is_none()
     }
 
     pub fn describe(&self) -> String {
+        if let Some(r) = &self.bfp {
+            return format!("{} in RAM", r.describe());
+        }
         let c = match self.codec {
             Codec::None => "raw".to_string(),
             Codec::Lz4 => "lz4".into(),
@@ -130,6 +199,8 @@ enum SetBody {
     Ram { arena: Vec<u8>, idx: Vec<(u64, u32)> },
     /// file blocks: (absolute offset, length)
     File { idx: Vec<(u64, u32)> },
+    /// BFP: coil row c (2 m reals) at mant[c · rw ..] / ex[c · rb ..] (`hasty_bfp::xfer` row layout)
+    Bfp { fmt: hasty_bfp::Bfp, mant: Vec<u32>, ex: Vec<u8> },
 }
 
 /// See the module docs.
@@ -139,6 +210,8 @@ pub struct KStore {
     lens: Vec<usize>,
     /// absolute quantisation step per real component (0: lossless)
     step: f64,
+    /// noise std per real component of the stored data (the pipeline's whitened-noise level), if known
+    sigma: Option<f64>,
     sets: Vec<OnceLock<SetBody>>,
     file: Option<File>,
     next: Mutex<u64>,
@@ -197,12 +270,16 @@ impl KStore {
             }
             None => None,
         };
+        if matches!(spec.bfp, Some(BfpRule::Sigma { .. })) && !sigma.is_some_and(|s| s > 0.0) {
+            return Err(Error::Format("k-space store: bfp (σ rule) needs the noise level (noise-free data: bfpN)".into()));
+        }
         let n = lens.len();
         Ok(Self {
             spec,
             nvc,
             lens,
             step,
+            sigma,
             sets: (0..n).map(|_| OnceLock::new()).collect(),
             file,
             next: Mutex::new(0),
@@ -229,7 +306,7 @@ impl KStore {
             z if z.starts_with("zstd") => Codec::Zstd(z[4..].parse().unwrap_or(3)),
             _ => return Err(fmt("codec")),
         };
-        let spec = StoreSpec { file: Some(path.to_path_buf()), codec, quant_rel: j["quant_rel"].as_f64(), block: u(&j["block"])? };
+        let spec = StoreSpec { file: Some(path.to_path_buf()), codec, quant_rel: j["quant_rel"].as_f64(), block: u(&j["block"])?, bfp: None };
         let sets: Vec<OnceLock<SetBody>> = j["index"].as_array().ok_or_else(|| fmt("index"))?.iter().map(|s| {
             let a = s.as_array().unwrap();
             let idx = a.chunks(2).map(|p| (p[0].as_u64().unwrap(), p[1].as_u64().unwrap() as u32)).collect();
@@ -245,6 +322,7 @@ impl KStore {
             nvc,
             lens,
             step: j["step"].as_f64().unwrap_or(0.0),
+            sigma: j["sigma"].as_f64(),
             sets,
             file: Some(File::open(path)?),
             next: Mutex::new(u(&j["file_bytes"])? as u64),
@@ -313,6 +391,72 @@ impl KStore {
     pub fn step(&self) -> f64 {
         self.step
     }
+    /// noise std per real component the store was created with
+    pub fn sigma(&self) -> Option<f64> {
+        self.sigma
+    }
+    /// BFP width of set t (None: not a BFP set, or not stored)
+    pub fn bfp_fmt(&self, t: usize) -> Option<hasty_bfp::Bfp> {
+        match self.sets[t].get() {
+            Some(SetBody::Bfp { fmt, .. }) => Some(*fmt),
+            _ => None,
+        }
+    }
+
+    /// Copy the packed coil rows `coils` (None: all) of BFP set t into `mant` / `ex` (`hasty_bfp::xfer` row layout,
+    /// `coils.len()` rows of 2 · len(t) reals); returns the width. Not for selection views.
+    pub fn read_packed(&self, t: usize, coils: Option<&[usize]>, mant: &mut [u32], ex: &mut [u8]) -> Result<hasty_bfp::Bfp, Error> {
+        if self.view.is_some() {
+            return Err(Error::Format("k-space store: packed reads of a selection view".into()));
+        }
+        let Some(SetBody::Bfp { fmt, mant: sm, ex: se }) = self.sets[t].get() else {
+            return Err(Error::Format(format!("k-space store: set {t} is not stored as BFP")));
+        };
+        let m = self.lens[t];
+        let (rw, rb) = (fmt.mant_words(2 * m), hasty_bfp::Bfp::blocks(2 * m));
+        let all: Vec<usize>;
+        let coils = match coils {
+            Some(c) => c,
+            None => {
+                all = (0..self.nvc).collect();
+                &all
+            }
+        };
+        if mant.len() < coils.len() * rw || ex.len() < coils.len() * rb {
+            return Err(Error::Format(format!("k-space store packed read: set {t}: buffers too small")));
+        }
+        for (j, &c) in coils.iter().enumerate() {
+            mant[j * rw..(j + 1) * rw].copy_from_slice(&sm[c * rw..(c + 1) * rw]);
+            ex[j * rb..(j + 1) * rb].copy_from_slice(&se[c * rb..(c + 1) * rb]);
+        }
+        Ok(*fmt)
+    }
+
+    /// BFP sets: (width histogram (bits, sets), worst block step / σ, predicted rms error / σ = √(mean step² / 12) / σ
+    /// over all blocks), None without BFP sets
+    pub fn bfp_summary(&self) -> Option<(Vec<(u32, usize)>, f64, f64)> {
+        let mut hist: std::collections::BTreeMap<u32, usize> = Default::default();
+        let (mut worst, mut s2, mut nblk) = (0.0f64, 0.0f64, 0usize);
+        for s in self.sets.iter().filter_map(|s| s.get()) {
+            if let SetBody::Bfp { fmt, ex, mant } = s {
+                *hist.entry(fmt.bits()).or_default() += 1;
+                let nb = mant.len() / fmt.bits() as usize;
+                for &e in &ex[..nb] {
+                    if e != hasty_bfp::ENAN {
+                        let st = fmt.step(e) as f64;
+                        worst = worst.max(st);
+                        s2 += st * st;
+                    }
+                }
+                nblk += nb;
+            }
+        }
+        if hist.is_empty() {
+            return None;
+        }
+        let sg = self.sigma.unwrap_or(f64::NAN);
+        Some((hist.into_iter().collect(), worst / sg, (s2 / nblk.max(1) as f64 / 12.0).sqrt() / sg))
+    }
     pub fn is_filled(&self, t: usize) -> bool {
         self.sets[t].get().is_some()
     }
@@ -378,7 +522,20 @@ impl KStore {
         if y.len() != self.nvc * m {
             return Err(Error::Format(format!("k-space store: set {t} has {} values, expected {} × {m}", y.len(), self.nvc)));
         }
-        let body = if self.spec.is_dense() {
+        let body = if let Some(rule) = &self.spec.bfp {
+            let peak = y.par_iter().map(|z| z.re.abs().max(z.im.abs())).reduce(|| 0.0f32, f32::max);
+            let fmt = rule.bits(peak, self.sigma)?;
+            let (rw, rb) = (fmt.mant_words(2 * m), hasty_bfp::Bfp::blocks(2 * m));
+            let mut mant = vec![0u32; self.nvc * rw];
+            let mut ex = vec![0u8; (self.nvc * rb).div_ceil(4) * 4];
+            if m > 0 {
+                mant.par_chunks_mut(rw).zip(ex[..self.nvc * rb].par_chunks_mut(rb)).enumerate().for_each(|(c, (mw, eb))| {
+                    fmt.encode_serial(hasty_bfp::as_reals(&y[c * m..(c + 1) * m]), mw, eb);
+                });
+            }
+            self.stored.fetch_add(mant.len() * 4 + ex.len(), Ordering::Relaxed);
+            SetBody::Bfp { fmt, mant, ex }
+        } else if self.spec.is_dense() {
             self.stored.fetch_add(y.len() * 8, Ordering::Relaxed);
             SetBody::Dense(y)
         } else {
@@ -466,6 +623,11 @@ impl KStore {
                     self.decode(&arena[o as usize..o as usize + l as usize], blk)
                 })
             }),
+            SetBody::Bfp { fmt, mant, ex } => {
+                let (rw, rb) = (fmt.mant_words(2 * m), hasty_bfp::Bfp::blocks(2 * m));
+                out.par_chunks_mut(m).zip(coils.par_iter()).for_each(|(row, &c)| fmt.decode_serial(&mant[c * rw..(c + 1) * rw], &ex[c * rb..(c + 1) * rb], hasty_bfp::as_reals_mut(row)));
+                Ok(())
+            }
             SetBody::File { idx } => {
                 let f = self.file.as_ref().unwrap();
                 out.par_chunks_mut(m).zip(coils.par_iter()).try_for_each(|(row, &c)| {
@@ -492,6 +654,17 @@ impl KStore {
             return Ok(());
         }
         let body = self.sets[t].get().ok_or_else(|| Error::Format(format!("k-space store: set {t} not stored")))?;
+        if let SetBody::Bfp { fmt, mant, ex } = body {
+            let (rw, rb) = (fmt.mant_words(2 * m), hasty_bfp::Bfp::blocks(2 * m));
+            out.par_chunks_mut(ms).zip(coils.par_iter()).for_each(|(row, &c)| {
+                let mut full = vec![C32::new(0.0, 0.0); m];
+                fmt.decode_serial(&mant[c * rw..(c + 1) * rw], &ex[c * rb..(c + 1) * rb], hasty_bfp::as_reals_mut(&mut full));
+                for (o, &j) in row.iter_mut().zip(sel) {
+                    *o = full[j as usize];
+                }
+            });
+            return Ok(());
+        }
         if let SetBody::Dense(v) = body {
             out.par_chunks_mut(ms).zip(coils.par_iter()).for_each(|(row, &c)| {
                 for (o, &j) in row.iter_mut().zip(sel) {
@@ -525,7 +698,7 @@ impl KStore {
                         self.file.as_ref().unwrap().read_exact_at(&mut buf, o)?;
                         self.decode(&buf, &mut blk)?;
                     }
-                    SetBody::Dense(_) => unreachable!(),
+                    SetBody::Dense(_) | SetBody::Bfp { .. } => unreachable!(),
                 }
                 for (x, &j) in p.iter_mut().zip(&sel[bounds[b]..bounds[b + 1]]) {
                     *x = blk[j as usize - lo];
@@ -548,6 +721,7 @@ impl KStore {
             SetBody::Dense(v) => v.len() * 8,
             SetBody::Ram { arena, idx } => arena.len() + idx.len() * 12,
             SetBody::File { idx } => idx.len() * 12,
+            SetBody::Bfp { mant, ex, .. } => mant.len() * 4 + ex.len(),
         }).sum();
         StoreStats { raw_bytes: raw, stored_bytes: self.stored.load(Ordering::Relaxed), ram_bytes: ram, saturated: self.saturated.load(Ordering::Relaxed) }
     }
@@ -565,7 +739,10 @@ impl KStore {
             s.ratio(),
             gb(s.ram_bytes),
             if s.saturated > 0 { format!(", {} values clipped", s.saturated) } else { String::new() }
-        )
+        ) + &match self.bfp_summary() {
+            Some((h, worst, rms)) => format!("; BFP widths {}, worst block step {worst:.3} σ, predicted rms error {rms:.2e} σ", h.iter().map(|(b, n)| format!("{b} bits × {n}")).collect::<Vec<_>>().join(", ")),
+            None => String::new(),
+        }
     }
 
     /// Write the index of a file store (`path.json`; all sets must be stored) so it can be reopened. No-op in RAM.
@@ -593,6 +770,7 @@ impl KStore {
             "codec": codec,
             "quant_rel": self.spec.quant_rel,
             "step": self.step,
+            "sigma": self.sigma,
             "file_bytes": *self.next.lock().unwrap(),
             "saturated": self.saturated.load(Ordering::Relaxed),
             "index": index,
@@ -636,6 +814,11 @@ mod tests {
         let s = StoreSpec::parse("disk=/tmp/a.kst:zstd", d).unwrap();
         assert_eq!(s.file.as_deref(), Some(Path::new("/tmp/a.kst")));
         assert!(StoreSpec::parse("gzip", d).is_err());
+        assert_eq!(StoreSpec::parse("bfp", d).unwrap().bfp, Some(BfpRule::Sigma { q: 0.25 }));
+        assert_eq!(StoreSpec::parse("bfp+q0.125", d).unwrap().bfp, Some(BfpRule::Sigma { q: 0.125 }));
+        assert_eq!(StoreSpec::parse("bfp18", d).unwrap().bfp, Some(BfpRule::Bits(18)));
+        assert!(!StoreSpec::parse("bfp", d).unwrap().is_dense());
+        assert!(StoreSpec::parse("disk:bfp", d).is_err() && StoreSpec::parse("bfp30", d).is_err() && StoreSpec::parse("bfp16+q0.5", d).is_err());
         assert!(StoreSpec::parse("lz4+q9", d).is_err());
     }
 
@@ -645,7 +828,7 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp").join(format!("hasty_kstore_test_{}", std::process::id()));
         let (nvc, lens) = (5, vec![70001usize, 0, 1234, 32768]);
         let sets: Vec<Vec<C32>> = lens.iter().enumerate().map(|(t, &m)| data(nvc, m, 7 + t as u64)).collect();
-        for spec in ["ram", "raw", "lz4", "zstd", "zstd7", "disk:raw", "disk:lz4", "lz4+q0.25", "disk:zstd+q0.5"] {
+        for spec in ["ram", "raw", "lz4", "zstd", "zstd7", "disk:raw", "disk:lz4", "lz4+q0.25", "disk:zstd+q0.5", "bfp16", "bfp", "bfp+q0.5", "bfp9"] {
             let mut sp = StoreSpec::parse(spec, &dir.join(format!("{}.kst", spec.replace([':', '+'], "_")))).unwrap();
             sp.block = 10000;
             let sigma = 0.2887; // std of U(−0.5, 0.5)
@@ -656,7 +839,15 @@ mod tests {
             let check = |ks: &KStore| {
                 for t in 0..lens.len() {
                     let v = ks.read_vec(t).unwrap();
-                    let tol = if sp.quant_rel.is_some() { 0.5 * ks.step() as f32 + 1e-4 } else { 0.0 };
+                    let tol = if sp.quant_rel.is_some() {
+                        0.5 * ks.step() as f32 + 1e-4
+                    } else if sp.bfp.is_some() {
+                        // half the worst block step (bfp_summary reports it over σ)
+                        let (_, worst, _) = ks.bfp_summary().unwrap();
+                        (0.5 * worst * sigma) as f32
+                    } else {
+                        0.0
+                    };
                     let err = v.iter().zip(&sets[t]).map(|(a, b)| (a.re - b.re).abs().max((a.im - b.im).abs())).fold(0.0f32, f32::max);
                     assert!(err <= tol, "{spec} set {t}: error {err} > {tol}");
                     // coil subset
@@ -688,7 +879,7 @@ mod tests {
         let sets: Vec<Vec<C32>> = lens.iter().enumerate().map(|(t, &m)| data(nvc, m, 31 + t as u64)).collect();
         // prefix + suffix of every "readout" of 1000 samples, one set empty, one set whole blocks skipped
         let sel: Vec<Vec<u32>> = lens.iter().enumerate().map(|(t, &m)| (0..m as u32).filter(|&j| match t { 3 => j < 7000 && (j % 1000 < 40 || j % 1000 > 980), _ => j % 1000 < 40 || j % 1000 > 980 }).collect()).collect();
-        for spec in ["ram", "lz4", "disk:zstd", "zstd+q0.25"] {
+        for spec in ["ram", "lz4", "disk:zstd", "zstd+q0.25", "bfp", "bfp12"] {
             let mut sp = StoreSpec::parse(spec, &dir.join(format!("{}.kst", spec.replace([':', '+'], "_")))).unwrap();
             sp.block = 4096;
             let ks = KStore::create(sp.clone(), nvc, lens.clone(), Some(0.2887), "view").unwrap();
@@ -718,6 +909,55 @@ mod tests {
         let ks = KStore::create(StoreSpec::dense(), 1, vec![10], None, "").unwrap();
         assert!(ks.with_selection(vec![vec![3, 2]]).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bfp_sigma_rule_bounds_every_block_step() {
+        // k-space-like rows: a decaying centre peak up to 4000 σ on noise σ; the σ rule's width keeps every block's
+        // step ≤ q σ, the error per value ≤ half a step, and the rms error at the predicted √(step²/12)
+        let (nvc, m) = (6usize, 20000usize);
+        let sigma = 1.0f64;
+        let mut s = 0x1234_5678u64;
+        let mut g = || {
+            // Box–Muller from xorshift
+            let mut u = || {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                ((s >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+            };
+            (-2.0 * u().ln()).sqrt() * (2.0 * std::f64::consts::PI * u()).cos()
+        };
+        let y: Vec<C32> = (0..nvc * m).map(|i| {
+            let j = (i % m) as f64;
+            let a = 4000.0 * (-j / 300.0).exp() / (1.0 + (i / m) as f64);
+            C32::new((a + sigma * g()) as f32, (0.3 * a + sigma * g()) as f32)
+        }).collect();
+        for q in [0.25f64, 0.5] {
+            let sp = StoreSpec::parse(&format!("bfp+q{q}"), Path::new("/unused")).unwrap();
+            let ks = KStore::create(sp, nvc, vec![m], Some(sigma), "").unwrap();
+            ks.put(0, &y).unwrap();
+            let (h, worst, rms_pred) = ks.bfp_summary().unwrap();
+            let b = h[0].0;
+            let formula = (4000.0f64 / sigma).log2() + 2.0 + (1.0 / q).log2();
+            assert!(worst <= q + 1e-12, "q {q}: worst step {worst} σ");
+            assert!((b as f64) <= formula.ceil() && (b as f64) >= formula.floor() - 1.0, "q {q}: width {b} vs rule {formula:.2}");
+            let d = ks.read_vec(0).unwrap();
+            let (mut se, mut mx) = (0.0f64, 0.0f64);
+            for (a, b) in d.iter().zip(&y) {
+                for e in [(a.re - b.re) as f64, (a.im - b.im) as f64] {
+                    se += e * e;
+                    mx = mx.max(e.abs());
+                }
+            }
+            let rms = (se / (2 * y.len()) as f64).sqrt() / sigma;
+            println!("q {q}: {b} bits, worst step {worst:.3} σ, max error {mx:.3} σ, rms {rms:.2e} σ (predicted {rms_pred:.2e})");
+            assert!(mx <= 0.5 * worst * sigma + 1e-9);
+            assert!((rms / rms_pred - 1.0).abs() < 0.15, "rms {rms:.3e} vs predicted {rms_pred:.3e}");
+        }
+        // noise-free data: the σ rule refuses, a fixed width works
+        assert!(KStore::create(StoreSpec::parse("bfp", Path::new("/u")).unwrap(), 1, vec![4], None, "").is_err());
+        assert!(KStore::create(StoreSpec::parse("bfp16", Path::new("/u")).unwrap(), 1, vec![4], None, "").is_ok());
     }
 
     #[test]

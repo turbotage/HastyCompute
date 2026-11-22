@@ -1,0 +1,873 @@
+=== t04_vknot: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-recon__vknot --nocapture --test-threads 1 (2026-11-20 19:06:55)
+locked 19:06:55; power limit / draw / sm clock / memory used: 300.00 W, 59.58 W, 2565 MHz, 294 MiB
+
+running 2 tests
+test knot_velocity_gradient_sink ... gradient sink (plain): f32 sink f 6.335879e4 vs 6.335879e4, g rel 2.0e-7
+
+thread 'knot_velocity_gradient_sink' (1215300) panicked at crates/hasty-recon/tests/vknot.rs:342:9:
+plain: f32 sink differs (f 6.335878585362563e4 vs 6.335878585630014e4, g rel 1.9508742108952286e-7)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test knot_velocity_model_gradient_streaming_and_recovery ... at-knots objective: f 9.8752e4, directional derivative fd 1.111453e4 vs analytic 1.111438e4 (rel 1.4e-5)
+streamed gradient vs device: f rel 2.6e-9, g rel 2.0e-7
+coil groups (all coils, weights 1) vs full: f rel 1.7e-10 / 6.3e-10, g rel 3.5e-7 / 3.6e-7
+Hessian-vector product: streamed vs device rel 1.6e-7; symmetry 7.905e4 vs 7.905e4
+λ_max(MH): device 3.13599e3, host 3.13599e3
+    time it 0: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 1: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 2: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 3: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 4: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 5: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 6: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 7: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 8: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 9: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 10: tau 6.432e-1..6.432e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.504e0)
+    time it 10: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 11: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 12: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 13: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 14: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 15: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 16: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 17: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 18: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 19: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 20: tau 2.896e0..2.896e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -4.396e-1)
+    time it 20: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 21: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 22: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 23: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 24: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 25: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 26: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 27: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 28: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 29: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 30: tau 6.062e-1..6.062e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c 1.269e-3)
+    time it 30: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 31: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 32: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 33: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 34: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 35: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 36: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 37: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 38: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 39: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 40: tau 8.389e-1..8.389e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.395e0)
+    time it 40: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 41: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 42: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 43: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 44: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 45: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 46: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 47: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 48: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 49: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 50: tau 9.639e-1..9.639e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -8.260e-1)
+    time it 50: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 51: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 52: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 53: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 54: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 55: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 56: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 57: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 58: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 59: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 60: tau 6.854e-1..6.854e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.792e-2)
+    time it 60: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 61: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 62: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 63: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 64: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 65: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 66: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 67: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 68: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 69: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 70: tau 7.306e-1..7.306e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -6.128e0)
+    time it 70: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 71: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 72: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 73: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 74: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 75: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 76: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 77: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 78: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 79: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 80: tau 8.492e-1..8.492e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -5.938e0)
+    time it 80: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 81: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 82: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 83: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 84: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 85: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 86: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 87: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 88: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 89: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 90: tau 1.970e0..1.970e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -8.911e-1)
+    time it 90: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 91: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 92: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 93: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 94: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 95: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 96: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 97: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 98: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 99: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 100: tau 4.010e0..4.010e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -4.467e-1)
+    time it 100: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 101: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 102: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 103: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 104: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 105: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 106: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 107: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 108: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 109: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 110: tau 7.560e-1..7.560e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -1.033e0)
+    time it 110: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 111: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 112: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 113: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 114: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 115: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 116: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 117: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 118: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 119: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 120: tau 6.346e-1..6.346e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -3.199e-1)
+    time it 120: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 121: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 122: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 123: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 124: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 125: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 126: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 127: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 128: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 129: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 130: tau 5.212e-1..5.212e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -1.771e0)
+    time it 130: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 131: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 132: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 133: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 134: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 135: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 136: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 137: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 138: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 139: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 140: tau 2.394e0..2.394e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -1.373e0)
+    time it 140: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 141: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 142: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 143: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 144: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 145: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 146: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 147: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 148: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 149: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 150: tau 7.195e-1..7.195e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -8.975e-1)
+    time it 150: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 151: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 152: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 153: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 154: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 155: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 156: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 157: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 158: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 159: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 160: tau 4.925e0..4.925e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -5.941e0)
+    time it 160: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 161: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 162: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 163: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 164: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 165: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 166: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 167: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 168: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 169: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 170: tau 5.256e-1..5.256e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.360e0)
+    time it 170: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 171: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 172: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 173: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 174: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 175: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 176: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 177: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 178: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 179: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 180: tau 7.585e-1..7.585e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -9.726e0)
+    time it 180: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 181: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 182: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 183: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 184: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 185: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 186: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 187: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 188: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 189: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 190: tau 5.997e-1..5.997e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c 3.830e-1)
+    time it 190: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 191: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 192: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 193: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 194: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 195: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 196: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 197: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 198: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 199: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 200: tau 1.094e0..1.094e0, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.087e0)
+    time it 200: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 201: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 202: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 203: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 204: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 205: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 206: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 207: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 208: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 209: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 210: tau 5.234e-1..5.234e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c 6.189e-1)
+    time it 210: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 211: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 212: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 213: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 214: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 215: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 216: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 217: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 218: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 219: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 220: tau 5.792e-1..5.792e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -1.001e-1)
+    time it 220: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 221: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 222: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 223: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 224: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 225: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 226: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 227: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 228: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 229: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 230: tau 9.334e-1..9.334e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -2.328e-1)
+    time it 230: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 231: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 232: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 233: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 234: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 235: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 236: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 237: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 238: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 239: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 240: tau 6.010e-1..6.010e-1, a > 0 in 0/17 sets (a 0.000), rank-one in 17/17 (c -5.014e0)
+    time it 240: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 241: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 242: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 243: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 244: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 245: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 246: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 247: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 248: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 249: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 0: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 1: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 2: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 3: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 4: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 5: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 6: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 7: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 8: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 9: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 10: a 0.000 tau 6.432e-1..6.432e-1, rank-one in 17/17
+    time it 10: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 11: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 12: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 13: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 14: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 15: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 16: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 17: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 18: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 19: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 20: a 0.000 tau 2.896e0..2.896e0, rank-one in 17/17
+    time it 20: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 21: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 22: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 23: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 24: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 25: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 26: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 27: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 28: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 29: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 30: a 0.000 tau 6.055e-1..6.055e-1, rank-one in 17/17
+    time it 30: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 31: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 32: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 33: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 34: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 35: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 36: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 37: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 38: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 39: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 40: a 0.000 tau 7.422e-1..7.422e-1, rank-one in 17/17
+    time it 40: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 41: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 42: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 43: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 44: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 45: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 46: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 47: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 48: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 49: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 50: a 0.000 tau 4.369e0..4.369e0, rank-one in 17/17
+    time it 50: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 51: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 52: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 53: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 54: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 55: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 56: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 57: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 58: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 59: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 60: a 0.000 tau 5.885e0..5.885e0, rank-one in 17/17
+    time it 60: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 61: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 62: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 63: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 64: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 65: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 66: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 67: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 68: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 69: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 70: a 0.000 tau 9.702e-1..9.702e-1, rank-one in 17/17
+    time it 70: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 71: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 72: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 73: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 74: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 75: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 76: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 77: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 78: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 79: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 80: a 0.000 tau 9.411e-1..9.411e-1, rank-one in 17/17
+    time it 80: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 81: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 82: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 83: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 84: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 85: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 86: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 87: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 88: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 89: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 90: a 0.000 tau 7.620e-1..7.620e-1, rank-one in 17/17
+    time it 90: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 91: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 92: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 93: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 94: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 95: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 96: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 97: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 98: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 99: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 100: a 0.000 tau 9.803e-1..9.803e-1, rank-one in 17/17
+    time it 100: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 101: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 102: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 103: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 104: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 105: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 106: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 107: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 108: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 109: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 110: a 0.000 tau 2.213e0..2.213e0, rank-one in 17/17
+    time it 110: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 111: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 112: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 113: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 114: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 115: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 116: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 117: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 118: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 119: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 120: a 0.000 tau 9.578e-1..9.578e-1, rank-one in 17/17
+    time it 120: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 121: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 122: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 123: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 124: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 125: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 126: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 127: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 128: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 129: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 130: a 0.000 tau 7.005e0..7.005e0, rank-one in 17/17
+    time it 130: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 131: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 132: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 133: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 134: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 135: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 136: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 137: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 138: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 139: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 140: a 0.000 tau 8.662e-1..8.662e-1, rank-one in 17/17
+    time it 140: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 141: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 142: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 143: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 144: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 145: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 146: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 147: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 148: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 149: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 150: a 0.000 tau 1.297e0..1.297e0, rank-one in 17/17
+    time it 150: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 151: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 152: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 153: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 154: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 155: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 156: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 157: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 158: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 159: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 160: a 0.000 tau 2.775e0..2.775e0, rank-one in 17/17
+    time it 160: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 161: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 162: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 163: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 164: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 165: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 166: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 167: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 168: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 169: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 170: a 0.000 tau 3.513e0..3.513e0, rank-one in 17/17
+    time it 170: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 171: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 172: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 173: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 174: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 175: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 176: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 177: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 178: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 179: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 180: a 0.000 tau 1.859e0..1.859e0, rank-one in 17/17
+    time it 180: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 181: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 182: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 183: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 184: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 185: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 186: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 187: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 188: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 189: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 190: a 0.000 tau 9.705e-1..9.705e-1, rank-one in 17/17
+    time it 190: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 191: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 192: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 193: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 194: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 195: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 196: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 197: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 198: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 199: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 200: a 0.000 tau 8.797e-1..8.797e-1, rank-one in 17/17
+    time it 200: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 201: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 202: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 203: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 204: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 205: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 206: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 207: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 208: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 209: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 210: a 0.000 tau 3.097e0..3.097e0, rank-one in 17/17
+    time it 210: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 211: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 212: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 213: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 214: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 215: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 216: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 217: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 218: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 219: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 220: a 0.000 tau 1.014e0..1.014e0, rank-one in 17/17
+    time it 220: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 221: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 222: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 223: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 224: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 225: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 226: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 227: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 228: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 229: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 230: a 0.000 tau 1.094e0..1.094e0, rank-one in 17/17
+    time it 230: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 231: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 232: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 233: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 234: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 235: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 236: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 237: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 238: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 239: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 240: a 0.000 tau 9.270e-1..9.270e-1, rank-one in 17/17
+    time it 240: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 241: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 242: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 243: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 244: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 245: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 246: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 247: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 248: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 249: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+recovery: velocity RMS error 0.0696 → device 6.48e-4 / host 1.23e-3 m/s; z rel error 9.91e-4 / 1.94e-3; f 9.875e4 → 2.465e-2 (host 1.117e-1); f at it 10 device 1.835190e3 host 1.835191e3
+    time it 0: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 1: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 2: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 3: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 4: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 5: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 6: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 7: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 8: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 9: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 10: a 0.000 tau 1.695e0..1.695e0, rank-one in 17/17
+    time it 10: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 11: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 12: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 13: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 14: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 15: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 16: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 17: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 18: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 19: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 20: a 0.000 tau 6.371e-1..6.371e-1, rank-one in 17/17
+    time it 20: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 21: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 22: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 23: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 24: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 25: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 26: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 27: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 28: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 29: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 30: a 0.000 tau 5.508e-1..5.508e-1, rank-one in 17/17
+    time it 30: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 31: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 32: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 33: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 34: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 35: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 36: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 37: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 38: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 39: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 40: a 0.000 tau 7.721e-1..7.721e-1, rank-one in 17/17
+    time it 40: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 41: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 42: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 43: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 44: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 45: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 46: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 47: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 48: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 49: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 50: a 0.000 tau 1.876e0..1.876e0, rank-one in 17/17
+    time it 50: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 51: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 52: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 53: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 54: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 55: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 56: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 57: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 58: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 59: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 60: a 0.000 tau 5.467e-1..5.467e-1, rank-one in 17/17
+    time it 60: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 61: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 62: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 63: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 64: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 65: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 66: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 67: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 68: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 69: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 70: a 0.000 tau 8.823e-1..8.823e-1, rank-one in 17/17
+    time it 70: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 71: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 72: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 73: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 74: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 75: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 76: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 77: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 78: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 79: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 80: a 0.000 tau 5.687e-1..5.687e-1, rank-one in 17/17
+    time it 80: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 81: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 82: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 83: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 84: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 85: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 86: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 87: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 88: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 89: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 90: a 0.000 tau 6.343e-1..6.343e-1, rank-one in 17/17
+    time it 90: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 91: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 92: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 93: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 94: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 95: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 96: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 97: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 98: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 99: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 100: a 0.000 tau 6.855e-1..6.855e-1, rank-one in 17/17
+    time it 100: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 101: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 102: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 103: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 104: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 105: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 106: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 107: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 108: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 109: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 110: a 0.000 tau 8.473e-1..8.473e-1, rank-one in 17/17
+    time it 110: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 111: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 112: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 113: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 114: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 115: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 116: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 117: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 118: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 119: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 120: a 0.000 tau 6.345e-1..6.345e-1, rank-one in 17/17
+    time it 120: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 121: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 122: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 123: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 124: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 125: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 126: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 127: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 128: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 129: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 130: a 0.000 tau 9.639e-1..9.639e-1, rank-one in 17/17
+    time it 130: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 131: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 132: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 133: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 134: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 135: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 136: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 137: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 138: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 139: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 140: a 0.000 tau 4.616e-1..4.616e-1, rank-one in 17/17
+    time it 140: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 141: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 142: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 143: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 144: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 145: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 146: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 147: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 148: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 149: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 150: a 0.000 tau 9.066e-1..9.066e-1, rank-one in 17/17
+    time it 150: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 151: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 152: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 153: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 154: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 155: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 156: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 157: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 158: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 159: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 160: a 0.000 tau 5.188e-1..5.188e-1, rank-one in 17/17
+    time it 160: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 161: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 162: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 163: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 164: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 165: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 166: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 167: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 168: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 169: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 170: a 0.000 tau 8.534e-1..8.534e-1, rank-one in 17/17
+    time it 170: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 171: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 172: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 173: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 174: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 175: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 176: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 177: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 178: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 179: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 180: a 0.000 tau 3.170e0..3.170e0, rank-one in 17/17
+    time it 180: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 181: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 182: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 183: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 184: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 185: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 186: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 187: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 188: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 189: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 190: a 0.000 tau 6.008e-1..6.008e-1, rank-one in 17/17
+    time it 190: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 191: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 192: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 193: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 194: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 195: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 196: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 197: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 198: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 199: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 200: a 0.000 tau 5.843e-1..5.843e-1, rank-one in 17/17
+    time it 200: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 201: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 202: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 203: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 204: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 205: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 206: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 207: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 208: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 209: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 210: a 0.000 tau 6.196e-1..6.196e-1, rank-one in 17/17
+    time it 210: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 211: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 212: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 213: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 214: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 215: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 216: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 217: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 218: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 219: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 220: a 0.000 tau 8.875e-1..8.875e-1, rank-one in 17/17
+    time it 220: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 221: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 222: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 223: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 224: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 225: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 226: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 227: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 228: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 229: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 230: a 0.000 tau 9.375e-1..9.375e-1, rank-one in 17/17
+    time it 230: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 231: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 232: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 233: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 234: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 235: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 236: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 237: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 238: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 239: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    zmshr1-M it 240: a 0.000 tau 4.002e0..4.002e0, rank-one in 17/17
+    time it 240: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 241: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 242: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 243: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 244: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 245: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 246: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 247: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 248: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+    time it 249: gradient 0.0s, step 0.0s, prior 0.0s, report 0.0s
+residual phase + anchor (host state): a rel error 1 → 5.129e-6, velocity RMS error 0.0696 → 9.28e-6 m/s
+ok
+
+failures:
+
+failures:
+    knot_velocity_gradient_sink
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.95s
+
+Command exited with non-zero status 101
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-recon__vknot --nocapture --test-threads 1"
+	User time (seconds): 15.21
+	System time (seconds): 0.82
+	Percent of CPU this job got: 106%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:15.00
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 204028
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 71594
+	Voluntary context switches: 23429
+	Involuntary context switches: 637
+	Swaps: 0
+	File system inputs: 48
+	File system outputs: 4984
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101
+exit 101 19:07:10; power limit at end 300.00 W

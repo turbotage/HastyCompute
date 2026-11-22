@@ -1,0 +1,13 @@
+=== seg_b0_direct (2026-11-20 15:50:46); power.limit 300.00 W
+
+running 6 tests
+test fat_species_error_budget_cpu ... ignored, CPU-only error budget for the fat models; run with --ignored
+test seg_b0_fat_region_matches_direct_sum ... ok
+test seg_b0_model_error_budget_cpu ... ignored, CPU-only error budget (~1 min on 32 cores); run with --ignored
+test seg_b0_smooth_field_matches_direct_sum ... ok
+test seg_b0_strong_gradient_field_matches_direct_sum ... ok
+test seg_plain_matches_direct_sum_forward_and_adjoint ... ok
+
+test result: ok. 4 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 91.36s
+
+exit 0 (2026-11-20 15:54:58)

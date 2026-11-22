@@ -1,0 +1,79 @@
+=== a01_static_o3: env RAYON_NUM_THREADS=8 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 3 --switches fft=bfp24/grid=bfp24/grid=bfp22/grid=bfp20/maps=bfp24/diag=bfp24/maps=bfp20,diag=bfp20/maps=bfp16,diag=bfp16/fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24 (2026-11-21 13:42:22)
+locked 13:42:22; power limit / draw / sm clock / memory used: 450.00 W, 276.26 W, 2565 MHz, 240 MiB
+ph0001 scan /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan: image [254, 144, 114] (2.0 mm voxels), 32 coils, 53144 readouts × 3990 ADC samples, 20 frames; loaded in 4.0 s
+  virtual coils 10 of 32: signal-region energy kept 0.926, eigenvalue ratio last / first 0.042; 2175329 support voxels
+  segment basis fixed: interpolator norm ‖a(τ)‖ min / mean / max 0.88 / 0.97 / 1.08; diagonal rms per segment [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00]
+  encode 3: 379 readouts, 1512210 samples; L 10 segments over τ ∈ [1.60, 9.58] ms; order 3
+  F32 reference: coil batch 5, fft f32, grid f32, maps / diag (F32, F32), k-support pruned grid FFT (50 ch, grid [320, 180, 144], z-pass columns 0.853, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 0.635, x pass Some((16, 40)) lines × threads, two-pass L2 slabs of 1 z planes (23.0 MB), pad / crop fused into the x passes (not in this FFT time))
+  static order 3: relative error against the all-f32 engine (floor = f32 with x or n moved by one ulp; spread = f32 run to run and engine to engine)
+    | configuration | output | floor | spread | error | error / floor |
+    | fft=bfp24 | forward A x | 3.58e-7 | 1.07e-7 | 3.51e-7 | 0.98 |
+    | fft=bfp24 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 1.03e-5 | 1.49 |
+    | fft=bfp24 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 5.89e-6 | 1.32 |
+    | fft=bfp24 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 6.74e-5 | 1.31 |
+      (fft=bfp24: active fft bfp24, grid f32, maps / diag (F32, F32); coil batch 5; 2.9 s)
+    | grid=bfp24 | forward A x | 3.58e-7 | 1.07e-7 | 7.21e-7 | 2.01 |
+    | grid=bfp24 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 9.72e-6 | 1.40 |
+    | grid=bfp24 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 4.99e-6 | 1.12 |
+    | grid=bfp24 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 2.64e-4 | 5.15 |
+      (grid=bfp24: active fft f32, grid bfp24, maps / diag (F32, F32); coil batch 5; 3.6 s)
+    | grid=bfp22 | forward A x | 3.58e-7 | 1.07e-7 | 2.07e-6 | 5.78 |
+    | grid=bfp22 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 9.55e-6 | 1.38 |
+    | grid=bfp22 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 5.27e-6 | 1.18 |
+    | grid=bfp22 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 8.43e-4 | 16.40 |
+      (grid=bfp22: active fft f32, grid bfp22, maps / diag (F32, F32); coil batch 5; 3.6 s)
+    | grid=bfp20 | forward A x | 3.58e-7 | 1.07e-7 | 8.34e-6 | 23.30 |
+    | grid=bfp20 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 9.96e-6 | 1.43 |
+    | grid=bfp20 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 1.05e-5 | 2.35 |
+    | grid=bfp20 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 3.06e-3 | 59.55 |
+      (grid=bfp20: active fft f32, grid bfp20, maps / diag (F32, F32); coil batch 5; 3.6 s)
+    | maps=bfp24 | forward A x | 3.58e-7 | 1.07e-7 | 3.19e-7 | 0.89 |
+    | maps=bfp24 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 9.33e-6 | 1.34 |
+    | maps=bfp24 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 7.74e-6 | 1.73 |
+    | maps=bfp24 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 4.33e-5 | 0.84 |
+      (maps=bfp24: active fft f32, grid f32, maps / diag (Bfp(24), F32); coil batch 5; 2.0 s)
+    | diag=bfp24 | forward A x | 3.58e-7 | 1.07e-7 | 3.24e-7 | 0.91 |
+    | diag=bfp24 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 9.64e-6 | 1.39 |
+    | diag=bfp24 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 5.33e-6 | 1.19 |
+    | diag=bfp24 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 5.39e-5 | 1.05 |
+      (diag=bfp24: active fft f32, grid f32, maps / diag (F32, Bfp(24)); coil batch 5; 2.0 s)
+    | maps=bfp20,diag=bfp20 | forward A x | 3.58e-7 | 1.07e-7 | 3.81e-7 | 1.06 |
+    | maps=bfp20,diag=bfp20 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 1.01e-5 | 1.46 |
+    | maps=bfp20,diag=bfp20 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 5.54e-6 | 1.24 |
+    | maps=bfp20,diag=bfp20 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 6.79e-5 | 1.32 |
+      (maps=bfp20,diag=bfp20: active fft f32, grid f32, maps / diag (Bfp(20), Bfp(20)); coil batch 5; 2.1 s)
+    | maps=bfp16,diag=bfp16 | forward A x | 3.58e-7 | 1.07e-7 | 1.51e-6 | 4.21 |
+    | maps=bfp16,diag=bfp16 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 2.70e-5 | 3.89 |
+    | maps=bfp16,diag=bfp16 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 2.24e-5 | 5.02 |
+    | maps=bfp16,diag=bfp16 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 1.34e-4 | 2.62 |
+      (maps=bfp16,diag=bfp16: active fft f32, grid f32, maps / diag (Bfp(16), Bfp(16)); coil batch 5; 2.0 s)
+    | fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24 | forward A x | 3.58e-7 | 1.07e-7 | 7.48e-7 | 2.09 |
+    | fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24 | adjoint Aᴴ n | 6.94e-6 | 9.46e-6 | 1.00e-5 | 1.44 |
+    | fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24 | early gradient Aᴴ A x | 4.47e-6 | 4.67e-6 | 7.74e-6 | 1.73 |
+    | fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24 | converged gradient Aᴴ(A x − y) | 5.14e-5 | 9.39e-6 | 2.55e-4 | 4.97 |
+      (fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24: active fft bfp24, grid bfp24, maps / diag (Bfp(24), Bfp(24)); coil batch 5; 2.5 s)
+  total 86.1 s
+	Command being timed: "timeout 900 env RAYON_NUM_THREADS=8 /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/bfp_phantom /home/turbotage/Documents/GitHub/HastyCompute/data/hasty/phantom/factory_arms/ph0001/sim_flow_10min/scan --order 3 --switches fft=bfp24/grid=bfp24/grid=bfp22/grid=bfp20/maps=bfp24/diag=bfp24/maps=bfp20,diag=bfp20/maps=bfp16,diag=bfp16/fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24"
+	User time (seconds): 175.09
+	System time (seconds): 6.60
+	Percent of CPU this job got: 209%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:26.57
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 6463732
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 1
+	Minor (reclaiming a frame) page faults: 4091256
+	Voluntary context switches: 112755
+	Involuntary context switches: 1291
+	Swaps: 0
+	File system inputs: 9676368
+	File system outputs: 15520
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:43:49; power limit at end 450.00 W

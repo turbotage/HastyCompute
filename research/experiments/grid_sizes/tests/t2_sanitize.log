@@ -1,0 +1,22 @@
+=== t2_sanitize: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/seg_split2 one_bin_sanitize --exact (2026-11-20 08:43:05); power.limit 300.00 W
+========= COMPUTE-SANITIZER
+
+running 1 test
+test one_bin_sanitize ... sanitize o0 tile: forward 7.2e-7, adjoint 2.5e-5
+sanitize o0 vs: forward 5.8e-6, adjoint 2.5e-5
+sanitize o0 ra: forward 7.3e-7, adjoint 2.5e-5
+sanitize o0 ra skip: forward 7.3e-7, adjoint 2.5e-5
+sanitize o0 kl kernel: forward 7.5e-7, adjoint 2.5e-5
+sanitize o0 split 2 x 2: forward 1.4e-6, adjoint 2.4e-5
+sanitize o3 tile: forward 1.4e-6, adjoint 3.2e-6
+sanitize o3 vs: forward 1.8e-6, adjoint 3.2e-6
+sanitize o3 ra: forward 1.4e-6, adjoint 3.4e-6
+sanitize o3 ra skip: forward 1.4e-6, adjoint 3.4e-6
+sanitize o3 kl kernel: forward 1.4e-6, adjoint 3.4e-6
+sanitize o3 split 2 x 2: forward 1.4e-6, adjoint 3.2e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 16.67s
+
+========= ERROR SUMMARY: 0 errors
+exit 0 (2026-11-20 08:43:38)

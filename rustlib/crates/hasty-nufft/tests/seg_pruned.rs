@@ -139,8 +139,14 @@ fn apply(dev: &Device, st: &Arc<CudaStream>, dims: [usize; 3], nc: usize, l: usi
 
 #[test]
 fn pruned_grid_fft_and_fused_residual() {
+    // an f32-exactness / equivalence check: pin the f32 FFT store (the BFP store's own error is tested in
+    // seg_fft_store and bfp_store; its rounding differs between slab / pruned layouts by design)
+    hasty_nufft::set_thread_fft_store(Some(hasty_fft::Store::F32));
     let dev = Device::new(0).expect("CUDA device");
     let st = dev.default_stream();
+    // the pruned transform against the full one with the same (separate) pad / crop kernels: the fused pad / crop
+    // (default, pruned plans only) rounds differently and has its own test (seg_fft_traffic)
+    unsafe { std::env::set_var("HASTY_SEG_FUSE_PADCROP", "0") };
     for (order, frames, l) in [(0u32, 1usize, 4usize), (2, 1, 6), (2, 4, 4), (3, 1, 5)] {
         let dims = [22usize, 18, 13];
         let nc = 3;
@@ -176,6 +182,7 @@ fn pruned_grid_fft_and_fused_residual() {
     let (_, _, _, _, tf, _) = apply(&dev, &st, dims, 8, 8, 2, 1, &cs, true);
     unsafe { std::env::remove_var("HASTY_SEG_NOPRUNE") };
     eprintln!("{dims:?}, 8 coils, L 8, order 2, {} samples: forward + adjoint {tf:.1} ms full → {tp:.1} ms pruned ({:.2}×)", cs.tau.len(), tf / tp);
+    unsafe { std::env::remove_var("HASTY_SEG_FUSE_PADCROP") };
 }
 
 /// k-support pruning of the grid FFTs (HASTY_SEG_KPRUNE, default on) against the block-pruned transforms

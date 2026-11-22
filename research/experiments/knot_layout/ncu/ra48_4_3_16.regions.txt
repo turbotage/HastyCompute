@@ -1,0 +1,38 @@
+total samples 3857312
+helpers        6.8 %   [wait 37%, short_sb 26%, selected 13%, not_selected 10%]
+list           0.7 %   [long_sb 26%, wait 26%, selected 21%, not_selected 12%]
+init+prefetch   3.6 %   [wait 26%, selected 21%, short_sb 14%, mio 13%]
+chunkhead+STS  14.0 %   [barrier 51%, wait 13%, selected 8%, long_sb 7%]
+stageA_kv      3.4 %   [wait 30%, short_sb 20%, selected 16%, not_selected 9%]
+w_l            2.1 %   [long_sb 34%, wait 23%, selected 12%, short_sb 10%]
+box_e          1.0 %   [wait 26%, no_inst 19%, selected 17%, short_sb 14%]
+sync1         10.2 %   [barrier 98%, wait 0%, selected 0%, not_selected 0%]
+z_build        5.6 %   [short_sb 33%, wait 27%, selected 14%, not_selected 10%]
+MAC           51.8 %   [barrier 23%, wait 23%, selected 18%, short_sb 13%]
+output         0.9 %   [wait 37%, selected 13%, barrier 13%, not_selected 9%]
+top lines:
+  463  14.1%  for (int s = 0; s < nl; ++s) {
+  465  10.4%  if (tz < ((bx >> 16) & 15) || tz > ((bx >> 20) & 15)) continue;   // warp-uniform
+  390  10.2%  __syncthreads();
+  485   7.5%  const float wr = ky[r] * fz;
+  314   7.2%  for (int r = 0; r < NRP; ++r) { const int q = threadIdx.x + r * NTA; if (q < 3 * nl) REC[q] = pfr[r]; }
+  491   5.7%  for (int k = 0; k < CB; ++k) { acc[r][i][k].x = fmaf(w, zv[k].x, acc[r][i][k].x); acc[r][i][k].y = fmaf(w, zv[
+  484   3.9%  if (r < ylo || r > yhi) continue;   // warp-uniform: exact rows
+  401   3.5%  for (int s = 0; s < nl; ++s) zp[(size_t)s * (CBP / 2) * NCL * 2] = ok ? cmul(yp[s * NCBRM], ap[s * NSEG]) : cx
+  318   3.3%  if (base + CHK < n) prefetch(base + CHK);
+  306   2.9%  if (q < nl * NCBRM && q % NCBRM < ncbr) pfy[r] = y[(size_t)(c0 + clo + q % NCBRM) * M + SAMPLE_OF((unsigned in
+  311   2.6%  const int nl = min(CHK, n - base);
+  489   2.4%  const float w = wx[i] * wr;
+   34   1.9%  __device__ __forceinline__ cx cmul(cx a, cx b) { return cx{a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x}; }
+  466   1.8%  const int ylo = (bx >> 8) & 15, yhi = (bx >> 12) & 15, xlo = bx & 15, xhi = (bx >> 4) & 15;
+   58   1.6%  f = expf((float)BETA * (s - 1.f));
+  405   1.4%  for (int q = threadIdx.x; q < nl * NCL; q += NTA) ZS[((size_t)(q / NCL) * (CBP / 2) * NCL + (CBP / 2 - 1) * NC
+  480   1.1%  const float4 kyv = *reinterpret_cast<const float4*>(ax + TT);
+  464   1.1%  const int bx = BOX[s];
+  472   1.1%  for (int k = 0; k < CBP / 2; ++k) { const float4 u = zp[k * NCL]; zv[2 * k] = cx{u.x, u.y}; zv[2 * k + 1] = cx
+  470   1.1%  const float4* zp = reinterpret_cast<const float4*>(ZS) + (size_t)s * (CBP / 2) * NCL + cb;
+   57   1.0%  const float s = sqrtf(a);
+   56   1.0%  if (a <= 0.f) { f = 0.f; d1 = 0.f; d2 = 0.f; return; }
+  476   0.9%  const float fz = ax[2 * TT + tz];
+  323   0.7%  const float sc = a == 0 ? r.x : (a == 1 ? r.y : r.z);
+  338   0.7%  const cx a = cx{fmaf(fr, pb.x - pa.x, pa.x), fmaf(fr, pb.y - pa.y, pa.y)};

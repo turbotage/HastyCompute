@@ -1,0 +1,76 @@
+=== t15_seg_fft_store_f32: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin2/hasty-nufft__seg_fft_store --nocapture --test-threads 1 (2026-11-21 15:06:41)
+locked 15:06:41; power limit / draw / sm clock / memory used: 450.00 W, 93.47 W, 2565 MHz, 240 MiB
+
+running 2 tests
+test bfp22_engine_matches_f32 ... Static order 0, kprune true, fused true, slab 390: bfp22 vs f32 forward 6.39e-6 (26.81 · 2^-22), adjoint 6.62e-6 (27.76), gradient 8.73e-6 (36.60); f32 run-to-run adjoint 8.2e-7, gradient 2.3e-6; adjointness f32 2.0e-8, bfp22 1.2e-7
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 390 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.6e-6 (κ = 22.0 × the slot's change), adjoint 5.8e-6, gradient 6.1e-6; forward predicted κ · slot error = 9.75e-6
+Static order 0, kprune true, fused false, slab 0: bfp22 vs f32 forward 6.36e-6 (26.69 · 2^-22), adjoint 6.62e-6 (27.78), gradient 9.48e-6 (39.76); f32 run-to-run adjoint 5.6e-7, gradient 2.6e-6; adjointness f32 3.8e-8, bfp22 5.0e-8
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, whole-grid passes, pad / crop separate kernels, y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.4e-6 (κ = 20.9 × the slot's change), adjoint 6.3e-6, gradient 6.3e-6; forward predicted κ · slot error = 9.28e-6
+Static order 0, kprune false, fused true, slab 1: bfp22 vs f32 forward 6.39e-6 (26.80 · 2^-22), adjoint 6.87e-6 (28.81), gradient 8.59e-6 (36.05); f32 run-to-run adjoint 4.9e-7, gradient 2.6e-6; adjointness f32 7.1e-8, bfp22 1.2e-7
+    block-pruned grid FFT (12 ch, grid [36, 28, 24], x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 1 z planes (0.1 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.6e-6 (κ = 22.0 × the slot's change), adjoint 6.5e-6, gradient 7.3e-6; forward predicted κ · slot error = 9.76e-6
+Static order 3, kprune true, fused true, slab 390: bfp22 vs f32 forward 6.40e-6 (26.86 · 2^-22), adjoint 6.55e-6 (27.46), gradient 1.02e-5 (42.74); f32 run-to-run adjoint 1.1e-6, gradient 2.5e-6; adjointness f32 5.0e-8, bfp22 5.6e-8
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 390 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.6e-6 (κ = 22.1 × the slot's change), adjoint 5.5e-6, gradient 6.4e-6; forward predicted κ · slot error = 9.79e-6
+Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused true, slab 390: bfp22 vs f32 forward 6.47e-6 (27.13 · 2^-22), adjoint 6.92e-6 (29.02), gradient 9.42e-6 (39.52); f32 run-to-run adjoint 0.0e0, gradient 3.4e-6; adjointness f32 8.1e-8, bfp22 1.2e-7
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 390 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.9e-6 (κ = 23.9 × the slot's change), adjoint 4.8e-6, gradient 7.4e-6; forward predicted κ · slot error = 1.06e-5
+Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused false, slab 2: bfp22 vs f32 forward 6.47e-6 (27.14 · 2^-22), adjoint 6.95e-6 (29.13), gradient 9.08e-6 (38.07); f32 run-to-run adjoint 0.0e0, gradient 3.2e-6; adjointness f32 8.9e-8, bfp22 1.6e-7
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 2 z planes (0.2 MB), pad / crop separate kernels, y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.8e-6 (κ = 23.4 × the slot's change), adjoint 5.2e-6, gradient 7.1e-6; forward predicted κ · slot error = 1.04e-5
+Knot2d { mc: 6, kr: 3 } order 3, kprune true, fused true, slab 390: bfp22 vs f32 forward 6.49e-6 (27.23 · 2^-22), adjoint 6.97e-6 (29.25), gradient 8.69e-6 (36.46); f32 run-to-run adjoint 0.0e0, gradient 3.6e-6; adjointness f32 2.2e-7, bfp22 2.1e-7
+    k-support pruned grid FFT (12 ch, grid [36, 28, 24], z-pass columns 1.000, kx / ky / kz ranges [1.000, 1.000, 1.000], cells 1.000, x pass Some((16, 9)) lines × threads, two-pass L2 slabs of 390 z planes (37.7 MB), pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.9e-6 (κ = 24.0 × the slot's change), adjoint 4.7e-6, gradient 6.8e-6; forward predicted κ · slot error = 1.06e-5
+Knot2d { mc: 6, kr: 3 } order 3, kprune false, fused true, slab 0: bfp22 vs f32 forward 6.49e-6 (27.24 · 2^-22), adjoint 7.05e-6 (29.58), gradient 9.31e-6 (39.04); f32 run-to-run adjoint 0.0e0, gradient 3.3e-6; adjointness f32 2.2e-7, bfp22 2.4e-7
+    block-pruned grid FFT (12 ch, grid [36, 28, 24], x pass Some((16, 9)) lines × threads, whole-grid passes, pad / crop fused into the x passes (not in this FFT time), y ↔ z intermediates bfp22 (in the grid slot, 0.000 GB extra))
+    stored buffer: loaded slot bfp22 vs f32 4.43e-7 (1.86 · 2^-22); sensitivity: one-ulp x, y move the forward 3.9e-6 (κ = 24.0 × the slot's change), adjoint 4.6e-6, gradient 7.2e-6; forward predicted κ · slot error = 1.06e-5
+summary (· 2^-22): forward / adjoint / gradient; [slot] rows: slot error · 2^-22 / κ
+  Static order 0, kprune true, fused true, slab 390       26.81 / 27.76 / 36.60
+  Static order 0, kprune true, fused true, slab 390 [slot] 1.86 / 22.01 / 0.00
+  Static order 0, kprune true, fused false, slab 0        26.69 / 27.78 / 39.76
+  Static order 0, kprune true, fused false, slab 0 [slot] 1.86 / 20.92 / 0.00
+  Static order 0, kprune false, fused true, slab 1        26.80 / 28.81 / 36.05
+  Static order 0, kprune false, fused true, slab 1 [slot] 1.86 / 22.02 / 0.00
+  Static order 3, kprune true, fused true, slab 390       26.86 / 27.46 / 42.74
+  Static order 3, kprune true, fused true, slab 390 [slot] 1.86 / 22.10 / 0.00
+  Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused true, slab 390 27.13 / 29.02 / 39.52
+  Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused true, slab 390 [slot] 1.86 / 23.89 / 0.00
+  Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused false, slab 2 27.14 / 29.13 / 38.07
+  Knot2d { mc: 6, kr: 3 } order 0, kprune true, fused false, slab 2 [slot] 1.86 / 23.36 / 0.00
+  Knot2d { mc: 6, kr: 3 } order 3, kprune true, fused true, slab 390 27.23 / 29.25 / 36.46
+  Knot2d { mc: 6, kr: 3 } order 3, kprune true, fused true, slab 390 [slot] 1.86 / 23.98 / 0.00
+  Knot2d { mc: 6, kr: 3 } order 3, kprune false, fused true, slab 0 27.24 / 29.58 / 39.04
+  Knot2d { mc: 6, kr: 3 } order 3, kprune false, fused true, slab 0 [slot] 1.86 / 23.98 / 0.00
+ok
+test switch_off_bit_identical ... Static order 0: loaded slot f32 before / after a bfp22 round trip: fused pad bit-identical true, separate pad true; bfp22 vs f32 4.35e-7
+Knot2d { mc: 6, kr: 3 } order 3: loaded slot f32 before / after a bfp22 round trip: fused pad bit-identical true, separate pad true; bfp22 vs f32 4.35e-7
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin2/hasty-nufft__seg_fft_store --nocapture --test-threads 1"
+	User time (seconds): 0.77
+	System time (seconds): 0.47
+	Percent of CPU this job got: 139%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.89
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 166348
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 47444
+	Voluntary context switches: 5129
+	Involuntary context switches: 1703
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 15:06:42; power limit at end 450.00 W

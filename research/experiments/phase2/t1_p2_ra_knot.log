@@ -1,0 +1,18 @@
+== p2_ra_knot 13:03:06 power limit 300.00 W
+
+running 1 test
+test p2_ra_knot ... knot1d o0 6(3)x5 miNone split true zero tiles RaCfg { nxg: 1, cb: 1, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 } (regs 80, local 48 B, spill 16 B, 24 warps): vs base ra 3.4e-6 (bound 1.0e-6), base vs tile 7.0e-4, adjointness 3.7e-6 (tile 2.2e-6)
+
+thread 'p2_ra_knot' (1031201) panicked at crates/hasty-nufft/tests/seg_phase2.rs:234:17:
+knot1d o0 6(3)x5 miNone RaCfg { nxg: 1, cb: 1, chk: 8 } RaVar { inplace: true, stages: 1, lbmin: 0 } zero_tiles true: variant vs base ra 3.4e-6 (bound 1.0e-6)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    p2_ra_knot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 3.53s
+
+== exit 101 13:04:06

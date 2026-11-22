@@ -35,6 +35,72 @@ fn nvrtc_version() -> (i32, i32) {
     (a, b)
 }
 
+/// Process-wide NVRTC / module-load counters (cache hits, compiles, module loads, their wall time). Instrumentation
+/// only: read by the autotune to report where engine setup time goes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CompileStats {
+    /// cubins read from the disk cache, and the seconds spent reading them
+    pub hits: u64,
+    pub hit_s: f64,
+    /// NVRTC compiles (cache misses or `no_cache`), and their seconds
+    pub misses: u64,
+    pub miss_s: f64,
+    /// `cuModuleLoadData` calls of [`crate::Device::load_module`], and their seconds
+    pub loads: u64,
+    pub load_s: f64,
+}
+
+mod stats {
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    pub(crate) static HITS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static HIT_NS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static MISSES: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static MISS_NS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LOADS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LOAD_NS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) fn add(n: &AtomicU64, ns: &AtomicU64, t: std::time::Instant) {
+        n.fetch_add(1, Relaxed);
+        ns.fetch_add(t.elapsed().as_nanos() as u64, Relaxed);
+    }
+}
+
+/// counters since process start (differences of two calls give a phase's share)
+pub fn compile_stats() -> CompileStats {
+    use std::sync::atomic::Ordering::Relaxed;
+    let s = |ns: &std::sync::atomic::AtomicU64| ns.load(Relaxed) as f64 * 1e-9;
+    CompileStats {
+        hits: stats::HITS.load(Relaxed),
+        hit_s: s(&stats::HIT_NS),
+        misses: stats::MISSES.load(Relaxed),
+        miss_s: s(&stats::MISS_NS),
+        loads: stats::LOADS.load(Relaxed),
+        load_s: s(&stats::LOAD_NS),
+    }
+}
+
+impl CompileStats {
+    /// counters accumulated since `earlier`
+    pub fn since(&self, earlier: &CompileStats) -> CompileStats {
+        CompileStats {
+            hits: self.hits - earlier.hits,
+            hit_s: self.hit_s - earlier.hit_s,
+            misses: self.misses - earlier.misses,
+            miss_s: self.miss_s - earlier.miss_s,
+            loads: self.loads - earlier.loads,
+            load_s: self.load_s - earlier.load_s,
+        }
+    }
+}
+
+pub(crate) fn note_load(t: std::time::Instant) {
+    stats::add(&stats::LOADS, &stats::LOAD_NS, t);
+}
+
+/// NVRTC version (major, minor)
+pub fn nvrtc_version_pub() -> (i32, i32) {
+    nvrtc_version()
+}
+
 fn cache_dir() -> Option<PathBuf> {
     // HASTY_KERNEL_CACHE, else $HASTY_SCRATCH/hasty-kernels, else rustlib/target/hasty-kernels (hasty-site)
     Some(hasty_site::kernel_cache())
@@ -71,17 +137,25 @@ pub fn compile_cubin(
     }
 
     let cache_file = cache_dir().map(|d| d.join(format!("{name}-{hash}.cubin")));
+    let t0 = std::time::Instant::now();
     if !settings.no_cache {
         if let Some(f) = &cache_file {
             if let Ok(bytes) = fs::read(f) {
+                stats::add(&stats::HITS, &stats::HIT_NS, t0);
                 return Ok(bytes);
             }
         }
     }
+    let r = compile_uncached(name, src, arch, settings, &hash, lineinfo, cache_file);
+    stats::add(&stats::MISSES, &stats::MISS_NS, t0);
+    r
+}
+
+fn compile_uncached(name: &str, src: &str, arch: &str, settings: &CompileSettings, hash: &str, lineinfo: bool, cache_file: Option<PathBuf>) -> Result<Vec<u8>> {
 
     let err = |log: String| Error::Nvrtc {
         name: name.to_owned(),
-        hash: hash.clone(),
+        hash: hash.to_owned(),
         log,
     };
     let csrc = CString::new(src).map_err(|_| err("source contains NUL".into()))?;

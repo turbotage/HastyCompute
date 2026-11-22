@@ -1,0 +1,35 @@
+=== r33_seg_split: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_split --test-threads 1 (2026-11-21 14:19:01)
+locked 14:19:01; power limit / draw / sm clock / memory used: 450.00 W, 58.92 W, 2565 MHz, 240 MiB
+
+running 4 tests
+test one_bin_knot_matches_static ... ok
+test one_bin_sanitize ... ok
+test split_matches_plain ... ok
+test static_knot_env_switch ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 609.11s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_split --test-threads 1"
+	User time (seconds): 606.04
+	System time (seconds): 4.01
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 10:09.18
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 287176
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2263476
+	Voluntary context switches: 17727
+	Involuntary context switches: 7835
+	Swaps: 0
+	File system inputs: 32
+	File system outputs: 659496
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 14:29:10; power limit at end 450.00 W

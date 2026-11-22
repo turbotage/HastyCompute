@@ -8,7 +8,7 @@
 //!              [--fresh] [--ckpt-every n] [--fat-fraction <npy|truth> [--fat-model shared|separate|joint]]
 //!              [--conc-fit quad|deg4] [--table-prefetch]
 //!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--rate <z.npy>] [--smaps truth|espirit[:eig_min]] [--coil-mask auto|none|support]
-//!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
+//!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--state-store f32|bfpN|G:P] [--kstage f32|bfp[+qREL]|bfpN[:resident]] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
 //!              [--table-store auto|pinned|lz4|zstd|zstdN]   (env HASTY_KSTORE_DIR: k-space store directory, default <sim>/kstore)
 //!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]] [--seg-fit-stride N] [--seg-table-stride S]
 //!              [--vmodel knots [--knots2d RK:RDEG,CK:CDEG] [--resp bellows|truth] [--eval LABEL[@AMP]:idx.npy,..] [--eval-every N]] [--keep N]
@@ -81,6 +81,11 @@
 //!        full model's floor from the quadratic fit's residual (CPU emulation, flow_thorax, oblique off-centre, GNL,
 //!        L = 20: 2.89 T 4.8e-3 / 8.3e-3 → 1.2e-3 / 2.2e-3 forward / adjoint, 1.5 T 8.9e-3 / 1.5e-2 → 3.0e-3 / 6.5e-3;
 //!        hasty-bench tests/seg_physics_direct.rs). Useful with --gnl only; the run directory gets a `_deg4` suffix.
+//! Knot grid slot: `--grid-budget auto|legacy|free|SIZE` (default auto: sized by the knot memory ledger before the
+//!   engine is built: the largest coil batch whose slot fits next to the rest of the plan bounds it, the engine planner's
+//!   rule picks (fewest transformed channels, then passes: no ragged last batch), 5 % of the
+//!   device kept free for the estimate, research/sample_kernels.md §20; legacy: (free − work) / 3, at most 6 GiB, the
+//!   previous default; free: (free − work − 2 GiB) / 1.5, no cap; §18: 50 → 100 channels per slot = −16 % gradient).
 //! Memory: `--plan auto|device|host` and `--vram-budget` also place the operator's per-set sample tables (SegPoints,
 //!   ≈ 200 B/sample): resident, or pinned host memory uploaded into two device slots per set use (≈ bytes / pinned
 //!   bandwidth per gradient). They are built straight into host memory when they would not fit next to what is still
@@ -130,6 +135,7 @@ use cudarc::driver::CudaSlice;
 use hasty_cuda::{Device, C32};
 use hasty_mrsim::{mat_vec, transpose};
 use hasty_nufft::{build_segments, build_segments_complex, build_segments_fat, build_segments_svd_weighted, SegNufft, SegNufftOpts};
+use hasty_recon::lanczos::{LamEst, LamMethod};
 use hasty_recon::checkpoint::{value_dev, Outcome, RunCtl};
 use hasty_recon::data::{inv3, SampleSet, SimData};
 use hasty_recon::kload::LoadOpts;
@@ -216,6 +222,9 @@ fn main() {
     // --synthetic construction, sampled on any grid): a solution that drifts away from it has a biased fixed point
     // (model or estimator); one that stays shows that the usual start / convergence is the problem
     let init_truth = flag("--init-truth");
+    // --lam-compare (diagnostic): λ_max by power 12 / 100 and Lanczos 4 / 6 / 8 before the solver (frame mode: N and
+    // M N; knot / velocity mode: each stage's M H or H)
+    let lam_compare = flag("--lam-compare");
     let learned_cpu = flag("--learned-cpu");
     let table_prefetch = flag("--table-prefetch");
     let bin_group = flag("--bin-group");
@@ -392,6 +401,25 @@ fn main() {
     let eval_every: usize = take("--eval-every").map_or(10, |v| v.parse().expect("--eval-every N"));
     // knot mode: power iterations of each stage's λ_max (default 12, as --vmodel)
     let lam_iters: usize = take("--lam-iters").map_or(12, |v| v.parse().expect("--lam-iters N"));
+    // --lam-method lanczos[:K]|power: the step size's λ_max estimator (research/temporal_operator.md, "Step size by
+    // Lanczos"). lanczos (default, K = 8 steps): α = 1 / (θ + residual bound); power: the original power iteration
+    // (frame mode 12 iterations, knot / velocity mode --lam-iters), α = 1 / λ exactly as before
+    let lam_method = take("--lam-method").map_or(hasty_recon::lanczos::LamMethod::Lanczos(8), |v| hasty_recon::lanczos::LamMethod::parse(&v).expect("--lam-method lanczos[:K]|power"));
+    // --lam-warm auto|on|off (Lanczos, velocity stages): start each stage's λ_max from the previous stage's top Ritz
+    // vector; keeps the K Lanczos vectors in host memory, auto = when (K + 1) stacks fit min(HASTY_LAM_WARM_GB
+    // (default 4), a quarter of the available host memory)
+    let lam_warm_arg = take("--lam-warm").unwrap_or_else(|| "auto".into());
+    let lam_warm_on = |stack_bytes: usize, k: usize| -> bool {
+        match lam_warm_arg.as_str() {
+            "on" => true,
+            "off" => false,
+            _ => {
+                let cap = std::env::var("HASTY_LAM_WARM_GB").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(4.0) * (1u64 << 30) as f64;
+                let avail = std::fs::read_to_string("/proc/meminfo").ok().and_then(|m| m.lines().find(|l| l.starts_with("MemAvailable:")).and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())).map_or(0.0, |kb| kb * 1024.0);
+                ((k + 1) * stack_bytes) as f64 <= cap.min(avail / 4.0)
+            }
+        }
+    };
     let vdeg: (u32, u32) = take("--vdeg").map(|s| { let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect(); (v[0], v[1]) }).unwrap_or((1, 1));
     let vpoly: Option<usize> = match take("--vpoly").as_deref() { Some("off") => None, Some(s) => Some(s.parse().unwrap()), None => spline_defaults.then_some(1) };
     let vcont: usize = take("--vcont").map(|s| s.parse().unwrap()).unwrap_or(if spline_defaults { 10 } else { 0 });
@@ -403,6 +431,12 @@ fn main() {
     // memory planner (velocity path): device-usage cap (e.g. 8G; default: the whole card) and placement mode
     let vram_budget: Option<usize> = take("--vram-budget").map(|s| hasty_recon::plan::parse_bytes(&s).expect("--vram-budget e.g. 8G"));
     let plan_mode = take("--plan").unwrap_or("auto".into());
+    // knot-engine grid slot budget (research/sample_kernels.md §18, §20): auto (default) = sized by the knot ledger
+    // (hasty_recon::vknot::slot_budget: the planner's batch (no ragged last batch) under the largest slot that fits next to the planned state,
+    // data, tables and scratch; falls back to legacy if the estimate refuses); legacy = (free − work) / 3 clamped to
+    // 6 GiB (the previous default); free = (free − work − 2 GiB) / 1.5, no clamp; or an explicit size (e.g. 10G). The
+    // knot ledger still checks the whole plan before the solver.
+    let grid_budget_arg = take("--grid-budget").unwrap_or("auto".into());
     let kstore_arg = take("--kstore").unwrap_or("auto".into());
     // --rcompress off|auto[:OS]|ball[:OS[:R_MM]]|box[:OS]: exact per-readout sample compression of the data term
     // (hasty_recon::rcompress, research/sample_compression.md; ROI = the grid box, one design per readout, or the ball
@@ -473,6 +507,19 @@ fn main() {
     // memory, the gradient streams set by set through two device slots (hasty_recon::hoststack) — the device never
     // holds a stack; auto: host when three stacks would not fit in half the free device memory
     let state_arg = take("--state").unwrap_or("auto".into());
+    // --state-store f32|bfpN|G:P (= HASTY_STATE_STORE): host solver state with g, g_prev and the secant step as BFP
+    // stacks, x f32 (hasty_recon::bfpstate); --kstage f32|bfp[+qREL]|bfpN[:resident] (= HASTY_KSTAGE): k-space
+    // staged as BFP (σ rule) and decoded on the device (hasty_recon::kstage). Default f32 for both (research/bfp_storage.md §9)
+    for (flag, var) in [("--state-store", "HASTY_STATE_STORE"), ("--kstage", "HASTY_KSTAGE")] {
+        if let Some(v) = take(flag) {
+            std::env::set_var(var, &v);
+        }
+    }
+    let state_store = hasty_recon::bfpstate::StateStore::from_env().unwrap_or_else(|e| panic!("--state-store: {e}"));
+    let kstage = hasty_recon::kstage::stage_from_env().unwrap_or_else(|e| panic!("--kstage: {e}"));
+    if !state_store.is_f32() || kstage.is_some() {
+        println!("BFP storage: host state {}; k-space staging {}", state_store.describe(), kstage.map_or("f32".to_string(), |(r, res)| format!("{}{}", r.describe(), if res { ", resident on the device" } else { "" })));
+    }
     // --prior llr|wavelet (complex-image prior without --learned; default llr); --wavelet THR[:LEVELS] (default 1:3):
     // 3D Daubechies-4 shrinkage per image, threshold THR × the MAD noise level of each image (scale-equivariant), cycle
     // spinning; --wavelet-mix β: with --learned, x ← x + κ ((1 − β) D(x) + β W(x) − x) (research/wavelet_prior.md)
@@ -1918,6 +1965,61 @@ fn main() {
         } else {
             hasty_recon::segphys::FieldPoly::none()
         };
+        // --ratemap truth-bc: the true ratemap of every knot's (breathing, cardiac) state, on the reconstruction grid
+        // (built before the segment rule: with per-knot ratemaps the rule runs on every knot's own model)
+        let rm_knots: Option<Vec<RateFrame>> = ratemap_frames.then(|| {
+            assert!(knots2d.is_some() && op_frames.is_none(), "--ratemap truth-bc: complex 2-D knots (--knots2d) for now; the velocity model's operator frames come next");
+            let (b, per, _) = knot_basis.as_ref().unwrap();
+            let t_ro: Vec<f32> = (0..sd.n_readouts()).map(|i| { let c = sd.ro.card[i]; (c.phase * nf as f64 - 0.5).rem_euclid(nf as f64) as f32 }).collect();
+            let used: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
+            let tf: Vec<f32> = used.iter().map(|&i| t_ro[i]).collect();
+            let (kt, ri, rv) = b.sample_coords(&tf, nf, per, &|j| used[j]);
+            let w: Vec<Vec<(usize, f64)>> = (0..used.len()).map(|j| b.sample_weights(kt[j] as f64, ri[j], rv[j])).collect();
+            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, b.nk(), &used, &w);
+            if ratemap_static {
+                // knot weights: the samples' basis weights summed per knot
+                let mut kw = vec![0.0f64; rm.len()];
+                for ws in &w {
+                    for &(b_, wb) in ws {
+                        kw[b_] += wb.abs();
+                    }
+                }
+                let nvr = rm[0].om.len();
+                let avg = |get: &dyn Fn(&RateFrame) -> &Vec<f32>| -> Vec<f32> {
+                    (0..nvr).map(|v| {
+                        let (mut s_, mut ws_) = (0.0f64, 0.0f64);
+                        for (f, &k) in rm.iter().zip(&kw) {
+                            let x = get(f)[v];
+                            if x.is_finite() && k > 0.0 { s_ += k * x as f64; ws_ += k; }
+                        }
+                        if ws_ > 0.0 { (s_ / ws_) as f32 } else { f32::NAN }
+                    }).collect()
+                };
+                let mean = RateFrame { om: avg(&|f| &f.om), rw: avg(&|f| &f.rw), rf: avg(&|f| &f.rf), ff: avg(&|f| &f.ff) };
+                println!("ratemap truth-bc:static: every knot gets the data-weighted mean of the {} knot ratemaps (control)", rm.len());
+                for f in rm.iter_mut() {
+                    *f = RateFrame { om: mean.om.clone(), rw: mean.rw.clone(), rf: mean.rf.clone(), ff: mean.ff.clone() };
+                }
+            }
+            // voxels without a source in a state: the static field (they carry no signal there)
+            for f in rm.iter_mut() {
+                for (v, x) in f.om.iter_mut().enumerate() {
+                    if !x.is_finite() {
+                        *x = grid.omega[v] as f32;
+                    }
+                }
+            }
+            // sign / unit check against the static field the rest of the operator uses (rad/s)
+            let (mut sxy, mut sxx, mut syy) = (0.0f64, 0.0f64, 0.0f64);
+            for &v in fit_vox.iter().step_by(13) {
+                let m: f64 = rm.iter().map(|f| f.om[v] as f64).sum::<f64>() / rm.len() as f64;
+                sxy += m * grid.omega[v];
+                sxx += m * m;
+                syy += grid.omega[v] * grid.omega[v];
+            }
+            println!("ratemap per frame (truth-bc, ORACLE): {} knots; knot-mean ω vs the static field: correlation {:.3}, rms {:.1} / {:.1} Hz", rm.len(), sxy / (sxx * syy).sqrt().max(1e-30), (sxx / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU, (syy / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU);
+            rm
+        });
         // voxel weights of the segment basis over the fit voxels (seg_fit below): energy (--seg-weight energy)
         let seg_fit_e: Vec<usize> = fit_vox.iter().copied().step_by(seg_fit_stride).collect();
         let seg_ew: Option<Vec<f64>> = seg_energy.then(|| {
@@ -2002,6 +2104,66 @@ fn main() {
                 };
                 lsel = lsel.max(l_e);
             }
+            // per-knot ratemaps (--ratemap truth-bc): the rule on every knot's own model g_b (its field, water and fat
+            // decay and fat fraction, as `make_segs` builds them), the maximum over knots and encodes
+            // (research/field_absorb.md: the static field with phase only gave L = 8–9 where the knot models need 11).
+            // Env HASTY_SEG_RULE_KNOTS=static: the previous rule (static field) also here.
+            let rule_knots = rm_knots.is_some() && !std::env::var("HASTY_SEG_RULE_KNOTS").is_ok_and(|v| v == "static");
+            if let (true, Some(rm)) = (rule_knots, rm_knots.as_ref()) {
+                let t_rule = Instant::now();
+                let l_static = lsel;
+                let ta = tau_a[0];
+                // knot models of encode e; per (knot, encode): (L, error at L, spectrum or None for the node scan)
+                let tl_of = |l: usize| -> Vec<f64> { if seg_cheb { hasty_nufft::cheb_nodes(l, t0, t1) } else { (0..l).map(|i| t0 + (t1 - t0) * i as f64 / (l - 1).max(1) as f64).collect() } };
+                let weighted = seg_cheb || seg_energy;
+                let mut per: Vec<Vec<(usize, Option<Vec<f64>>)>> = vec![Vec::with_capacity(ne); rm.len()];
+                for e in 0..ne {
+                    let conc0 = segment_phase(&grid, &wbar[e], &tau_a, false);
+                    for (kb, f) in rm.iter().enumerate() {
+                        let psi_raw = |v: usize, t: f64| conc0(v, t) + f.om[v] as f64 * t;
+                        let psi = field_poly.residual(&sd, &psi_raw);
+                        let g = |v: usize, t: f64| -> Complex64 {
+                            let ph = Complex64::from_polar(1.0, -psi(v, t));
+                            let ffv = f.ff[v] as f64;
+                            let wat = (1.0 - ffv) * (-(f.rw[v] as f64) * (t - ta)).exp();
+                            let fat = ffv * (-(f.rf[v] as f64) * (t - ta)).exp();
+                            ph * (Complex64::new(wat, 0.0) + fat * cfat(t))
+                        };
+                        if seg_svd {
+                            let ev = hasty_nufft::weighted_spectrum(&seg_fit_e, seg_ew_rule.as_deref(), ts_n, tw_n, &g);
+                            per[kb].push((hasty_nufft::seg_count_for(&ev, tol, 2, 64), Some(ev)));
+                        } else {
+                            let l = (2..=64).find(|&l| hasty_nufft::nodes_weighted_error(&seg_fit_e, if weighted { seg_vw_rule.as_deref() } else { None }, seg_ew_rule.as_deref(), ts_n, tw_n, &tl_of(l), &g) <= tol).unwrap_or(64);
+                            per[kb].push((l, None));
+                        }
+                    }
+                }
+                lsel = per.iter().flatten().map(|p| p.0).max().unwrap_or(l_static).max(2);
+                // predicted error of every knot at the chosen L (worst encode)
+                let err_at = |kb: usize, e: usize| -> f64 {
+                    match &per[kb][e].1 {
+                        Some(ev) => hasty_nufft::tail_errors(ev)[lsel.min(ev.len())],
+                        None => {
+                            let conc0 = segment_phase(&grid, &wbar[e], &tau_a, false);
+                            let f = &rm[kb];
+                            let psi_raw = |v: usize, t: f64| conc0(v, t) + f.om[v] as f64 * t;
+                            let psi = field_poly.residual(&sd, &psi_raw);
+                            let g = |v: usize, t: f64| -> Complex64 {
+                                let ffv = f.ff[v] as f64;
+                                Complex64::from_polar(1.0, -psi(v, t)) * (Complex64::new((1.0 - ffv) * (-(f.rw[v] as f64) * (t - ta)).exp(), 0.0) + ffv * (-(f.rf[v] as f64) * (t - ta)).exp() * cfat(t))
+                            };
+                            hasty_nufft::nodes_weighted_error(&seg_fit_e, if weighted { seg_vw_rule.as_deref() } else { None }, seg_ew_rule.as_deref(), ts_n, tw_n, &tl_of(lsel), &g)
+                        }
+                    }
+                };
+                let errs: Vec<f64> = (0..rm.len()).map(|kb| (0..ne).map(|e| err_at(kb, e)).fold(0.0, f64::max)).collect();
+                let lk: Vec<usize> = per.iter().map(|v| v.iter().map(|p| p.0).max().unwrap_or(0)).collect();
+                let worst = (0..rm.len()).max_by(|&a, &b| errs[a].partial_cmp(&errs[b]).unwrap()).unwrap_or(0);
+                println!("segments (per-knot ratemaps): the rule on each of the {} knots' own models (field, water / fat decay, fat fraction), {ne} encodes → L = {lsel} (static-field rule: {l_static}); per-knot L {}..{}; predicted relative weighted error at L = {lsel}: max {:.2e} (knot {worst}), target {tol:.2e}; {:.1}s", rm.len(), lk.iter().min().unwrap(), lk.iter().max().unwrap(), errs[worst], t_rule.elapsed().as_secs_f64());
+                for (r, chunk) in errs.chunks(16).enumerate() {
+                    println!("    knots {:>3}..{:>3}: L {:?}, error {}", r * 16, r * 16 + chunk.len() - 1, &lk[r * 16..r * 16 + chunk.len()], chunk.iter().map(|x| format!("{x:.1e}")).collect::<Vec<_>>().join(" "));
+                }
+            }
             if seg_noise_rule.is_some() {
                 println!("segments (auto:noise): predicted data error × {margin} ≤ {r_noise} noise rms (relative weighted error ≤ {tol:.2e}, ×{gain:.1}) → L = {lsel} ({} basis)", seg_basis_arg);
             } else {
@@ -2037,10 +2199,66 @@ fn main() {
         // spline mode: the engine's knots are (kre respiratory knots, linear) × (fop operator frames, degree odeg)
         let eng_knots: Option<(usize, u32, usize, u32)> = match &op_frames { Some(of) => Some((of.kre, 1, of.fop, of.odeg)), None => knots2d };
         let knot_grid_budget: usize = eng_knots.map_or(6 << 30, |(kr, _, mc, _)| {
-            let (free, _) = dev.ctx.mem_get_info().unwrap();
+            let (free, total) = dev.ctx.mem_get_info().unwrap();
             let m_max = host_sets.iter().map(|s| s.tau.len()).max().unwrap_or(0);
             let work = kr * mc * nv * 8 + 2 * nvc * m_max * 8 + (3usize << 30);
-            (free.saturating_sub(work) / 3).clamp(256 << 20, 6 << 30)
+            let legacy = (free.saturating_sub(work) / 3).clamp(256 << 20, 6 << 30);
+            // the knot ledger's slot entry: everything else of the plan estimated now (the real ledger runs before the
+            // solver on measured sizes): operator without the slot = what is resident now + coil maps + segment
+            // diagonals (per-knot ratemaps: every knot's) + 0.5 GiB of FFT plans / kernels; data and tables from the
+            // sample counts (≈ 220 B of tables per sample); the velocity model's parameter stack
+            let ledger_slot = || -> Result<usize, String> {
+                let nk = kr * mc;
+                let kenc_e: Vec<[f64; 3]> = sd.encode_m1.iter().map(|m| m.map(|x| hasty_mrsim::GAMMA * x)).collect();
+                let spec_e = match &op_frames {
+                    Some(of) => hasty_recon::vmodel::VelSpec::splines(sd.dims, kenc_e, of.clone(), vpoly),
+                    None => hasty_recon::vmodel::VelSpec::at_knots(sd.dims, kenc_e, kr, mc, vpoly),
+                };
+                let ms: Vec<usize> = host_sets.iter().map(|s| s.tau.len()).collect();
+                let samples: usize = ms.iter().sum();
+                let segs = ne * nseg * nv * 8 * if ratemap_frames { nk } else { 1 };
+                let fixed = (total - free) + nvc * nv * 8 + segs + (512usize << 20);
+                let pf = 0.4;
+                let quasi = preconds.iter().any(|p| Precond::parse(p).is_some_and(|q| q.quasi()));
+                let lin = hasty_recon::vknot::LedgerIn {
+                    nv,
+                    nk,
+                    img_frames: op_frames.as_ref().map_or(0, |o| o.set_frames()),
+                    slots: 0,
+                    stack: spec_e.stack_bytes(),
+                    chunk_max: spec_e.lens().iter().max().copied().unwrap_or(0) * 8,
+                    nsets: ms.len(),
+                    data_all: samples * nvc * 8,
+                    data_max: m_max * nvc * 8,
+                    data_movable: true,
+                    tab_all: samples * 220,
+                    tab_max: m_max * 220,
+                    fixed,
+                    dev_budget: vram_budget.unwrap_or(total.saturating_sub(512 << 20)).min(total),
+                    host_avail: available_memory(),
+                    quasi,
+                    prior_dev: 0,
+                    h2d: 20e9,
+                    pageable: pf * 20e9,
+                };
+                let force_state = match state_arg.as_str() { "host" => Some(true), "device" => Some(false), _ => None };
+                let force_mode = match plan_mode.as_str() { "host" => Some(true), "device" => Some(false), _ => None };
+                let (slot, cb, pl) = hasty_recon::vknot::slot_budget(&lin, op_frames.is_none(), force_state, force_mode, force_mode, nvc, 16, 0.05, &|cb| hasty_nufft::seg_slot_bytes(sd.dims, 1.25, 10, nseg, cb, 1))?;
+                println!("knot grid slot (auto, sized by the knot ledger): coil batch {cb} of {nvc} ({} passes), {:.2} GiB; estimated plan: state {}, data {}, tables {}, device peak {:.2} GiB", nvc.div_ceil(cb), slot as f64 / GIB, if pl.state_on_host { "host" } else { "device" }, if pl.data_on_host { "host" } else { "device" }, if pl.tables_on_host { "host" } else { "device" }, pl.device_peak as f64 / GIB);
+                Ok(slot + (1 << 20))
+            };
+            let b = match grid_budget_arg.as_str() {
+                "legacy" => legacy,
+                "free" => ((free.saturating_sub(work + (2usize << 30))) as f64 / 1.5) as usize,
+                "auto" => ledger_slot().unwrap_or_else(|e| {
+                    println!("knot grid slot (auto): the ledger estimate fits no slot ({}); legacy budget", e.lines().next().unwrap_or(""));
+                    legacy
+                }),
+                g => hasty_recon::plan::parse_bytes(g).expect("--grid-budget auto | legacy | free | size (e.g. 10G)"),
+            }
+            .max(256 << 20);
+            println!("knot grid slot budget ({grid_budget_arg}): {:.2} GiB of {:.2} GiB free (work {:.2} GiB)", b as f64 / GIB, free as f64 / GIB, work as f64 / GIB);
+            b
         });
         let seg_opts = |nseg: usize| match eng_knots {
             Some((_, _, mc, cdeg)) => SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: mc, bspline: cdeg, max_grid_bytes: knot_grid_budget },
@@ -2108,60 +2326,6 @@ fn main() {
             let err = hasty_nufft::segment_model_error(sp, at, nseg, nv, ta, dt, &seg_err_vox, Some(&seg_err_w), &taus, &tws, g);
             println!("  segment model error of the ratemap, encode {e}: L = {nseg}, relative {err:.2e} ({} over ADC time, signal energy over {} fit voxels)", if snr_w.is_some() { "SNR-weighted" } else { "uniform" }, seg_err_vox.len());
         };
-        // --ratemap truth-bc: the true ratemap of every knot's (breathing, cardiac) state, on the reconstruction grid
-        let rm_knots: Option<Vec<RateFrame>> = ratemap_frames.then(|| {
-            assert!(knots2d.is_some() && op_frames.is_none(), "--ratemap truth-bc: complex 2-D knots (--knots2d) for now; the velocity model's operator frames come next");
-            let (b, per, _) = knot_basis.as_ref().unwrap();
-            let t_ro: Vec<f32> = (0..sd.n_readouts()).map(|i| { let c = sd.ro.card[i]; (c.phase * nf as f64 - 0.5).rem_euclid(nf as f64) as f32 }).collect();
-            let used: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
-            let tf: Vec<f32> = used.iter().map(|&i| t_ro[i]).collect();
-            let (kt, ri, rv) = b.sample_coords(&tf, nf, per, &|j| used[j]);
-            let w: Vec<Vec<(usize, f64)>> = (0..used.len()).map(|j| b.sample_weights(kt[j] as f64, ri[j], rv[j])).collect();
-            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, b.nk(), &used, &w);
-            if ratemap_static {
-                // knot weights: the samples' basis weights summed per knot
-                let mut kw = vec![0.0f64; rm.len()];
-                for ws in &w {
-                    for &(b_, wb) in ws {
-                        kw[b_] += wb.abs();
-                    }
-                }
-                let nvr = rm[0].om.len();
-                let avg = |get: &dyn Fn(&RateFrame) -> &Vec<f32>| -> Vec<f32> {
-                    (0..nvr).map(|v| {
-                        let (mut s_, mut ws_) = (0.0f64, 0.0f64);
-                        for (f, &k) in rm.iter().zip(&kw) {
-                            let x = get(f)[v];
-                            if x.is_finite() && k > 0.0 { s_ += k * x as f64; ws_ += k; }
-                        }
-                        if ws_ > 0.0 { (s_ / ws_) as f32 } else { f32::NAN }
-                    }).collect()
-                };
-                let mean = RateFrame { om: avg(&|f| &f.om), rw: avg(&|f| &f.rw), rf: avg(&|f| &f.rf), ff: avg(&|f| &f.ff) };
-                println!("ratemap truth-bc:static: every knot gets the data-weighted mean of the {} knot ratemaps (control)", rm.len());
-                for f in rm.iter_mut() {
-                    *f = RateFrame { om: mean.om.clone(), rw: mean.rw.clone(), rf: mean.rf.clone(), ff: mean.ff.clone() };
-                }
-            }
-            // voxels without a source in a state: the static field (they carry no signal there)
-            for f in rm.iter_mut() {
-                for (v, x) in f.om.iter_mut().enumerate() {
-                    if !x.is_finite() {
-                        *x = grid.omega[v] as f32;
-                    }
-                }
-            }
-            // sign / unit check against the static field the rest of the operator uses (rad/s)
-            let (mut sxy, mut sxx, mut syy) = (0.0f64, 0.0f64, 0.0f64);
-            for &v in fit_vox.iter().step_by(13) {
-                let m: f64 = rm.iter().map(|f| f.om[v] as f64).sum::<f64>() / rm.len() as f64;
-                sxy += m * grid.omega[v];
-                sxx += m * m;
-                syy += grid.omega[v] * grid.omega[v];
-            }
-            println!("ratemap per frame (truth-bc, ORACLE): {} knots; knot-mean ω vs the static field: correlation {:.3}, rms {:.1} / {:.1} Hz", rm.len(), sxy / (sxx * syy).sqrt().max(1e-30), (sxx / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU, (syy / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU);
-            rm
-        });
         let make_segs = |eng: &SegNufft, nseg: usize| -> Vec<hasty_nufft::SegSegments> {
         (0..ne)
             .map(|e| {
@@ -2391,8 +2555,18 @@ fn main() {
         if b0_absorb >= 2 {
             println!("--b0-absorb 2: largest per-sample quadratic B0 phase in the ΔC Taylor correction {absorb_q:.3} rad (Taylor-2 truncation ≈ {:.1e})", absorb_q.powi(3) / 6.0);
         }
+        let (tune_t0, tune_cs0, tune_tm0) = (Instant::now(), hasty_cuda::compile_stats(), hasty_nufft::tune_timing_stats());
         let (kf, ka) = eng.autotune(&st, &segs[0], &pts[0]).unwrap();
         println!("  [build timer] autotune done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
+        {
+            // where the autotune's time went (HASTY_TUNE=reuse: a cache hit times nothing; research/arch_targets.md item 0)
+            let (cs, tm) = (hasty_cuda::compile_stats().since(&tune_cs0), hasty_nufft::tune_timing_stats());
+            let (all, timing) = (tune_t0.elapsed().as_secs_f64(), tm.1 - tune_tm0.1);
+            println!(
+                "  autotune {all:.1} s: timing launches {timing:.1} s ({} candidates), NVRTC compiles {:.1} s ({}), cubin cache reads {:.1} s ({}), module loads {:.1} s ({}), rest {:.1} s (HASTY_TUNE={:?})",
+                tm.0 - tune_tm0.0, cs.miss_s, cs.misses, cs.hit_s, cs.hits, cs.load_s, cs.loads, all - timing - cs.miss_s - cs.hit_s - cs.load_s, hasty_nufft::tune_mode()
+            );
+        }
         println!(
             "SegNufft: L = {nseg}, order {}, frames/set {}, coil batch {}, kernels {kf:.1}/{ka:.1} ms (set 0), max phase left out by the {} fit {resid:.2e} rad, built in {:.1}s",
             eng.order,
@@ -2937,7 +3111,9 @@ fn main() {
         let force_state = match state_arg.as_str() { "host" => Some(true), "device" => Some(false), _ => None };
         let force_data = if staged || early_host { Some(true) } else { match plan_mode.as_str() { "host" => Some(true), "device" => Some(false), _ => None } };
         let force_tab = if tab_all == 0 { None } else { match plan_mode.as_str() { "host" => Some(true), "device" => Some(false), _ => None } };
-        let lp = hasty_recon::vknot::plan(&lin, force_state, force_data, force_tab).unwrap_or_else(|e| {
+        // the velocity objective's gradient sink (at-knots mode): a BFP host state keeps g, g_prev at their width
+        let has_sink = { use hasty_recon::p2np::Objective; pr.has_gradient_sink() };
+        let lp = hasty_recon::vknot::plan_sink(&lin, has_sink, force_state, force_data, force_tab).unwrap_or_else(|e| {
             eprintln!("{e}");
             eprintln!("refused before the solver (no OOM): fewer knots / coils, --keep N, a smaller grid (--grid-scale) or a box, or a larger card");
             std::process::exit(2)
@@ -3026,6 +3202,8 @@ fn main() {
                 stages.insert(0, (vzwarm, false));
             }
             let mut k_off = 0;
+            // the top Ritz vector of the last stage's λ_max (Lanczos warm start of the next stage)
+            let mut lam_ritz: Option<Vec<C32>> = None;
             let anchor_auto = matches!(&vanchor, Some((_, m)) if m == "auto") && stages.len() > 1;
             let fit_mask: Option<Vec<f32>> = sfit.as_ref().map(|f| f.mask.clone());
             // the knot lock's map (saved exactly with every refresh: a resumed run continues with it)
@@ -3087,14 +3265,49 @@ fn main() {
                     continue;
                 }
                 let tl = Instant::now();
-                let mut lam = if state_host { pr.lambda_max_host(&st, &xh, with_metric, lam_iters).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, lam_iters).unwrap() };
+                if lam_compare {
+                    // diagnostic: the stage's λ_max by every estimator (cold starts), relative to power 100
+                    let r = if state_host { pr.lambda_max_host(&st, &xh, with_metric, 100).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, 100).unwrap() };
+                    let mut line = format!("  λ compare ({}): power 100 = {r:.5e}", if with_metric { "M H" } else { "H" });
+                    let e = if state_host { pr.lambda_max_host(&st, &xh, with_metric, lam_iters).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, lam_iters).unwrap() };
+                    line += &format!("; power {lam_iters} {:+.2e}", e / r - 1.0);
+                    for k in [4usize, 6, 8] {
+                        let e = if state_host { pr.lambda_lanczos_host(&st, &xh, with_metric, k, None).unwrap() } else { pr.lambda_lanczos(&st, &xd, with_metric, k, None).unwrap() };
+                        line += &format!("; lanczos {k}: θ {:+.2e}, θ+b {:+.2e}", e.theta / r - 1.0, e.hat() / r - 1.0);
+                    }
+                    if let (Some(wv), LamMethod::Lanczos(k)) = (lam_ritz.clone(), lam_method) {
+                        let mut wv = Some(wv);
+                        let e = if state_host { pr.lambda_lanczos_host(&st, &xh, with_metric, k.min(4), Some(&mut wv)).unwrap() } else { pr.lambda_lanczos(&st, &xd, with_metric, k.min(4), Some(&mut wv)).unwrap() };
+                        line += &format!("; warm lanczos {}: θ {:+.2e}, θ+b {:+.2e}", k.min(4), e.theta / r - 1.0, e.hat() / r - 1.0);
+                    }
+                    println!("{line} ({:.0}s)", tl.elapsed().as_secs_f64());
+                }
+                let tl = Instant::now();
+                let (mut lam, mut applies) = match lam_method {
+                    LamMethod::Power => (if state_host { pr.lambda_max_host(&st, &xh, with_metric, lam_iters).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, lam_iters).unwrap() }, lam_iters),
+                    LamMethod::Lanczos(k) => {
+                        let warm = lam_warm_on(lens.iter().sum::<usize>() * 8, k);
+                        let e = if state_host { pr.lambda_lanczos_host(&st, &xh, with_metric, k, warm.then_some(&mut lam_ritz)).unwrap() } else { pr.lambda_lanczos(&st, &xd, with_metric, k, warm.then_some(&mut lam_ritz)).unwrap() };
+                        println!("  λ_max by Lanczos ({k} steps{}): θ {:.4e} + residual bound {:.2e}", if warm { ", Ritz vector kept for the next stage" } else { "" }, e.theta, e.bound);
+                        (e.hat(), e.applies)
+                    }
+                };
                 if let Some(cs) = coil_sampling.clone() {
                     // the step must be stable for every coil subset: α from the largest λ_max over a few draws
                     let ncs = pr.op.n_coils();
                     let mut ls = 0.0f64;
                     for d in 0..3 {
                         pr.cur_groups = cs.groups(ncs, d * cs.hold.max(1), usize::MAX);
-                        let l = if state_host { pr.lambda_max_host(&st, &xh, with_metric, 8).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, 8).unwrap() };
+                        let l = match lam_method {
+                            LamMethod::Power => if state_host { pr.lambda_max_host(&st, &xh, with_metric, 8).unwrap() } else { pr.lambda_max(&st, &xd, with_metric, 8).unwrap() },
+                            // each draw starts from the full operator's Ritz vector (when kept; the draws do not replace it)
+                            LamMethod::Lanczos(k) => {
+                                let mut wv = lam_ritz.clone();
+                                let wr = wv.is_some().then_some(&mut wv);
+                                (if state_host { pr.lambda_lanczos_host(&st, &xh, with_metric, k, wr).unwrap() } else { pr.lambda_lanczos(&st, &xd, with_metric, k, wr).unwrap() }).hat()
+                            }
+                        };
+                        applies += match lam_method { LamMethod::Power => 8, LamMethod::Lanczos(k) => k };
                         ls = ls.max(l);
                     }
                     pr.cur_groups = None;
@@ -3102,7 +3315,7 @@ fn main() {
                     lam = lam.max(ls);
                 }
                 st.synchronize().unwrap();
-                println!("  {tag} stage {si} ({}): {n_it} iterations, λ_max({}) = {lam:.3e} ({:.1}s, {:.1}s per Hessian-vector product)", if only_hi { "reference + high-VENC encodes" } else { "all encodes" }, if with_metric { "M H" } else { "H" }, tl.elapsed().as_secs_f64(), tl.elapsed().as_secs_f64() / lam_iters as f64);
+                println!("  {tag} stage {si} ({}): {n_it} iterations, λ_max({}) = {lam:.3e} ({:.1}s, {applies} Hessian-vector products, {:.1}s each)", if only_hi { "reference + high-VENC encodes" } else { "all encodes" }, if with_metric { "M H" } else { "H" }, tl.elapsed().as_secs_f64(), tl.elapsed().as_secs_f64() / applies as f64);
                 if vanchor.is_some() {
                     if anchor_auto && si == 0 {
                         // --vanchor …,auto: no anchor in the first stage (its mask is refined by pulsatility after it)
@@ -3678,6 +3891,7 @@ fn main() {
                 stages.insert(0, (vzwarm, false));
             }
             let mut k_off = 0;
+            let mut lam_ritz: Option<Vec<C32>> = None;
             // the automatic anchor waits for pulsatility: stage 0 without it, refined mask from stage 1 on
             let anchor_auto = matches!(&vanchor, Some((_, m)) if m == "auto") && stages.len() > 1;
             let fit_mask: Option<Vec<f32>> = sfit.as_ref().map(|f| f.mask.clone());
@@ -3732,7 +3946,15 @@ fn main() {
                     continue;
                 }
                 let tl = Instant::now();
-                let lam = pr.lambda_max(&st, &x, with_metric, 12).unwrap();
+                let lam = match lam_method {
+                    LamMethod::Power => pr.lambda_max(&st, &x, with_metric, 12).unwrap(),
+                    LamMethod::Lanczos(k) => {
+                        let warm = lam_warm_on(lens.iter().sum::<usize>() * 8, k);
+                        let e = pr.lambda_lanczos(&st, &x, with_metric, k, warm.then_some(&mut lam_ritz)).unwrap();
+                        println!("  λ_max by Lanczos ({k} steps): θ {:.4e} + residual bound {:.2e}", e.theta, e.bound);
+                        e.hat()
+                    }
+                };
                 st.synchronize().unwrap();
                 println!("  {tag} stage {si} ({}): {n_it} iterations, λ_max({}) = {lam:.3e}", if only_hi { "reference + high-VENC encodes" } else { "all encodes" }, if with_metric { "M H" } else { "H" });
                 if vanchor.is_some() {
@@ -3909,16 +4131,44 @@ fn main() {
     } else {
         P2np::new(sop, ys.iter().collect(), circ, &st).unwrap().with_circ_map_opt(circ_map.clone())
     };
-    let mut lmax = p.step_norm(&st, false, 12).unwrap();
-    let mut lmax_c = if need_circ { p.step_norm(&st, true, 12).unwrap() } else { 1.0 };
+    if lam_compare {
+        // diagnostic: every estimator on the same operators (set 0 and the middle set), relative to power 100
+        let tc = Instant::now();
+        for circ in [false, true] {
+            if circ && !need_circ {
+                continue;
+            }
+            let r = p.step_norm_with(&st, circ, LamMethod::Power, 100).unwrap();
+            let mut line = format!("λ compare ({}): power 100 = {:.5e} ({} applies)", if circ { "M N" } else { "N" }, r.theta, r.applies);
+            let e = p.step_norm_with(&st, circ, LamMethod::Power, 12).unwrap();
+            line += &format!("; power 12 {:+.2e}", e.theta / r.theta - 1.0);
+            for k in [4usize, 6, 8] {
+                let e = p.step_norm_with(&st, circ, LamMethod::Lanczos(k), 12).unwrap();
+                line += &format!("; lanczos {k}: θ {:+.2e}, θ+b {:+.2e}", e.theta / r.theta - 1.0, e.hat() / r.theta - 1.0);
+            }
+            println!("{line}");
+        }
+        println!("λ compare: {:.0}s", tc.elapsed().as_secs_f64());
+    }
+    // λ_max(N) only when a precondition without the metric uses it, λ_max(M N) only when one with it does
+    let need_plain = preconds.iter().any(|q| !Precond::parse(q).unwrap_or(Precond::Zmshr1).metric());
+    let tl = Instant::now();
+    let mut est_n = if need_plain { Some(p.step_norm_with(&st, false, lam_method, 12).unwrap()) } else { None };
+    let mut est_c = if need_circ { Some(p.step_norm_with(&st, true, lam_method, 12).unwrap()) } else { None };
     if let Some(cs) = coil_sampling.clone() {
         // the step must be stable for every subset: α from the largest λ_max over a few draws
         p = p.with_sampling(cs.clone());
-        let (ls, lsc) = (p.step_norm_sampled(&st, false, 12, 4).unwrap(), if need_circ { p.step_norm_sampled(&st, true, 12, 4).unwrap() } else { 1.0 });
-        println!("coil sampling: keep {} + draw {} of {} (hold {}, last {} full): λ_max(sampled) / λ_max(full) = {:.3} (M-weighted {:.3})", cs.keep, cs.draw, nvc - cs.keep, cs.hold, cs.full_last, ls / lmax, lsc / lmax_c);
-        lmax = lmax.max(ls);
-        lmax_c = lmax_c.max(lsc);
+        let ls = est_n.map(|_| p.step_norm_sampled_with(&st, false, lam_method, 12, 4).unwrap());
+        let lsc = est_c.map(|_| p.step_norm_sampled_with(&st, true, lam_method, 12, 4).unwrap());
+        let ratio = |a: Option<LamEst>, b: Option<LamEst>| a.zip(b).map_or("-".to_string(), |(a, b)| format!("{:.3}", a.hat() / b.hat()));
+        println!("coil sampling: keep {} + draw {} of {} (hold {}, last {} full): λ_max(sampled) / λ_max(full) = {} (M-weighted {})", cs.keep, cs.draw, nvc - cs.keep, cs.hold, cs.full_last, ratio(ls, est_n), ratio(lsc, est_c));
+        est_n = est_n.zip(ls).map(|(a, b)| a.max(b));
+        est_c = est_c.zip(lsc).map(|(a, b)| a.max(b));
     }
+    let lmax = est_n.map_or(f64::NAN, |e| e.hat());
+    let lmax_c = est_c.map_or(1.0, |e| e.hat());
+    let fmt_est = |e: Option<LamEst>| e.map_or("not needed".to_string(), |e| format!("{:.3e} (θ {:.4e} + bound {:.2e})", e.hat(), e.theta, e.bound));
+    println!("step size by {lam_method}: λ_max(N) = {}, λ_max(M N) = {}; {} operator applications, {:.1}s", fmt_est(est_n), fmt_est(est_c), est_n.map_or(0, |e| e.applies) + est_c.map_or(0, |e| e.applies), tl.elapsed().as_secs_f64());
     if let Some(tau) = lag_tau {
         p = p.with_lagged(tau);
     }
@@ -4045,7 +4295,7 @@ fn main() {
     let mut info = serde_json::json!({
         "cmdline": cmdline, "sim_dir": dir, "model": model, "temporal": temporal, "phys": phys, "gnl": gnl, "nseg": nseg,
         "order": order, "conc_fit": conc_fit, "fat_model": fat_fraction.as_ref().map(|_| fat_model.clone()), "eps": eps, "iters": iters, "warm_iters": warm_iters, "block": block, "vcoils": nvc, "dims": sd.dims, "vox": sd.vox, "native_dims": sd.tdims,
-        "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "lambda_max": lmax, "lambda_max_mn": lmax_c, "setup_s": t0.elapsed().as_secs_f64(),
+        "n_frames": nf, "n_enc": ne, "venc": sd.venc, "venc_range": dec.range(), "encoding": sd.meta["encoding"], "lambda_max": est_n.map(|e| e.hat()), "lambda_max_mn": est_c.map(|e| e.hat()), "lambda_method": lam_method.to_string(), "lambda_applies": est_n.map_or(0, |e| e.applies) + est_c.map_or(0, |e| e.applies), "setup_s": t0.elapsed().as_secs_f64(),
         "noise_sigma_env": std::env::var("HASTY_NOISE_SIGMA").ok(), "runs": runs,
         "prior": if learned.is_some() { "learned" } else { "llr" }, "prior_mode": prior_mode, "red_rho": red.then_some(red_rho), "red_shifts": red.then_some(red_shifts), "tsub": tsub_spec, "learned_dir": learned_dir, "tile": tile, "keep_frames": keep_frames, "learned_prec": learned_prec,
         "field": field_spec, "r2s": r2s_spec, "smaps": smaps_spec, "coil_mask": coil_mask_mode, "coils": coil_info, "estimates": diag, "kdata": kstore_info, "lagged": lag_info, "vdecode": vdec_info,

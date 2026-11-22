@@ -1,0 +1,15 @@
+=== seg_kl (2026-11-20 16:07:48); power.limit 300.00 W
+
+running 8 tests
+test kl_autotune_choice ... ok
+test kl_fused_and_slabs ... ok
+test kl_knot_orders ... ok
+test kl_knot_split_lists ... ok
+test kl_sanitizer_case ... ok
+test kl_split_equals_unsplit_ra ... ok
+test kl_support_union ... ok
+test kl_unsplit_equals_ra ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 847.12s
+
+exit 0 (2026-11-20 16:25:56)

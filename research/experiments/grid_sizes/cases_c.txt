@@ -1,0 +1,7 @@
+# planner demonstration: SegSplit::planned picks (coil batch, segment batch) from a grid-slot budget (one-bin knot path, order 3, 20 frames)
+c192_o3_f20_b18|--static-knot --matrix 192,192,192 --order 3 --frames 20 --nseg 10 --vcoils 10 --plan-budget-gb 18
+c256_o3_f20_b16|--static-knot --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --plan-budget-gb 16
+c320_o3_f20_b14.5|--static-knot --matrix 320,320,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --plan-budget-gb 14.5
+c512_o3_f20_c1_b4.5|--static-knot --matrix 512,512,512 --order 3 --frames 20 --nseg 10 --vcoils 1 --plan-budget-gb 4.5
+c640_o3_f20_c10_b7|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 10 --plan-budget-gb 7
+c640_o3_f20_c1_b12|--static-knot --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --plan-budget-gb 12

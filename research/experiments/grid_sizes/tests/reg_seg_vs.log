@@ -1,0 +1,12 @@
+=== seg_vs (2026-11-20 15:32:52); power.limit 300.00 W
+
+running 5 tests
+test vs_autotune_choice ... ok
+test vs_env_case ... ok
+test vs_knot_orders ... ok
+test vs_residual_sink_group ... ok
+test vs_static_orders ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 261.68s
+
+exit 0 (2026-11-20 15:38:10)

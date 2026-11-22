@@ -1,0 +1,33 @@
+
+running 1 test
+test kl_knot_split_lists ... knot1d o0 6(3)x5 split split true None zero tiles: layout on vs off 2.0e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 4.1e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true None zero full: layout on vs off 2.3e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 2.5e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero tiles: layout on vs off 2.3e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 3.2e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) zero full: layout on vs off 2.0e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 9.3e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 32 }) zero tiles: layout on vs off 1.9e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.1e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 32 }) zero full: layout on vs off 1.8e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.6e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 1, chk: 16 }) zero tiles: layout on vs off 2.2e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 8.6e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 1, chk: 16 }) zero full: layout on vs off 2.4e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.4e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 1, chk: 32 }) zero tiles: layout on vs off 2.0e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 2.5e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 1, chk: 32 }) zero full: layout on vs off 2.0e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.0e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 3, chk: 16 }) zero tiles: layout on vs off 2.1e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 5.1e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 2, cb: 3, chk: 16 }) zero full: layout on vs off 1.7e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.2e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 4, cb: 5, chk: 32 }) zero tiles: layout on vs off 1.8e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 4.8e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 4, cb: 5, chk: 32 }) zero full: layout on vs off 2.0e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.5e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 8 }) zero tiles: layout on vs off 1.8e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 4.9e-7 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true Some(RaCfg { nxg: 1, cb: 1, chk: 8 }) zero full: layout on vs off 1.9e-4 (bound 8.5e-4, run-to-run 2.1e-4), adjointness 1.5e-6 (off 5.1e-7)
+knot1d o0 6(3)x5 split split true kl kernel RaCfg { nxg: 1, cb: 1, chk: 16 } zero tiles: vs ra (layout off) 6.8e-4 (bound 1.4e-3, one-ulp data 2.3e-4), vs tile adjoint 7.0e-4, adjointness 2.5e-6 (off 5.1e-7)
+
+thread 'kl_knot_split_lists' (952500) panicked at crates/hasty-nufft/tests/seg_kl.rs:228:13:
+knot1d o0 6(3)x5 split kl kernel RaCfg { nxg: 1, cb: 1, chk: 16 } zero_tiles true: vs ra 6.8e-4 (bound 1.4e-3), adjointness 2.5e-6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_knot_split_lists
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.42s
+
+exit 101

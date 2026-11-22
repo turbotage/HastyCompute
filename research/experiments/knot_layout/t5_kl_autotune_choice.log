@@ -1,0 +1,9 @@
+
+running 1 test
+test kl_autotune_choice ... Knot1d o3: autotune knot-0 adjoint all items 0.950 ms, skip 0.945 ms, kl kernel 3.209 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 32 })) -> skip true kernel None (ra Some(RaCfg { nxg: 4, cb: 7, chk: 16 }))
+Knot2d o3: autotune knot-0 adjoint all items 0.635 ms, skip 0.618 ms, kl kernel 1.627 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 32 })) -> skip true kernel None (ra Some(RaCfg { nxg: 4, cb: 7, chk: 16 }))
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 3.54s
+
+exit 0

@@ -1,0 +1,38 @@
+warning: field `module` is never read
+   --> crates/hasty-nufft/src/plan.rs:129:16
+    |
+120 | pub struct NufftPlan<R: Real> {
+    |            --------- field in this struct
+...
+129 |     pub(crate) module: Arc<CudaModule>,
+    |                ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hasty-nufft` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.05s
+     Running tests/seg_defaults.rs (target/release/deps/seg_defaults-47135832cd26b94b)
+
+running 3 tests
+test fft_store_default_and_rebudget ... FAILED
+test one_bin_fallback_calls ... ok
+test static_o3_one_bin_default ... ok
+
+failures:
+
+---- fft_store_default_and_rebudget stdout ----
+grid [30, 28, 30], coil batch 3, default store f32 (dense, 0 B extra)
+
+thread 'fft_store_default_and_rebudget' (11887) panicked at crates/hasty-nufft/tests/seg_defaults.rs:283:5:
+assertion `left == right` failed
+  left: F32
+ right: Bfp(24)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fft_store_default_and_rebudget
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.97s
+
+error: test failed, to rerun pass `-p hasty-nufft --test seg_defaults`

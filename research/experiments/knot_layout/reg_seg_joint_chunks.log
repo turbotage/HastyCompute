@@ -1,0 +1,20 @@
+
+running 1 test
+test joint_phi_gemm_chunks_and_inner_shapes ... FAILED
+
+failures:
+
+---- joint_phi_gemm_chunks_and_inner_shapes stdout ----
+Static0 R = 65: Φ CGEMM vs kernel: forward 7.4e-5, adjoint 2.6e-7
+
+thread 'joint_phi_gemm_chunks_and_inner_shapes' (970359) panicked at crates/hasty-nufft/tests/seg_joint_chunks.rs:181:9:
+assertion failed: rel(&y1, &y0) < 1e-5 && rel(&x1, &x0) < 1e-5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    joint_phi_gemm_chunks_and_inner_shapes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+exit 101

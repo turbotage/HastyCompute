@@ -1,0 +1,17 @@
+=== k2_lo: /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_kl1 --knots2d 6:1,16:3 --scan-min 0.44 --reps 3 --new-compare --models seg-full --nseg 10 --vcoils 10 --order 3 --sets 1 --seq flow (Thu Nov 19 11:13:09 PM CET 2026)
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.8 GiB free), PCIe pinned 21.9 / 20.7 GB/s (h2d / d2h), device 906 GB/s
+grid [225, 225, 112] @ 2.0 mm (450 × 450 × 224 mm, 5670000 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 0.4 min (26 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 334 rotations, GIRF ideal
+   2338 readouts × 3990 ADC samples (step 1), 9328620 samples; 112 static sets (samples per set 67830 / 83790 / 99750 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 2466061 support voxels: 15.7 s
+  model seg-full (temporal B-spline 3):
+    tile lists: 181440 tiles, 184233 items (65103 zero-count, 4013 split), 45864619 entries (394.2 per nonempty tile); per knot window: entries 1911324 / 3822052 / 4934673 (min / mean / max), tiles with samples but an empty window 10930 / 18527 / 35233
+    autotune 11.8 s: fwd TileCfg { tt: 4, cpba: 1, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }, adj TileCfg { tt: 4, cpba: 5, cpbf: 5, ppf: 4, chunk: 48, max_item: 1024, acb: 1, fsb: 2, fcb: 1, kv: 1 }
+    autotune adjoint kernels (one coil batch, knot 0): tile 10.07 ms, ra 7.12 ms (Some(RaCfg { nxg: 4, cb: 7, chk: 16 })) -> ra
+    autotune forward kernels (one coil batch, knot 0): tile 8.62 ms, vs 5.19 ms (Some(VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }), Some(VsCfg { nwc: 4, nws: 2, vxpad: 0 })) -> vs; adjoint 7.12 ms; vs tables 49.8 B/sample
+
+thread 'main' (947623) panicked at crates/hasty-nufft/src/segnufft.rs:4182:9:
+assertion failed: x.len() >= self.frames * nv && y.len() >= self.nc * m
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+exit 101

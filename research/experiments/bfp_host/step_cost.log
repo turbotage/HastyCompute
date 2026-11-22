@@ -1,0 +1,15 @@
+
+running 1 test
+test step_cost_at_scale ... 4 rayon threads, 3 sets × 20000000 complex (0.45 GiB per f32 stack)
+Zmshr1   f32: host update 0.418 s per iteration (1.15 GB/s of f32-stack bytes per pass-equivalent: 7.0 ns per complex)
+  host state: x f32 (master), g and g_prev bfp16, secant step bfp16 (1.13 GiB: x 0.45, g 0.23, g_prev 0.23, secant step 0.23)
+    it 0: no post-step denoiser: secant step stored as the difference x − x_prev from the next iteration on
+Zmshr1 bfp16: host update 1.215 s per iteration (0.40 GB/s of f32-stack bytes per pass-equivalent: 20.2 ns per complex)
+Zmshr1M   f32: host update 0.554 s per iteration (0.87 GB/s of f32-stack bytes per pass-equivalent: 9.2 ns per complex)
+  host state: x f32 (master), g and g_prev bfp16, secant step bfp16 (1.58 GiB: x 0.45, g 0.23, g_prev 0.23, secant step 0.23)
+    it 0: no post-step denoiser: secant step stored as the difference x − x_prev from the next iteration on
+Zmshr1M bfp16: host update 1.593 s per iteration (0.30 GB/s of f32-stack bytes per pass-equivalent: 26.5 ns per complex)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 34.22s
+

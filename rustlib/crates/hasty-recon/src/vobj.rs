@@ -595,6 +595,176 @@ impl<'a> VelProblem<'a> {
         let _ = axpby;
         Ok(lam)
     }
+
+    /// λ_max of M H (`with_metric`) or H by `k` Lanczos steps (crate::lanczos, q-form: M⁻¹ only in the norm, as
+    /// [`lambda_max`](Self::lambda_max)). Device: q and H q (the same two parameter stacks as the power iteration)
+    /// plus chunk scratch; q_{j−1} lives in host memory (one stack down and up per step). `warm`: start from the
+    /// vector in it (when its length matches; else θ) and leave the top Ritz vector there — this keeps the k Lanczos
+    /// vectors in host memory (k stacks), so the caller enables it only when they fit its host budget.
+    pub fn lambda_lanczos(&mut self, st: &Arc<CudaStream>, th: &Stack, with_metric: bool, k: usize, warm: Option<&mut Option<Vec<C32>>>) -> Result<crate::lanczos::LamEst, Error> {
+        if with_metric && !self.have_metric {
+            self.update_metric(st, th)?;
+        }
+        let lens = self.model.lens();
+        let off: Vec<usize> = lens.iter().scan(0, |a, &n| { let o = *a; *a += n; Some(o) }).collect();
+        let total: usize = lens.iter().sum();
+        let start = warm.as_ref().and_then(|w| w.as_ref()).filter(|v| v.len() == total).cloned();
+        let keep = warm.is_some();
+        let mut sp = VelLanczos {
+            q: Stack::zeros_lens(st, &lens)?,
+            w: Stack::zeros_lens(st, &lens)?,
+            pr: self,
+            st,
+            th,
+            metric: with_metric,
+            lens,
+            off,
+            qp: vec![],
+            basis: if keep { Some(vec![]) } else { None },
+            start,
+            sc: crate::store::Scratch::default(),
+            out: warm,
+        };
+        crate::lanczos::lanczos(&mut sp, k)
+    }
+}
+
+/// the q-form Lanczos space of the velocity objective on the device (see [`VelProblem::lambda_lanczos`])
+struct VelLanczos<'s, 'p, 'a> {
+    pr: &'s mut VelProblem<'a>,
+    st: &'s Arc<CudaStream>,
+    th: &'s Stack,
+    metric: bool,
+    lens: Vec<usize>,
+    off: Vec<usize>,
+    q: Stack,
+    w: Stack,
+    qp: Vec<C32>,
+    basis: Option<Vec<Vec<C32>>>,
+    start: Option<Vec<C32>>,
+    sc: crate::store::Scratch,
+    out: Option<&'p mut Option<Vec<C32>>>,
+}
+
+impl VelLanczos<'_, '_, '_> {
+    fn norm2(&mut self) -> Result<f64, Error> {
+        let k = self.pr.kern.clone();
+        let mut n2 = 0.0;
+        for t in 0..self.lens.len() {
+            if self.metric {
+                let z = &mut self.sc.get(self.st, self.lens[t], 1)?[0];
+                self.pr.metric(self.st, t, &self.q.v[t], z, true)?;
+                n2 += k.dot(self.st, &self.q.v[t], z)?.re;
+            } else {
+                n2 += k.dot(self.st, &self.q.v[t], &self.q.v[t])?.re;
+            }
+        }
+        Ok(n2)
+    }
+}
+
+impl crate::lanczos::LanczosSpace for VelLanczos<'_, '_, '_> {
+    type E = Error;
+    fn start(&mut self) -> Result<f64, Error> {
+        match self.start.take() {
+            Some(v) => {
+                for t in 0..self.lens.len() {
+                    self.st.memcpy_htod(&v[self.off[t]..self.off[t] + self.lens[t]], &mut self.q.v[t])?;
+                }
+            }
+            // deterministic start: θ's own pattern (excites z, v and a), as the power iteration
+            None => self.q.copy_from(self.st, self.th)?,
+        }
+        let n2 = self.norm2()?;
+        if n2.is_finite() && n2 > 0.0 {
+            return Ok(n2);
+        }
+        // θ = 0: the frame-mode start pattern
+        for t in 0..self.lens.len() {
+            let h: Vec<C32> = (0..self.lens[t]).map(|i| C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32)).collect();
+            self.st.memcpy_htod(&h, &mut self.q.v[t])?;
+        }
+        self.norm2()
+    }
+    fn scale(&mut self, c: f64) -> Result<(), Error> {
+        for t in 0..self.lens.len() {
+            self.pr.kern.axpby(self.st, Complex64::new(0.0, 0.0), &self.w.v[t], Complex64::new(c, 0.0), &mut self.q.v[t])?;
+        }
+        Ok(())
+    }
+    fn apply(&mut self) -> Result<f64, Error> {
+        self.pr.hvp(self.st, self.th, &self.q, &mut self.w)?;
+        rdot(&self.pr.kern, self.st, &self.q, &self.w)
+    }
+    fn advance(&mut self, alpha: f64, beta: f64) -> Result<f64, Error> {
+        let k = self.pr.kern.clone();
+        let one = Complex64::new(1.0, 0.0);
+        let total: usize = self.lens.iter().sum();
+        // q_j to the host (it becomes q_{j−1})
+        let mut hq = vec![C32::new(0.0, 0.0); total];
+        for t in 0..self.lens.len() {
+            self.st.memcpy_dtoh(&self.q.v[t], &mut hq[self.off[t]..self.off[t] + self.lens[t]])?;
+        }
+        let mut n2 = 0.0;
+        for t in 0..self.lens.len() {
+            let l = self.lens[t];
+            let bufs = self.sc.get(self.st, l, 2)?;
+            let (u, z) = bufs.split_at_mut(1);
+            let (u, z) = (&mut u[0], &mut z[0]);
+            // r = M w − α q_j − β q_{j−1}
+            if self.metric {
+                self.pr.metric(self.st, t, &self.w.v[t], u, false)?;
+            } else {
+                self.st.memcpy_dtod(&self.w.v[t], u)?;
+            }
+            k.axpby(self.st, Complex64::new(-alpha, 0.0), &self.q.v[t], one, u)?;
+            if beta != 0.0 {
+                let prev = match &self.basis {
+                    Some(b) => &b[b.len() - 1],
+                    None => &self.qp,
+                };
+                self.st.memcpy_htod(&prev[self.off[t]..self.off[t] + l], z)?;
+                k.axpby(self.st, Complex64::new(-beta, 0.0), z, one, u)?;
+            }
+            self.st.memcpy_dtod(u, &mut self.q.v[t])?;
+            // ‖r‖²_{M⁻¹}
+            if self.metric {
+                self.pr.metric(self.st, t, &self.q.v[t], z, true)?;
+                n2 += k.dot(self.st, &self.q.v[t], z)?.re;
+            } else {
+                n2 += k.dot(self.st, &self.q.v[t], &self.q.v[t])?.re;
+            }
+        }
+        self.st.synchronize()?;
+        match self.basis.as_mut() {
+            Some(b) => b.push(hq),
+            None => self.qp = hq,
+        }
+        Ok(n2)
+    }
+    fn ritz(&mut self, s: &[f64]) -> Result<(), Error> {
+        if let (Some(out), Some(b)) = (self.out.as_mut(), self.basis.as_ref()) {
+            **out = Some(ritz_vector(b, s));
+        }
+        Ok(())
+    }
+}
+
+/// y = Σ_i s_i q_i (host)
+fn ritz_vector(b: &[Vec<C32>], s: &[f64]) -> Vec<C32> {
+    let n = b[0].len();
+    let mut y = vec![C32::new(0.0, 0.0); n];
+    y.par_chunks_mut(1 << 16).enumerate().for_each(|(ci, yc)| {
+        let o = ci << 16;
+        for (i, qi) in b.iter().enumerate().take(s.len()) {
+            let si = s[i] as f32;
+            for (j, v) in yc.iter_mut().enumerate() {
+                let x = qi[o + j];
+                *v = C32::new(v.re + si * x.re, v.im + si * x.im);
+            }
+        }
+    });
+    y
 }
 
 // ─── at-knots mode with host-resident parameters: θ streamed knot by knot ───────────────────────────────────────────
@@ -725,6 +895,165 @@ impl VelProblem<'_> {
                 g.chunk_mut(c).iter_mut().for_each(|q| *q = C32::new(0.0, 0.0));
             }
         }
+    }
+
+    /// [`knot_vjp_host`](Self::knot_vjp_host) into a gradient sink: the knots' gradient chunks are read back from the
+    /// sink (`first`: still zero) and stored as partial sums (`GradSink::put_partial`); completed by
+    /// [`gradient_knots_host_sink`](Self::gradient_knots_host_sink)
+    #[allow(clippy::too_many_arguments)]
+    fn knot_vjp_sink(&mut self, st: &Arc<CudaStream>, th: &HostStack, a: &CudaSlice<C32>, e: usize, ge: &CudaSlice<C32>, w: f32, sink: &mut dyn crate::bfpstate::GradSink, first: bool, hz: &mut Vec<C32>, hv: &mut Vec<C32>) -> Result<(), Error> {
+        self.ensure_slots(st)?;
+        let s = self.model.s.clone();
+        let (nv, k) = (s.nv(), s.kz);
+        let nvv = (3 * nv).div_ceil(2);
+        hz.resize(nv, C32::new(0.0, 0.0));
+        hv.resize(nvv, C32::new(0.0, 0.0));
+        let (gp, ap) = (raw(ge, st), raw(a, st));
+        let sp = raw(&self.sacc[e], st);
+        for kk in 0..k {
+            let sl = self.slots.as_mut().unwrap();
+            st.memcpy_htod(th.chunk(s.chunk_z(kk)), &mut sl.z)?;
+            st.memcpy_htod(th.chunk(s.chunk_v(kk)), &mut sl.v)?;
+            if first {
+                st.memset_zeros(&mut sl.gz)?;
+                st.memset_zeros(&mut sl.gv)?;
+            } else {
+                if !sink.get(s.chunk_z(kk), hz)? || !sink.get(s.chunk_v(kk), hv)? {
+                    return Err(Error::Format("velocity gradient sink: the sink cannot read back partial sums".into()));
+                }
+                st.memcpy_htod(&hz[..], &mut sl.gz)?;
+                st.memcpy_htod(&hv[..], &mut sl.gv)?;
+            }
+            self.model.vjp_knot(st, raw(&sl.z, st), raw(&sl.v, st), ap, e, gp + (kk * nv * 8) as u64, w, raw(&sl.gz, st), raw(&sl.gv, st), sp)?;
+            let sl = self.slots.as_ref().unwrap();
+            st.memcpy_dtoh(&sl.gz, &mut hz[..])?;
+            st.memcpy_dtoh(&sl.gv, &mut hv[..])?;
+            sink.put_partial(s.chunk_z(kk), hz)?;
+            sink.put_partial(s.chunk_v(kk), hv)?;
+        }
+        Ok(())
+    }
+
+    /// The at-knots gradient on host-resident θ delivered to a gradient sink ([`Objective::gradient_host_sink`]: the
+    /// BFP host state needs no f32 g / g_prev stacks, research/bfp_storage.md §9.5). The encodes run as in
+    /// [`gradient_knots_host`](Self::gradient_knots_host); every knot's z / v chunk collects one contribution per
+    /// encode (and coil group) as a partial sum in the sink, and a last pass completes each chunk (static-tissue
+    /// anchor, frozen velocity) with one `put`. A BFP sink of width b rounds each partial sum: the completed chunk
+    /// carries ≈ √(sets) roundings of 2^−b (bfp24: ≈ 1.6e-7 for 7 encodes). Equal to `gradient_knots_host` for an f32
+    /// sink up to f32 summation order (none: the same additions in the same order).
+    fn gradient_knots_host_sink(&mut self, st: &Arc<CudaStream>, th: &HostStack, sink: &mut dyn crate::bfpstate::GradSink) -> Result<Option<f64>, Error> {
+        let s = self.model.s.clone();
+        // the sink must read back (probe on the small chunk a)
+        let mut ha = vec![C32::new(0.0, 0.0); th.lens[s.chunk_a()]];
+        if !sink.get(s.chunk_a(), &mut ha)? {
+            return Ok(None);
+        }
+        if !self.have_metric || (self.metric_every > 0 && self.calls % self.metric_every == 0) {
+            self.update_metric_host(st, th)?;
+        }
+        self.calls += 1;
+        for acc in self.sacc.iter_mut() {
+            st.memset_zeros(acc)?;
+        }
+        let a = st.clone_htod(th.chunk(s.chunk_a()))?;
+        let order: Vec<usize> = (0..self.op.nsets()).filter(|&t| self.weights[t] != 0.0).collect();
+        let mut fval = 0.0;
+        let mut first = true;
+        let (mut hz, mut hv): (Vec<C32>, Vec<C32>) = (Vec::new(), Vec::new());
+        {
+            let mut body = |me: &mut Self, t: usize, y: &CudaSlice<C32>, first: &mut bool, sink: &mut dyn crate::bfpstate::GradSink, hz: &mut Vec<C32>, hv: &mut Vec<C32>| -> Result<(), Error> {
+                let w = me.weights[t];
+                let xe = me.knot_image_host(st, th, None, &a, t)?;
+                fval += me.set_pass(st, t, xe, Some(y), w, &mut |me, ge, wg| {
+                    me.knot_vjp_sink(st, th, &a, t, ge, wg, sink, *first, hz, hv)?;
+                    *first = false;
+                    Ok(())
+                })?;
+                Ok(())
+            };
+            if let Some(mut sg) = self.stage.take() {
+                let staged: Vec<usize> = order.iter().copied().filter(|&t| matches!(self.ys[t], YData::Staged(_))).collect();
+                let r = sg.for_each(st, &staged, None, &mut |t, y| body(self, t, y, &mut first, sink, &mut hz, &mut hv));
+                self.stage = Some(sg);
+                r?;
+            }
+            for &t in &order {
+                if matches!(self.ys[t], YData::Staged(_)) {
+                    continue;
+                }
+                let y = match &self.ys[t] {
+                    YData::Host(hd) => {
+                        let mut d = st.alloc_zeros::<C32>(hd.len())?;
+                        st.memcpy_htod(hd, &mut d)?;
+                        Some(d)
+                    }
+                    _ => None,
+                };
+                match y {
+                    Some(d) => body(self, t, &d, &mut first, sink, &mut hz, &mut hv)?,
+                    None => {
+                        let ys = std::mem::take(&mut self.ys);
+                        let r = if let YData::Dev(d) = &ys[t] { body(self, t, d, &mut first, sink, &mut hz, &mut hv) } else { unreachable!() };
+                        self.ys = ys;
+                        r?;
+                    }
+                }
+            }
+        }
+        // complete every chunk: z as accumulated, v with the anchor term and the freeze, a from the accumulators
+        let (nv, k) = (s.nv(), s.kz);
+        hz.resize(nv, C32::new(0.0, 0.0));
+        hv.resize((3 * nv).div_ceil(2), C32::new(0.0, 0.0));
+        for kk in 0..k {
+            if first {
+                hz.iter_mut().for_each(|q| *q = C32::new(0.0, 0.0));
+                hv.iter_mut().for_each(|q| *q = C32::new(0.0, 0.0));
+            } else {
+                sink.get(s.chunk_z(kk), &mut hz)?;
+                sink.get(s.chunk_v(kk), &mut hv)?;
+            }
+            sink.put(s.chunk_z(kk), &hz)?;
+            fval += self.anchor_chunk(s.chunk_v(kk), th.chunk(s.chunk_v(kk)), &mut hv);
+            if self.freeze_v {
+                hv.iter_mut().for_each(|q| *q = C32::new(0.0, 0.0));
+            }
+            sink.put(s.chunk_v(kk), &hv)?;
+        }
+        // chunk a (−Σ_r P_p S_e) through a one-chunk f32 stack
+        let mut ga = HostStack::zeros(&th.lens.iter().enumerate().map(|(c, &l)| if c == s.chunk_a() { l } else { 0 }).collect::<Vec<_>>());
+        self.finish_a_host(st, &mut ga)?;
+        let mut av = ga.chunk(s.chunk_a()).to_vec();
+        if self.freeze_v {
+            av.iter_mut().for_each(|q| *q = C32::new(0.0, 0.0));
+        }
+        sink.put(s.chunk_a(), &av)?;
+        Ok(Some(fval))
+    }
+
+    /// the static-tissue anchor of one v chunk `c` (θ values `v`, gradient `g`): g += λ w v, returns ½ λ Σ w |v|²
+    fn anchor_chunk(&self, _c: usize, v: &[C32], g: &mut [C32]) -> f64 {
+        if self.anchor.is_none() || self.anchor_host.is_empty() {
+            return 0.0;
+        }
+        let nv = self.model.s.nv();
+        let (lam, w) = (self.anchor_lam as f32, &self.anchor_host);
+        let vf: Vec<f32> = v.iter().flat_map(|q| [q.re, q.im]).collect();
+        let mut gf: Vec<f32> = g.iter().flat_map(|q| [q.re, q.im]).collect();
+        let e = (0..3)
+            .map(|a| {
+                gf[a * nv..(a + 1) * nv].par_iter_mut().zip(vf[a * nv..(a + 1) * nv].par_iter()).zip(w.par_iter()).map(|((g, &x), &wr)| {
+                    if wr == 0.0 {
+                        return 0.0;
+                    }
+                    *g += lam * wr * x;
+                    0.5 * lam as f64 * wr as f64 * x as f64 * x as f64
+                }).sum::<f64>()
+            })
+            .sum::<f64>();
+        for (i, q) in g.iter_mut().enumerate() {
+            *q = C32::new(gf[2 * i], *gf.get(2 * i + 1).unwrap_or(&0.0));
+        }
+        e
     }
 
     /// at-knots gradient on host-resident θ / g (see the module docs)
@@ -861,6 +1190,131 @@ impl VelProblem<'_> {
             }
         }
         Ok(lam)
+    }
+
+    /// [`lambda_lanczos`](Self::lambda_lanczos) on host stacks (at-knots mode): q, H q, q_{j−1} — one host stack more
+    /// than [`lambda_max_host`](Self::lambda_max_host); `warm` as there (k host stacks for the basis)
+    pub fn lambda_lanczos_host(&mut self, st: &Arc<CudaStream>, th: &HostStack, with_metric: bool, k: usize, warm: Option<&mut Option<Vec<C32>>>) -> Result<crate::lanczos::LamEst, Error> {
+        if with_metric && !self.have_metric {
+            self.update_metric_host(st, th)?;
+        }
+        let lens = th.lens.clone();
+        let total: usize = lens.iter().sum();
+        let start = warm.as_ref().and_then(|w| w.as_ref()).filter(|v| v.len() == total).cloned();
+        let keep = warm.is_some();
+        let maxl = lens.iter().copied().max().unwrap_or(0);
+        let mut sp = VelLanczosHost {
+            pr: self,
+            st,
+            th,
+            metric: with_metric,
+            q: HostStack::zeros(&lens),
+            w: HostStack::zeros(&lens),
+            qp: HostStack::zeros(&lens),
+            basis: if keep { Some(vec![]) } else { None },
+            start,
+            tmp: vec![C32::new(0.0, 0.0); maxl],
+            out: warm,
+        };
+        crate::lanczos::lanczos(&mut sp, k)
+    }
+}
+
+/// the q-form Lanczos space of the velocity objective on host stacks
+struct VelLanczosHost<'s, 'p, 'a> {
+    pr: &'s mut VelProblem<'a>,
+    st: &'s Arc<CudaStream>,
+    th: &'s HostStack,
+    metric: bool,
+    q: HostStack,
+    w: HostStack,
+    qp: HostStack,
+    basis: Option<Vec<Vec<C32>>>,
+    start: Option<Vec<C32>>,
+    tmp: Vec<C32>,
+    out: Option<&'p mut Option<Vec<C32>>>,
+}
+
+fn rdot_c(a: &[C32], b: &[C32]) -> f64 {
+    a.par_iter().zip(b.par_iter()).map(|(x, y)| x.re as f64 * y.re as f64 + x.im as f64 * y.im as f64).sum::<f64>()
+}
+
+impl VelLanczosHost<'_, '_, '_> {
+    fn norm2(&mut self) -> Result<f64, Error> {
+        let mut n2 = 0.0;
+        for t in 0..self.q.lens.len() {
+            let l = self.q.lens[t];
+            if self.metric {
+                self.pr.metric_host(self.st, t, self.q.chunk(t), &mut self.tmp[..l], true)?;
+                n2 += rdot_c(self.q.chunk(t), &self.tmp[..l]);
+            } else {
+                n2 += rdot_c(self.q.chunk(t), self.q.chunk(t));
+            }
+        }
+        Ok(n2)
+    }
+}
+
+impl crate::lanczos::LanczosSpace for VelLanczosHost<'_, '_, '_> {
+    type E = Error;
+    fn start(&mut self) -> Result<f64, Error> {
+        match self.start.take() {
+            Some(v) => self.q.data.copy_from_slice(&v),
+            None => self.q.data.copy_from_slice(&self.th.data),
+        }
+        let n2 = self.norm2()?;
+        if n2.is_finite() && n2 > 0.0 {
+            return Ok(n2);
+        }
+        for t in 0..self.q.lens.len() {
+            self.q.chunk_mut(t).iter_mut().enumerate().for_each(|(i, x)| *x = C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32));
+        }
+        self.norm2()
+    }
+    fn scale(&mut self, c: f64) -> Result<(), Error> {
+        let c = c as f32;
+        self.q.data.par_iter_mut().for_each(|x| *x = C32::new(x.re * c, x.im * c));
+        Ok(())
+    }
+    fn apply(&mut self) -> Result<f64, Error> {
+        self.pr.hvp_host(self.st, self.th, &self.q, &mut self.w)?;
+        Ok(HostStack::rdot(&self.q, &self.w))
+    }
+    fn advance(&mut self, alpha: f64, beta: f64) -> Result<f64, Error> {
+        if let Some(b) = self.basis.as_mut() {
+            b.push(self.q.data.clone());
+        }
+        let (a, b) = (alpha as f32, beta as f32);
+        let mut n2 = 0.0;
+        for t in 0..self.q.lens.len() {
+            let l = self.q.lens[t];
+            // u = M w (in tmp), r = u − α q_j − β q_{j−1}; q_{j−1} ← q_j, q_j ← r
+            if self.metric {
+                self.pr.metric_host(self.st, t, self.w.chunk(t), &mut self.tmp[..l], false)?;
+            } else {
+                self.tmp[..l].copy_from_slice(self.w.chunk(t));
+            }
+            let (o, tmp) = (self.q.off[t], &self.tmp[..l]);
+            let (q, qp) = (&mut self.q.data[o..o + l], &mut self.qp.data[o..o + l]);
+            q.par_iter_mut().zip(qp.par_iter_mut()).zip(tmp.par_iter()).for_each(|((qv, pv), u)| {
+                let r = C32::new(u.re - a * qv.re - b * pv.re, u.im - a * qv.im - b * pv.im);
+                *pv = *qv;
+                *qv = r;
+            });
+            if self.metric {
+                self.pr.metric_host(self.st, t, self.q.chunk(t), &mut self.tmp[..l], true)?;
+                n2 += rdot_c(self.q.chunk(t), &self.tmp[..l]);
+            } else {
+                n2 += rdot_c(self.q.chunk(t), self.q.chunk(t));
+            }
+        }
+        Ok(n2)
+    }
+    fn ritz(&mut self, s: &[f64]) -> Result<(), Error> {
+        if let (Some(out), Some(b)) = (self.out.as_mut(), self.basis.as_ref()) {
+            **out = Some(ritz_vector(b, s));
+        }
+        Ok(())
     }
 }
 
@@ -1396,6 +1850,19 @@ impl Objective for VelProblem<'_> {
             st.memcpy_dtoh(&gd.v[t], g.chunk_mut(t))?;
         }
         Ok(f)
+    }
+
+    /// at-knots mode (θ streamed knot by knot): the gradient goes into the sink chunk by chunk (no f32 g / g_prev
+    /// host stacks with the BFP host state); spline and per-frame modes: none (their g stays f32)
+    fn has_gradient_sink(&self) -> bool {
+        self.model.s.identity() && !std::env::var("HASTY_VOBJ_SINK").is_ok_and(|v| v == "0")
+    }
+
+    fn gradient_host_sink(&mut self, st: &Arc<CudaStream>, x: &HostStack, sink: &mut dyn crate::bfpstate::GradSink) -> Result<Option<f64>, Error> {
+        if !self.has_gradient_sink() {
+            return Ok(None);
+        }
+        self.gradient_knots_host_sink(st, x, sink)
     }
 
     fn metric(&mut self, st: &Arc<CudaStream>, t: usize, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>, inverse: bool) -> Result<(), Error> {

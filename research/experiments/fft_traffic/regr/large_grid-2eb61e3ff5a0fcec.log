@@ -1,0 +1,9 @@
+
+running 4 tests
+test launch_grid_folds_line_groups ... ok
+test pruned_many_x_lines ... ok
+test strided_pass_many_groups ... ok
+test torso_1mm_grid_point_source ... ignored, 3 GB of GPU memory: run with --ignored
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.24s
+

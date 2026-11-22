@@ -1,0 +1,16 @@
+
+running 1 test
+test kl_split_equals_unsplit_ra ... Knot1d o0 RaCfg { nxg: 2, cb: 3, chk: 16 } zero_tiles true: kl kernel on split lists vs ra on unsplit lists 3.0e-4 (run-to-run 0.0e0)
+
+thread 'kl_split_equals_unsplit_ra' (957522) panicked at crates/hasty-nufft/tests/seg_kl.rs:418:17:
+Knot1d o0 RaCfg { nxg: 2, cb: 3, chk: 16 }: 3.0e-4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    kl_split_equals_unsplit_ra
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.28s
+

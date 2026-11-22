@@ -1,0 +1,178 @@
+=== run.sh start 2026-11-21 13:08:50, new binaries frozen at 2026-11-21 13:08:29, old at Sat Nov 21 11:47:55 AM CET 2026
+start t01_bfp_store 2026-11-21 13:08:50
+done  t01_bfp_store: exit 0, peak RSS 202772 kB (2026-11-21 13:09:23)
+start t02_bfp_store_fused 2026-11-21 13:09:23
+done  t02_bfp_store_fused: exit 0, peak RSS 202616 kB (2026-11-21 13:09:56)
+start t03_bfp_store_vec_discard 2026-11-21 13:09:56
+done  t03_bfp_store_vec_discard: exit 0, peak RSS 203464 kB (2026-11-21 13:10:04)
+start t04_chanfft 2026-11-21 13:10:04
+done  t04_chanfft: exit 0, peak RSS 151204 kB (2026-11-21 13:10:07)
+start t05_bfp_dram 2026-11-21 13:10:07
+done  t05_bfp_dram: exit 0, peak RSS 182736 kB (2026-11-21 13:10:09)
+start t06_bfp_dram_vs 2026-11-21 13:10:09
+done  t06_bfp_dram_vs: exit 0, peak RSS 184656 kB (2026-11-21 13:10:11)
+start t07_bfp_dram_split 2026-11-21 13:10:11
+done  t07_bfp_dram_split: exit 0, peak RSS 236100 kB (2026-11-21 13:10:28)
+start t08_bfp_dram_zero_full 2026-11-21 13:10:28
+done  t08_bfp_dram_zero_full: exit 0, peak RSS 182540 kB (2026-11-21 13:10:30)
+start t09_bfp_dram_noslab_nodiscard 2026-11-21 13:10:30
+done  t09_bfp_dram_noslab_nodiscard: exit 0, peak RSS 181936 kB (2026-11-21 13:10:32)
+start t10_seg_fft_traffic 2026-11-21 13:10:32
+done  t10_seg_fft_traffic: exit 0, peak RSS 219736 kB (2026-11-21 13:10:44)
+start t11_seg_fft_traffic_nodiscard 2026-11-21 13:10:44
+done  t11_seg_fft_traffic_nodiscard: exit 0, peak RSS 159852 kB (2026-11-21 13:10:45)
+start t12_seg_fft_store 2026-11-21 13:10:45
+done  t12_seg_fft_store: exit 0, peak RSS 202908 kB (2026-11-21 13:10:47)
+start t13_seg_defaults 2026-11-21 13:10:47
+done  t13_seg_defaults: exit 0, peak RSS 216136 kB (2026-11-21 13:10:50)
+start s01_memcheck_bfp_store_fused 2026-11-21 13:10:50
+done  s01_memcheck_bfp_store_fused: exit 0, peak RSS 206844 kB (2026-11-21 13:10:55)
+start s02_memcheck_bfp_dram 2026-11-21 13:10:55
+done  s02_memcheck_bfp_dram: exit 0, peak RSS 274148 kB (2026-11-21 13:11:14)
+start s03_memcheck_bfp_dram_vs 2026-11-21 13:11:14
+done  s03_memcheck_bfp_dram_vs: exit 0, peak RSS 367436 kB (2026-11-21 13:11:42)
+start s04_racecheck_fft_fused 2026-11-21 13:11:42
+done  s04_racecheck_fft_fused: exit 0, peak RSS 8921752 kB (2026-11-21 13:11:45)
+start s05_racecheck_hooks_maps 2026-11-21 13:11:45
+done  s05_racecheck_hooks_maps: exit 0, peak RSS 17817436 kB (2026-11-21 13:11:50)
+start s06_racecheck_gather_grid 2026-11-21 13:11:50
+done  s06_racecheck_gather_grid: exit 1, peak RSS 6988 kB (2026-11-21 13:11:50)
+start s07_synccheck_bfp_dram 2026-11-21 13:11:50
+done  s07_synccheck_bfp_dram: exit 0, peak RSS 192360 kB (2026-11-21 13:11:51)
+start p01_fft_slab_f32 2026-11-21 13:11:51
+done  p01_fft_slab_f32: exit 0, peak RSS 6283248 kB (2026-11-21 13:12:14)
+start p02_fft_slab_b24 2026-11-21 13:12:14
+done  p02_fft_slab_b24: exit 0, peak RSS 6283896 kB (2026-11-21 13:12:36)
+start p03_fft_slab_b24_fused 2026-11-21 13:12:36
+done  p03_fft_slab_b24_fused: exit 0, peak RSS 6322480 kB (2026-11-21 13:12:58)
+start p04_fft_slab_b24_vec 2026-11-21 13:12:58
+done  p04_fft_slab_b24_vec: exit 0, peak RSS 6283412 kB (2026-11-21 13:13:20)
+start p05_fft_slab_b24_discard 2026-11-21 13:13:20
+done  p05_fft_slab_b24_discard: exit 0, peak RSS 6322212 kB (2026-11-21 13:13:43)
+start p06_fft_whole_f32 2026-11-21 13:13:43
+done  p06_fft_whole_f32: exit 0, peak RSS 6283176 kB (2026-11-21 13:14:05)
+start p07_fft_whole_b24 2026-11-21 13:14:05
+done  p07_fft_whole_b24: exit 0, peak RSS 6283476 kB (2026-11-21 13:14:27)
+start p08_fft_whole_b24_fused 2026-11-21 13:14:27
+done  p08_fft_whole_b24_fused: exit 0, peak RSS 6283548 kB (2026-11-21 13:14:50)
+start p09_fft_whole_b24_vec 2026-11-21 13:14:50
+done  p09_fft_whole_b24_vec: exit 0, peak RSS 6283528 kB (2026-11-21 13:15:12)
+start p10_fft_whole_b22_dense 2026-11-21 13:15:12
+done  p10_fft_whole_b22_dense: exit 0, peak RSS 6322164 kB (2026-11-21 13:15:35)
+start p11_256_old 2026-11-21 13:15:35
+done  p11_256_old: exit 0, peak RSS 3325408 kB (2026-11-21 13:17:53)
+start p12_256_new 2026-11-21 13:17:53
+done  p12_256_new: exit 0, peak RSS 3325716 kB (2026-11-21 13:20:12)
+start p12b_256_new_fftb24 2026-11-21 13:20:12
+done  p12b_256_new_fftb24: exit 0, peak RSS 3326028 kB (2026-11-21 13:22:31)
+start p13_256_all 2026-11-21 13:22:31
+done  p13_256_all: exit 0, peak RSS 3366116 kB (2026-11-21 13:24:47)
+start p14_640_old 2026-11-21 13:24:47
+done  p14_640_old: exit 0, peak RSS 7385912 kB (2026-11-21 13:26:18)
+start p15_640_new 2026-11-21 13:26:18
+done  p15_640_new: exit 0, peak RSS 7386352 kB (2026-11-21 13:26:52)
+start p16_640_all 2026-11-21 13:26:52
+done  p16_640_all: exit 101, peak RSS 7385944 kB (2026-11-21 13:26:59)
+start p17_vel_old 2026-11-21 13:26:59
+done  p17_vel_old: exit 0, peak RSS 6401196 kB (2026-11-21 13:31:05)
+start p18_vel_new 2026-11-21 13:31:05
+done  p18_vel_new: exit 0, peak RSS 6414620 kB (2026-11-21 13:38:15)
+start p19_vel_new_fftb24 2026-11-21 13:38:15
+done  p19_vel_new_fftb24: exit 0, peak RSS 6414760 kB (2026-11-21 13:42:22)
+start a01_static_o3 2026-11-21 13:42:22
+done  a01_static_o3: exit 0, peak RSS 6463732 kB (2026-11-21 13:43:49)
+start a02_knot2d_o3 2026-11-21 13:43:49
+done  a02_knot2d_o3: exit 0, peak RSS 20593280 kB (2026-11-21 13:46:48)
+start r01_bfp_store 2026-11-21 13:46:48
+done  r01_bfp_store: exit 0, peak RSS 164864 kB (2026-11-21 13:46:50)
+start r02_bluestein 2026-11-21 13:46:50
+done  r02_bluestein: exit 0, peak RSS 142832 kB (2026-11-21 13:46:50)
+start r03_chanfft 2026-11-21 13:46:50
+done  r03_chanfft: exit 0, peak RSS 149968 kB (2026-11-21 13:46:54)
+start r04_conv 2026-11-21 13:46:54
+done  r04_conv: exit 0, peak RSS 147400 kB (2026-11-21 13:46:55)
+start r05_correctness 2026-11-21 13:46:55
+done  r05_correctness: exit 0, peak RSS 143556 kB (2026-11-21 13:46:56)
+start r06_hasty_fft 2026-11-21 13:46:56
+done  r06_hasty_fft: exit 0, peak RSS 2432 kB (2026-11-21 13:46:56)
+start r07_large_grid 2026-11-21 13:46:56
+done  r07_large_grid: exit 0, peak RSS 343396 kB (2026-11-21 13:46:57)
+start r08_accuracy 2026-11-21 13:46:57
+done  r08_accuracy: exit 0, peak RSS 145580 kB (2026-11-21 13:47:04)
+start r09_chirp 2026-11-21 13:47:04
+done  r09_chirp: exit 0, peak RSS 223716 kB (2026-11-21 13:47:11)
+start r10_hasty_nufft 2026-11-21 13:47:11
+done  r10_hasty_nufft: exit 0, peak RSS 10556 kB (2026-11-21 13:47:17)
+start r11_seg_b0_direct 2026-11-21 13:47:17
+done  r11_seg_b0_direct: exit 0, peak RSS 214836 kB (2026-11-21 13:48:00)
+start r12_seg_basis_cpu 2026-11-21 13:48:00
+done  r12_seg_basis_cpu: exit 0, peak RSS 1066744 kB (2026-11-21 13:48:43)
+start r13_seg_bfp_dram 2026-11-21 13:48:43
+done  r13_seg_bfp_dram: exit 0, peak RSS 181588 kB (2026-11-21 13:48:45)
+start r14_seg_defaults 2026-11-21 13:48:45
+done  r14_seg_defaults: exit 0, peak RSS 163396 kB (2026-11-21 13:48:46)
+start r15_seg_fat_union_cpu 2026-11-21 13:48:46
+done  r15_seg_fat_union_cpu: exit 0, peak RSS 7312 kB (2026-11-21 13:48:47)
+start r16_seg_fat_union_gpu 2026-11-21 13:48:47
+done  r16_seg_fat_union_gpu: exit 0, peak RSS 232680 kB (2026-11-21 13:49:02)
+start r17_seg_fft_store 2026-11-21 13:49:02
+done  r17_seg_fft_store: exit 0, peak RSS 166920 kB (2026-11-21 13:49:03)
+start r18_seg_fft_traffic 2026-11-21 13:49:03
+done  r18_seg_fft_traffic: exit 0, peak RSS 161536 kB (2026-11-21 13:49:04)
+start r19_seg_frames 2026-11-21 13:49:04
+done  r19_seg_frames: exit 0, peak RSS 218436 kB (2026-11-21 13:49:08)
+start r20_seg_joint 2026-11-21 13:49:08
+done  r20_seg_joint: exit 0, peak RSS 591504 kB (2026-11-21 13:49:18)
+start r21_seg_joint_chunks 2026-11-21 13:49:18
+done  r21_seg_joint_chunks: exit 101, peak RSS 522364 kB (2026-11-21 13:49:20)
+start r22_seg_kernel 2026-11-21 13:49:20
+done  r22_seg_kernel: exit 0, peak RSS 212844 kB (2026-11-21 13:50:04)
+start r23_seg_kl 2026-11-21 13:50:04
+done  r23_seg_kl: exit 0, peak RSS 279052 kB (2026-11-21 13:54:25)
+start r24_seg_knot 2026-11-21 13:54:25
+done  r24_seg_knot: exit 0, peak RSS 219812 kB (2026-11-21 13:54:36)
+start r25_seg_knot2d 2026-11-21 13:54:36
+done  r25_seg_knot2d: exit 0, peak RSS 208704 kB (2026-11-21 13:54:39)
+start r26_seg_knot_hi 2026-11-21 13:54:39
+done  r26_seg_knot_hi: exit 0, peak RSS 242868 kB (2026-11-21 13:55:27)
+start r27_seg_knot_kv 2026-11-21 13:55:27
+done  r27_seg_knot_kv: exit 0, peak RSS 241736 kB (2026-11-21 13:58:34)
+start r28_seg_multi 2026-11-21 13:58:34
+done  r28_seg_multi: exit 0, peak RSS 233640 kB (2026-11-21 13:59:21)
+start r29_seg_phase2 2026-11-21 13:59:21
+done  r29_seg_phase2: exit 124, peak RSS 322224 kB (2026-11-21 14:14:22)
+start r30_seg_pruned 2026-11-21 14:14:22
+done  r30_seg_pruned: exit 0, peak RSS 557228 kB (2026-11-21 14:16:14)
+start r31_seg_ra_vt 2026-11-21 14:16:14
+done  r31_seg_ra_vt: exit 101, peak RSS 309692 kB (2026-11-21 14:19:00)
+start r32_seg_rule_cpu 2026-11-21 14:19:00
+done  r32_seg_rule_cpu: exit 0, peak RSS 7740 kB (2026-11-21 14:19:01)
+start r33_seg_split 2026-11-21 14:19:01
+done  r33_seg_split: exit 0, peak RSS 287176 kB (2026-11-21 14:29:10)
+start r34_seg_stream 2026-11-21 14:29:10
+done  r34_seg_stream: exit 0, peak RSS 224660 kB (2026-11-21 14:29:22)
+start r35_seg_tile_block 2026-11-21 14:29:22
+done  r35_seg_tile_block: exit 0, peak RSS 243320 kB (2026-11-21 14:34:32)
+start r36_seg_vs 2026-11-21 14:34:32
+done  r36_seg_vs: exit 0, peak RSS 393072 kB (2026-11-21 14:40:06)
+start r37_seg_warp_cpu 2026-11-21 14:40:06
+done  r37_seg_warp_cpu: exit 0, peak RSS 10840 kB (2026-11-21 14:40:13)
+start r38_seg_warp_gpu 2026-11-21 14:40:13
+done  r38_seg_warp_gpu: exit 0, peak RSS 221848 kB (2026-11-21 14:40:21)
+start r39_seg_wf 2026-11-21 14:40:21
+done  r39_seg_wf: exit 0, peak RSS 234596 kB (2026-11-21 14:40:33)
+start r40_segnufft 2026-11-21 14:40:33
+done  r40_segnufft: exit 0, peak RSS 215112 kB (2026-11-21 14:40:44)
+start s06b_racecheck_gather_grid 2026-11-21 14:40:45
+done  s06b_racecheck_gather_grid: exit 0, peak RSS 2941448 kB (2026-11-21 14:40:48)
+=== all cases done 2026-11-21 14:40:48
+=== run.sh start 2026-11-21 15:06:06, new binaries frozen at 2026-11-21 13:08:29, old at Sat Nov 21 11:47:55 AM CET 2026
+start p16b_640_maps_bfp16 2026-11-21 15:06:06
+done  p16b_640_maps_bfp16: exit 0, peak RSS 7385868 kB (2026-11-21 15:06:40)
+start t14_seg_defaults_f32 2026-11-21 15:06:40
+done  t14_seg_defaults_f32: exit 0, peak RSS 162900 kB (2026-11-21 15:06:41)
+start t15_seg_fft_store_f32 2026-11-21 15:06:41
+done  t15_seg_fft_store_f32: exit 0, peak RSS 166348 kB (2026-11-21 15:06:42)
+start t16_bfp_dram_f32 2026-11-21 15:06:42
+done  t16_bfp_dram_f32: exit 0, peak RSS 181832 kB (2026-11-21 15:06:44)
+=== all cases done 2026-11-21 15:06:44

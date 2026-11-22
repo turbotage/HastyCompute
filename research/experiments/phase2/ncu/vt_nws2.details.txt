@@ -1,0 +1,2 @@
+==ERROR== Could not open report file '/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/ncu/vt_nws2.ncu-rep'.
+==ERROR== The file does not exist or is not a regular file.

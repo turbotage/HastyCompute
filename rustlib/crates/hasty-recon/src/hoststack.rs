@@ -107,8 +107,28 @@ pub struct SetStreamer {
     ev_comp: [CudaEvent; 2],
     ev_down: [CudaEvent; 2],
     len: usize,
+    /// device-packed gradient download (BFP sink), allocated on first use
+    pk: Option<PackSlots>,
     /// sets streamed, bytes up / down
     pub stats: (usize, usize, usize),
+}
+
+/// Slots of the packed gradient download: the device packs g_t (`hasty_bfp::xfer`) into dm / de, the copy stream
+/// downloads the packed bytes into pinned hm / he.
+struct PackSlots {
+    k: Arc<hasty_bfp::xfer::XferKernels>,
+    nw: usize,
+    ne: usize,
+    dm: [CudaSlice<u32>; 2],
+    de: [CudaSlice<u8>; 2],
+    hm: [PinnedHostSlice<u32>; 2],
+    he: [PinnedHostSlice<u8>; 2],
+}
+
+/// `HASTY_GRAD_PACK=0`: a BFP gradient sink gets f32 downloads and encodes on the host (the same bytes; default:
+/// packed on the device before the copy)
+fn grad_pack_enabled() -> bool {
+    std::env::var("HASTY_GRAD_PACK").map_or(true, |v| v != "0")
 }
 
 impl SetStreamer {
@@ -127,6 +147,7 @@ impl SetStreamer {
             ev_comp: [ev()?, ev()?],
             ev_down: [ev()?, ev()?],
             len,
+            pk: None,
             stats: (0, 0, 0),
         };
         for e in s.ev_up.iter().chain(&s.ev_comp).chain(&s.ev_down) {
@@ -139,14 +160,53 @@ impl SetStreamer {
         4 * self.len * 8
     }
 
+    /// device bytes of the packed-download slots (0 until a BFP sink used them)
+    pub fn packed_device_bytes(&self) -> usize {
+        self.pk.as_ref().map_or(0, |p| 2 * (4 * p.nw + p.ne))
+    }
+
+    fn ensure_packed(&mut self, fmt: hasty_bfp::Bfp) -> Result<(), Error> {
+        if self.pk.as_ref().is_some_and(|p| p.k.fmt == fmt) {
+            return Ok(());
+        }
+        let ctx = self.up.context().clone();
+        let k = hasty_bfp::xfer::kernels(&ctx, fmt)?;
+        let nw = hasty_bfp::xfer::rows_words(fmt, 2 * self.len, 1).max(1);
+        let ne = hasty_bfp::xfer::rows_ex(2 * self.len, 1).max(4);
+        let dm = [self.up.alloc_zeros::<u32>(nw)?, self.up.alloc_zeros::<u32>(nw)?];
+        let de = [self.up.alloc_zeros::<u8>(ne)?, self.up.alloc_zeros::<u8>(ne)?];
+        let hm = unsafe { [ctx.alloc_pinned_with_flags::<u32>(nw, 0)?, ctx.alloc_pinned_with_flags::<u32>(nw, 0)?] };
+        let he = unsafe { [ctx.alloc_pinned_with_flags::<u8>(ne, 0)?, ctx.alloc_pinned_with_flags::<u8>(ne, 0)?] };
+        self.pk = Some(PackSlots { k, nw, ne, dm, de, hm, he });
+        Ok(())
+    }
+
     /// For every set t in `order`: `f(t, x_t, g_t)` on the device (x_t uploaded from `x`, g_t written by f and
     /// downloaded into `g`). The next set's image is staged by a worker thread while f runs.
     pub fn for_each(&mut self, st: &Arc<CudaStream>, x: &HostStack, g: &mut HostStack, order: &[usize], f: &mut dyn FnMut(usize, &CudaSlice<C32>, &mut CudaSlice<C32>) -> Result<(), Error>) -> Result<(), Error> {
+        assert!(order.iter().all(|&t| g.lens[t] == self.len), "SetStreamer: every set must have {} elements", self.len);
+        self.for_each_sink(st, x, &mut crate::bfpstate::StackSink(g), order, f)
+    }
+
+    /// [`for_each`](Self::for_each) with the gradients delivered to a sink (by the worker thread, set by set). A sink
+    /// that stores BFP ([`GradSink::packed`](crate::bfpstate::GradSink::packed)) gets the bytes packed on the device
+    /// before the copy (half the PCIe bytes at bfp16; `HASTY_GRAD_PACK=0`: f32 downloads, encoded on the host — the
+    /// same bytes).
+    pub fn for_each_sink(&mut self, st: &Arc<CudaStream>, x: &HostStack, sink: &mut dyn crate::bfpstate::GradSink, order: &[usize], f: &mut dyn FnMut(usize, &CudaSlice<C32>, &mut CudaSlice<C32>) -> Result<(), Error>) -> Result<(), Error> {
         if order.is_empty() {
             return Ok(());
         }
-        assert!(order.iter().all(|&t| x.lens[t] == self.len && g.lens[t] == self.len), "SetStreamer: every set must have {} elements", self.len);
+        assert!(order.iter().all(|&t| x.lens[t] == self.len), "SetStreamer: every set must have {} elements", self.len);
         let n = self.len;
+        let packed = sink.packed().filter(|_| grad_pack_enabled());
+        if let Some(fmt) = packed {
+            self.ensure_packed(fmt)?;
+        }
+        let (pnw, pne) = match (&self.pk, packed) {
+            (Some(_), Some(fmt)) => (hasty_bfp::xfer::rows_words(fmt, 2 * n, 1), hasty_bfp::Bfp::blocks(2 * n)),
+            _ => (0, 0),
+        };
+        let down_bytes = if packed.is_some() { 4 * pnw + pne } else { n * 8 };
         // prime: set order[0] into slot 0
         self.ev_up[0].synchronize()?;
         self.hx[0].as_mut_slice()?[..n].copy_from_slice(x.chunk(order[0]));
@@ -160,29 +220,32 @@ impl SetStreamer {
             // compute set t (waits for its upload)
             st.wait(&self.ev_up[b])?;
             // worker: stage the next image into hx[nb] (its previous upload is done once ev_up[nb] completed) and
-            // collect the previous gradient from hg[nb] (downloaded behind ev_down[nb]) while the GPU computes
+            // hand the previous gradient (downloaded behind ev_down[nb]) to the sink while the GPU computes
             let (hx_a, hx_b) = self.hx.split_at_mut(1);
             let hx_nb: &mut PinnedHostSlice<C32> = if nb == 0 { &mut hx_a[0] } else { &mut hx_b[0] };
             let hg_nb: &PinnedHostSlice<C32> = &self.hg[nb];
+            let pk_nb = match (&self.pk, packed) {
+                (Some(p), Some(_)) => Some((&p.hm[nb], &p.he[nb])),
+                _ => None,
+            };
             let (ev_up_nb, ev_down_nb) = (&self.ev_up[nb], &self.ev_down[nb]);
-            let g_prev_dst: Option<&mut [C32]> = prev.map(|p| {
-                let (o, l) = (g.off[p], g.lens[p]);
-                // SAFETY-free split: a disjoint mutable chunk of g (the worker writes only this one)
-                &mut g.data[o..o + l]
-            });
             let (dx_a, dx_b) = (&self.dx[0], &self.dx[1]);
             let (dg_a, dg_b) = self.dg.split_at_mut(1);
             let dg_b_ref: &mut CudaSlice<C32> = if b == 0 { &mut dg_a[0] } else { &mut dg_b[0] };
             let dx_b_ref = if b == 0 { dx_a } else { dx_b };
+            let sink_w: &mut dyn crate::bfpstate::GradSink = &mut *sink;
             let res = std::thread::scope(|s| -> Result<(), Error> {
                 let h = s.spawn(move || -> Result<(), Error> {
                     if let Some(tn) = next {
                         ev_up_nb.synchronize()?;
                         hx_nb.as_mut_slice()?[..n].copy_from_slice(x.chunk(tn));
                     }
-                    if let Some(dst) = g_prev_dst {
+                    if let Some(p) = prev {
                         ev_down_nb.synchronize()?;
-                        dst.copy_from_slice(&hg_nb.as_slice()?[..n]);
+                        match pk_nb {
+                            Some((hm, he)) => sink_w.put_packed(p, &hm.as_slice()?[..pnw], &he.as_slice()?[..pne])?,
+                            None => sink_w.put(p, &hg_nb.as_slice()?[..n])?,
+                        }
                     }
                     Ok(())
                 });
@@ -192,9 +255,17 @@ impl SetStreamer {
             });
             res?;
             self.ev_comp[b].record(st)?;
-            // download g_t; upload the next image once the slot's previous compute is done
+            // download g_t (packed on the copy stream first for a BFP sink); upload the next image once the slot's
+            // previous compute is done
             self.up.wait(&self.ev_comp[b])?;
-            self.up.memcpy_dtoh(&self.dg[b], &mut self.hg[b].as_mut_slice()?[..n])?;
+            match (self.pk.as_mut(), packed) {
+                (Some(p), Some(_)) => {
+                    p.k.pack(&self.up, &self.dg[b], 2 * n, 1, &mut p.dm[b], &mut p.de[b])?;
+                    self.up.memcpy_dtoh(&p.dm[b], &mut p.hm[b].as_mut_slice()?[..pnw])?;
+                    self.up.memcpy_dtoh(&p.de[b], &mut p.he[b].as_mut_slice()?[..pne])?;
+                }
+                _ => self.up.memcpy_dtoh(&self.dg[b], &mut self.hg[b].as_mut_slice()?[..n])?,
+            }
             self.ev_down[b].record(&self.up)?;
             if next.is_some() {
                 self.up.wait(&self.ev_comp[nb])?;
@@ -203,12 +274,15 @@ impl SetStreamer {
             }
             self.stats.0 += 1;
             self.stats.1 += n * 8;
-            self.stats.2 += n * 8;
+            self.stats.2 += down_bytes;
         }
         // the last gradient
         let (lb, lt) = ((order.len() - 1) % 2, *order.last().unwrap());
         self.ev_down[lb].synchronize()?;
-        g.chunk_mut(lt).copy_from_slice(&self.hg[lb].as_slice()?[..n]);
+        match (&self.pk, packed) {
+            (Some(p), Some(_)) => sink.put_packed(lt, &p.hm[lb].as_slice()?[..pnw], &p.he[lb].as_slice()?[..pne])?,
+            _ => sink.put(lt, &self.hg[lb].as_slice()?[..n])?,
+        }
         Ok(())
     }
 }
@@ -648,6 +722,16 @@ pub fn run_objective_host(
     report: &mut dyn FnMut(usize, &HostStack, f64),
     ctl: Option<(&RunCtl, &str)>,
 ) -> Result<Outcome, Error> {
+    // HASTY_STATE_STORE (recon_p2np --state-store): BFP gradient / secant stacks (hasty_recon::bfpstate); unset: this loop
+    let store = crate::bfpstate::StateStore::from_env().map_err(Error::Format)?;
+    if !store.is_f32() {
+        return crate::bfpstate::run_objective_host_bfp(obj, st, x, precond, alpha, iters, denoise, report, ctl, store);
+    }
+    if let Some((c, name)) = ctl {
+        if crate::bfpstate::has_checkpoint(c, name) {
+            return Err(Error::Format(format!("{name}: a checkpoint of a BFP state exists (state_{name}.hsb); resume with the same --state-store / HASTY_STATE_STORE, or remove it")));
+        }
+    }
     let lens = x.lens.clone();
     let nt = lens.len();
     let quasi = precond.quasi();

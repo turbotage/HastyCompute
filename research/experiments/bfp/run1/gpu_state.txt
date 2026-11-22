@@ -1,0 +1,4 @@
+name, utilization.gpu [%], memory.used [MiB], power.limit [W], clocks.current.memory [MHz]
+NVIDIA GeForce RTX 4090, 100 %, 294 MiB, 300.00 W, 10501 MHz
+name, utilization.gpu [%], memory.used [MiB]
+NVIDIA GeForce RTX 4090, 15 %, 294 MiB

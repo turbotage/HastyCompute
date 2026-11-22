@@ -1,0 +1,20 @@
+=== hasty_nufft (2026-11-20 15:29:33); power.limit 300.00 W
+
+running 13 tests
+test kernel::tests::cheb_mono_roundtrip ... ok
+test kernel::tests::fseries_matches_direct_sum ... ok
+test kernel::tests::gl_integrates_polynomials ... ok
+test kernel::tests::kb_poly_fits_and_derivatives ... ok
+test kernel::tests::kb_poly_interpolation_errors ... ok
+test kernel::tests::smooth ... ok
+test segnufft::multi_tests::multi_plan_respects_budget_and_prefers_shared_passes ... ok
+test segnufft::multi_tests::multi_sources_are_generated ... ok
+test segnufft::multi_tests::multi_tile_shapes_fit_shared_memory ... ok
+test segnufft::seg_build_tests::parallel_segments_equal_serial ... ok
+test segnufft::shape_tests::default_shapes_do_not_collapse ... ok
+test segnufft::shape_tests::pick_group_rules ... ok
+test segsplit::tests::plan_batch_rules ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.83s
+
+exit 0 (2026-11-20 15:31:43)

@@ -1,0 +1,19 @@
+
+running 1 test
+test kl_support_union ... Knot1d o1 ra None kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra None kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 4.2e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 4.2e-6
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.1e17
+Knot1d o1 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.6e-4
+Knot2d o3 ra None kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off NaN
+Knot2d o3 ra None kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 6.2e-7
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off NaN
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel false zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 1.2e-6
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles true CONTROL (no zeroing): half-ball set inside the union support, layout on vs off NaN
+Knot2d o3 ra Some(RaCfg { nxg: 1, cb: 1, chk: 16 }) kl kernel true zero_tiles false CONTROL (no zeroing): half-ball set inside the union support, layout on vs off 4.1e-5
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.75s
+
+exit 0

@@ -10,6 +10,7 @@ hasty-site = { path = "../hasty-site" }
 hasty-cuda = { path = "../hasty-cuda" }
 hasty-nufft = { path = "../hasty-nufft" }
 hasty-fft = { path = "../hasty-fft" }
+hasty-bfp = { path = "../hasty-bfp" }
 hasty-toeplitz = { path = "../hasty-toeplitz" }
 hasty-mrsim = { path = "../hasty-mrsim" }
 hasty-seq = { path = "../hasty-seq" }

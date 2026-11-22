@@ -1,0 +1,73 @@
+=== t03_seg_defaults: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_defaults --nocapture --test-threads 1 (2026-11-20 19:03:29)
+locked 19:03:29; power limit / draw / sm clock / memory used: 300.00 W, 23.13 W, 210 MHz, 294 MiB
+
+running 3 tests
+test fft_store_default_and_rebudget ... grid [30, 28, 30], coil batch 3, default store bfp24 (dense, 1108128 B extra)
+bfp24 default vs f32: forward 1.3e-6 (bound 8.0e-6), adjoint 2.2e-6 (bound 7.2e-6)
+    [fft_store] coil batch 3 → 1 (re-budget for the bfp22 intermediates): launch shapes and kernel variants back to their defaults (autotune again)
+set_fft_store(bfp22) on a 3-coil budget: coil batch 1 (358848 B of BFP buffer)
+  bfp22 after re-budget vs f32: forward 2.9e-6 (bound 2.0e-5), adjoint 3.9e-6 (bound 2.0e-5)
+    [fft_store] coil batch 1 → 3 (re-budget for the f32 intermediates): launch shapes and kernel variants back to their defaults (autotune again)
+  f32 after re-budget vs f32: forward 1.6e-7, adjoint 2.3e-6
+ok
+test one_bin_fallback_calls ... order 3 Order3: multi fwd K1 w: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: multi fwd K2: one bin vs static 1.8e-7 (bound 3.0e-5)
+order 3 Order3: multi adj K2 img0: one bin vs static 2.8e-6 (bound 3.0e-5)
+order 3 Order3: multi adj K2 img1: one bin vs static 2.8e-6 (bound 3.0e-5)
+order 3 Order3: group fwd 0: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: group fwd 1: one bin vs static 2.1e-7 (bound 3.0e-5)
+order 3 Order3: group residual 1: one bin vs static 2.2e-7 (bound 3.0e-5)
+order 3 Order3: group adj: one bin vs static 3.1e-6 (bound 3.0e-5)
+order 3 Order3: fat fwd: one bin vs static 1.9e-7 (bound 3.0e-5)
+order 3 Order3: fat adj: one bin vs static 2.9e-6 (bound 3.0e-5)
+order 3 Order3: fat group fwd 1: one bin vs static 2.2e-7 (bound 3.0e-5)
+order 3 Order3: fat group adj: one bin vs static 3.2e-6 (bound 3.0e-5)
+order 3 Order3: plain fwd: one bin vs static 1.8e-6 (bound 3.0e-5)
+order 2 Always: multi fwd K1 w: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: multi fwd K2: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: multi adj K2 img0: one bin vs static 2.1e-6 (bound 3.0e-5)
+order 2 Always: multi adj K2 img1: one bin vs static 2.0e-6 (bound 3.0e-5)
+order 2 Always: group fwd 0: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group fwd 1: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group residual 1: one bin vs static 1.2e-6 (bound 3.0e-5)
+order 2 Always: group adj: one bin vs static 2.1e-6 (bound 3.0e-5)
+order 2 Always: fat fwd: one bin vs static 1.5e-7 (bound 3.0e-5)
+order 2 Always: fat adj: one bin vs static 2.2e-6 (bound 3.0e-5)
+order 2 Always: fat group fwd 1: one bin vs static 1.7e-7 (bound 3.0e-5)
+order 2 Always: fat group adj: one bin vs static 2.2e-6 (bound 3.0e-5)
+order 2 Always: plain fwd: one bin vs static 9.3e-7 (bound 3.0e-5)
+ok
+test static_o3_one_bin_default ... order 0 default (static) vs static: forward 5.6e-7 (bound 6.3e-5), adjoint 2.4e-5 (bound 6.3e-5), residual 5.7e-7
+order 0 default (static) vs static, autotuned: forward 6.5e-7 (bound 6.3e-5), adjoint 3.8e-5 (bound 6.3e-5), residual 6.7e-7
+order 2 default (static) vs static: forward 1.6e-7 (bound 3.0e-5), adjoint 2.0e-6 (bound 3.0e-5), residual 1.6e-7
+order 2 default (static) vs static, autotuned: forward 9.6e-7 (bound 3.0e-5), adjoint 2.0e-6 (bound 3.0e-5), residual 9.6e-7
+order 3 default (one bin) vs static: forward 1.6e-6 (bound 3.0e-5), adjoint 5.7e-6 (bound 3.0e-5), residual 1.6e-6
+order 3 default (one bin) vs static, autotuned: forward 1.9e-6 (bound 3.0e-5), adjoint 5.7e-6 (bound 3.0e-5), residual 1.9e-6
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 205.29s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/int/bin/hasty-nufft__seg_defaults --nocapture --test-threads 1"
+	User time (seconds): 203.03
+	System time (seconds): 2.40
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:25.35
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 280312
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 1383159
+	Voluntary context switches: 3401
+	Involuntary context switches: 2033
+	Swaps: 0
+	File system inputs: 248
+	File system outputs: 150480
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 19:06:55; power limit at end 300.00 W

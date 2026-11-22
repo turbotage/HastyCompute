@@ -1,0 +1,16 @@
+== PG_DEFS=
+    ra RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  28160 regs 128 local 0 blocks/SM 2:   326.41 ms (11.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  35328 regs 222 local 0 blocks/SM 2:   198.87 ms (19.1 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  26880 regs 128 local 0 blocks/SM 3:   254.58 ms (15.0 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 5, chk: 16, lmax: 2048 } smem  24448 regs 123 local 0 blocks/SM 4:   282.61 ms (13.5 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 3, chk: 16, lmax: 2048 } smem  22272 regs  96 local 16 blocks/SM 4:   420.30 ms (9.1 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  36352 regs 128 local 0 blocks/SM 2:   250.62 ms (15.2 %)
+  BEST ra: 192.09 ms (kernel; + memset 6.77 ms) RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } items 109007 | 2082 G cMAC/s, 19.8 % of FP32 FMA peak (4 FMA/MAC) | rel err 1.26e-6 at 48 points x 100 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 4.08e-7 on 200 samples
+== PG_DEFS=RA_NOMAC
+    ra RaCfg { tx: 2, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  28160 regs  61 local 0 blocks/SM 3:   137.44 ms (27.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } smem  35328 regs  72 local 8 blocks/SM 2:    85.91 ms (44.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  26880 regs  66 local 0 blocks/SM 3:   112.59 ms (33.8 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 5, chk: 16, lmax: 2048 } smem  24448 regs  69 local 0 blocks/SM 4:   139.25 ms (27.3 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 4, nxg: 4, cb: 3, chk: 16, lmax: 2048 } smem  22272 regs  66 local 0 blocks/SM 4:   228.64 ms (16.7 %)
+    ra RaCfg { tx: 4, ty: 4, tz: 8, nxg: 2, cb: 4, chk: 16, lmax: 2048 } smem  36352 regs  61 local 0 blocks/SM 2:   110.83 ms (34.4 %)
+  BEST ra: 85.65 ms (kernel; + memset 6.78 ms) RaCfg { tx: 4, ty: 4, tz: 4, nxg: 2, cb: 7, chk: 16, lmax: 2048 } items 109007 | 4670 G cMAC/s, 44.5 % of FP32 FMA peak (4 FMA/MAC) | rel err 1.00e0 at 48 points x 100 ch | adjointness |<Ax,y> - <x,A^H y>| / |<Ax,y>| = 1.00e0 on 200 samples

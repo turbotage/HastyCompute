@@ -168,6 +168,41 @@ impl Objective for Red<'_> {
         self.log();
         Ok(f)
     }
+    fn has_gradient_sink(&self) -> bool {
+        self.inner.has_gradient_sink()
+    }
+    /// d = x − D(x) first (it needs only x), then the inner gradient set by set with λ d_t added on its way into the
+    /// sink (f32 downloads: the sum is encoded once, on the host)
+    fn gradient_host_sink(&mut self, st: &Arc<CudaStream>, x: &HostStack, sink: &mut dyn crate::bfpstate::GradSink) -> Result<Option<f64>, Error> {
+        if !self.inner.has_gradient_sink() {
+            return Ok(None);
+        }
+        if self.d.lens != x.lens {
+            self.d = HostStack::zeros(&x.lens);
+        }
+        self.d.copy_from(x);
+        let mut s = self.residual_into(x);
+        let (lam, d) = (self.lambda as f32, &self.d);
+        let hook = move |t: usize, v: &mut [C32]| {
+            v.par_chunks_mut(PAR).zip(d.chunk(t).par_chunks(PAR)).for_each(|(a, b)| {
+                for (ai, bi) in a.iter_mut().zip(b) {
+                    // as HostStack::axpby(λ, d, 1, g): λ d + 1 · g in f32
+                    *ai = C32::new(lam * bi.re + 1.0 * ai.re, lam * bi.im + 1.0 * ai.im);
+                }
+            });
+        };
+        let mut ss = crate::bfpstate::SumSink { inner: sink, sq: 0.0, hook: Some(&hook) };
+        let Some(f) = self.inner.gradient_host_sink(st, x, &mut ss)? else {
+            // declined after offering (it should not): the caller falls back to gradient_host (the denoiser runs again)
+            return Ok(None);
+        };
+        let gg = ss.sq;
+        s.f_data = f;
+        s.pull = self.lambda * (2.0 * s.prior_quad / self.lambda.max(1e-300)).sqrt() / gg.sqrt().max(1e-300);
+        self.last = s;
+        self.log();
+        Ok(Some(f))
+    }
     fn gradient(&mut self, st: &Arc<CudaStream>, x: &Stack, g: &mut Stack) -> Result<f64, Error> {
         let f = self.inner.gradient(st, x, g)?;
         let lens = self.inner.lens();

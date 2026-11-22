@@ -1,0 +1,17 @@
+
+running 1 test
+test ra_vt_fused_and_slabs ... Static o2 fuse true slab None: vt 7.2e-6, ra 4.3e-5, pair adjointness 6.2e-8
+Static o2 fuse true slab Some(0): vt 7.2e-6, ra 4.3e-5, pair adjointness 6.2e-8
+Static o2 fuse false slab None: vt 7.2e-6, ra 4.3e-5, pair adjointness 4.7e-8
+Static o2 fuse false slab Some(0): vt 7.2e-6, ra 4.3e-5, pair adjointness 4.7e-8
+Static o2 fuse true slab Some(2): vt 7.2e-6, ra 4.3e-5, pair adjointness 6.2e-8
+Knot2d o3 fuse true slab None: vt 1.0e-5, ra 4.5e-5, pair adjointness 1.4e-7
+Knot2d o3 fuse true slab Some(0): vt 1.0e-5, ra 4.5e-5, pair adjointness 1.4e-7
+Knot2d o3 fuse false slab None: vt 1.0e-5, ra 4.5e-5, pair adjointness 1.2e-7
+Knot2d o3 fuse false slab Some(0): vt 1.0e-5, ra 4.5e-5, pair adjointness 1.2e-7
+Knot2d o3 fuse true slab Some(2): vt 1.0e-5, ra 4.5e-5, pair adjointness 1.4e-7
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 11.89s
+
+exit 0

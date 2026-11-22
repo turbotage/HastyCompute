@@ -5,12 +5,42 @@
 //!           [--models sense,seg-none,seg-b0,seg-full] [--nseg 10] [--order 2] [--b0-nseg 6] [--ntab 256]
 //!           [--temporal off|linear|cubic] [--iters 40] [--sets 2] [--reps 5] [--adc-step 1]
 //!           [--fov-centre 0,0,0.05] [--no-gnl] [--no-tune] [--max-grid-gb 6] [--quick] [--json file] [--plan]
-//!           [--knot] [--cb-cap N] [--vs-compare]
+//!           [--knot] [--cb-cap N] [--vs-compare] [--new-compare] [--knots2d KR:RDEG,MC:CDEG] [--kl-compare] [--mma-compare] [--ws-compare]
+//!           [--matrix NX,NY,NZ] [--profile] [--cb-list N,N,..] [--jsonl file] [--seg-batch LB] [--static-knot]
+//!           [--plan-budget-gb G]
+//!
+//! `--matrix NX,NY,NZ` (seg models): the engine's image matrix set directly (research/sample_kernels.md §18). The
+//! physics (maps, field, concomitant fit) and the sample tables are computed on the design grid of `--fov` / `--res`
+//! as before; the sample coordinates k·Δ (radians, |k·Δ| ≤ π at the design's k-max) are kept, i.e. the same readouts
+//! stretched in k so that their k-max is the new matrix's Nyquist edge (FOV unchanged, voxel FOV / N). Coil maps and
+//! the segment phase are sampled from the design grid by nearest neighbour onto the matrix (values do not change the
+//! cost). `--profile`: one extra gradient (forward + adjoint) between cuProfilerStart / cuProfilerStop, for
+//! `nsys profile --capture-range=cudaProfilerApi` (per-kernel times of exactly one gradient). `--cb-list`: each seg
+//! model once per coil batch cap of the list (a new engine each; the curve of time vs channel batch). `--jsonl`: one
+//! JSON record per measured (model, batch, set) appended to the file (times, breakdown, memory, the autotune's
+//! kernel choices). `--seg-batch LB`: segment batches inside a coil (`hasty_nufft::SegSplit`, research/sample_kernels.md
+//! §18): grid slots of cb × LB channels, the L segments in ⌈L / LB⌉ balanced groups (the last zero-padded), one pass
+//! over the samples per (coil batch, group); `--cb-list` then counts coils of LB-segment channels. `--static-knot`:
+//! static (one-frame) seg models on a one-bin knot-major engine (frames 1, degree 0): the knot kernels with their vt /
+//! ra / kl variants and fused pad / crop at every order, instead of the static path (order 3 there: the multi kernels).
+//! `--plan-budget-gb G`: the channel batch chosen by the planner (`hasty_nufft::SegSplit::planned`) for a G GiB grid
+//! slot instead of --cb-list / --seg-batch.
 //!
 //! `--knot`: temporal models on a knot-major engine (`SegNufft::new_temporal(.., true)`, one slot per knot) instead
 //! of the interval-major one. `--cb-cap N`: coil batch cap of the engine (default 16). `--vs-compare`: after the
 //! autotune, the forward / adjoint / normal times of the measured sets once with the vs forward off (tile kernels)
 //! and once on (the autotune's best vs shape; research/sample_kernels.md §14), plus the autotune's kernel times.
+//! `--new-compare`: the same with the forward vs / vt and the adjoint ra each off and on (four rows: both off, forward
+//! only, adjoint only, both; the autotune's best shapes; research/sample_kernels.md §16). `--order 3` (seg-full): the
+//! sample tables carry order-3 data (`points_hi`, u and H' of zeros: the order-3 kernels' full arithmetic, the order-2
+//! operator's values).
+//! `--knots2d KR:RDEG,MC:CDEG` (e.g. 6:1,16:3, the velocity reconstruction's `recon_p2np --vmodel knots` default):
+//! a 2-D knot-major engine (`SegNufft::new_temporal2d`, KR respiratory knots of degree RDEG × MC cardiac knots of
+//! degree CDEG; implies `--knot --frames MC --temporal`), sample tables by `points2d` / `points2d_hi` with a synthetic
+//! breathing amplitude (0.5 − 0.5 cos(2π t / 4.3 s) of the excitation time) and the respiratory knots at its quantiles
+//! over the set's readouts (the reconstruction's bellows-quantile rule; values do not change the cost). Also prints
+//! the samples per knot window and the tile-list statistics. `--kl-compare`: the knot-path layout
+//! (research/sample_kernels.md §17) off / on.
 //!
 //! Defaults: the user's 10-minute free-breathing 4D-flow scan (flow_thorax: TR 11.29 ms, 7 encodes, 3990 ADC samples
 //! at 2 µs per readout → ≈ 53 000 readouts, 2.1e8 samples), 12 virtual coils (32 → 12 compression happens before
@@ -24,8 +54,10 @@
 //! smooth field + a −3.4 ppm shell, clinical GNL model) — values do not change the cost:
 //!   * forward, adjoint and normal (forward + adjoint, i.e. the operator part of one P²nP gradient) per set, CUDA events,
 //!     median of `--reps` after a warm-up; `sense` includes the per-call `set_points` of `SenseSets` (reported too);
-//!   * breakdown: SegNufft tile kernels (gridding + segment / ΔC physics, from `autotune`), the partial-axis FFTs
-//!     (timed separately on the same channel-interleaved grid) and the rest (pad / crop / memsets); SENSE: set_points,
+//!   * breakdown: SegNufft tile kernels (gridding + segment / ΔC physics, from `autotune`), the grid FFTs (the
+//!     engine's own transforms as it runs them — block- / k-support-pruned plans, `SegNufft::grid_fft_run` — timed on
+//!     its slot per coil batch, times the transforms one call executes, `SegNufft::fft_calls`; the line before the
+//!     set says which plan) and the rest (pad / crop / memsets); SENSE: set_points,
 //!     FFT, rest (spreading / interpolation, deconvolution, coil expand / reduce). The cost of the physics itself is the
 //!     difference between `seg-none` (L = 1), `seg-b0` (L segments) and `seg-full` (L segments + ΔC correction);
 //!   * device memory: operator engine (fine-grid slots, FFT plans, maps), segment tables per encode, per-sample bytes of
@@ -34,7 +66,7 @@
 //! k-space data streaming when the resident problem does not fit the card (pinned host → device at the measured
 //! bandwidth), the host round trip of the image stack for the prior (as `p2np::run_objective_with` does every
 //! iteration), the ZMSHR1 vector passes (≈ 10 passes over the stack at the measured device bandwidth); setup (tables,
-//! tile lists, segments, step-size power iteration) separately. Projected total for `--iters` iterations.
+//! tile lists, segments, step-size λ_max by --lam-method) separately. Projected total for `--iters` iterations.
 //! Prior cost (LLR / learned denoiser) is not included.
 //!
 //! `--plan`: CPU-only dry run (schedules, set statistics, the median set's host tables, formula memory estimates).
@@ -48,7 +80,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use cudarc::driver::sys::CUevent_flags;
-use cudarc::driver::CudaStream;
+use cudarc::driver::{CudaSlice, CudaStream};
 use hasty_bench::seqsched::{EchoSchedule, FlowSchedule};
 use hasty_cuda::{Device, C32};
 use hasty_fft::{Direction, FftPlan, Norm};
@@ -56,7 +88,7 @@ use hasty_mrsim::gnl::GradientCoils;
 use hasty_mrsim::physio::{CardiacTime, Ecg};
 use hasty_mrsim::sequence::{Schedule, SAMPLE_FLOATS};
 use hasty_mrsim::{Vec3, GAMMA_BAR, IDENTITY};
-use hasty_nufft::{build_segments, next_smooth_even, EsKernel, SegNufft, SegNufftOpts};
+use hasty_nufft::{build_segments, next_smooth_even, EsKernel, SegNufft, SegNufftOpts, SegSplit};
 use hasty_recon::data::{smooth7, PhysicsGrid, ReadoutInfo, SampleSet, SimData};
 use hasty_recon::gpu::Kernels;
 use hasty_recon::op::SenseOp;
@@ -85,6 +117,8 @@ struct Args {
     ntab: usize,
     temporal: Option<u32>,
     iters: usize,
+    /// operator applications per set of the step size's λ_max (recon_p2np --lam-method)
+    lam_applies: usize,
     nsets: usize,
     reps: usize,
     adc_step: usize,
@@ -97,18 +131,52 @@ struct Args {
     plan: bool,
     /// knot-major temporal engine
     knot: bool,
+    /// 2-D knots (KR, RDEG, MC, CDEG)
+    knots2d: Option<(usize, u32, usize, u32)>,
+    /// measure the knot-path layout off / on
+    kl_compare: bool,
+    mma_compare: bool,
+    ws_compare: bool,
     /// coil batch cap (None: the engine default)
     cb_cap: Option<usize>,
     /// measure vs off / on after the autotune
     vs_compare: bool,
+    /// measure the new variants (forward vs / vt, adjoint ra) off / on after the autotune
+    new_compare: bool,
+    /// engine image matrix (None: the design grid of --fov / --res)
+    matrix: Option<[usize; 3]>,
+    /// one extra gradient between cuProfilerStart / Stop
+    profile: bool,
+    /// coil batch caps to sweep (one engine each; empty: --cb-cap only)
+    cb_list: Vec<usize>,
+    /// one JSON record per (model, batch, set) appended here
+    jsonl: Option<PathBuf>,
+    /// segments per channel batch inside a coil (`hasty_nufft::SegSplit`; None or ≥ L: whole coils)
+    seg_batch: Option<usize>,
+    /// static models on a one-bin knot-major engine (the knot kernels)
+    static_knot: bool,
+    /// grid-slot budget for the batch planner (`SegSplit::planned`: whole coils while one fits, else segment groups)
+    plan_budget: Option<usize>,
 }
 
 fn parse() -> Args {
     let mut a: Vec<String> = std::env::args().skip(1).collect();
     let mut flag = |n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let (quick, no_gnl, no_tune, plan) = (flag("--quick"), flag("--no-gnl"), flag("--no-tune"), flag("--plan"));
-    let (knot, vs_compare) = (flag("--knot"), flag("--vs-compare"));
+    let (mut knot, vs_compare, new_compare, kl_compare) = (flag("--knot"), flag("--vs-compare"), flag("--new-compare"), flag("--kl-compare"));
+    let mma_compare = flag("--mma-compare");
+    let ws_compare = flag("--ws-compare");
+    let profile = flag("--profile");
+    let static_knot = flag("--static-knot");
     let mut take = |n: &str| -> Option<String> { a.iter().position(|x| x == n).map(|i| { a.remove(i); a.remove(i) }) };
+    let knots2d: Option<(usize, u32, usize, u32)> = take("--knots2d").map(|v| {
+        let p: Vec<usize> = v.split([',', ':']).map(|x| x.trim().parse().expect("--knots2d KR:RDEG,MC:CDEG")).collect();
+        assert!(p.len() == 4 && p[1] <= 1 && matches!(p[3], 0 | 1 | 3), "--knots2d KR:RDEG,MC:CDEG (RDEG 0 | 1, CDEG 0 | 1 | 3), got {v}");
+        (p[0], p[1] as u32, p[2], p[3] as u32)
+    });
+    if knots2d.is_some() {
+        knot = true;
+    }
     let v3 = |s: String| -> Vec3 { let v: Vec<f64> = s.split(',').map(|x| x.parse().unwrap()).collect(); [v[0], v[1], v[2]] };
     let args = Args {
         seqs: take("--seq").unwrap_or("flow,b0".into()).split(',').map(String::from).collect(),
@@ -117,7 +185,7 @@ fn parse() -> Args {
         b0_scan_min: take("--b0-scan-min").map(|s| s.parse().unwrap()).unwrap_or(2.5),
         fov: take("--fov").map(v3).unwrap_or([0.45, 0.45, 0.22]),
         res: take("--res").map(|s| s.parse().unwrap()).unwrap_or(if quick { 4e-3 } else { 2e-3 }),
-        frames: take("--frames").map(|s| s.parse().unwrap()).unwrap_or(20),
+        frames: knots2d.map(|k| k.2).or_else(|| take("--frames").map(|s| s.parse().unwrap())).unwrap_or(20),
         rr: take("--rr").map(|s| s.parse().unwrap()).unwrap_or(1.0),
         nvc: take("--vcoils").map(|s| s.parse().unwrap()).unwrap_or(if quick { 4 } else { 12 }),
         b0: take("--b0").map(|s| s.parse().unwrap()).unwrap_or(2.89),
@@ -127,12 +195,19 @@ fn parse() -> Args {
         b0_nseg: take("--b0-nseg").map(|s| s.parse().unwrap()).unwrap_or(6),
         ntab: take("--ntab").map(|s| s.parse().unwrap()).unwrap_or(256),
         temporal: match take("--temporal").as_deref() {
+            _ if knots2d.is_some() => Some(knots2d.unwrap().3),
             None | Some("off") => None,
             Some("linear") => Some(1),
             Some("cubic") => Some(3),
             Some(o) => panic!("--temporal {o}: off | linear | cubic"),
         },
         iters: take("--iters").map(|s| s.parse().unwrap()).unwrap_or(40),
+        // --lam-method lanczos[:K]|power (as recon_p2np): lanczos = K steps on M N only (default K 8); power = 12
+        // iterations each on N and M N (the original step-size setup)
+        lam_applies: match hasty_recon::lanczos::LamMethod::parse(&take("--lam-method").unwrap_or_else(|| "lanczos".into())).expect("--lam-method lanczos[:K]|power") {
+            hasty_recon::lanczos::LamMethod::Power => 24,
+            hasty_recon::lanczos::LamMethod::Lanczos(k) => k,
+        },
         nsets: take("--sets").map(|s| s.parse().unwrap()).unwrap_or(if quick { 1 } else { 2 }),
         reps: take("--reps").map(|s| s.parse().unwrap()).unwrap_or(if quick { 3 } else { 5 }),
         adc_step: take("--adc-step").map(|s| s.parse().unwrap()).unwrap_or(if quick { 2 } else { 1 }),
@@ -143,8 +218,24 @@ fn parse() -> Args {
         json: take("--json").map(PathBuf::from),
         plan,
         knot,
+        knots2d,
+        kl_compare,
+        mma_compare,
+        ws_compare,
         cb_cap: take("--cb-cap").map(|s| s.parse().unwrap()),
         vs_compare,
+        new_compare,
+        matrix: take("--matrix").map(|v| {
+            let p: Vec<usize> = v.split(',').map(|x| x.trim().parse().expect("--matrix NX,NY,NZ")).collect();
+            assert!(p.len() == 3, "--matrix NX,NY,NZ");
+            [p[0], p[1], p[2]]
+        }),
+        profile,
+        cb_list: take("--cb-list").map(|v| v.split(',').map(|x| x.trim().parse().expect("--cb-list N,N,..")).collect()).unwrap_or_default(),
+        jsonl: take("--jsonl").map(PathBuf::from),
+        seg_batch: take("--seg-batch").map(|s| s.parse().unwrap()),
+        static_knot,
+        plan_budget: take("--plan-budget-gb").map(|s| (s.parse::<f64>().unwrap() * GB) as usize),
     };
     assert!(a.is_empty(), "unknown arguments {a:?}");
     args
@@ -437,6 +528,8 @@ struct ModelRes {
     seg_s: f64,
     tune_s: f64,
     coil_batch: usize,
+    /// one JSON record per measured set (`--jsonl`)
+    recs: Vec<serde_json::Value>,
 }
 
 /// one model on the measured sets of a scan
@@ -453,10 +546,34 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
         m => panic!("model {m}: sense | seg-none | seg-b0 | seg-full"),
     };
     let mut res = ModelRes { model: model.into(), nseg, order, frames, ..Default::default() };
-    let host_x: Vec<C32> = (0..frames * nv).map(|i| C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32)).collect();
+    // image frames of the operator: 2-D knots hold kr × mc knot images (the engine's `frames`)
+    let img_frames = match a.knots2d.filter(|_| temporal) { Some((kr, _, mc, _)) => kr * mc, None => frames };
+    // engine image matrix (--matrix: set directly, FOV kept; else the design grid) and the nearest design voxel of an
+    // engine voxel / the engine voxel at a design voxel (maps, segment phase and fit voxels sampled onto the matrix)
+    let (edims, eres) = match a.matrix.filter(|_| model != "sense") {
+        Some(m) => (m, [0, 1, 2].map(|k| dims[k] as f64 * sd.vox[k] / m[k] as f64)),
+        None => (dims, sd.vox),
+    };
+    let nve: usize = edims.iter().product();
+    let to_design = move |q: usize| -> usize {
+        let (i, j, k) = (q % edims[0], (q / edims[0]) % edims[1], q / (edims[0] * edims[1]));
+        (i * dims[0] / edims[0]) + dims[0] * ((j * dims[1] / edims[1]) + dims[1] * (k * dims[2] / edims[2]))
+    };
+    let to_engine = move |q: usize| -> usize {
+        let (i, j, k) = (q % dims[0], (q / dims[0]) % dims[1], q / (dims[0] * dims[1]));
+        let up = |v: usize, a: usize| ((2 * v + 1) * edims[a] / (2 * dims[a])).min(edims[a] - 1);
+        up(i, 0) + edims[0] * (up(j, 1) + edims[1] * up(k, 2))
+    };
+    if a.matrix.is_some() && model != "sense" {
+        let gb = |n: usize| n as f64 * 8.0 / 1e9;
+        println!("    matrix {edims:?} (voxel {:.3} × {:.3} × {:.3} mm, {nve} voxels): image {:.2} GB, coil maps {:.2} GB, segment diagonals {:.2} GB per encode",
+            eres[0] * 1e3, eres[1] * 1e3, eres[2] * 1e3, gb(nve), gb(nc * nve), gb(nseg * nve));
+    }
+    let host_x: Vec<C32> = (0..img_frames * nve).into_par_iter().map(|i| C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32)).collect();
     let x = st.clone_htod(&host_x).unwrap();
     drop(host_x);
-    let mut xo = st.alloc_zeros::<C32>(frames * nv).unwrap();
+    let mut xo = st.alloc_zeros::<C32>(img_frames * nve).unwrap();
+    res.frames = img_frames;
     if model == "sense" {
         let w = EsKernel::width_for(1e-4, 2.0);
         let nf = dims.map(|n| next_smooth_even(((2.0 * n as f64).ceil() as usize).max(2 * w)));
@@ -495,16 +612,30 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
     // segmented physics NUFFT: one engine, per-set points, segments per encode
     let f0 = free_mem(dev, st);
     hasty_nufft::set_thread_cb_cap(a.cb_cap);
-    let eopts = SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline: a.temporal.unwrap_or(1), max_grid_bytes: a.max_grid };
-    let mut eng = SegNufft::new_temporal(dev, dims, sd.vox, nc, eopts, temporal && a.knot).unwrap();
+    let sknot = a.static_knot && !temporal;
+    let eopts = SegNufftOpts { sigma: 1.25, width: 10, nseg, order, frames, bspline: if sknot { 0 } else { a.temporal.unwrap_or(1) }, max_grid_bytes: a.max_grid };
+    let mut op = match a.knots2d.filter(|_| temporal) {
+        Some((kr, rdeg, _, _)) => SegSplit::from_engine(SegNufft::new_temporal2d(dev, edims, eres, nc, eopts, kr, rdeg).unwrap()),
+        None if a.plan_budget.is_some() => SegSplit::planned(dev, edims, eres, nc, eopts, a.plan_budget.unwrap(), None, (temporal && a.knot) || sknot).unwrap(),
+        None => match a.seg_batch.filter(|&lb| lb < nseg) {
+            Some(lb) => SegSplit::new(dev, edims, eres, nc, eopts, lb, (temporal && a.knot) || sknot).unwrap(),
+            None => SegSplit::from_engine(SegNufft::new_temporal(dev, edims, eres, nc, eopts, (temporal && a.knot) || sknot).unwrap()),
+        },
+    };
+    if op.groups > 1 {
+        println!("    segment batches: {} groups of {} segments (L {nseg}{}), {:?}", op.groups, op.lb, if op.groups * op.lb > nseg { ", last group zero-padded" } else { "" }, op.plan());
+    }
     hasty_nufft::set_thread_cb_cap(None);
-    eng.set_maps(st, &grid.smaps).unwrap();
+    if a.matrix.is_some() {
+        let m: Vec<C32> = (0..nc * nve).into_par_iter().map(|i| grid.smaps[(i / nve) * nv + to_design(i % nve)]).collect();
+        op.eng.set_maps(st, &m).unwrap();
+    } else {
+        op.eng.set_maps(st, &grid.smaps).unwrap();
+    }
     res.engine_bytes = f0.saturating_sub(free_mem(dev, st));
-    res.coil_batch = eng.cb;
-    let nf = eng.plan.nf;
-    let (ff, fi) = fft_ms(dev, st, tm, nf, nseg);
-    let seg_fit: Vec<usize> = support.iter().copied().step_by((support.len() / 20000).max(1)).collect();
-    let mut segs_by_enc: Vec<(usize, hasty_nufft::SegSegments)> = Vec::new();
+    res.coil_batch = op.eng.cb;
+    let seg_fit: Vec<usize> = support.iter().copied().step_by((support.len() / 20000).max(1)).map(to_engine).collect();
+    let mut segs_by_enc: Vec<(usize, hasty_nufft::SegSplitSegments)> = Vec::new();
     for (si, set) in sets.iter().enumerate() {
         let t = Instant::now();
         let (ss, card) = build_set(scan.sch.as_ref(), set, sd.res, a.adc_step, a.rr);
@@ -521,8 +652,9 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
             let ts = Instant::now();
             let psi = segment_phase(grid, &wbar, &tab.tau_adc, with_b0);
             let fb = free_mem(dev, st);
-            let (sp, at, t0, dt) = build_segments(nv, nseg, tab.tau_adc[0], tab.tau_adc[na - 1], a.ntab, &seg_fit, &psi);
-            let seg = eng.segments(st, &sp, &at, t0, dt).unwrap();
+            let psi_e = |q: usize, t: f64| psi(to_design(q), t);
+            let (sp, at, t0, dt) = build_segments(nve, nseg, tab.tau_adc[0], tab.tau_adc[na - 1], a.ntab, &seg_fit, &psi_e);
+            let seg = op.segments(st, &sp, &at, t0, dt).unwrap();
             res.seg_bytes = res.seg_bytes.max(fb.saturating_sub(free_mem(dev, st)));
             res.seg_s = ts.elapsed().as_secs_f64();
             seg_here = res.seg_s;
@@ -530,54 +662,319 @@ fn run_model(dev: &Device, st: &Arc<CudaStream>, kern: &Arc<Kernels>, a: &Args, 
         }
         let seg = &segs_by_enc.iter().find(|(e, _)| *e == set.enc).unwrap().1;
         let fb = free_mem(dev, st);
-        let pts = eng.points(st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, temporal.then_some(&tab.t[..])).unwrap();
+        // 2-D knots: per sample the respiratory interval and fraction of a synthetic breathing amplitude, knots at its
+        // quantiles over the set's readouts
+        let resp2d: Option<(Vec<u32>, Vec<f32>)> = a.knots2d.filter(|_| temporal).map(|(kr, rdeg, _, _)| {
+            let amp: Vec<f64> = set.ros.iter().map(|&i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * scan.sch.readout_row(i)[0] / 4.3).cos()).collect();
+            let mut srt = amp.clone();
+            srt.sort_by(|x, y| x.partial_cmp(y).unwrap());
+            let q = |f: f64| srt[((f * (srt.len() - 1) as f64).round() as usize).min(srt.len() - 1)];
+            let nri = if rdeg == 0 { kr } else { kr - 1 };
+            let edges: Vec<f64> = (0..=nri).map(|k| q(k as f64 / nri as f64)).collect();
+            let (mut ri, mut rv) = (Vec::with_capacity(m), Vec::with_capacity(m));
+            for &av in &amp {
+                let r = (0..nri).rfind(|&r| av >= edges[r]).unwrap_or(0);
+                let v = if rdeg == 0 { 0.0 } else { ((av - edges[r]) / (edges[r + 1] - edges[r]).max(1e-12)).clamp(0.0, 1.0) };
+                for _ in 0..na {
+                    ri.push(r as u32);
+                    rv.push(v as f32);
+                }
+            }
+            (ri, rv)
+        });
+        let pts = if let Some((ri, rv)) = &resp2d {
+            if order >= 3 {
+                let (u, h) = (vec![0f32; 4 * m], vec![0f64; 4 * hasty_nufft::NHI]);
+                op.eng.points2d_hi(st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &tab.t, ri, rv, &u, &h).unwrap()
+            } else {
+                op.eng.points2d(st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &tab.t, ri, rv).unwrap()
+            }
+        } else if order >= 3 {
+            // order 3: the degree-3/4 tables of zeros (the kernels' full order-3 arithmetic; values of the order-2 operator)
+            let (u, h) = (vec![0f32; 4 * m], vec![0f64; 4 * hasty_nufft::NHI]);
+            op.eng.points_hi(st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &u, &h, temporal.then_some(&tab.t[..])).unwrap()
+        } else {
+            op.eng.points(st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, temporal.then_some(&tab.t[..])).unwrap()
+        };
         let pts_bytes = fb.saturating_sub(free_mem(dev, st));
+        if a.knots2d.is_some() || (temporal && a.knot) {
+            let ts = pts.tile_stats(st, op.eng.plan.nf, op.eng.tiles_adj.tt, op.eng.ks, op.eng.kr, op.eng.rdeg).unwrap();
+            println!("    tile lists: {} tiles, {} items ({} zero-count, {} split), {} entries ({:.1} per nonempty tile); per knot window: entries {} / {:.0} / {} (min / mean / max), tiles with samples but an empty window {} / {:.0} / {}",
+                ts.tiles, ts.items, ts.zero_items, ts.split_items, ts.entries, ts.entries_per_tile, ts.win_entries.0, ts.win_entries.1, ts.win_entries.2, ts.win_empty_tiles.0, ts.win_empty_tiles.1, ts.win_empty_tiles.2);
+        }
         let setup_s = t.elapsed().as_secs_f64() - seg_here;
         drop(tab);
         let mut kern_t = (f64::NAN, f64::NAN);
         if si == 0 && a.tune {
             let tt = Instant::now();
-            let (kf, ka) = eng.autotune(st, seg, &pts).unwrap();
+            let (cs0, tm0) = (hasty_cuda::compile_stats(), hasty_nufft::tune_timing_stats());
+            let (kf, ka) = op.autotune(st, seg, &pts).unwrap();
             res.tune_s = tt.elapsed().as_secs_f64();
-            println!("    autotune {:.1} s: fwd {:?}, adj {:?}", res.tune_s, eng.tiles_fwd, eng.tiles_adj);
-            if let Some((tt, tv)) = eng.vs_tune_times() {
-                println!("    autotune forward kernels (one coil batch{}): tile {tt:.2} ms, vs {tv:.2} ms ({:?}, {:?}) -> {}; adjoint {ka:.2} ms; vs tables {:.1} B/sample", if temporal { ", knot 0" } else { "" }, eng.vs_geom(), eng.vs_tune_cfg(), if eng.vs_active().is_some() { "vs" } else { "tile" }, pts.vs_table_bytes() as f64 / m as f64);
+            println!("    autotune {:.1} s: fwd {:?}, adj {:?}", res.tune_s, op.eng.tiles_fwd, op.eng.tiles_adj);
+            let (cs, tm) = (hasty_cuda::compile_stats().since(&cs0), hasty_nufft::tune_timing_stats());
+            let timing_s = tm.1 - tm0.1;
+            println!(
+                "    autotune split: timing launches {timing_s:.1} s ({} candidates), NVRTC compiles {:.1} s ({}), cubin cache reads {:.1} s ({}), module loads {:.1} s ({}), rest {:.1} s (tune cache HASTY_TUNE={:?})",
+                tm.0 - tm0.0,
+                cs.miss_s,
+                cs.misses,
+                cs.hit_s,
+                cs.hits,
+                cs.load_s,
+                cs.loads,
+                res.tune_s - timing_s - cs.miss_s - cs.hit_s - cs.load_s,
+                hasty_nufft::tune_mode()
+            );
+            if let Some((ta, tr)) = op.eng.ra_tune_times() {
+                println!("    autotune adjoint kernels (one coil batch{}): tile {ta:.2} ms, ra {tr:.2} ms ({:?}) -> {}", if temporal { ", knot 0" } else { "" }, op.eng.ra_tune_cfg(), if op.eng.ra_active().is_some() { "ra" } else { "tile" });
+            }
+            if let Some((tt, tv)) = op.eng.vs_tune_times() {
+                println!("    autotune forward kernels (one coil batch{}): tile {tt:.2} ms, vs {tv:.2} ms ({:?}, {:?}) -> {}; adjoint {ka:.2} ms; vs tables {:.1} B/sample", if temporal { ", knot 0" } else { "" }, op.eng.vs_geom(), op.eng.vs_tune_cfg(), if op.eng.vs_active().is_some() { "vs" } else { "tile" }, pts.vs_table_bytes() as f64 / m as f64);
+            }
+            if let Some((ta, tk, tw)) = op.eng.kl_tune_times() {
+                println!("    autotune knot-path layout (adjoint of a representative knot incl. split-tile zeroing, one coil batch): engine adjoint all items {ta:.2} ms, skip empty tiles {tk:.2} ms, whole-tile kl kernel {tw:.2} ms ({:?}) -> {}", op.eng.kl_tune_cfg(), match (op.eng.kl_kernel(), op.eng.kl_active()) { (Some(_), _) => "kl kernel", (None, true) => "skip", _ => "all items" });
             }
             // kernels of one coil batch (static sets: the whole set) → all batches
-            let nb = nc.div_ceil(eng.cb) as f64;
+            let nb = op.plan().passes as f64;
             if !temporal {
                 kern_t = (kf as f64 * nb, ka as f64 * nb);
             }
         }
         let mut y = st.alloc_zeros::<C32>(nc * m).unwrap();
-        let fwd = tm.ms(st, &mut || eng.forward(st, seg, &pts, &x, &mut y).unwrap());
-        let adj = tm.ms(st, &mut || eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
-        let normal = tm.ms(st, &mut || { eng.forward(st, seg, &pts, &x, &mut y).unwrap(); eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+        // transforms per call, counted by the engine (`fft_calls`) over the timed runs (warm-up + reps)
+        let c0 = op.eng.fft_calls();
+        let fwd = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+        let c1 = op.eng.fft_calls();
+        let adj = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+        let c2 = op.eng.fft_calls();
+        let runs = (tm.reps + 1) as f64;
+        let (nfwd, ninv) = ((c1 - c0) as f64 / runs, (c2 - c1) as f64 / runs);
+        // the engine's own grid transforms (the plans it uses for this set's k-support), one coil batch each
+        let ff = tm.ms(st, &mut || op.eng.grid_fft_run(st, true).unwrap());
+        let fi = tm.ms(st, &mut || op.eng.grid_fft_run(st, false).unwrap());
+        println!("    FFT column: {} — forward {ff:.2} ms × {nfwd:.0}, inverse {fi:.2} ms × {ninv:.0} per call", op.eng.grid_fft_desc());
+        let normal = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+        if a.profile {
+            // exactly one gradient inside the profiler range (nsys --capture-range=cudaProfilerApi)
+            st.synchronize().unwrap();
+            unsafe { cudarc::driver::sys::cuProfilerStart() };
+            op.forward(st, seg, &pts, &x, &mut y).unwrap();
+            op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+            st.synchronize().unwrap();
+            unsafe { cudarc::driver::sys::cuProfilerStop() };
+            println!("    profiled one gradient (forward + adjoint) between cuProfilerStart / Stop");
+        }
         if a.vs_compare {
             // the same operator with the vs forward off (tile kernels) and on (the autotune's best vs shape)
-            let keep = eng.vs_active().map(|v| v.1);
-            for (lab, c) in [("vs off", None), ("vs on", eng.vs_tune_cfg())] {
+            let keep = op.eng.vs_active().map(|v| v.1);
+            for (lab, c) in [("vs off", None), ("vs on", op.eng.vs_tune_cfg())] {
                 if lab == "vs on" && c.is_none() {
                     println!("    {:<28} {lab}: no vs shape (no tables or not a candidate)", set.label);
                     continue;
                 }
-                eng.set_vs(c).unwrap();
-                let f = tm.ms(st, &mut || eng.forward(st, seg, &pts, &x, &mut y).unwrap());
-                let ad = tm.ms(st, &mut || eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
-                let nm = tm.ms(st, &mut || { eng.forward(st, seg, &pts, &x, &mut y).unwrap(); eng.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                op.eng.set_vs(c).unwrap();
+                let f = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let ad = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                let nm = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
                 println!("    {:<28} {lab:<7} M {m:>9}: forward {f:>8.1} ms, adjoint {ad:>8.1} ms, gradient (forward + adjoint) {nm:>8.1} ms", set.label);
             }
-            eng.set_vs(keep).unwrap();
+            op.eng.set_vs(keep).unwrap();
         }
-        // FFT per call: every frame once per coil batch (temporal: + the wrap-around slots)
-        let loads = if temporal { (frames + eng.nf - 1) as f64 } else { 1.0 };
-        let fft = (ff * nc as f64 * loads, fi * nc as f64 * loads);
+        if a.new_compare {
+            // forward vs / vt and adjoint ra, each off (tile kernels) and on (the autotune's best shape)
+            let keep = (op.eng.vs_active().map(|v| v.1), op.eng.ra_active());
+            let (vc, rc) = (op.eng.vs_tune_cfg(), op.eng.ra_tune_cfg());
+            println!("    new variants: forward {vc:?} (geometry {:?}), adjoint {rc:?}", op.eng.vs_geom());
+            for (lab, fv, av) in [("both off", false, false), ("fwd new", true, false), ("adj new", false, true), ("both new", true, true)] {
+                if (fv && vc.is_none()) || (av && rc.is_none()) {
+                    println!("    {:<28} {lab:<8}: no shape (no tables or not a candidate)", set.label);
+                    continue;
+                }
+                op.eng.set_vs(if fv { vc } else { None }).unwrap();
+                op.eng.set_ra(if av { rc } else { None }).unwrap();
+                let f = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let ad = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                let nm = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                println!("    {:<28} {lab:<8} M {m:>9}: forward {f:>8.1} ms, adjoint {ad:>8.1} ms, gradient (forward + adjoint) {nm:>8.1} ms", set.label);
+            }
+            op.eng.set_vs(keep.0).unwrap();
+            op.eng.set_ra(keep.1).unwrap();
+        }
+        if a.mma_compare {
+            // tensor-core vt (research/sample_kernels.md §21) against the FMA vt of the same channel groups: forward /
+            // gradient times and the forward / adjoint-of-forward error each adds (relative, vs the FMA vt), next to
+            // the FMA vt's one-ulp floor (image moved by one ulp) and the vt-vs-tile difference
+            let keep = op.eng.vs_active_v();
+            if let Some((_, c0, sch0, _)) = keep {
+                let host = |st: &Arc<CudaStream>, v: &CudaSlice<C32>| -> Vec<C32> { st.clone_dtoh(v).unwrap() };
+                let rel = |a: &[C32], b: &[C32]| {
+                    let n: f64 = a.iter().zip(b).map(|(x, y)| ((x.re - y.re) as f64).powi(2) + ((x.im - y.im) as f64).powi(2)).sum();
+                    let d: f64 = b.iter().map(|y| (y.re as f64).powi(2) + (y.im as f64).powi(2)).sum();
+                    (n / d.max(1e-300)).sqrt()
+                };
+                op.eng.set_vt_mma(0);
+                op.eng.set_vs(None).unwrap();
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                let yt = host(st, &y);
+                // the FMA baseline: the active shape and sub-chunk (HASTY_SEG_VS_CFG, e.g. 4,1,0,24 = the autotune's
+                // choice at 256^3), compiled as the FMA vt
+                let base = c0;
+                op.eng.set_vs_v(Some(base), sch0).unwrap();
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                let yf = host(st, &y);
+                op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                let xf = host(st, &xo);
+                let hx = host(st, &x);
+                let mut sd = 1u64;
+                let xu: Vec<C32> = hx.iter().map(|v| { let mut sg = || { sd ^= sd << 13; sd ^= sd >> 7; sd ^= sd << 17; if sd & 1 == 0 { 1.0 + f32::EPSILON * 0.5 } else { 1.0 - f32::EPSILON * 0.5 } }; C32::new(v.re * sg(), v.im * sg()) }).collect();
+                let xud = st.clone_htod(&xu).unwrap();
+                op.forward(st, seg, &pts, &xud, &mut y).unwrap();
+                let yu = host(st, &y);
+                op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                let xuo = host(st, &xo);
+                drop(xud);
+                let f0 = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let g0 = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                println!("    mma compare {:<16} FMA vt {base:?} sch {sch0}: forward {f0:.1} ms, gradient {g0:.1} ms; one-ulp floor forward {:.2e} / adjoint of forward {:.2e}; vt vs tile forward {:.2e}", set.label, rel(&yu, &yf), rel(&xuo, &xf), rel(&yf, &yt));
+                for (mk, nws, sch) in [(2usize, 1usize, 8usize), (2, 1, 16), (2, 1, 24), (2, 2, 8), (2, 2, 16), (2, 2, 24), (1, 1, 16), (1, 2, 16)] {
+                    op.eng.set_vt_mma(mk);
+                    let c = hasty_nufft::VsCfg { nws, nwc: base.nwc, vxpad: 0 };
+                    if op.eng.set_vs_v(Some(c), sch).is_err() {
+                        println!("    mma compare mma{mk} {c:?} sch {sch}: not valid");
+                        continue;
+                    }
+                    let r = op.eng.vs_active_v().unwrap().3;
+                    op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                    let ym = host(st, &y);
+                    op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                    let xm = host(st, &xo);
+                    let f = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                    let g = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                    println!("    mma compare mma{mk} {c:?} sch {sch} (regs {}, spill {} B, {} warps/SM): forward {f:.1} ms, gradient {g:.1} ms; added error forward {:.2e}, adjoint of forward {:.2e}", r.regs, r.spill, r.warps, rel(&ym, &yf), rel(&xm, &xf));
+                }
+                op.eng.set_vt_mma(0);
+                let (_, kc, ksch, _) = keep.unwrap();
+                op.eng.set_vs_v(Some(kc), ksch).unwrap();
+            }
+        }
+        if a.ws_compare {
+            // warp-specialised forward / adjoint (research/sample_kernels.md §22) against the active FMA vt / ra shape:
+            // forward / adjoint / gradient times and the error each adds (relative 2-norm, vs the active kernels),
+            // next to the one-ulp floor (image / data moved by one ulp) and the vt-vs-tile difference
+            let keep = (op.eng.vs_active_v(), op.eng.ra_active_v());
+            let host = |st: &Arc<CudaStream>, v: &CudaSlice<C32>| -> Vec<C32> { st.clone_dtoh(v).unwrap() };
+            let rel = |a: &[C32], b: &[C32]| {
+                let n: f64 = a.iter().zip(b).map(|(x, y)| ((x.re - y.re) as f64).powi(2) + ((x.im - y.im) as f64).powi(2)).sum();
+                let d: f64 = b.iter().map(|y| (y.re as f64).powi(2) + (y.im as f64).powi(2)).sum();
+                (n / d.max(1e-300)).sqrt()
+            };
+            let mut sd = 7u64;
+            let mut ulp = |v: &[C32]| -> Vec<C32> { v.iter().map(|c| { let mut sg = || { sd ^= sd << 13; sd ^= sd >> 7; sd ^= sd << 17; if sd & 1 == 0 { 1.0 + f32::EPSILON * 0.5 } else { 1.0 - f32::EPSILON * 0.5 } }; C32::new(c.re * sg(), c.im * sg()) }).collect() };
+            if let Some((_, c0, sch0, r0)) = keep.0 {
+                op.eng.set_vs(None).unwrap();
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                let yt = host(st, &y);
+                op.eng.set_vs_v(Some(c0), sch0).unwrap();
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                let yf = host(st, &y);
+                op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                let xf = host(st, &xo);
+                let xud = st.clone_htod(&ulp(&host(st, &x))).unwrap();
+                op.forward(st, seg, &pts, &xud, &mut y).unwrap();
+                let yu = host(st, &y);
+                drop(xud);
+                let f0 = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let g0 = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                println!("    ws compare {:<16} FMA vt {c0:?} sch {sch0} (regs {}, {} warps/SM): forward {f0:.1} ms, gradient {g0:.1} ms; one-ulp floor forward {:.2e}; vt vs tile forward {:.2e}", set.label, r0.regs, r0.warps, rel(&yu, &yf), rel(&yf, &yt));
+                let c = hasty_nufft::VsCfg { nws: 1, vxpad: 0, ..c0 };
+                let mut shapes: Vec<(usize, hasty_nufft::VwCfg)> = Vec::new();
+                for (ncw, nbw, ncp) in [(10usize, 3usize, 3usize), (8, 2, 2), (5, 1, 2), (12, 2, 2)] {
+                    for sch in [24usize, 16] {
+                        shapes.push((sch, hasty_nufft::VwCfg { ncw, nbw, nst: 2, nwt: sch, ncp }));
+                    }
+                }
+                for (nbw, sch) in [(1usize, 24usize), (1, 20), (2, 16)] {
+                    shapes.push((sch, hasty_nufft::VwCfg { ncw: 0, nbw, nst: 0, nwt: sch, ncp: 0 }));
+                }
+                for (sch, v) in shapes {
+                    if op.eng.set_vs_w(c, sch, v).is_err() {
+                        println!("    ws compare vw {v:?} sch {sch}: not valid");
+                        continue;
+                    }
+                    let r = op.eng.vs_active_v().unwrap().3;
+                    op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                    let ym = host(st, &y);
+                    op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                    let xm = host(st, &xo);
+                    let f = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                    let g = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                    let bw = ym == yf;
+                    println!("    ws compare vw {v:?} sch {sch} (regs {}, local {} B, {} warps/SM): forward {f:.1} ms, gradient {g:.1} ms; added error forward {:.2e}{}, adjoint of forward {:.2e}", r.regs, r.local, r.warps, rel(&ym, &yf), if bw { " (bitwise)" } else { "" }, rel(&xm, &xf));
+                }
+                op.eng.set_vs_v(Some(c0), sch0).unwrap();
+            }
+            if let Some((rc, rv, rr)) = keep.1 {
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                let xb = host(st, &xo);
+                let yud = st.clone_htod(&ulp(&host(st, &y))).unwrap();
+                op.adjoint(st, seg, &pts, &yud, &mut xo).unwrap();
+                let xu = host(st, &xo);
+                drop(yud);
+                op.forward(st, seg, &pts, &x, &mut y).unwrap();
+                let a0 = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                println!("    ws compare {:<16} ra {rc:?} {rv:?} (regs {}, {} warps/SM): adjoint {a0:.1} ms; one-ulp floor adjoint {:.2e}", set.label, rr.regs, rr.warps, rel(&xu, &xb));
+                for (chk, st5) in [(rc.chk, 5usize), (rc.chk, 6), (12, 5), (16, 5)] {
+                    let (c, v) = (hasty_nufft::RaCfg { chk, ..rc }, hasty_nufft::RaVar { inplace: true, stages: st5, lbmin: 0 });
+                    if op.eng.set_ra_v(Some(c), v).is_err() {
+                        println!("    ws compare ra {c:?} {v:?}: not valid");
+                        continue;
+                    }
+                    let r = op.eng.ra_active_v().unwrap().2;
+                    op.adjoint(st, seg, &pts, &y, &mut xo).unwrap();
+                    let xm = host(st, &xo);
+                    let ad = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                    let g = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                    println!("    ws compare ra {c:?} {v:?} (regs {}, spill {} B, {} warps/SM): adjoint {ad:.1} ms, gradient {g:.1} ms; added error adjoint {:.2e}{}", r.regs, r.spill, r.warps, rel(&xm, &xb), if xm == xb { " (bitwise)" } else { "" });
+                }
+                op.eng.set_ra_v(Some(rc), rv).unwrap();
+            }
+        }
+        if a.kl_compare {
+            // the knot-path layout (research/sample_kernels.md §17) off / on, everything else as the autotune chose
+            let keep = (op.eng.kl_active(), op.eng.kl_kernel());
+            for (lab, on, kc) in [("kl off", false, None), ("skip", true, None), ("kl kern", true, op.eng.kl_tune_cfg())] {
+                if lab == "kl kern" && kc.is_none() {
+                    continue;
+                }
+                op.eng.set_kl(on);
+                op.eng.set_kl_kernel(kc).unwrap();
+                let f = tm.ms(st, &mut || op.forward(st, seg, &pts, &x, &mut y).unwrap());
+                let ad = tm.ms(st, &mut || op.adjoint(st, seg, &pts, &y, &mut xo).unwrap());
+                let nm = tm.ms(st, &mut || { op.forward(st, seg, &pts, &x, &mut y).unwrap(); op.adjoint(st, seg, &pts, &y, &mut xo).unwrap() });
+                println!("    {:<28} {lab:<8} M {m:>9}: forward {f:>8.1} ms, adjoint {ad:>8.1} ms, gradient (forward + adjoint) {nm:>8.1} ms", set.label);
+            }
+            op.eng.set_kl(keep.0);
+            op.eng.set_kl_kernel(keep.1).unwrap();
+        }
+        let fft = (ff * nfwd, fi * ninv);
         let rest = (fwd - fft.0 - kern_t.0, adj - fft.1 - kern_t.1);
         println!(
             "    {:<28} M {:>9}: forward {fwd:>8.1} ms, adjoint {adj:>8.1} ms, normal {normal:>8.1} ms | kernels {} / {} ms, FFT {:.1} / {:.1} ms, pad/crop/rest {} / {} ms | tables {:.1} s, {:.0} B/sample on the GPU",
             set.label, m, fmt(kern_t.0), fmt(kern_t.1), fft.0, fft.1, fmt(rest.0), fmt(rest.1), setup_s, pts_bytes as f64 / m as f64
         );
         res.meas.push(Meas { label: set.label.clone(), m, fwd, adj, normal, points: 0.0, pts_bytes, setup_s, kern: kern_t, fft });
+        res.recs.push(serde_json::json!({
+            "matrix": edims, "grid": [op.eng.plan.nf[0], op.eng.plan.nf[1], op.eng.plan.nf[2]], "res_mm": eres.map(|v| v * 1e3), "coils": nc, "nseg": nseg, "order": order,
+            "model": model, "static_knot": sknot, "one_bin": op.eng.is_one_bin(), "fft_store": op.eng.fft_store().to_string(), "fft_store_bytes": op.eng.fft_store_bytes(), "set": set.label, "samples": m, "coil_batch": op.eng.cb, "channels": op.plan().channels, "seg_batch": op.lb, "seg_groups": op.groups, "passes": op.plan().passes, "max_grid_gib": a.max_grid as f64 / GB,
+            "forward_ms": fwd, "adjoint_ms": adj, "gradient_ms": normal, "kernels_ms": [kern_t.0, kern_t.1],
+            "fft_ms": [fft.0, fft.1], "fft_one_ms": [ff, fi], "fft_count": [nfwd, ninv], "rest_ms": [rest.0, rest.1],
+            "engine_gib": res.engine_bytes as f64 / GB, "tables_bytes": pts_bytes, "fft_desc": op.eng.grid_fft_desc(),
+            "tiles": format!("{:?} / {:?}", op.eng.tiles_fwd, op.eng.tiles_adj), "multi_tiles": format!("{:?}", op.eng.multi_shapes(1)),
+            "vs": format!("{:?}", op.eng.vs_active()), "vs_tune": format!("{:?}", op.eng.vs_tune_times()), "ra": format!("{:?}", op.eng.ra_active()), "ra_tune": format!("{:?}", op.eng.ra_tune_times()),
+            "kl": format!("active {} kernel {:?} tune {:?}", op.eng.kl_active(), op.eng.kl_kernel(), op.eng.kl_tune_times()),
+            "free_gib_after": free_mem(dev, st) as f64 / GB,
+        }));
         // propagate the tuned kernel times to the other sets (scaled by samples: the kernels are ∝ samples)
         if si > 0 && res.meas[0].kern.0.is_finite() {
             let r = m as f64 / res.meas[0].m as f64;
@@ -624,6 +1021,8 @@ struct Projection {
     vec_s: f64,
     iter_s: f64,
     setup_s: f64,
+    /// the step size's λ_max part of setup_s
+    step_s: f64,
     total_s: f64,
     resident_gb: f64,
     device_gb: f64,
@@ -692,9 +1091,11 @@ fn project(a: &Args, scan: &Scan, r: &ModelRes, sets: &[SetDef], nv: usize, nc: 
     let roundtrip_s = stack / mach.d2h + stack / mach.h2d;
     let vec_s = 10.0 * stack / mach.dev_bw;
     let iter_s = op_s + stream_s + roundtrip_s + vec_s;
-    // setup: sample tables / tile lists per set, segments per encode, autotune, step size (15 power iterations on 2 sets)
+    // setup: sample tables / tile lists per set, segments per encode, autotune, step size (--lam-method: Lanczos K
+    // steps on M N, or 12 power iterations each on N and M N; on set 0 and the middle set)
     let setup_tab = r.meas.iter().map(|m| m.setup_s / m.m as f64).sum::<f64>() / r.meas.len() as f64 * samples as f64;
-    let setup_s = setup_tab + r.seg_s * n_seg_tabs as f64 + r.tune_s + 2.0 * 15.0 * normal_s / sets.len() as f64;
+    let step_s = 2.0 * a.lam_applies as f64 * normal_s / sets.len() as f64;
+    let setup_s = setup_tab + r.seg_s * n_seg_tabs as f64 + r.tune_s + step_s;
     Projection {
         n_sets: sets.len(),
         samples,
@@ -705,6 +1106,7 @@ fn project(a: &Args, scan: &Scan, r: &ModelRes, sets: &[SetDef], nv: usize, nc: 
         vec_s,
         iter_s,
         setup_s,
+        step_s,
         total_s: setup_s + a.iters as f64 * iter_s,
         resident_gb: resident / GB,
         device_gb: device_only / GB,
@@ -825,7 +1227,40 @@ fn main() {
             let all: Vec<SetDef> = if temporal { scan.tsets.clone() } else { nonempty.iter().map(|s| (*s).clone()).collect() };
             let sel: Vec<SetDef> = pick(&all, a.nsets).into_iter().map(|i| all[i].clone()).collect();
             println!("  model {model}{}:", if temporal { format!(" (temporal B-spline {})", a.temporal.unwrap()) } else { String::new() });
-            let r = run_model(&dev, &st, &kern, &a, &scan, model, &mut sd, &grid, &support, &fit, &sel, &tm);
+            let cbs: Vec<Option<usize>> = if a.cb_list.is_empty() || !model.starts_with("seg") { vec![a.cb_cap] } else { a.cb_list.iter().map(|&c| Some(c)).collect() };
+            let mut r = ModelRes::default();
+            for (ci, cb) in cbs.iter().enumerate() {
+                if cbs.len() > 1 {
+                    println!("  --- coil batch cap {cb:?}");
+                }
+                let mut ab = a.clone();
+                ab.cb_cap = *cb;
+                if let (Some(c), true) = (cb, cbs.len() > 1 || !a.cb_list.is_empty()) {
+                    // the grid budget of exactly c coils, so that the order-3 (multi-image) path cannot take a larger
+                    // batch with extra buffers either
+                    let ed = a.matrix.unwrap_or(dims);
+                    let ge: usize = ed.iter().map(|&n| hasty_nufft::next_smooth_even(((1.25 * n as f64).ceil() as usize).max(20))).product();
+                    let ns = match model.as_str() { "seg-full" => a.nseg, "seg-b0" => scan.nseg, _ => 1 };
+                    // segment batches: channels per coil = the balanced group size
+                    let ns = a.seg_batch.filter(|&lb| lb < ns).map_or(ns, |lb| ns.div_ceil(ns.div_ceil(lb)));
+                    // plus the BFP y ↔ z intermediates of the default store (research/sample_kernels.md §20)
+                    ab.max_grid = hasty_nufft::seg_slot_bytes(ed, 1.25, 10, ns, *c, 1).max(c * ns * ge * 8) + (1 << 20);
+                }
+                let rr = run_model(&dev, &st, &kern, &ab, &scan, model, &mut sd, &grid, &support, &fit, &sel, &tm);
+                if let Some(p) = &a.jsonl {
+                    use std::io::Write;
+                    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(p).unwrap();
+                    for rec in &rr.recs {
+                        let mut rec = rec.clone();
+                        rec["cmdline"] = serde_json::json!(std::env::args().collect::<Vec<_>>().join(" "));
+                        rec["cb_cap"] = serde_json::json!(cb);
+                        writeln!(f, "{}", rec).unwrap();
+                    }
+                }
+                if ci == 0 {
+                    r = rr;
+                }
+            }
             let p = project(&a, &scan, &r, &all, nv, a.nvc, &mach);
             println!(
                 "    engine {:.2} GiB (coil batch {}), segment tables {:.2} GiB per encode ({:.1} s), resident problem {:.1} GiB ({}), device part without data {:.1} GiB",
@@ -838,7 +1273,7 @@ fn main() {
                 p.device_gb
             );
             println!(
-                "    per iteration: operator {:.2} s (forward + adjoint over {} sets, {:.3e} samples{}) + data streaming {:.2} s + prior round trip {:.2} s + ZMSHR1 vectors {:.2} s = {:.2} s; setup {:.0} s; {} iterations ≈ {:.1} min",
+                "    per iteration: operator {:.2} s (forward + adjoint over {} sets, {:.3e} samples{}) + data streaming {:.2} s + prior round trip {:.2} s + ZMSHR1 vectors {:.2} s = {:.2} s; setup {:.0} s (step size {:.0} s: {} set normal operators); {} iterations ≈ {:.1} min",
                 p.op_s,
                 p.n_sets,
                 p.samples as f64,
@@ -854,6 +1289,8 @@ fn main() {
                 p.vec_s,
                 p.iter_s,
                 p.setup_s,
+                p.step_s,
+                2 * a.lam_applies,
                 a.iters,
                 p.total_s / 60.0
             );
@@ -876,7 +1313,7 @@ fn main() {
                 "measured": r.meas.iter().map(|m| serde_json::json!({"set": m.label, "samples": m.m, "forward_ms": m.fwd, "adjoint_ms": m.adj, "normal_ms": m.normal,
                     "set_points_ms": m.points, "kernels_ms": [m.kern.0, m.kern.1], "fft_ms": [m.fft.0, m.fft.1], "tables_s": m.setup_s, "sample_table_bytes": m.pts_bytes})).collect::<Vec<_>>(),
                 "projection": {"sets": p.n_sets, "samples": p.samples, "operator_s": p.op_s, "normal_s": p.normal_s, "stream_s": p.stream_s, "prior_roundtrip_s": p.roundtrip_s,
-                    "vector_s": p.vec_s, "iteration_s": p.iter_s, "setup_s": p.setup_s, "iterations": a.iters, "total_s": p.total_s, "resident_gib": p.resident_gb,
+                    "vector_s": p.vec_s, "iteration_s": p.iter_s, "setup_s": p.setup_s, "step_size_s": p.step_s, "lam_applies_per_set": a.lam_applies, "iterations": a.iters, "total_s": p.total_s, "resident_gib": p.resident_gb,
                     "fits": p.fits, "kernel_fraction": p.kern_frac, "fft_fraction": p.fft_frac,
                     "plan": p.plan, "tables_streamed": p.tables_host, "data_streamed": p.data_host, "device_gib": p.device_gb},
             }));

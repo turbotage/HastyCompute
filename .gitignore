@@ -9,3 +9,13 @@ research/experiments/**/*.hv
 research/experiments/**/*.npy
 research/experiments/**/*.npz
 research/experiments/**/*.ncu-rep
+research/experiments/**/*.pkl
+research/experiments/**/*.pickle
+research/experiments/**/*.pt
+research/experiments/**/*.pth
+research/experiments/**/*.h5
+research/experiments/**/*.hdf5
+research/experiments/**/*.bin
+research/experiments/**/*.raw
+research/experiments/**/*.cubin
+research/experiments/**/cache/

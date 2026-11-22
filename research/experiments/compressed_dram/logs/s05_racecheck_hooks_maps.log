@@ -1,0 +1,38 @@
+=== s05_racecheck_hooks_maps: env HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=fft_axis /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_maps (2026-11-21 13:11:45)
+locked 13:11:45; power limit / draw / sm clock / memory used: 450.00 W, 89.87 W, 2565 MHz, 240 MiB
+========= COMPUTE-SANITIZER
+
+running 1 test
+test bfp_maps_match_f32 ... Static order 0 kprune true slab 390: maps bfp16 diag f32: forward 2.32e-5 (1.52 · 2^-b), adjoint 5.05e-5 (3.31), gradient 2.54e-5 (1.67); one ulp 3.6e-6 / 6.4e-6 / 1.2e-5; spread 3.8e-5 / 1.3e-5; adjointness f32 1.2e-7, bfp 9.5e-8
+Static order 0 kprune true slab 390: maps f32 diag bfp16: forward 1.50e-5 (0.98 · 2^-b), adjoint 3.31e-5 (2.17), gradient 2.17e-5 (1.42); one ulp 3.6e-6 / 6.4e-6 / 1.2e-5; spread 3.8e-5 / 1.3e-5; adjointness f32 1.2e-7, bfp 1.8e-7
+Static order 0 kprune true slab 390: maps bfp16 diag bfp16: forward 2.71e-5 (1.78 · 2^-b), adjoint 4.21e-5 (2.76), gradient 3.07e-5 (2.01); one ulp 3.6e-6 / 6.4e-6 / 1.2e-5; spread 3.8e-5 / 1.3e-5; adjointness f32 1.2e-7, bfp 4.9e-8
+Static order 0 kprune true slab 390: maps bfp24 diag bfp24: forward 3.51e-6 (58.93 · 2^-b), adjoint 3.25e-5 (544.74), gradient 1.41e-5 (236.75); one ulp 3.6e-6 / 6.4e-6 / 1.2e-5; spread 3.8e-5 / 1.3e-5; adjointness f32 1.2e-7, bfp 8.2e-8
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 4.92s
+
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+	Command being timed: "timeout 900 env HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1 /usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=fft_axis /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_maps"
+	User time (seconds): 14.33
+	System time (seconds): 5.98
+	Percent of CPU this job got: 402%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:05.05
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 17817436
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 4430005
+	Voluntary context switches: 24325
+	Involuntary context switches: 1313
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 13:11:50; power limit at end 450.00 W

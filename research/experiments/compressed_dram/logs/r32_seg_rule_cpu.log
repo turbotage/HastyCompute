@@ -1,0 +1,37 @@
+=== r32_seg_rule_cpu: env  /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_rule_cpu --test-threads 1 (2026-11-21 14:19:00)
+locked 14:19:00; power limit / draw / sm clock / memory used: 450.00 W, 58.87 W, 2565 MHz, 240 MiB
+
+running 6 tests
+test nodes_error_matches_the_tabulated_basis ... ok
+test noise_weighting_lowers_the_weighted_error ... ok
+test rule_is_monotone_in_the_field_spread ... ok
+test spectrum_tail_predicts_the_built_basis ... ok
+test time_grid_resolves_peaked_weights ... ok
+test white_floor_weights ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+	Command being timed: "timeout 900 env /tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin/hasty-nufft__seg_rule_cpu --test-threads 1"
+	User time (seconds): 4.64
+	System time (seconds): 0.15
+	Percent of CPU this job got: 1131%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.42
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 7740
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 3888
+	Voluntary context switches: 3798
+	Involuntary context switches: 1862
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0 14:19:00; power limit at end 450.00 W

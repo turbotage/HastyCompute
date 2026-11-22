@@ -1,0 +1,16 @@
+locked 15:41:42 power limit 300.00 W
+==PROF== Connected to process 1130431 (/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/bin/opbench_p2)
+NVIDIA GeForce RTX 4090 (23.5 GiB, 22.7 GiB free), PCIe pinned 21.4 / 20.1 GB/s (h2d / d2h), device 932 GB/s
+grid [150, 150, 75] @ 3.0 mm (450 × 450 × 225 mm, 1687500 voxels), 10 virtual coils, GNL on, FOV centre [0.0, 0.0, 50.0] mm, 40 iterations
+
+== 4D flow 0.4 min (26 s): 4D-flow yarn TR (/home/turbotage/Documents/GitHub/HastyCompute/data/hasty/seq/flow_thorax): 7 encodes, TR 11.290 ms, TE 1.600 ms, T_adc 7.98 ms, dwell 2.0 µs, 334 rotations, GIRF ideal
+   2338 readouts × 3990 ADC samples (step 1), 9328620 samples; 112 static sets (samples per set 67830 / 83790 / 99750 min / median / max), 7 temporal sets (one per encode); schedule 0.0 s
+  physics grid (GNL) + quadratic monomial fit over 734371 support voxels: 4.3 s
+  model seg-full (temporal B-spline 3):
+
+thread 'main' (1130431) panicked at crates/hasty-nufft/src/segnufft/vs.rs:378:13:
+HASTY_SEG_VS_CFG: VsCfg { nwc: 4, nws: 2, vxpad: 0 } sub-chunk 48 is not a valid vs shape for VsGeom { tx: 4, ty: 4, tz: 16, smax: 48 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+==PROF== Disconnected from process 1130431
+==ERROR== The application returned an error code (101).
+exit 101

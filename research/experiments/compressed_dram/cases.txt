@@ -1,0 +1,97 @@
+# research/bfp_storage.md §10 campaign: name|env|command ($B frozen new binaries, $OB frozen old binaries, $S phantom scan)
+# ── correctness (new binaries)
+t01_bfp_store||$B/hasty-fft__bfp_store --nocapture --test-threads 1
+t02_bfp_store_fused|HASTY_FFT_BFP_STORE=fused|$B/hasty-fft__bfp_store --nocapture --test-threads 1
+t03_bfp_store_vec_discard|HASTY_FFT_BFP_LOAD=vec HASTY_FFT_BFP_DISCARD=1|$B/hasty-fft__bfp_store --nocapture --test-threads 1
+t04_chanfft||$B/hasty-fft__chanfft --nocapture --test-threads 1
+t05_bfp_dram||$B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+t06_bfp_dram_vs|HASTY_SEG_VS=1 HASTY_SEG_VT=1|$B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+t07_bfp_dram_split|HASTY_SEG_MAXITEM=64|$B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+t08_bfp_dram_zero_full|HASTY_SEG_ZERO=full|$B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+t09_bfp_dram_noslab_nodiscard|HASTY_SEG_FFT_SLAB=0 HASTY_FFT_SLAB_DISCARD=0|$B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+t10_seg_fft_traffic||$B/hasty-nufft__seg_fft_traffic --nocapture --test-threads 1
+t11_seg_fft_traffic_nodiscard|HASTY_FFT_SLAB_DISCARD=0|$B/hasty-nufft__seg_fft_traffic --nocapture --test-threads 1
+t12_seg_fft_store||$B/hasty-nufft__seg_fft_store --nocapture --test-threads 1
+t13_seg_defaults||$B/hasty-nufft__seg_defaults --nocapture --test-threads 1
+# ── sanitizers on tiny cases (kernel-name filters; peak RSS in the log)
+s01_memcheck_bfp_store_fused|HASTY_FFT_BFP_STORE=fused HASTY_FFT_BFP_LOAD=vec HASTY_FFT_BFP_DISCARD=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-fft__bfp_store --nocapture --test-threads 1 bfp_store_short_batch
+s02_memcheck_bfp_dram|HASTY_BFP_TEST_CASES=0,3 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+s03_memcheck_bfp_dram_vs|HASTY_BFP_TEST_CASES=0,4 HASTY_SEG_VS=1 HASTY_SEG_VT=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool memcheck --print-limit 20 $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_grid
+s04_racecheck_fft_fused|HASTY_FFT_BFP_STORE=fused HASTY_FFT_BFP_LOAD=vec HASTY_FFT_BFP_DISCARD=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=fft_axis $B/hasty-fft__bfp_store --nocapture --test-threads 1 bfp_store_short_batch
+s05_racecheck_hooks_maps|HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=fft_axis $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_maps
+#s06_racecheck_gather_grid (wrong filter syntax, rerun as s06b)|HASTY_BFP_TEST_CASES=0 HASTY_SEG_VS=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name regex:seg_forward $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_grid
+s07_synccheck_bfp_dram|HASTY_BFP_TEST_CASES=0 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool synccheck --print-limit 20 $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1
+# ── FFT pair, 320³ grid, 256³ image, 24 channels (median of 15)
+p01_fft_slab_f32||$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 1 --store f32
+p02_fft_slab_b24||$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 1 --store bfp24
+p03_fft_slab_b24_fused|HASTY_FFT_BFP_STORE=fused|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 1 --store bfp24
+p04_fft_slab_b24_vec|HASTY_FFT_BFP_LOAD=vec|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 1 --store bfp24
+p05_fft_slab_b24_discard|HASTY_FFT_BFP_DISCARD=1|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 1 --store bfp24
+p06_fft_whole_f32||$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 0 --store f32
+p07_fft_whole_b24||$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 0 --store bfp24
+p08_fft_whole_b24_fused|HASTY_FFT_BFP_STORE=fused|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 0 --store bfp24
+p09_fft_whole_b24_vec|HASTY_FFT_BFP_LOAD=vec|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 0 --store bfp24
+p10_fft_whole_b22_dense|X=1|$B/bfp_fft_bench 320 320 320 256 256 256 24 --noerr --reps 15 --slab 0 --store bfp22 --dense
+# ── one-set gradient, order 3: OLD = the binary frozen before this session with the f32 FFT store; NEW = new defaults;
+#    NEW_ALL = every compressed buffer on (y ↔ z bfp24 also under slabs, grid bfp24, coil maps bfp24, diagonals bfp24);
+#    *_fftb24 = new defaults with the y ↔ z store forced to bfp24 under slabs (the §20 default)
+p11_256_old|HASTY_SEG_FFT_STORE=f32|$OB/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p12_256_new||$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p12b_256_new_fftb24|HASTY_SEG_FFT_STORE=bfp24|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p13_256_all|HASTY_SEG_FFT_STORE=bfp24 HASTY_SEG_GRID_STORE=bfp24 HASTY_SEG_MAPS_STORE=bfp24 HASTY_SEG_DIAG_STORE=bfp24|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 256,256,256 --order 3 --frames 20 --nseg 10 --vcoils 10 --cb-list 5 --jsonl $D/perf.jsonl
+p14_640_old|HASTY_SEG_FFT_STORE=f32|$OB/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+p15_640_new||$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+p16_640_all|HASTY_SEG_FFT_STORE=bfp24 HASTY_SEG_GRID_STORE=bfp24 HASTY_SEG_MAPS_STORE=bfp24 HASTY_SEG_DIAG_STORE=bfp24|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+p17_vel_old|HASTY_SEG_FFT_STORE=f32|$OB/opbench --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --jsonl $D/perf.jsonl
+p18_vel_new||$B/opbench --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --jsonl $D/perf.jsonl
+p19_vel_new_fftb24|HASTY_SEG_FFT_STORE=bfp24|$B/opbench --models seg-full --nseg 10 --vcoils 10 --sets 1 --seq flow --order 3 --knots2d 6:1,16:3 --scan-min 4.4 --reps 1 --jsonl $D/perf.jsonl
+# ── accuracy on ph0001 against an all-f32 engine and its one-ulp floor (per switch, then all on)
+a01_static_o3|RAYON_NUM_THREADS=8|$B/bfp_phantom $S --order 3 --switches fft=bfp24/grid=bfp24/grid=bfp22/grid=bfp20/maps=bfp24/diag=bfp24/maps=bfp20,diag=bfp20/maps=bfp16,diag=bfp16/fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24
+a02_knot2d_o3|RAYON_NUM_THREADS=8|$B/bfp_phantom $S --order 3 --knots2d 3:1,8:3 --readouts 340 --switches fft=bfp24/grid=bfp24/grid=bfp22/grid=bfp20/maps=bfp24/diag=bfp24/maps=bfp20,diag=bfp20/maps=bfp16,diag=bfp16/fft=bfp24,grid=bfp24,maps=bfp24,diag=bfp24
+# ── regression: every hasty-fft / hasty-nufft test binary (known pre-existing failures: seg_joint_chunks, seg_ra_vt::ra_static_orders)
+r01_bfp_store||$B/hasty-fft__bfp_store --test-threads 1
+r02_bluestein||$B/hasty-fft__bluestein --test-threads 1
+r03_chanfft||$B/hasty-fft__chanfft --test-threads 1
+r04_conv||$B/hasty-fft__conv --test-threads 1
+r05_correctness||$B/hasty-fft__correctness --test-threads 1
+r06_hasty_fft||$B/hasty-fft__hasty_fft --test-threads 1
+r07_large_grid||$B/hasty-fft__large_grid --test-threads 1
+r08_accuracy||$B/hasty-nufft__accuracy --test-threads 1
+r09_chirp||$B/hasty-nufft__chirp --test-threads 1
+r10_hasty_nufft||$B/hasty-nufft__hasty_nufft --test-threads 1
+r11_seg_b0_direct||$B/hasty-nufft__seg_b0_direct --test-threads 1
+r12_seg_basis_cpu||$B/hasty-nufft__seg_basis_cpu --test-threads 1
+r13_seg_bfp_dram||$B/hasty-nufft__seg_bfp_dram --test-threads 1
+r14_seg_defaults||$B/hasty-nufft__seg_defaults --test-threads 1
+r15_seg_fat_union_cpu||$B/hasty-nufft__seg_fat_union_cpu --test-threads 1
+r16_seg_fat_union_gpu||$B/hasty-nufft__seg_fat_union_gpu --test-threads 1
+r17_seg_fft_store||$B/hasty-nufft__seg_fft_store --test-threads 1
+r18_seg_fft_traffic||$B/hasty-nufft__seg_fft_traffic --test-threads 1
+r19_seg_frames||$B/hasty-nufft__seg_frames --test-threads 1
+r20_seg_joint||$B/hasty-nufft__seg_joint --test-threads 1
+r21_seg_joint_chunks||$B/hasty-nufft__seg_joint_chunks --test-threads 1
+r22_seg_kernel||$B/hasty-nufft__seg_kernel --test-threads 1
+r23_seg_kl||$B/hasty-nufft__seg_kl --test-threads 1
+r24_seg_knot||$B/hasty-nufft__seg_knot --test-threads 1
+r25_seg_knot2d||$B/hasty-nufft__seg_knot2d --test-threads 1
+r26_seg_knot_hi||$B/hasty-nufft__seg_knot_hi --test-threads 1
+r27_seg_knot_kv||$B/hasty-nufft__seg_knot_kv --test-threads 1
+r28_seg_multi||$B/hasty-nufft__seg_multi --test-threads 1
+r29_seg_phase2||$B/hasty-nufft__seg_phase2 --test-threads 1
+r30_seg_pruned||$B/hasty-nufft__seg_pruned --test-threads 1
+r31_seg_ra_vt||$B/hasty-nufft__seg_ra_vt --test-threads 1
+r32_seg_rule_cpu||$B/hasty-nufft__seg_rule_cpu --test-threads 1
+r33_seg_split||$B/hasty-nufft__seg_split --test-threads 1
+r34_seg_stream||$B/hasty-nufft__seg_stream --test-threads 1
+r35_seg_tile_block||$B/hasty-nufft__seg_tile_block --test-threads 1
+r36_seg_vs||$B/hasty-nufft__seg_vs --test-threads 1
+r37_seg_warp_cpu||$B/hasty-nufft__seg_warp_cpu --test-threads 1
+r38_seg_warp_gpu||$B/hasty-nufft__seg_warp_gpu --test-threads 1
+r39_seg_wf||$B/hasty-nufft__seg_wf --test-threads 1
+r40_segnufft||$B/hasty-nufft__segnufft --test-threads 1
+s06b_racecheck_gather_grid|HASTY_BFP_TEST_CASES=0 HASTY_SEG_VS=1 HASTY_NVRTC_LINEINFO=1|/usr/local/cuda/bin/compute-sanitizer --tool racecheck --print-limit 20 --kernel-name kns=seg_forward $B/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1 bfp_grid
+p16b_640_maps_bfp16|HASTY_SEG_MAPS_STORE=bfp16 HASTY_SEG_DIAG_STORE=bfp16|$B/opbench --models seg-full --sets 1 --seq flow --no-gnl --reps 3 --matrix 640,384,320 --order 3 --frames 20 --nseg 10 --vcoils 1 --cb-list 1 --jsonl $D/perf.jsonl
+# ── after the f32-default decision (binaries rebuilt into $SP/cz/bin2; run on resume)
+t14_seg_defaults_f32||/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin2/hasty-nufft__seg_defaults --nocapture --test-threads 1
+t15_seg_fft_store_f32||/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin2/hasty-nufft__seg_fft_store --nocapture --test-threads 1
+t16_bfp_dram_f32||/tmp/claude-1000/-home-turbotage-Documents-GitHub-HastyCompute/c25caa1d-d864-44cf-9019-66f29ac9cb24/scratchpad/cz/bin2/hasty-nufft__seg_bfp_dram --nocapture --test-threads 1

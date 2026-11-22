@@ -1,0 +1,1615 @@
+  fft_axis               (3, 384, 1)        x 320   25.58 ms R   7.554 W   7.855 GB
+  fft_axis               (1000, 1, 1)       x 320   11.37 ms R   0.002 W   0.949 GB
+  --
+  fft_axis               (1000, 480, 1)     x   1   18.67 ms R   8.018 W   6.872 GB
+  --
+  seg_forward_vs         (284991, 1, 1)     x   1   56.00 ms R  11.340 W   0.048 GB
+  --
+  seg_tile_count         (5238, 1, 1)       x   1    0.05 ms R   0.021 W   0.017 GB
+  --
+  seg_zero_empty         (1060369, 1, 1)    x   1    0.96 ms R   0.017 W   0.012 GB
+  --
+  seg_adjoint_kl         (1340852, 1, 1)    x   1   41.86 ms R   2.543 W   6.864 GB
+  --
+  fft_axis               (1000, 480, 1)     x   1   18.55 ms R   6.874 W   8.014 GB
+  fft_axis               (1000, 1, 1)       x   1    0.06 ms R   0.025 W   0.023 GB
+  --
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.004 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.003 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.004 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.04 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.000 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.003 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.04 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.04 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.04 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.003 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.002 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.003 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.05 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.000 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.002 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --
+  fft_axis               (1000, 1, 1)       x   1    0.05 ms R   0.025 W   0.001 GB
+  fft_axis               (3, 384, 1)        x   1    0.06 ms R   0.024 W   0.001 GB
+  --
+  l2_discard             (64, 1, 1)         x   1    0.00 ms R   0.000 W   0.000 GB
+  --

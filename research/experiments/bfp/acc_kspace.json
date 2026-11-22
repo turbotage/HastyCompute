@@ -1,0 +1,93 @@
+{
+ "sigma": 39.97583861630753,
+ "readouts": 256,
+ "peak_over_sigma": 3796.563173745274,
+ "rms_over_sigma": 84.60495066632632,
+ "samples_per_coil": {
+  "bfp8": {
+   "rms_err_over_sigma": 0.3503143223794541,
+   "max_err_over_sigma": 35.074365307410424
+  },
+  "bfp10": {
+   "rms_err_over_sigma": 0.0870286074800915,
+   "max_err_over_sigma": 8.615714740524982
+  },
+  "bfp12": {
+   "rms_err_over_sigma": 0.021826193458518005,
+   "max_err_over_sigma": 2.182082133744003
+  },
+  "bfp14": {
+   "rms_err_over_sigma": 0.005452568154667309,
+   "max_err_over_sigma": 0.5516429425177056
+  },
+  "bfp16": {
+   "rms_err_over_sigma": 0.001361370171330941,
+   "max_err_over_sigma": 0.1363550069250191
+  },
+  "bfp18": {
+   "rms_err_over_sigma": 0.0003404657959296998,
+   "max_err_over_sigma": 0.033103321249484945
+  },
+  "bfp20": {
+   "rms_err_over_sigma": 8.533163314069116e-05,
+   "max_err_over_sigma": 0.008534089951289705
+  },
+  "bfp22": {
+   "rms_err_over_sigma": 2.1266793726859377e-05,
+   "max_err_over_sigma": 0.0020226477525992713
+  },
+  "bfp24": {
+   "rms_err_over_sigma": 5.331534916352162e-06,
+   "max_err_over_sigma": 0.0005094080333509384
+  },
+  "f32": {
+   "rms_err_over_sigma": 1.50761378968812e-06
+  }
+ },
+ "coils_per_sample": {
+  "bfp8": {
+   "rms_err_over_sigma": 0.4842516295868706,
+   "max_err_over_sigma": 35.666137023720005
+  },
+  "bfp10": {
+   "rms_err_over_sigma": 0.12071254734579288,
+   "max_err_over_sigma": 8.843919724854254
+  },
+  "bfp12": {
+   "rms_err_over_sigma": 0.030229430127430294,
+   "max_err_over_sigma": 2.2072112833821826
+  },
+  "bfp14": {
+   "rms_err_over_sigma": 0.0075600787074443674,
+   "max_err_over_sigma": 0.5577743768594237
+  },
+  "bfp16": {
+   "rms_err_over_sigma": 0.0018900782859218445,
+   "max_err_over_sigma": 0.13941452092089152
+  },
+  "bfp18": {
+   "rms_err_over_sigma": 0.00047294368233771284,
+   "max_err_over_sigma": 0.034725727319172985
+  },
+  "bfp20": {
+   "rms_err_over_sigma": 0.00011837764079570989,
+   "max_err_over_sigma": 0.00884054050925259
+  },
+  "bfp22": {
+   "rms_err_over_sigma": 2.946523546411392e-05,
+   "max_err_over_sigma": 0.00211600901340504
+  },
+  "bfp24": {
+   "rms_err_over_sigma": 7.380447647963255e-06,
+   "max_err_over_sigma": 0.0005346808179118372
+  },
+  "f32": {
+   "rms_err_over_sigma": 1.5076137896881202e-06
+  }
+ },
+ "uniform_step_over_sigma": {
+  "0.25": 0.07216878364870323,
+  "0.1": 0.02886751345948129,
+  "0.05": 0.014433756729740645
+ }
+}
