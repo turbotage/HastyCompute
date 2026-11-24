@@ -1,0 +1,9 @@
+[sinusoidal_truth] stage 0: cost 8.4330e0, v [-13.040370518535116, 0.0, 0.0] mm/s
+[sinusoidal_truth] stage 1: cost 8.2864e0, v [-13.114241858522616, 1.0786324528118678, 0.0] mm/s
+[sinusoidal_truth] stage 2: cost 8.2750e0, v [-12.567169745620458, 1.0690697375169658, -0.17468246049269914] mm/s
+[sinusoidal_truth] R² 0.0855  v fit [12.57, 1.07, 0.17] mm/s  (truth [12.0, 1.2, 0.18], fundamental)  δ fit [0.61, 2.04, 4.1]
+[nonsinusoidal_truth] stage 0: cost 8.5067e0, v [12.417983761499716, 0.0, 0.0] mm/s
+[nonsinusoidal_truth] stage 1: cost 8.3678e0, v [12.546848850890921, 1.0239428979959249, 0.0] mm/s
+[nonsinusoidal_truth] stage 2: cost 8.3530e0, v [11.826432542969908, 1.0229675148580937, 0.21285253923815814] mm/s
+[nonsinusoidal_truth] R² 0.0796  v fit [11.83, 1.02, 0.21] mm/s  (truth [12.0, 1.2, 0.18], fundamental)  δ fit [0.63, 2.13, 4.26]
+done in 310.4 s → research/experiments/csf_inflow/roundtrip

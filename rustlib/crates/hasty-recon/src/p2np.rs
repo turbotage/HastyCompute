@@ -129,6 +129,39 @@ pub struct P2np<'a> {
     pub group_bytes: usize,
 }
 
+/// One set's inner PCG of [`P2np::admm_x_step`] on the device: N_t p = E_tᴴ E_t p through the set operator (no data),
+/// the clip metric's circulant or the identity.
+struct DevSetPcg<'o> {
+    op: &'o mut dyn SetOp,
+    st: &'o Arc<CudaStream>,
+    t: usize,
+    pre: Option<&'o mut CirculantPrecond>,
+}
+
+impl crate::admm::SetPcgOps for DevSetPcg<'_> {
+    type V = CudaSlice<C32>;
+    fn dot(&mut self, a: &CudaSlice<C32>, b: &CudaSlice<C32>) -> Result<f64, Error> {
+        Ok(self.op.kernels().dot(self.st, a, b)?.re)
+    }
+    fn axpby(&mut self, a: f64, x: &CudaSlice<C32>, b: f64, y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.op.kernels().axpby(self.st, Complex64::new(a, 0.0), x, Complex64::new(b, 0.0), y)
+    }
+    fn normal(&mut self, p: &CudaSlice<C32>, out: &mut CudaSlice<C32>) -> Result<f64, Error> {
+        let mut e = self.st.alloc_zeros::<C32>(self.op.len_y(self.t))?;
+        self.op.forward(self.st, self.t, p, &mut e)?;
+        let n = self.op.kernels().dot(self.st, &e, &e)?.re;
+        self.op.adjoint(self.st, self.t, &e, out)?;
+        hasty_cuda::pace::pace(self.st);
+        Ok(n)
+    }
+    fn precond(&mut self, r: &CudaSlice<C32>, z: &mut CudaSlice<C32>) -> Result<(), Error> {
+        match self.pre.as_mut() {
+            Some(c) => c.apply(self.st, r, z),
+            None => Ok(self.st.memcpy_dtod(r, z)?),
+        }
+    }
+}
+
 /// Stochastic coil sampling for the data term of [`P2np`]: each gradient uses a subset of the coils and stays
 /// unbiased (inclusion weights): ∇̃f = Σ_{c < keep} E_cᴴ r_c + w Σ_{c ∈ D} E_cᴴ r_c, D = `draw` of the remaining
 /// nc − keep coils, w = 1 / P(c ∈ D). With random reshuffling the remaining coils are partitioned at random into
@@ -452,6 +485,82 @@ impl<'a> P2np<'a> {
         Ok(Self { op, ys, circ, res, blk, sampling: None, cur: None, cur_k: 0, iters_total: 0, m_set: vec![], stage: None, lagged: None, anchor: None, lag_stats: (0, 0), lag_hist: [(0, false); 2], streamer: None, circ_map: vec![], group_bytes: 0 })
     }
 
+    /// ADMM's data step (`crate::admm`) on host stacks: for every set t, x_t ← `inner` PCG iterations on
+    /// (N_t + ρI) x = E_tᴴ y_t + ρ (z_t − u_t), warm-started at x_t, each set solved on its own (own α, β; the data term
+    /// is block-diagonal over the sets) and entirely on the device: the set's image, v_t = z_t − u_t, five PCG vectors
+    /// and its data (staged from the store or resident) — never a stack. y_t is read once per call (the initial
+    /// residual); the inner iterations apply N_t only. `metric`: the clip metric (sets visited in its symbol order),
+    /// None: plain CG. Exact gradients only (no coil sampling, no lagged gradients).
+    #[allow(clippy::too_many_arguments)]
+    pub fn admm_x_step(&mut self, st: &Arc<CudaStream>, x: &mut crate::hoststack::HostStack, z: &crate::hoststack::HostStack, u: &crate::hoststack::HostStack, rho: f64, inner: usize, mut metric: Option<&mut crate::admm::ClipMetric>) -> Result<crate::admm::XStats, Error> {
+        use rayon::prelude::*;
+        assert!(self.sampling.is_none() && self.lagged.is_none(), "ADMM data step: exact gradients only (no --coil-sampling / --lagged)");
+        let t0 = std::time::Instant::now();
+        let nt = self.op.nsets();
+        assert_eq!(x.nsets(), nt, "ADMM data step: {} chunks for {nt} sets", x.nsets());
+        let n = x.lens[0];
+        assert!((0..nt).all(|t| x.lens[t] == n && z.lens[t] == n && u.lens[t] == n && self.op.len_x(t) == n), "ADMM data step: every set must hold one image of {n} elements");
+        let order: Vec<usize> = match metric.as_ref() {
+            Some(m) => m.order(),
+            None => (0..nt).collect(),
+        };
+        let (msecs0, mupd0) = metric.as_ref().map_or((0.0, 0), |m| (m.secs, m.updates));
+        let mut dx = st.alloc_zeros::<C32>(n)?;
+        let mut dr = st.alloc_zeros::<C32>(n)?;
+        let mut dg = st.alloc_zeros::<C32>(n)?;
+        let mut w = [st.alloc_zeros::<C32>(n)?, st.alloc_zeros::<C32>(n)?, st.alloc_zeros::<C32>(n)?];
+        let mut hv = vec![C32::new(0.0, 0.0); n];
+        let mut stats = crate::admm::XStats::default();
+        let mut ratios: Vec<f64> = Vec::with_capacity(nt);
+        let op = &mut *self.op;
+        let ys = &self.ys;
+        let mut body = |t: usize, y: &CudaSlice<C32>| -> Result<(), Error> {
+            // v_t = z_t − u_t on the host, x_t and v_t up (r holds v_t until the residual is formed)
+            hv.par_iter_mut().zip(z.chunk(t).par_iter().zip(u.chunk(t).par_iter())).for_each(|(h, (a, b))| *h = C32::new(a.re - b.re, a.im - b.im));
+            st.memcpy_htod(x.chunk(t), &mut dx)?;
+            st.memcpy_htod(&hv, &mut dr)?;
+            // g = ∇f_t(x) = E_tᴴ(E_t x − y_t), f_t(x)
+            let f0 = {
+                let mut res = unsafe { st.alloc::<C32>(op.len_y(t))? };
+                op.forward_residual(st, t, &dx, y, &mut res)?;
+                let f0 = 0.5 * op.kernels().dot(st, &res, &res)?.re;
+                op.adjoint(st, t, &res, &mut dg)?;
+                f0
+            };
+            // r = b − (N + ρI) x = ρ v − ρ x − g
+            op.kernels().axpby(st, Complex64::new(-rho, 0.0), &dx, Complex64::new(rho, 0.0), &mut dr)?;
+            op.kernels().axpby(st, Complex64::new(-1.0, 0.0), &dg, Complex64::new(1.0, 0.0), &mut dr)?;
+            let pre = match metric.as_mut() {
+                Some(m) => Some(m.prepare(st, t, rho)?),
+                None => None,
+            };
+            let mut ops = DevSetPcg { op: &mut *op, st, t, pre };
+            let o = crate::admm::pcg_inner(&mut ops, rho, inner, &mut dx, &mut dr, &mut dg, f0, &mut w)?;
+            st.memcpy_dtoh(&dx, x.chunk_mut(t))?;
+            stats.add(f0, &o, &mut ratios);
+            Ok(())
+        };
+        match self.stage.take() {
+            Some(mut sg) => {
+                let r = sg.for_each(st, &order, None, &mut body);
+                self.stage = Some(sg);
+                r?;
+            }
+            None => {
+                for &t in &order {
+                    body(t, ys[t])?;
+                }
+            }
+        }
+        stats.finish(ratios);
+        stats.secs = t0.elapsed().as_secs_f64();
+        if let Some(m) = metric.as_ref() {
+            stats.metric_secs = m.secs - msecs0;
+            stats.metric_updates = m.updates - mupd0;
+        }
+        Ok(stats)
+    }
+
     /// set-streaming statistics of host-resident runs: (sets, bytes up, bytes down)
     pub fn streamer_stats(&self) -> Option<(usize, usize, usize)> {
         self.streamer.as_ref().map(|s| s.stats)
@@ -527,6 +636,56 @@ impl<'a> P2np<'a> {
     /// [`with_circ_map`](Self::with_circ_map) for a non-empty map, unchanged otherwise
     pub fn with_circ_map_opt(self, map: Vec<usize>) -> Self {
         if map.is_empty() { self } else { self.with_circ_map(map) }
+    }
+
+    /// Mean diagonal of the per-set normal operator, tr(N_t)/n: the Hutchinson estimate zᴴ N_t z / zᴴ z for a fixed
+    /// pseudo-random ±1 ± i vector (exact in expectation; one normal application per set), averaged over set 0 and
+    /// the middle set. The data term's scale for the temporal anchor (`crate::tanchor`, research/temporal_pyramid.md §6
+    /// rule 2: μ in units of the mean diagonal).
+    pub fn mean_diag(&mut self, st: &Arc<CudaStream>) -> Result<f64, Error> {
+        let idx: Vec<usize> = { let mut v = vec![0, self.op.nsets() / 2]; v.dedup(); v };
+        let (mut num, mut den) = (0.0f64, 0.0f64);
+        for &t in &idx {
+            let nx = self.op.len_x(t);
+            let mut s = 0x9E37_79B9_7F4A_7C15u64 ^ (t as u64).wrapping_mul(0xD1B5_4A32_D192_ED03);
+            let z: Vec<C32> = (0..nx)
+                .map(|_| {
+                    s ^= s << 13;
+                    s ^= s >> 7;
+                    s ^= s << 17;
+                    C32::new(if s & 1 == 0 { 1.0 } else { -1.0 }, if s & 2 == 0 { 1.0 } else { -1.0 })
+                })
+                .collect();
+            let zd = st.clone_htod(&z)?;
+            let mut w = st.alloc_zeros::<C32>(nx)?;
+            self.normal_full(st, t, &zd, &mut w)?;
+            num += self.op.kernels().dot(st, &zd, &w)?.re;
+            den += self.op.kernels().dot(st, &zd, &zd)?.re;
+        }
+        Ok(num / den.max(1e-300))
+    }
+
+    /// λ_max of the fixed metric M_t alone (power iteration, `iters` steps, from below), maximised over `sets` (one
+    /// per distinct circulant suffices). Bounds the temporal anchor's share of λ_max(M (N + A)) ≤ λ_max(M N) +
+    /// μ λ_max(M) (`crate::tanchor`). FFTs only, no data.
+    pub fn metric_lmax(&mut self, st: &Arc<CudaStream>, sets: &[usize], iters: usize) -> Result<f64, Error> {
+        let mut best: f64 = 0.0;
+        for &t in sets {
+            let nx = self.op.len_x(t);
+            let host: Vec<C32> = (0..nx).map(|i| C32::new(1.0 + 0.1 * (i % 7) as f32, 0.05 * (i % 5) as f32)).collect();
+            let mut v = st.clone_htod(&host)?;
+            let mut w = st.alloc_zeros::<C32>(nx)?;
+            let mut lam = 0.0;
+            for _ in 0..iters {
+                let n = self.op.kernels().dot(st, &v, &v)?.re.sqrt();
+                self.op.kernels().axpby(st, Complex64::new(0.0, 0.0), &w, Complex64::new(1.0 / n.max(1e-300), 0.0), &mut v)?;
+                self.precond(st, t, &v, &mut w, false)?;
+                lam = self.op.kernels().dot(st, &w, &w)?.re.sqrt();
+                std::mem::swap(&mut v, &mut w);
+            }
+            best = best.max(lam);
+        }
+        Ok(best)
     }
 
     /// z = M_t r (or M_t⁻¹ r), M_t block-diagonal over the set's frames
@@ -717,6 +876,20 @@ impl<'a> P2np<'a> {
                 // every entry is written by the group forward: no zeroing
                 let mut rs: Vec<CudaSlice<C32>> = sub.iter().map(|&t| unsafe { st.alloc::<C32>(op.len_y(t)) }).collect::<Result<_, _>>()?;
                 match stage.as_mut() {
+                    // an operator that forms its own residuals (synthetic data): the staged store data must not be
+                    // read (before 2026-11-22 the branch below subtracted the MEASURED data from E x here, so every
+                    // pooled / grouped solve of an inverse crime with staged data solved the measured problem)
+                    Some(_) if op.residual_ignores_data() => {
+                        let dummy = st.alloc_zeros::<C32>(1)?;
+                        let d: Vec<&CudaSlice<C32>> = sub.iter().map(|_| &dummy).collect();
+                        {
+                            let mut refs: Vec<&mut CudaSlice<C32>> = rs.iter_mut().collect();
+                            op.forward_residual_group(st, sub, xd, &d, &mut refs)?;
+                        }
+                        for r in &rs {
+                            f += 0.5 * op.kernels().dot(st, r, r)?.re;
+                        }
+                    }
                     Some(sg) => {
                         {
                             let mut refs: Vec<&mut CudaSlice<C32>> = rs.iter_mut().collect();
@@ -1072,6 +1245,120 @@ pub fn run_objective(
     run_objective_with(obj, st, x, precond, alpha, iters, denoise, report, ctl, &StateOpts::default())
 }
 
+/// Step safeguard of the quasi-Newton (ZMSHR1) loops, process-wide (recon_p2np --step-guard F; 0 bits = off, the
+/// default): when the data term at the new iterate exceeds F × its value at the previous iterate and the step that
+/// produced it was a ZMSHR1 step, the new iterate is rejected: x, ∇f and f are restored from the secant pair's
+/// x_prev, g_prev (no extra gradient) and the plain scalar step (τ = 1, no rank-one term; the metric step for ZMSHR1-M)
+/// is taken from there. A rejection costs the one gradient spent on the rejected iterate. Plain steps are never
+/// rejected (no loop when the prior itself raises the data term).
+static STEP_GUARD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn set_step_guard(factor: Option<f64>) {
+    STEP_GUARD.store(factor.map_or(0, f64::to_bits), std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn step_guard() -> Option<f64> {
+    let b = STEP_GUARD.load(std::sync::atomic::Ordering::Relaxed);
+    (b != 0).then(|| f64::from_bits(b))
+}
+
+/// Step of the prox the loop is about to call (process-wide, f64 bits; 0 = unset): the denoiser of a FIXED objective
+/// f + λR thresholds at λ · step (prox of step · λR). PnP-ISTA / P²nP set α (the scaled-gradient step), the
+/// metric-consistent ZMSHR1 (`set_prox_in_metric`) α τ_k, ADMM 1/ρ. A denoiser with a frozen penalty λ reads it; the
+/// adaptive κσ̂ rule ignores it.
+static PROX_STEP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn set_prox_step(step: f64) {
+    PROX_STEP.store(step.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn prox_step() -> Option<f64> {
+    let b = PROX_STEP.load(std::sync::atomic::Ordering::Relaxed);
+    (b != 0).then(|| f64::from_bits(b))
+}
+
+/// Metric-consistent prox for global ZMSHR1 (Becker–Fadili–Ochs 2019; process-wide, recon_p2np --prox-metric): the
+/// step x − S α∇f, S = τI + β w wᵀ, is followed by the prox of h in the metric S⁻¹ = dI + κ w wᵀ (d = 1/τ, Sherman–
+/// Morrison) instead of the Euclidean prox: x⁺ = prox_{h/d}(y + (κ a*/d) w), a* the root of the strongly monotone
+/// L(a) = a − ⟨w, y − prox_{h/d}(y + (κ a/d) w)⟩ (one denoiser call per evaluation). Fixed points: 0 ∈ α∇f + ∂h for
+/// every S, i.e. the metric no longer displaces the fixed point (thm:displacement). Needs a denoiser that is the prox
+/// of a fixed h scaled by `prox_step` (frozen penalty).
+static PROX_IN_METRIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_prox_in_metric(on: bool) {
+    PROX_IN_METRIC.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn prox_in_metric() -> bool {
+    PROX_IN_METRIC.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The root of the metric-consistent prox (see [`set_prox_in_metric`]) on host vectors: y the step's output, w the
+/// rank-one direction, (d, κ) the metric S⁻¹ = dI + κ w wᵀ; `prox(v)` applies prox_{h/d} in place. Secant iterations on
+/// L(a) from a = 0 (slope ≥ 1 + min(0, κ)‖w‖²/d > 0), at most `max_eval` prox calls; returns (x⁺, a*, |L(a*)|, calls).
+pub fn metric_prox_root(y: &[C32], w: &[C32], d: f64, kappa: f64, max_eval: usize, tol: f64, prox: &mut dyn FnMut(&mut Vec<C32>)) -> (Vec<C32>, f64, f64, usize) {
+    use rayon::prelude::*;
+    let dotw = |v: &[C32]| -> f64 { w.par_iter().zip(v.par_iter()).map(|(a, b)| a.re as f64 * b.re as f64 + a.im as f64 * b.im as f64).sum() };
+    let wy = dotw(y);
+    let ww = dotw(w);
+    let mut eval = |a: f64, n: &mut usize| -> (f64, Vec<C32>) {
+        let c = (kappa * a / d) as f32;
+        let mut v: Vec<C32> = y.par_iter().zip(w.par_iter()).map(|(yy, wv)| C32::new(yy.re + c * wv.re, yy.im + c * wv.im)).collect();
+        prox(&mut v);
+        *n += 1;
+        // L(a) = a − ⟨w, y⟩ + ⟨w, v⟩
+        (a - wy + dotw(&v), v)
+    };
+    let mut n = 0usize;
+    let (l0, v0) = eval(0.0, &mut n);
+    if kappa == 0.0 || w.is_empty() || ww == 0.0 {
+        return (v0, 0.0, 0.0, n);
+    }
+    // L is increasing with slope in [lo, hi] (prox Jacobian 0 ≼ J ≼ I): lo = 1 + min(0, κ)‖w‖²/d, hi = 1 + max(0, κ)‖w‖²/d
+    let lo = 1.0 + kappa.min(0.0) * ww / d;
+    let hi = 1.0 + kappa.max(0.0) * ww / d;
+    assert!(lo > 0.0, "metric_prox_root: the metric is not positive definite along w (slope bound {lo:.3e})");
+    let scale = wy.abs() + l0.abs() + 1e-30;
+    // bracket of the root from L(0): a* between −L0/hi and −L0/lo
+    let (mut br_lo, mut br_hi) = if l0 > 0.0 { (-l0 / lo, -l0 / hi) } else { (-l0 / hi, -l0 / lo) };
+    if br_lo > br_hi {
+        std::mem::swap(&mut br_lo, &mut br_hi);
+    }
+    let (mut best_a, mut best_l, mut best_v) = (0.0, l0, v0);
+    let (mut a_prev, mut l_prev) = (0.0, l0);
+    // first point: Newton with the slope midpoint
+    let mut a = (-l0 / (0.5 * (lo + hi))).clamp(br_lo, br_hi);
+    while n < max_eval && best_l.abs() > tol * scale {
+        let (l, v) = eval(a, &mut n);
+        if l.abs() < best_l.abs() {
+            best_a = a;
+            best_l = l;
+            best_v = v;
+        }
+        // shrink the bracket by the sign of L (increasing)
+        if l > 0.0 { br_hi = br_hi.min(a) } else { br_lo = br_lo.max(a) }
+        // secant with the slope clamped to [lo, hi], kept inside the bracket (bisection if it would leave it)
+        let slope = if (a - a_prev).abs() > 0.0 { ((l - l_prev) / (a - a_prev)).clamp(lo, hi) } else { 0.5 * (lo + hi) };
+        let mut next = a - l / slope;
+        if !(next > br_lo && next < br_hi) {
+            next = 0.5 * (br_lo + br_hi);
+        }
+        a_prev = a;
+        l_prev = l;
+        a = next;
+    }
+    (best_v, best_a, best_l.abs() / scale, n)
+}
+
+/// [`step_guard`] decision: reject the iterate with data term `f` (the previous one `f_prev`) when the last step was a
+/// quasi-Newton step and f > factor · f_prev (or f is not finite)
+pub fn step_guard_rejects(factor: Option<f64>, last_quasi: bool, f_prev: f64, f: f64) -> bool {
+    match factor {
+        Some(fa) if last_quasi && f_prev.is_finite() => !(f <= fa * f_prev),
+        _ => false,
+    }
+}
+
 /// ZMSHR1 secant scalars (Hong et al.): convex combination v = a s + (1−a) m with bounded curvature, then τ
 pub fn zmshr1_scalars(ss: f64, sm: f64, mm: f64) -> (f64, f64) {
     let (th1, th2) = (2e-6, 200.0);
@@ -1219,6 +1506,9 @@ pub fn run_objective_with(
     let lens = obj.lens();
     let off: Vec<usize> = lens.iter().scan(0, |a, &n| { let o = *a; *a += n; Some(o) }).collect();
     let quasi = precond.quasi();
+    // --prox-metric (set_prox_in_metric): the prox in the step's metric, global ZMSHR1 without a fixed metric only
+    let bfo = prox_in_metric();
+    assert!(!bfo || matches!(precond, Precond::Zmshr1 | Precond::None), "--prox-metric: global ZMSHR1 (or no preconditioner) only, got {precond:?}");
     // ZMSHR1 in the circulant metric (the plain circulant step has its own arm)
     let metric = quasi && precond.metric();
     let per_set = precond.per_set();
@@ -1267,13 +1557,41 @@ pub fn run_objective_with(
     };
     let one = Complex64::new(1.0, 0.0);
     let re = |v: f64| Complex64::new(v, 0.0);
+    // step safeguard state: the data term at the previous iterate, whether the last step was a ZMSHR1 step (and its
+    // global (a, τ, c) of set 0, for the log)
+    let guard = if quasi { step_guard() } else { None };
+    let (mut f_prev, mut last_quasi, mut last_at, mut n_rej) = (f64::NAN, false, (f64::NAN, f64::NAN, f64::NAN), 0usize);
     for k in k0..iters {
         let mut tm = IterTimer::start();
         obj.begin_iteration(k, iters);
-        let f = obj.gradient(st, x, &mut g)?;
+        let mut f = obj.gradient(st, x, &mut g)?;
         tm.lap(st, 0);
-        // scaled gradient α g
-        axpby(obj.kernels(), st, 0.0, x, alpha, &mut g)?;
+        let reject = step_guard_rejects(guard, last_quasi, f_prev, f);
+        if guard.is_some() {
+            eprintln!("    step guard it {k}: data term f {f:.4e}, f / f_prev {:.4}{}", f / f_prev, if last_quasi { " (after a ZMSHR1 step)" } else { " (after a plain step)" });
+        }
+        if reject {
+            // back to the previous iterate: x ← x_prev, α g ← g_prev (already scaled), f ← f_prev
+            n_rej += 1;
+            eprintln!("    step guard it {k}: f {f:.4e} > {:.2} × f_prev {f_prev:.4e} after the ZMSHR1 step (a {:.3}, τ {:.3e}, c {:.3e}): iterate rejected, plain step from the previous iterate ({n_rej} so far)", guard.unwrap(), last_at.0, last_at.1, last_at.2);
+            for t in 0..nt {
+                let sc = scratch.get(st, lens[t], 6)?;
+                let (a, b) = sc.split_at_mut(1);
+                let v = x_prev.view(st, t, &mut a[0])?;
+                st.memcpy_dtod(v, &mut x.v[t])?;
+                let v = g_prev.view(st, t, &mut b[0])?;
+                st.memcpy_dtod(v, &mut g.v[t])?;
+            }
+            f = f_prev;
+        } else {
+            // scaled gradient α g
+            axpby(obj.kernels(), st, 0.0, x, alpha, &mut g)?;
+        }
+        let plain_quasi = k == 0 || !obj.curvature_pair_ok() || reject;
+        last_quasi = quasi && !plain_quasi;
+        // the step's metric for the metric-consistent prox: None = S = I (plain step); (τ, κ, w) = S = τI + β w wᵀ
+        let mut step_metric: Option<(f64, f64, Vec<C32>)> = None;
+        f_prev = f;
         match precond {
             Precond::None => pg.copy_from(st, &g)?,
             Precond::Circulant => {
@@ -1281,8 +1599,9 @@ pub fn run_objective_with(
                     obj.metric(st, t, &g.v[t], &mut pg.v[t], false)?;
                 }
             }
-            // first iteration, or a new coil subset (stochastic objectives): no exact secant pair → the metric step
-            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if k == 0 || !obj.curvature_pair_ok() => {
+            // first iteration, or a new coil subset (stochastic objectives): no exact secant pair → the metric step;
+            // also the step after a rejected iterate (--step-guard)
+            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if plain_quasi => {
                 for t in 0..nt {
                     if metric { obj.metric(st, t, &g.v[t], &mut pg.v[t], false)? } else { st.memcpy_dtod(&g.v[t], &mut pg.v[t])? }
                 }
@@ -1346,6 +1665,30 @@ pub fn run_objective_with(
                 }
                 // rank-one coefficients c_t = ⟨w, g⟩ / ⟨w, z⟩ (0 where the safeguard fires)
                 let ct = zmshr1_rank_one_grouped(&d2, per_set, groups.as_deref());
+                last_at = (at[0].0, at[0].1, ct[0]);
+                if bfo {
+                    // S = τI + β w wᵀ with β = 1/⟨w, z⟩ (the step is τ g + (⟨w, g⟩/⟨w, z⟩) w); S⁻¹ = (1/τ) I + κ w wᵀ
+                    let (a, tau) = at[0];
+                    let (uv, ww): (f64, f64) = d2.iter().fold((0.0, 0.0), |acc, v| (acc.0 + v[0], acc.1 + v[1]));
+                    let c = ct[0];
+                    let beta = if c != 0.0 { 1.0 / uv } else { 0.0 };
+                    if c != 0.0 && tau + beta * ww > 0.0 {
+                        let kappa_m = -beta / (tau * (tau + beta * ww));
+                        // w on the host (recomputed from the secant pair, as pass 3 does)
+                        let mut wh = vec![C32::new(0.0, 0.0); off[nt - 1] + lens[nt - 1]];
+                        for t in 0..nt {
+                            let sc = scratch.get(st, lens[t], 6)?;
+                            secant(obj, sc, t, &x_prev, &g_prev)?;
+                            let (w_, rest) = sc.split_at_mut(1);
+                            obj.kernels().axpby(st, re(-tau * (1.0 - a)), &rest[0], re(1.0 - tau * a), &mut w_[0])?;
+                            st.memcpy_dtoh(&w_[0], &mut wh[off[t]..off[t] + lens[t]])?;
+                        }
+                        step_metric = Some((tau, kappa_m, wh));
+                    } else {
+                        // no (or an indefinite) rank-one term: S = τI, the prox at step ατ
+                        step_metric = Some((tau, 0.0, Vec::new()));
+                    }
+                }
                 let ok = ct.iter().any(|&c| c != 0.0);
                 if ok {
                     // pass 3: step += c_t w
@@ -1371,7 +1714,7 @@ pub fn run_objective_with(
                         }
                     }
                 }
-                if (k % 10 == 0 || std::env::var_os("HASTY_ZMSHR1_LOG").is_some()) && (metric || per_set) {
+                if (k % 10 == 0 || std::env::var_os("HASTY_ZMSHR1_LOG").is_some()) && (metric || per_set || guard.is_some()) {
                     let taus: Vec<f64> = at.iter().map(|p| p.1).collect();
                     let (lo, hi) = taus.iter().fold((f64::INFINITY, 0.0f64), |(l, h), &v| (l.min(v), h.max(v)));
                     let mixed = at.iter().filter(|p| p.0 > 0.0).count();
@@ -1402,7 +1745,22 @@ pub fn run_objective_with(
             let h = st.clone_dtoh(&x.v[t])?;
             host[off[t]..off[t] + lens[t]].copy_from_slice(&h);
         }
-        denoise(k, &mut host);
+        match (&step_metric, bfo) {
+            (Some((tau, kappa_m, wh)), true) => {
+                // metric-consistent prox: x⁺ = prox_{h/d}(y + (κ a*/d) w), d = 1/τ, prox step ατ
+                set_prox_step(alpha * tau);
+                let (xn, a_star, res, n) = metric_prox_root(&host, wh, 1.0 / tau, *kappa_m, 6, 1e-4, &mut |v: &mut Vec<C32>| denoise(k, v));
+                set_prox_step(alpha);
+                host = xn;
+                if k < 3 || k % 10 == 0 {
+                    eprintln!("    prox in the step metric it {k}: τ {tau:.3e}, κ {kappa_m:.3e}, a* {a_star:.3e}, |L| {res:.1e} (relative), {n} prox calls");
+                }
+            }
+            _ => {
+                set_prox_step(alpha);
+                denoise(k, &mut host);
+            }
+        }
         for t in 0..nt {
             st.memcpy_htod(&host[off[t]..off[t] + lens[t]], &mut x.v[t])?;
         }
@@ -1420,6 +1778,26 @@ pub fn run_objective_with(
                 save(c, name, next, x, &x_prev, &g_prev)?;
             }
         }
+    }
+    // --step-guard: the last iterate has no next gradient; one extra gradient checks it (rejected → the previous
+    // iterate is the result, reported again)
+    if guard.is_some() && last_quasi && iters > k0 {
+        let f = obj.gradient(st, x, &mut g)?;
+        if step_guard_rejects(guard, last_quasi, f_prev, f) {
+            n_rej += 1;
+            eprintln!("    step guard (final check): f {f:.4e} > {:.2} × f_prev {f_prev:.4e} (a {:.3}, τ {:.3e}, c {:.3e}): the last iterate is rejected, the result is the previous iterate (reported again)", guard.unwrap(), last_at.0, last_at.1, last_at.2);
+            for t in 0..nt {
+                let sc = scratch.get(st, lens[t], 6)?;
+                let v = x_prev.view(st, t, &mut sc[0])?;
+                st.memcpy_dtod(v, &mut x.v[t])?;
+            }
+            report(iters - 1, x, f_prev);
+        } else {
+            eprintln!("    step guard (final check, one extra gradient): f {f:.4e} vs f_prev {f_prev:.4e}, accepted");
+        }
+    }
+    if guard.is_some() {
+        eprintln!("    step guard: {n_rej} iterates rejected in iterations {k0}..{iters}");
     }
     if let Some((c, name)) = ctl {
         c.clear(name);
@@ -1486,5 +1864,113 @@ impl crate::lanczos::LanczosSpace for FrameLanczos<'_, '_, '_> {
         std::mem::swap(&mut self.pp, &mut self.p);
         std::mem::swap(&mut self.p, &mut self.w);
         Ok(n2)
+    }
+}
+
+#[cfg(test)]
+mod step_guard_tests {
+    use super::step_guard_rejects;
+
+    #[test]
+    fn rejects_only_quasi_rises_beyond_the_factor() {
+        let g = Some(1.5);
+        assert!(!step_guard_rejects(None, true, 1.0, 1e9));
+        assert!(!step_guard_rejects(g, false, 1.0, 1e9)); // a plain step is never rejected
+        assert!(!step_guard_rejects(g, true, f64::NAN, 1e9)); // no previous value (first iteration, resume)
+        assert!(!step_guard_rejects(g, true, 1.0, 1.4));
+        assert!(step_guard_rejects(g, true, 1.0, 1.6));
+        assert!(step_guard_rejects(g, true, 1.0, f64::NAN));
+        assert!(step_guard_rejects(g, true, 1.0, f64::INFINITY));
+    }
+}
+
+/// An objective whose chunks hold `nf` images each (e.g. the knot images of one encode in `--temporal`), restricted to
+/// chunks that are the same image in every slot: x_t ↦ (x_t, …, x_t). With a partition-of-unity time basis
+/// (Σ_k B_k(t) = 1) this is the time-static problem through the full operator, i.e. the pooled warm start of the
+/// temporal model. f(x) = F(R x), ∇f = Rᴴ ∇F(R x) (the slot sum of the inner gradient). No metric.
+pub struct ConstOverFrames<'a> {
+    inner: &'a mut dyn Objective,
+    nf: usize,
+}
+
+impl<'a> ConstOverFrames<'a> {
+    pub fn new(inner: &'a mut dyn Objective, nf: usize) -> Self {
+        assert!(nf >= 1);
+        for (t, l) in inner.lens().iter().enumerate() {
+            assert!(l % nf == 0, "ConstOverFrames: chunk {t} has {l} elements, not a multiple of {nf} slots");
+        }
+        Self { inner, nf }
+    }
+
+    /// x (one image per chunk) → R x (the image in every slot)
+    pub fn expand(&self, x: &crate::hoststack::HostStack) -> crate::hoststack::HostStack {
+        let lens = self.inner.lens();
+        let mut big = crate::hoststack::HostStack::zeros(&lens);
+        for t in 0..lens.len() {
+            let n = lens[t] / self.nf;
+            let src = x.chunk(t);
+            assert_eq!(src.len(), n, "ConstOverFrames: chunk {t} of the reduced stack");
+            for f in 0..self.nf {
+                big.chunk_mut(t)[f * n..(f + 1) * n].copy_from_slice(src);
+            }
+        }
+        big
+    }
+}
+
+impl Objective for ConstOverFrames<'_> {
+    fn kernels(&self) -> &Kernels {
+        self.inner.kernels()
+    }
+
+    fn lens(&self) -> Vec<usize> {
+        self.inner.lens().iter().map(|l| l / self.nf).collect()
+    }
+
+    fn gradient(&mut self, st: &Arc<CudaStream>, x: &Stack, g: &mut Stack) -> Result<f64, Error> {
+        // through the host form (one reduced and two full stacks on the host)
+        let lens = self.lens();
+        let mut xh = crate::hoststack::HostStack::zeros(&lens);
+        for t in 0..lens.len() {
+            let h = st.clone_dtoh(&x.v[t])?;
+            xh.chunk_mut(t).copy_from_slice(&h);
+        }
+        let mut gh = crate::hoststack::HostStack::zeros(&lens);
+        let f = self.gradient_host(st, &xh, &mut gh)?;
+        for t in 0..lens.len() {
+            st.memcpy_htod(gh.chunk(t), &mut g.v[t])?;
+        }
+        Ok(f)
+    }
+
+    fn metric(&mut self, _st: &Arc<CudaStream>, _t: usize, _r: &CudaSlice<C32>, _z: &mut CudaSlice<C32>, _inverse: bool) -> Result<(), Error> {
+        panic!("ConstOverFrames: no metric (use the plain pooled warm start)")
+    }
+
+    fn begin_iteration(&mut self, k: usize, iters: usize) {
+        self.inner.begin_iteration(k, iters)
+    }
+
+    fn curvature_pair_ok(&self) -> bool {
+        self.inner.curvature_pair_ok()
+    }
+
+    fn gradient_host(&mut self, st: &Arc<CudaStream>, x: &crate::hoststack::HostStack, g: &mut crate::hoststack::HostStack) -> Result<f64, Error> {
+        let big = self.expand(x);
+        let lens_big = self.inner.lens();
+        let mut gb = crate::hoststack::HostStack::zeros(&lens_big);
+        let f = self.inner.gradient_host(st, &big, &mut gb)?;
+        for t in 0..lens_big.len() {
+            let n = lens_big[t] / self.nf;
+            let out = g.chunk_mut(t);
+            out.iter_mut().for_each(|z| *z = C32::new(0.0, 0.0));
+            for fr in 0..self.nf {
+                for (o, s) in out.iter_mut().zip(&gb.chunk(t)[fr * n..(fr + 1) * n]) {
+                    o.re += s.re;
+                    o.im += s.im;
+                }
+            }
+        }
+        Ok(f)
     }
 }

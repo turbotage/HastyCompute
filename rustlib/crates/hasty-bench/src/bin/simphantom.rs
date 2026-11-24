@@ -18,6 +18,14 @@
 //! The meta records the design's reconstruction window (`sequence.recon_adc`: ADC-index ranges; seqdesign `recon`):
 //! the reconstruction loader keeps those samples, the rest (e.g. v2's rewinder) is navigator data.
 //! `--plan`: build the schedule, write readouts.npy, samples*.npy and plan.json (cost estimate), no GPU work.
+//! `--nav on|off` (default on; flow schedules): the navigator ADC during the velocity-encode block and the tail
+//! (ramp-down / spoiler) block of every TR (hasty_seq::nav windows, the design's rules or GE / pge2 timing, the
+//! readout's dwell), simulated with the same physics as the readout (the same per-sample records and sources) and
+//! stored apart from the reconstruction data, never reconstructed: nav_<block>.hv (complex64 [readout][sample][coil],
+//! clean, same quantisation step as data_clean.hv), nav_<block>_samples.hv [readout][sample][4] = nominal k (rad/m,
+//! physical) and τ (s after the excitation) (with a GIRF also nav_<block>_samples_played.hv [8] as samples_played),
+//! blocks "encode" and "tail"; meta.json `nav` (rules, windows: times, sample counts, ADC events). Readers of the
+//! readout data (data_clean.hv, samples.hv, sched_*.hv) are unchanged.
 //! Readouts are grouped into absolute-time bins; per bin (cardiac time from the ECG, breathing state r, ṙ):
 //! - tissue sources (Lagrangian, reference pose) are moved by the cardiac displacement (periodic Catmull-Rom of the
 //!   stored samples, trilinear) and the respiratory field: x = X + u_c(X, tc) + r S(X + u_c), v = u̇_c + ṙ S;
@@ -57,7 +65,7 @@ use hasty_cuda::{CompileSettings, Device, C32};
 use hasty_mrsim::gnl::GradientCoils;
 use hasty_mrsim::physio::Ecg;
 use hasty_bench::seqsched::{EchoSchedule, FlowSchedule};
-use hasty_mrsim::sequence::{Acquisition, FlowSpiralParams, Schedule, SAMPLE_FLOATS};
+use hasty_mrsim::sequence::{Acquisition, FlowSpiralParams, NavBlock, Schedule, SAMPLE_FLOATS};
 use hasty_qfit::waterfat::FatSpectrum;
 use hasty_seq::multiecho::{fit_slew_to_pns, EchoSpec, EchoTrain};
 use hasty_phantom::coils::{body_arrays, noise_covariance, SensitivityTable};
@@ -477,6 +485,23 @@ impl Schedule for Strided {
     fn describe(&self) -> String {
         format!("{} [every {}th group of {} encodes]", self.inner.describe(), self.stride, self.group)
     }
+    fn nav_blocks(&self) -> Vec<NavBlock> {
+        self.inner.nav_blocks()
+    }
+    fn nav_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
+        let idx = &self.keep[range];
+        let mut out = vec![];
+        let mut a = 0;
+        while a < idx.len() {
+            let mut b = a + 1;
+            while b < idx.len() && idx[b] == idx[b - 1] + 1 {
+                b += 1;
+            }
+            out.extend(self.inner.nav_params(idx[a]..idx[b - 1] + 1));
+            a = b;
+        }
+        out
+    }
 }
 
 fn main() {
@@ -566,6 +591,8 @@ fn main() {
     let rf_tbw: f64 = take("--rf-tbw").map(|s| s.parse().unwrap()).unwrap_or(6.0);
     let rf_dur: Option<f64> = take("--rf-dur").map(|s| s.parse().unwrap());
     let slab_thk_arg: Option<f64> = take("--slab-thk").map(|s| s.parse().unwrap());
+    // --nav on|off: navigator ADC during the encode and tail blocks (flow schedules; default on)
+    let nav_arg = take("--nav").map_or(true, |v| match v.as_str() { "on" => true, "off" => false, o => panic!("--nav {o}: on | off") });
     // readout Nyquist for the dev phantom's 50 cm: the yarn's |G| ≤ 23 mT/m needs ≤ 2 µs; the B0 train 3 µs
     let dwell_arg: f64 = dwell_opt.unwrap_or(if seq_kind == "flow" { 2e-6 } else { 3e-6 });
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
@@ -618,6 +645,8 @@ fn main() {
     fp.fov_center = [center[0] - iso[0], center[1] - iso[1], center[2] - iso[2]];
     let ecg = Ecg::new(fp.scan_time + 2.0, fp.mean_rr, fp.rr_rel_std, fp.seed);
     let mut seq_meta = serde_json::json!({"kind": seq_kind});
+    // the navigator ADC description (meta.json `nav`), flow schedules with --nav on
+    let mut nav_meta: Option<serde_json::Value> = None;
     // the schedule a reconstruction assumes when the simulated one is played through a GIRF (samples.npy)
     let mut nominal: Option<Box<dyn Schedule>> = None;
     let acq: Box<dyn Schedule> = match seq_kind.as_str() {
@@ -644,8 +673,10 @@ fn main() {
                 name => hasty_seq::girf::Girf::variants().into_iter().find(|v| v.0 == name).unwrap_or_else(|| panic!("--girf {name}: ideal | clinical | a Girf::variants() name | <girf.json>")).1,
             };
             let fs = FlowSchedule::load(&flow_run, scan_time, dwell_arg, fp.b0, ecg.clone(), fp.n_frames, girf, &girf_name);
+            let fs = if nav_arg { fs } else { fs.without_nav() };
             let fs = if girf_hist > 0 { fs.with_history(girf_hist) } else { fs };
             seq_meta = fs.meta.clone();
+            nav_meta = (!fs.nav.is_empty()).then(|| fs.nav_meta());
             if girf_name != "ideal" && girf_name != "none" {
                 nominal = Some(Box::new(fs.with_girf(hasty_seq::girf::Girf::ideal(), "ideal")));
             }
@@ -665,6 +696,14 @@ fn main() {
     let na = acq.n_adc();
     let tr = acq.tr();
     let n_ro = acq.n_readouts();
+    // navigator samples per readout (all blocks), stored apart from the readout data
+    let nav_blocks = acq.nav_blocks();
+    let mut nn: usize = nav_blocks.iter().map(|b| b.times.len()).sum();
+    if nn > 0 {
+        for b in &nav_blocks {
+            println!("navigator ADC {}: {} samples in {} event(s), {:.3}–{:.3} ms after the excitation (stored apart, never reconstructed)", b.name, b.times.len(), b.events.len(), b.times[0] * 1e3, b.times.last().unwrap() * 1e3);
+        }
+    }
     println!("acquisition: {}; {} readouts × {} ADC, TR {:.2} ms, TE {:.3} ms, RR {:.3} s (σ {:.0} %)", acq.describe(), n_ro, na, tr * 1e3, acq.te() * 1e3, period, rr_std * 100.0);
 
     // ── coils from the body mask ──
@@ -1306,7 +1345,7 @@ fn main() {
 
     if plan {
         let nb_mean = bf.iter().map(|b| b.3.len()).sum::<usize>() as f64 / nbf.max(1) as f64;
-        let terms = (nt as f64 + nb_mean) * (n_ro * na) as f64 * ncs as f64;
+        let terms = (nt as f64 + nb_mean) * (n_ro * (na + nn)) as f64 * ncs as f64;
         // measured direct-sum throughput (RTX 4090, this kernel): ≈ 4.6·10¹² source·sample·coil terms per second
         let est_s = terms / 4.6e12;
         let mut tab: Vec<u8> = Vec::with_capacity(n_ro * 14 * 8);
@@ -1343,7 +1382,7 @@ fn main() {
             }
         }
         let pj = serde_json::json!({"seq": seq_meta, "n_readouts": n_ro, "n_adc": na, "coils": nc, "sim_coils": ncs, "readout_stride": ro_stride, "tissue_sources": nt, "blood_sources_mean": nb_mean,
-                                    "terms": terms, "estimated_gpu_s": est_s, "scan_time": scan_time});
+                                    "terms": terms, "estimated_gpu_s": est_s, "scan_time": scan_time, "nav_samples_per_readout": nn, "nav": nav_meta});
         std::fs::write(out.join("plan.json"), serde_json::to_string_pretty(&pj).unwrap()).unwrap();
         println!("plan: {n_ro} readouts × {na} samples × {ncs} coils (simulated) × {:.2} M sources = {terms:.2e} terms ≈ {:.1} min of GPU ({:.1}s) → {}", (nt as f64 + nb_mean) / 1e6, est_s / 60.0, t0.elapsed().as_secs_f64(), out.display());
         return;
@@ -1658,6 +1697,42 @@ fn main() {
         }
         f.sync_data().unwrap();
     };
+    // navigator k-space (--nav): nav_clean.part.npy [readout][navigator sample][coil], pre-sized and written per chunk
+    // like the readout file, split into nav_<block>.hv at the end. A run resumed from chunks simulated without it keeps
+    // the navigator off (those chunks lack it); a finalised navigator (nav_<block>.hv, no part file) is kept.
+    let nav_part = out.join("nav_clean.part.npy");
+    let nav_final = |b: &NavBlock| out.join(format!("nav_{}.hv", b.name)).exists() || out.join(format!("nav_{}.npy", b.name)).exists();
+    let nav_finalised = nn > 0 && !nav_part.exists() && nav_blocks.iter().all(|b| nav_final(b));
+    let nav_row_bytes = (nn * nc * 8) as u64;
+    let nav_hdr = npy_header("<c8", &[n_ro, nn, nc], false);
+    let nav_need = nav_hdr.len() as u64 + n_ro as u64 * nav_row_bytes;
+    if nn > 0 && !nav_finalised {
+        let ok = std::fs::metadata(&nav_part).map(|m| m.len() == nav_need).unwrap_or(false);
+        if !ok && !k_new {
+            println!("WARNING: resuming a simulation whose finished chunks have no navigator data ({} missing or of another size): navigator ADC off for this run", nav_part.display());
+            nn = 0;
+        } else if !ok {
+            use std::io::Write;
+            let mut f = std::fs::File::create(&nav_part).unwrap();
+            f.write_all(&nav_hdr).unwrap();
+            f.set_len(nav_need).unwrap();
+        }
+    } else if nn == 0 && nav_part.exists() {
+        println!("note: {} exists but the navigator ADC is off for this run (left as it is)", nav_part.display());
+    }
+    // simulate the navigator in this run's chunks (off when finalised: then every chunk is done anyway)
+    let nav_sim = nn > 0 && !nav_finalised;
+    let mut nav_file = nav_sim.then(|| std::fs::OpenOptions::new().read(true).write(true).open(&nav_part).unwrap());
+    let write_nav_rows = |f: &mut std::fs::File, rows: &[usize], vals: &[num_complex::Complex32]| {
+        use std::io::{Seek, SeekFrom, Write};
+        let w = nn * nc;
+        for (k, &r) in rows.iter().enumerate() {
+            let b: Vec<u8> = vals[k * w..(k + 1) * w].iter().flat_map(|c| [c.re.to_le_bytes(), c.im.to_le_bytes()].concat()).collect();
+            f.seek(SeekFrom::Start(nav_hdr.len() as u64 + r as u64 * nav_row_bytes)).unwrap();
+            f.write_all(&b).unwrap();
+        }
+        f.sync_data().unwrap();
+    };
     let (fcx, fcy, fcz) = (fp.fov_center[0] as f32, fp.fov_center[1] as f32, fp.fov_center[2] as f32);
     let (isx, isy, isz) = (iso[0] as f32, iso[1] as f32, iso[2] as f32);
     // the slab profile is centred on the slab (the RF frequency offset), not necessarily on the FOV
@@ -1693,6 +1768,9 @@ fn main() {
                 // an older state holds the chunk's samples: into the file
                 let o: Vec<num_complex::Complex32> = t.to_vec().unwrap();
                 write_rows(&mut kfile, &rows, &o);
+                if nav_sim {
+                    println!("  WARNING: bins {b0}..{b1} come from an old chunk state without navigator data: their navigator rows stay zero");
+                }
                 ctl.save(&state, &Value::Tensor(hasty_value::Tensor::from_slice(&[rows.len()], &rows.iter().map(|&r| r as f32).collect::<Vec<f32>>()).unwrap())).unwrap();
                 println!("  bins {b0}..{b1}: from the saved chunk (moved to the data file)");
             } else {
@@ -1704,6 +1782,7 @@ fn main() {
             continue;
         }
         let mut chunk_out = vec![num_complex::Complex32::new(0.0, 0.0); rows.len() * na * nc];
+        let mut nav_out = vec![num_complex::Complex32::new(0.0, 0.0); if nav_sim { rows.len() * nn * nc } else { 0 }];
         let mut ro_off = 0;
         for b in b0..b1 {
             if by_bin[b].is_empty() {
@@ -1959,13 +2038,86 @@ fn main() {
                     }
                 }
             }
+            // navigator ADC (encode / tail blocks): the same sources and per-sample physics, its own launch so the
+            // readout launch (sample count → source chunking) is exactly what it was without the navigator
+            if nav_sim {
+                let mut smp_n = Vec::with_capacity(by_bin[b].len() * nn * SAMPLE_FLOATS);
+                for &ri in &by_bin[b] {
+                    let mut sp = acq.nav_params(ri..ri + 1);
+                    assert_eq!(sp.len(), nn * SAMPLE_FLOATS);
+                    let dlt = (acq.t_exc(ri) - tb) as f32;
+                    for n in 0..nn {
+                        sp[n * SAMPLE_FLOATS + 14] = if stat { 0.0 } else { dlt };
+                        if ideal {
+                            for q in 9..13 {
+                                sp[n * SAMPLE_FLOATS + q] = 0.0;
+                            }
+                        }
+                    }
+                    smp_n.extend(sp);
+                }
+                let ns_n = by_bin[b].len() * nn;
+                let d_smp_n = st.clone_htod(&smp_n).unwrap();
+                let mut d_out_n = st.alloc_zeros::<f64>(2 * ns_n * ncs).unwrap();
+                let ych = (2048 / (ns_n as u64).div_ceil(128)).clamp(1, 4096);
+                let chunk_un = (np_ as u64).div_ceil(ych).max(2048);
+                let ny_n = (np_ as u64).div_ceil(chunk_un) as u32;
+                let (chunk_n, ns_ni) = (chunk_un as i64, ns_n as i32);
+                let launch_n = |y0: u32, n: u32, out: &mut CudaSlice<f64>| {
+                    let yo = y0 as i32;
+                    unsafe {
+                        st.launch_builder(&kdsum)
+                            .arg(&d_smp_n).arg(&ns_ni).arg(&d_src).arg(&d_amp).arg(&np_l).arg(&chunk_n).arg(out).arg(&d_fattab).arg(&npk).arg(&yo)
+                            .launch(LaunchConfig { grid_dim: ((ns_n as u32).div_ceil(128), n, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
+                            .unwrap();
+                    }
+                };
+                match hasty_cuda::pace::slice_seconds() {
+                    None => launch_n(0, ny_n, &mut d_out_n),
+                    Some(slice) => {
+                        let mut y0 = 0u32;
+                        while y0 < ny_n {
+                            let n = ((slice / (per_chunk_s * ns_n as f64).max(1e-9)) as u32).clamp(1, ny_n - y0);
+                            launch_n(y0, n, &mut d_out_n);
+                            st.synchronize().unwrap();
+                            y0 += n;
+                            hasty_cuda::pace::pace_synced();
+                        }
+                    }
+                }
+                let o = st.clone_dtoh(&d_out_n).unwrap();
+                match &coil_u {
+                    None => {
+                        for k in 0..ns_n * nc {
+                            nav_out[ro_off * nn * nc + k] = num_complex::Complex32::new(o[2 * k] as f32, o[2 * k + 1] as f32);
+                        }
+                    }
+                    Some(u) => {
+                        for smp_i in 0..ns_n {
+                            for c in 0..nc {
+                                let mut a = Complex64::new(0.0, 0.0);
+                                for v in 0..ncs {
+                                    a += u[c * ncs + v] * Complex64::new(o[2 * (smp_i * ncs + v)], o[2 * (smp_i * ncs + v) + 1]);
+                                }
+                                nav_out[(ro_off * nn + smp_i) * nc + c] = num_complex::Complex32::new(a.re as f32, a.im as f32);
+                            }
+                        }
+                    }
+                }
+                terms += ns_n as f64 * np_ as f64 * ncs as f64;
+            }
             ro_off += by_bin[b].len();
             terms += ns as f64 * np_ as f64 * ncs as f64;
             // GPU pacing point (HASTY_GPU_DUTY / HASTY_GPU_WATTS; a no-op unless configured)
             hasty_cuda::pace::pace(&st);
         }
+        if let Some(f) = nav_file.as_mut() {
+            write_nav_rows(f, &rows, &nav_out);
+        }
+        // the readout rows last: a chunk is done once its marker is saved (below), both files written by then
         write_rows(&mut kfile, &rows, &chunk_out);
         drop(chunk_out);
+        drop(nav_out);
         ctl.save(&state, &Value::Tensor(hasty_value::Tensor::from_slice(&[rows.len()], &rows.iter().map(|&r| r as f32).collect::<Vec<f32>>()).unwrap())).unwrap();
         let el = t2.elapsed().as_secs_f64();
         println!("  bins {b0}..{b1} of {nbins}: {} readouts, {:.1}s, {:.2e} terms/s{}", rows.len(), el, terms / el.max(1e-9), if packed.1 > 0.0 { format!(", blood sub-sources packed to {:.1} %", 100.0 * packed.0 / packed.1) } else { String::new() });
@@ -2013,6 +2165,52 @@ fn main() {
     println!("noise σ {sigma:.4e} per complex sample ({}; data rms {rms:.4e})", if noise_sigma_abs.is_some() { "--noise-sigma" } else { "--noise × rms" });
     // k-space storage step (uniform, ADC-like): min(σ/8 per component, 1e-4 relative rms) (research/io_policy.md)
     let k_step = hasty_value::store::kspace_step(sigma, rms);
+    // navigator k-space → one file per block (nav_<block>.hv at the readout's quantisation step, HASTY_IO=npy: .npy),
+    // then the part file is removed; noise-free like data_clean (the same receiver σ applies)
+    drop(nav_file.take());
+    if nav_sim {
+        use std::io::{Read, Seek, SeekFrom};
+        let t = Instant::now();
+        let mut fh = std::fs::File::open(&nav_part).unwrap();
+        let mut c0 = 0usize;
+        for blk in &nav_blocks {
+            let nb_ = blk.times.len();
+            let hv = hasty_value::store::write_hv();
+            let name = format!("nav_{}.{}", blk.name, if hv { "hv" } else { "npy" });
+            let save = hasty_value::Save::default().policy(hasty_value::Policy::Abs(k_step)).chunk(hasty_value::store::Chunking::Rows(1));
+            let mut w = hv.then(|| hasty_value::store::TensorWriter::create(&out.join(&name), hasty_value::DType::C64, &[n_ro, nb_, nc], hasty_value::Order::C, &save, None).unwrap());
+            let mut fo = (!hv).then(|| {
+                use std::io::Write;
+                let mut f = std::io::BufWriter::new(std::fs::File::create(out.join(&name)).unwrap());
+                f.write_all(&npy_header("<c8", &[n_ro, nb_, nc], false)).unwrap();
+                f
+            });
+            let mut row = vec![0u8; nb_ * nc * 8];
+            for r in 0..n_ro {
+                fh.seek(SeekFrom::Start(nav_hdr.len() as u64 + r as u64 * nav_row_bytes + (c0 * nc * 8) as u64)).unwrap();
+                fh.read_exact(&mut row).unwrap();
+                match (w.as_mut(), fo.as_mut()) {
+                    (Some(w), _) => w.push(&row).unwrap(),
+                    (None, Some(f)) => {
+                        use std::io::Write;
+                        f.write_all(&row).unwrap()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            if let Some(w) = w {
+                w.finish().unwrap();
+            }
+            if let Some(mut f) = fo {
+                use std::io::Write;
+                f.flush().unwrap();
+            }
+            c0 += nb_;
+            println!("navigator {} → {} ({} × {nb_} × {nc}, {:.0} s)", blk.name, out.join(&name).display(), n_ro, t.elapsed().as_secs_f64());
+        }
+        drop(fh);
+        std::fs::remove_file(&nav_part).unwrap();
+    }
     if write_noisy {
         let l = hasty_phantom::scene::cholesky(&psi);
         let mut s = 0x9E3779B97F4A7C15u64;
@@ -2153,6 +2351,64 @@ fn main() {
                 write_samples(acq.as_ref(), "sched_played.npy", &all);
             }
         }
+        // navigator sample tables per block (nav_<block>_samples.hv: nominal k, τ; with a GIRF also _samples_played)
+        if nn > 0 {
+            let write_nav_samples = |sch: &dyn Schedule, suffix: &str, cols: &[usize]| {
+                use std::io::Write;
+                let hv = hasty_value::store::write_hv();
+                if resumed_outputs && hv && nav_blocks.iter().all(|b| out.join(format!("nav_{}_{suffix}.hv", b.name)).exists()) {
+                    println!("nav_*_{suffix}.hv: kept (written by the killed run)");
+                    return;
+                }
+                let mut ws = vec![];
+                for blk in &nav_blocks {
+                    let name = format!("nav_{}_{suffix}.{}", blk.name, if hv { "hv" } else { "npy" });
+                    let nb_ = blk.times.len();
+                    let w = hv.then(|| hasty_value::store::TensorWriter::create(&out.join(&name), hasty_value::DType::F32, &[n_ro, nb_, cols.len()], hasty_value::Order::C, &sched_save(nb_), None).unwrap());
+                    let f = (!hv).then(|| {
+                        let mut f = std::io::BufWriter::with_capacity(16 << 20, std::fs::File::create(out.join(&name)).unwrap());
+                        f.write_all(&npy_header("<f4", &[n_ro, nb_, cols.len()], false)).unwrap();
+                        f
+                    });
+                    ws.push((nb_, w, f));
+                }
+                for c0 in (0..n_ro).step_by(256) {
+                    let c1 = (c0 + 256).min(n_ro);
+                    let sp = sch.nav_params(c0..c1);
+                    let mut sk: Vec<Vec<u8>> = ws.iter().map(|_| Vec::new()).collect();
+                    for r in 0..c1 - c0 {
+                        let mut s0 = r * nn;
+                        for (bi, (nb_, _, _)) in ws.iter().enumerate() {
+                            for rec in sp[s0 * SAMPLE_FLOATS..(s0 + nb_) * SAMPLE_FLOATS].chunks(SAMPLE_FLOATS) {
+                                for &q in cols {
+                                    sk[bi].extend_from_slice(&rec[q].to_le_bytes());
+                                }
+                            }
+                            s0 += nb_;
+                        }
+                    }
+                    for (bi, (_, w, f)) in ws.iter_mut().enumerate() {
+                        match (w.as_mut(), f.as_mut()) {
+                            (Some(w), _) => w.push(&sk[bi]).unwrap(),
+                            (None, Some(f)) => f.write_all(&sk[bi]).unwrap(),
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+                for (_, w, f) in ws {
+                    if let Some(w) = w {
+                        w.finish().unwrap();
+                    }
+                    if let Some(mut f) = f {
+                        f.flush().unwrap();
+                    }
+                }
+            };
+            write_nav_samples(nominal.as_deref().unwrap_or(acq.as_ref()), "samples", &[0, 1, 2, 13]);
+            if nominal.is_some() {
+                write_nav_samples(acq.as_ref(), "samples_played", &[0, 1, 2, 3, 4, 5, 13, 15]);
+            }
+        }
     }
     // true sensitivities and field on the reconstruction grid (axial logical frame, index i ↦ (i − n/2) res)
     let dims = [0, 1, 2].map(|a| (fov[a] / res).round() as usize);
@@ -2240,6 +2496,19 @@ fn main() {
         "beats": beats_meta,
     });
     let mut meta = meta;
+    if nn > 0 {
+        // navigator ADC (never reconstruction data): files per block, sample times after the excitation, ADC events
+        let mut nm = nav_meta.clone().unwrap_or(serde_json::json!({}));
+        nm["blocks"] = serde_json::json!(nav_blocks.iter().map(|b| serde_json::json!({
+            "name": b.name, "n": b.times.len(), "data": format!("nav_{}.hv", b.name), "samples": format!("nav_{}_samples.hv", b.name),
+            "samples_played": if nominal.is_some() { serde_json::json!(format!("nav_{}_samples_played.hv", b.name)) } else { serde_json::Value::Null },
+            "t_first": b.times[0], "t_last": b.times.last(), "events": b.events,
+        })).collect::<Vec<_>>());
+        nm["n_per_readout"] = serde_json::json!(nn);
+        nm["layout"] = serde_json::json!("data [readout][sample][coil] complex64, noise-free (noise_sigma applies); samples [readout][sample][k_x, k_y, k_z (rad/m, physical), τ (s after the excitation)]; played [k (3), γM1 (3), τ, B0-term phase]");
+        nm["use"] = serde_json::json!("navigator / auxiliary data only: never reconstruction data (encode lobes and spoiler leave kmax)");
+        meta["nav"] = nm;
+    }
     if let Some(rd) = resp_dev.as_ref() {
         meta["resp_field"] = serde_json::json!({
             "file": resp_field_path.as_ref().map(|p| p.display().to_string()), "mode": rd.mode, "r_k": rd.rk, "n_cardiac": rd.nq, "period": rd.period,

@@ -1,0 +1,562 @@
+output directory data/hasty/phantom/factory_arms/ph0001/tpyr_dev/run (no periodic checkpoints (--ckpt-every N); Ctrl-C or touch data/hasty/phantom/factory_arms/ph0001/tpyr_dev/run/STOP to pause with a checkpoint)
+k-space data: 50.56 GiB raw coil data, 24.0 GiB RAM available → streamed from the files (kload)
+reconstruction grid [128, 72, 60] (native [254, 144, 114]), voxel [4.0, 4.0, 3.8] mm
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+velocity decoder: hierarchical (first stage ±1.50 m/s) + alias search over ±3.00 m/s (design), margin 1
+sample records of 140 sets (13170990 samples) in 0.4s
+calibration region [24, 24, 24]: 88804 samples of encode 0, 32 coils (1.7s)
+coil compression (whitened calibration region): 8 of 32 virtual coils (fixed 8), 68.306 % energy kept; σ²/Σσ²: [1.5e-1, 1.2e-1, 1.0e-1, 7.8e-2, 6.7e-2, 6.0e-2, 5.5e-2, 5.1e-2, 4.3e-2, 3.5e-2, 3.4e-2, 3.0e-2, 2.6e-2, 2.0e-2, 1.8e-2, 1.6e-2, 1.5e-2, 1.4e-2, 1.2e-2, 1.0e-2, 8.0e-3, 6.3e-3, 6.0e-3, 5.9e-3, 3.9e-3, 3.5e-3, 2.6e-3, 2.1e-3, 1.7e-3, 1.2e-3, 7.6e-4, 5.5e-4]
+  k-space store: 16 / 140 sets (1s)
+  k-space store: 32 / 140 sets (2s)
+  k-space store: 48 / 140 sets (2s)
+  k-space store: 64 / 140 sets (3s)
+  k-space store: 80 / 140 sets (4s)
+  k-space store: 96 / 140 sets (5s)
+  k-space store: 112 / 140 sets (6s)
+  k-space store: 128 / 140 sets (7s)
+  k-space store: 140 / 140 sets (7s)
+k-space store built in 7.2s: dense in RAM: 140 sets × 8 coils, 0.79 GiB raw → 0.79 GiB stored (×1.00), 0.79 GiB in RAM
+k-space crop (ball |k·Δ| ≤ 1.000π): 3001984 of 13170990 samples kept (22.79 %), ADC window 0..3989 of 3990 (1.600..9.578 ms), 11829 .. 31759 per set (0.0s)
+k-space crop: kept data 0.18 GiB read through a filtered view of the store
+device memory after loading and coil compression: 22.74 GiB free of 23.51 GiB
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 17.2s
+device memory after the data placement: 22.62 GiB free of 23.51 GiB
+warm start: 3 PCGLS iterations per encode (21s)
+device memory after the warm start: 21.87 GiB free of 23.51 GiB
+support 526431 voxels
+coil maps not masked (--coil-mask none): 552960 voxels; fit region 547451 voxels
+lumen 6165 voxels: 5714 in the support, 6165 in the masked maps
+circulant metric for encode 0: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 1: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 2: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 3: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 4: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 5: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+circulant metric for encode 6: 20 sets pooled, dynamic range 1.00e3 (host-resident)
+warm-start velocity in the lumen: mean ["0.007", "0.043", "0.015"] m/s, truth (time average) ["0.012", "0.003", "-0.010"], RMSE 1.809 m/s
+device memory before the segment operator: 21.84 GiB free of 23.51 GiB
+monomial quadratic fit over 547451 voxels: rms 3.3e-4 / max 1.7e-3 m² (z², x²+y², xz, yz: ["1.2e-3", "1.7e-3", "1.1e-3", "9.3e-4"])
+  [build timer] monomial fit done: 0.1s since the build start
+monomial degree-4 fit (--conc-fit deg4): rms 6.4e-5 / max 4.4e-4 m² (["4.2e-4", "3.9e-4", "4.4e-4", "3.4e-4"]); degree 3/4 part to first order in the kernel (order 3)
+  [build timer] segment bases of all encodes done: 13.2s since the build start
+sample tables: 234 B/sample, 0.65 GiB for 140 sets → device
+  [build timer] sample tables (280 sets) done: 17.1s since the build start
+    [tune] hit autotune 952364734374d6c5 (file, /home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/hasty-tune/NVIDIA-GeForce-RTX-4090-cc89-drv580.178.04-nvrtc13.0/952364734374d6c5.json): choice loaded, no timing
+  [build timer] autotune done: 17.1s since the build start
+  autotune 0.0 s: timing launches 0.0 s (0 candidates), NVRTC compiles 0.0 s (0), cubin cache reads 0.0 s (3), module loads 0.0 s (3), rest 0.0 s (HASTY_TUNE=Reuse)
+SegNufft: L = 6, order 3, frames/set 1, coil batch 8, kernels 0.7/0.8 ms (set 0), max phase left out by the degree-4 fit 4.54e-2 rad, built in 17.1s
+host sample records released: 0.78 GiB
+memory after setup: RSS 4.2 GiB → 2.9 GiB (malloc_trim)
+device memory before the solver: 21.33 GiB free of 23.51 GiB
+step size by lanczos:8: λ_max(N) = not needed, λ_max(M N) = 5.134e1 (θ 5.1036e1 + bound 3.06e-1); 16 operator applications, 0.1s
+lambda_max(N) = NaN, lambda_max(M N) = 5.134e1, setup 41s
+    [tune] hit multi-image autotune 514d2cd428426825 (file, /home/turbotage/Documents/GitHub/HastyCompute/rustlib/target/hasty-tune/NVIDIA-GeForce-RTX-4090-cc89-drv580.178.04-nvrtc13.0/514d2cd428426825.json): choice loaded, no timing
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 7.34e-1 7.40e-1 7.34e-1 7.35e-1 7.34e-1 7.34e-1 7.36e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 5.26e-1 5.44e-1 5.26e-1 5.35e-1 5.33e-1 5.27e-1 5.39e-1
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 4.41e-1 4.49e-1 4.32e-1 4.47e-1 4.44e-1 4.42e-1 4.50e-1
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 4.06e-1 4.11e-1 3.98e-1 4.10e-1 4.09e-1 4.06e-1 4.11e-1
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 3.85e-1 3.90e-1 3.87e-1 3.95e-1 3.93e-1 3.90e-1 3.94e-1
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 3.14e-1 3.16e-1 3.24e-1 3.14e-1 3.17e-1 3.18e-1 3.21e-1
+  pooled PCG it 7: ‖r‖/‖r₀‖ per group 2.66e-1 2.64e-1 2.70e-1 2.71e-1 2.70e-1 2.61e-1 2.69e-1
+  pooled PCG it 8: ‖r‖/‖r₀‖ per group 1.86e-1 1.81e-1 1.83e-1 1.86e-1 1.86e-1 1.79e-1 1.84e-1
+physics-model warm start: 8 pooled PCG iterations per encode (per-encode circulant) (5s)
+physics-model warm-start velocity in the lumen: RMSE 1.653 m/s vs the time-averaged truth
+temporal anchor: mean diagonal of one frame's normal operator d̄ = 1.7913e4 (λ_max(N)/d̄ = NaN), λ_max(M) = 1.8736e-6 (λ_max(M N)/λ_max(M) = 2.740e7) (0.2s)
+solver state: device (0.58 GiB per stack, 140 sets)
+    velocity error split: time-mean RMSE 1.657 m/s, temporal-detail RMSE 0.347 m/s (truth detail RMS 0.347 m/s, relative 1.000); |v − t| median 0.810, p90 3.119 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.123 m/s (rel 2.628)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 1.693 m/s (rel 3.962), frames 1.66 1.66 1.78 1.82 1.79 1.80 1.74 1.69 1.66 1.65 1.65 1.67 1.68 1.67 1.65 1.65 1.65 1.65 1.65 1.67, 1s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.601 m/s, temporal-detail RMSE 0.564 m/s (truth detail RMS 0.347 m/s, relative 1.626); |v − t| median 0.818, p90 3.117 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.125 m/s (rel 2.634)
+  zmshr1m κ 1    it   1: f = 1.0294e14, velocity RMSE 1.698 m/s (rel 3.974), frames 1.66 1.67 1.79 1.82 1.80 1.80 1.74 1.69 1.67 1.66 1.66 1.67 1.69 1.67 1.66 1.66 1.65 1.65 1.66 1.68, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.8s, report 0.6s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.360 m/s, temporal-detail RMSE 1.046 m/s (truth detail RMS 0.347 m/s, relative 3.015); |v − t| median 0.849, p90 3.129 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.133 m/s (rel 2.652)
+  zmshr1m κ 1    it   2: f = 9.9824e13, velocity RMSE 1.715 m/s (rel 4.016), frames 1.67 1.69 1.81 1.82 1.80 1.83 1.75 1.71 1.68 1.69 1.67 1.69 1.71 1.68 1.68 1.68 1.69 1.66 1.69 1.70, 8s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.8s, report 0.7s
+    velocity error split: time-mean RMSE 1.058 m/s, temporal-detail RMSE 1.396 m/s (truth detail RMS 0.347 m/s, relative 4.027); |v − t| median 0.907, p90 3.181 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.156 m/s (rel 2.705)
+  zmshr1m κ 1    it   3: f = 9.1222e13, velocity RMSE 1.752 m/s (rel 4.101), frames 1.70 1.70 1.85 1.88 1.86 1.87 1.77 1.78 1.71 1.73 1.70 1.74 1.73 1.74 1.73 1.69 1.73 1.69 1.68 1.74, 11s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.734 m/s, temporal-detail RMSE 1.746 m/s (truth detail RMS 0.347 m/s, relative 5.036); |v − t| median 1.182, p90 3.316 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.244 m/s (rel 2.912)
+  zmshr1m κ 1    it   4: f = 8.0102e13, velocity RMSE 1.894 m/s (rel 4.434), frames 1.86 1.82 1.99 2.02 2.01 2.03 1.86 1.95 1.84 1.96 1.82 1.91 1.84 1.89 1.86 1.85 1.89 1.82 1.79 1.87, 15s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.683 m/s, temporal-detail RMSE 1.803 m/s (truth detail RMS 0.347 m/s, relative 5.201); |v − t| median 1.247, p90 3.349 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.262 m/s (rel 2.953)
+  zmshr1m κ 1    it   5: f = 6.8944e13, velocity RMSE 1.928 m/s (rel 4.514), frames 1.89 1.87 2.03 2.04 2.05 2.05 1.86 1.97 1.88 1.99 1.85 1.91 1.88 1.94 1.88 1.87 1.96 1.85 1.82 1.92, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.696 m/s, temporal-detail RMSE 1.765 m/s (truth detail RMS 0.347 m/s, relative 5.090); |v − t| median 1.184, p90 3.321 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.243 m/s (rel 2.911)
+  zmshr1m κ 1    it   6: f = 6.3510e13, velocity RMSE 1.897 m/s (rel 4.441), frames 1.86 1.82 2.00 2.02 2.03 2.03 1.82 1.94 1.85 1.96 1.82 1.89 1.84 1.89 1.86 1.85 1.93 1.82 1.79 1.89, 21s
+    time it 5: gradient 0.6s, step 0.5s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.702 m/s, temporal-detail RMSE 1.730 m/s (truth detail RMS 0.347 m/s, relative 4.988); |v − t| median 1.119, p90 3.294 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.225 m/s (rel 2.867)
+  zmshr1m κ 1    it   7: f = 6.0507e13, velocity RMSE 1.867 m/s (rel 4.369), frames 1.83 1.79 1.97 1.99 2.01 2.00 1.79 1.91 1.82 1.93 1.79 1.87 1.80 1.85 1.83 1.82 1.90 1.80 1.75 1.87, 25s
+    time it 6: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.721 m/s, temporal-detail RMSE 1.640 m/s (truth detail RMS 0.347 m/s, relative 4.729); |v − t| median 0.969, p90 3.222 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.178 m/s (rel 2.757)
+  zmshr1m κ 1    it   8: f = 5.9668e13, velocity RMSE 1.792 m/s (rel 4.194), frames 1.74 1.72 1.88 1.94 1.92 1.96 1.73 1.83 1.75 1.86 1.71 1.79 1.73 1.74 1.75 1.74 1.80 1.72 1.66 1.80, 28s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.727 m/s, temporal-detail RMSE 1.536 m/s (truth detail RMS 0.347 m/s, relative 4.431); |v − t| median 0.813, p90 3.132 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.120 m/s (rel 2.622)
+  zmshr1m κ 1    it   9: f = 5.8366e13, velocity RMSE 1.700 m/s (rel 3.979), frames 1.64 1.60 1.79 1.86 1.84 1.88 1.67 1.72 1.67 1.76 1.60 1.70 1.65 1.66 1.68 1.64 1.71 1.64 1.56 1.69, 32s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.728 m/s, temporal-detail RMSE 1.510 m/s (truth detail RMS 0.347 m/s, relative 4.356); |v − t| median 0.782, p90 3.107 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.107 m/s (rel 2.591)
+  zmshr1m κ 1    it  10: f = 5.7356e13, velocity RMSE 1.677 m/s (rel 3.925), frames 1.61 1.58 1.77 1.83 1.82 1.86 1.64 1.70 1.65 1.72 1.59 1.68 1.63 1.64 1.66 1.61 1.68 1.62 1.53 1.67, 35s
+    time it 9: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    zmshr1-M it 10: tau 4.637e-1..4.637e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -8.517e-1)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.726 m/s, temporal-detail RMSE 1.479 m/s (truth detail RMS 0.347 m/s, relative 4.266); |v − t| median 0.745, p90 3.070 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.092 m/s (rel 2.556)
+  zmshr1m κ 1    it  11: f = 5.6181e13, velocity RMSE 1.648 m/s (rel 3.858), frames 1.58 1.55 1.75 1.80 1.80 1.84 1.62 1.67 1.61 1.69 1.56 1.65 1.58 1.60 1.63 1.58 1.65 1.60 1.52 1.64, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.713 m/s, temporal-detail RMSE 1.426 m/s (truth detail RMS 0.347 m/s, relative 4.111); |v − t| median 0.684, p90 2.994 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.060 m/s (rel 2.482)
+  zmshr1m κ 1    it  12: f = 5.5781e13, velocity RMSE 1.594 m/s (rel 3.731), frames 1.51 1.48 1.70 1.76 1.75 1.79 1.58 1.62 1.56 1.63 1.50 1.60 1.52 1.56 1.58 1.51 1.57 1.54 1.47 1.59, 42s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+  set streaming: 70 sets, 0.3 GiB up / 0.3 GiB down
+  temporal anchor anc_mean100: μ_abs = 1.7913e6, λ_max 5.1342e1 → 5.4698e1 (M N)
+solver state: device (0.58 GiB per stack, 140 sets)
+    velocity error split: time-mean RMSE 1.657 m/s, temporal-detail RMSE 0.347 m/s (truth detail RMS 0.347 m/s, relative 1.000); |v − t| median 0.810, p90 3.119 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.123 m/s (rel 2.628)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 1.693 m/s (rel 3.962), frames 1.66 1.66 1.78 1.82 1.79 1.80 1.74 1.69 1.66 1.65 1.65 1.67 1.68 1.67 1.65 1.65 1.65 1.65 1.65 1.67, 1s
+    anchor it 0: μ 1.791e6, ‖R x − c‖/‖c‖ 1.458e-7, f 1.0294e14 + anchor 7.9867e0
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.604 m/s, temporal-detail RMSE 0.553 m/s (truth detail RMS 0.347 m/s, relative 1.595); |v − t| median 0.818, p90 3.116 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.125 m/s (rel 2.633)
+  zmshr1m κ 1    it   1: f = 1.0294e14, velocity RMSE 1.697 m/s (rel 3.972), frames 1.66 1.67 1.79 1.82 1.80 1.80 1.74 1.69 1.67 1.66 1.66 1.67 1.69 1.67 1.66 1.65 1.65 1.65 1.66 1.68, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.6s
+    anchor it 1: μ 1.791e6, ‖R x − c‖/‖c‖ 1.045e-2, f 9.9986e13 + anchor 4.1061e10
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.381 m/s, temporal-detail RMSE 1.014 m/s (truth detail RMS 0.347 m/s, relative 2.923); |v − t| median 0.845, p90 3.127 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.132 m/s (rel 2.650)
+  zmshr1m κ 1    it   2: f = 1.0003e14, velocity RMSE 1.713 m/s (rel 4.009), frames 1.67 1.69 1.80 1.82 1.81 1.82 1.75 1.71 1.67 1.69 1.67 1.69 1.70 1.68 1.67 1.68 1.68 1.66 1.69 1.69, 7s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 2: μ 1.791e6, ‖R x − c‖/‖c‖ 4.967e-2, f 9.1642e13 + anchor 9.2723e11
+    velocity error split: time-mean RMSE 1.110 m/s, temporal-detail RMSE 1.342 m/s (truth detail RMS 0.347 m/s, relative 3.871); |v − t| median 0.894, p90 3.169 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.150 m/s (rel 2.692)
+  zmshr1m κ 1    it   3: f = 9.2570e13, velocity RMSE 1.742 m/s (rel 4.077), frames 1.69 1.70 1.86 1.86 1.84 1.85 1.76 1.76 1.70 1.72 1.68 1.73 1.72 1.73 1.72 1.68 1.72 1.68 1.67 1.72, 11s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.834 m/s, temporal-detail RMSE 1.651 m/s (truth detail RMS 0.347 m/s, relative 4.760); |v − t| median 1.080, p90 3.275 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.214 m/s (rel 2.841)
+  zmshr1m κ 1    it   4: f = 8.4426e13, velocity RMSE 1.849 m/s (rel 4.329), frames 1.80 1.78 1.94 1.99 1.97 1.99 1.83 1.89 1.80 1.88 1.79 1.86 1.81 1.85 1.83 1.79 1.83 1.76 1.77 1.83, 14s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.764 m/s, temporal-detail RMSE 1.720 m/s (truth detail RMS 0.347 m/s, relative 4.959); |v − t| median 1.139, p90 3.306 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.231 m/s (rel 2.883)
+  zmshr1m κ 1    it   5: f = 7.8418e13, velocity RMSE 1.882 m/s (rel 4.405), frames 1.84 1.81 1.99 2.02 2.01 2.04 1.86 1.91 1.84 1.90 1.82 1.87 1.84 1.87 1.84 1.84 1.86 1.79 1.79 1.85, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 5: μ 1.791e6, ‖R x − c‖/‖c‖ 1.823e-1, f 6.1967e13 + anchor 1.2492e13
+    velocity error split: time-mean RMSE 0.769 m/s, temporal-detail RMSE 1.692 m/s (truth detail RMS 0.347 m/s, relative 4.879); |v − t| median 1.095, p90 3.284 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.218 m/s (rel 2.852)
+  zmshr1m κ 1    it   6: f = 7.4460e13, velocity RMSE 1.858 m/s (rel 4.350), frames 1.82 1.78 1.96 1.99 1.98 2.02 1.84 1.89 1.81 1.88 1.79 1.85 1.81 1.85 1.82 1.81 1.84 1.77 1.77 1.84, 21s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.781 m/s, temporal-detail RMSE 1.626 m/s (truth detail RMS 0.347 m/s, relative 4.689); |v − t| median 0.994, p90 3.230 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.189 m/s (rel 2.784)
+  zmshr1m κ 1    it   7: f = 7.3126e13, velocity RMSE 1.804 m/s (rel 4.222), frames 1.76 1.72 1.88 1.94 1.93 1.97 1.78 1.84 1.76 1.84 1.75 1.81 1.76 1.78 1.77 1.76 1.79 1.72 1.70 1.79, 24s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.791 m/s, temporal-detail RMSE 1.551 m/s (truth detail RMS 0.347 m/s, relative 4.471); |v − t| median 0.885, p90 3.171 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.150 m/s (rel 2.693)
+  zmshr1m κ 1    it   8: f = 7.2228e13, velocity RMSE 1.741 m/s (rel 4.075), frames 1.68 1.64 1.84 1.89 1.87 1.93 1.73 1.76 1.70 1.77 1.69 1.76 1.69 1.71 1.71 1.68 1.72 1.66 1.62 1.73, 28s
+    time it 7: gradient 0.6s, step 0.5s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.785 m/s, temporal-detail RMSE 1.484 m/s (truth detail RMS 0.347 m/s, relative 4.280); |v − t| median 0.788, p90 3.102 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.109 m/s (rel 2.595)
+  zmshr1m κ 1    it   9: f = 7.1320e13, velocity RMSE 1.679 m/s (rel 3.930), frames 1.60 1.58 1.78 1.82 1.82 1.89 1.68 1.69 1.64 1.69 1.61 1.68 1.66 1.67 1.66 1.61 1.65 1.62 1.53 1.66, 31s
+    time it 8: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.786 m/s, temporal-detail RMSE 1.454 m/s (truth detail RMS 0.347 m/s, relative 4.192); |v − t| median 0.760, p90 3.065 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.094 m/s (rel 2.561)
+  zmshr1m κ 1    it  10: f = 7.0002e13, velocity RMSE 1.652 m/s (rel 3.868), frames 1.58 1.55 1.76 1.79 1.81 1.86 1.66 1.66 1.61 1.67 1.59 1.66 1.62 1.62 1.62 1.58 1.62 1.57 1.52 1.64, 35s
+    time it 9: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    anchor it 10: μ 1.791e6, ‖R x − c‖/‖c‖ 1.392e-1, f 6.1084e13 + anchor 7.2794e12
+    zmshr1-M it 10: tau 5.024e-1..5.024e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -1.268e0)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.794 m/s, temporal-detail RMSE 1.409 m/s (truth detail RMS 0.347 m/s, relative 4.065); |v − t| median 0.723, p90 3.016 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.076 m/s (rel 2.519)
+  zmshr1m κ 1    it  11: f = 6.8364e13, velocity RMSE 1.618 m/s (rel 3.786), frames 1.54 1.53 1.74 1.76 1.77 1.84 1.61 1.63 1.57 1.63 1.55 1.62 1.58 1.58 1.58 1.55 1.57 1.54 1.49 1.60, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.794 m/s, temporal-detail RMSE 1.377 m/s (truth detail RMS 0.347 m/s, relative 3.972); |v − t| median 0.695, p90 2.979 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.061 m/s (rel 2.483)
+  zmshr1m κ 1    it  12: f = 6.7656e13, velocity RMSE 1.590 m/s (rel 3.722), frames 1.53 1.49 1.72 1.73 1.75 1.81 1.59 1.60 1.55 1.58 1.52 1.60 1.54 1.56 1.56 1.51 1.54 1.53 1.46 1.59, 42s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+  set streaming: 70 sets, 0.3 GiB up / 0.3 GiB down
+solver state: device (0.58 GiB per stack, 140 sets)
+  seg_zmshr1m_k1_zero: started from zero
+    velocity error split: time-mean RMSE 0.250 m/s, temporal-detail RMSE 0.347 m/s (truth detail RMS 0.347 m/s, relative 1.000); |v − t| median 0.141, p90 0.606 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.427 m/s (rel 1.000)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 0.427 m/s (rel 1.000), frames 0.24 0.27 0.71 0.81 0.73 0.73 0.57 0.39 0.26 0.20 0.19 0.31 0.38 0.31 0.22 0.19 0.18 0.17 0.24 0.36, 1s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.672 m/s, temporal-detail RMSE 0.955 m/s (truth detail RMS 0.347 m/s, relative 2.753); |v − t| median 0.396, p90 2.025 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.842 m/s (rel 1.972)
+  zmshr1m κ 1    it   1: f = 3.8806e14, velocity RMSE 1.167 m/s (rel 2.733), frames 1.15 1.16 1.29 1.35 1.30 1.24 1.20 1.11 1.10 1.10 1.11 1.13 1.18 1.12 1.09 1.11 1.18 1.11 1.13 1.15, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.6s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.694 m/s, temporal-detail RMSE 1.192 m/s (truth detail RMS 0.347 m/s, relative 3.438); |v − t| median 0.529, p90 2.582 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.971 m/s (rel 2.273)
+  zmshr1m κ 1    it   2: f = 3.3347e14, velocity RMSE 1.379 m/s (rel 3.229), frames 1.32 1.40 1.48 1.50 1.43 1.47 1.36 1.35 1.30 1.36 1.32 1.39 1.38 1.39 1.31 1.29 1.39 1.38 1.36 1.39, 8s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.760 m/s, temporal-detail RMSE 1.653 m/s (truth detail RMS 0.347 m/s, relative 4.768); |v − t| median 1.076, p90 3.233 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.222 m/s (rel 2.860)
+  zmshr1m κ 1    it   3: f = 2.6351e14, velocity RMSE 1.819 m/s (rel 4.259), frames 1.73 1.86 1.84 1.88 1.80 1.93 1.73 1.84 1.78 1.92 1.76 1.83 1.80 1.87 1.73 1.76 1.91 1.79 1.76 1.85, 11s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.747 m/s, temporal-detail RMSE 1.773 m/s (truth detail RMS 0.347 m/s, relative 5.114); |v − t| median 1.298, p90 3.331 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.289 m/s (rel 3.018)
+  zmshr1m κ 1    it   4: f = 2.1119e14, velocity RMSE 1.924 m/s (rel 4.505), frames 1.81 1.93 1.92 2.01 1.93 2.07 1.84 2.02 1.89 2.10 1.93 1.89 1.85 1.95 1.81 1.84 1.99 1.88 1.83 1.98, 15s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.749 m/s, temporal-detail RMSE 1.770 m/s (truth detail RMS 0.347 m/s, relative 5.105); |v − t| median 1.285, p90 3.332 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.285 m/s (rel 3.008)
+  zmshr1m κ 1    it   5: f = 1.9270e14, velocity RMSE 1.922 m/s (rel 4.500), frames 1.82 1.86 1.94 2.01 1.93 2.11 1.86 1.97 1.87 2.09 1.94 1.88 1.84 1.94 1.81 1.86 1.98 1.86 1.84 2.00, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.745 m/s, temporal-detail RMSE 1.764 m/s (truth detail RMS 0.347 m/s, relative 5.087); |v − t| median 1.265, p90 3.326 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.278 m/s (rel 2.993)
+  zmshr1m κ 1    it   6: f = 1.7441e14, velocity RMSE 1.915 m/s (rel 4.483), frames 1.84 1.84 1.97 1.98 1.92 2.14 1.86 1.94 1.85 2.06 1.94 1.88 1.85 1.89 1.80 1.86 1.94 1.86 1.83 2.00, 21s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.709 m/s, temporal-detail RMSE 1.725 m/s (truth detail RMS 0.347 m/s, relative 4.973); |v − t| median 1.151, p90 3.281 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.236 m/s (rel 2.894)
+  zmshr1m κ 1    it   7: f = 1.6486e14, velocity RMSE 1.865 m/s (rel 4.365), frames 1.80 1.80 1.92 1.94 1.85 2.12 1.89 1.85 1.77 2.02 1.89 1.84 1.80 1.84 1.74 1.82 1.87 1.80 1.72 1.97, 25s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.641 m/s, temporal-detail RMSE 1.723 m/s (truth detail RMS 0.347 m/s, relative 4.970); |v − t| median 1.087, p90 3.253 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.215 m/s (rel 2.844)
+  zmshr1m κ 1    it   8: f = 1.3920e14, velocity RMSE 1.839 m/s (rel 4.304), frames 1.73 1.77 1.87 1.89 1.82 2.17 1.87 1.90 1.73 1.96 1.81 1.86 1.74 1.86 1.74 1.80 1.83 1.77 1.62 1.96, 28s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.637 m/s, temporal-detail RMSE 1.666 m/s (truth detail RMS 0.347 m/s, relative 4.806); |v − t| median 1.000, p90 3.199 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.189 m/s (rel 2.782)
+  zmshr1m κ 1    it   9: f = 1.2128e14, velocity RMSE 1.784 m/s (rel 4.176), frames 1.71 1.68 1.85 1.86 1.81 2.09 1.81 1.80 1.67 1.92 1.80 1.73 1.67 1.76 1.69 1.75 1.79 1.70 1.58 1.93, 32s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.632 m/s, temporal-detail RMSE 1.644 m/s (truth detail RMS 0.347 m/s, relative 4.740); |v − t| median 0.961, p90 3.172 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.177 m/s (rel 2.756)
+  zmshr1m κ 1    it  10: f = 1.0564e14, velocity RMSE 1.761 m/s (rel 4.122), frames 1.70 1.67 1.83 1.82 1.79 2.04 1.79 1.78 1.64 1.90 1.78 1.72 1.65 1.75 1.67 1.72 1.77 1.70 1.56 1.89, 35s
+    time it 9: gradient 0.6s, step 0.5s, prior 1.9s, report 0.7s
+    zmshr1-M it 10: tau 7.892e-1..7.892e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -3.894e0)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.587 m/s, temporal-detail RMSE 1.598 m/s (truth detail RMS 0.347 m/s, relative 4.607); |v − t| median 0.856, p90 3.105 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.143 m/s (rel 2.675)
+  zmshr1m κ 1    it  11: f = 1.0097e14, velocity RMSE 1.702 m/s (rel 3.984), frames 1.59 1.61 1.76 1.74 1.76 1.97 1.72 1.68 1.61 1.85 1.70 1.69 1.61 1.70 1.67 1.65 1.72 1.65 1.48 1.83, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.512 m/s, temporal-detail RMSE 1.632 m/s (truth detail RMS 0.347 m/s, relative 4.705); |v − t| median 0.840, p90 3.126 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.143 m/s (rel 2.676)
+  zmshr1m κ 1    it  12: f = 8.8349e13, velocity RMSE 1.710 m/s (rel 4.003), frames 1.58 1.60 1.76 1.75 1.77 2.04 1.67 1.71 1.70 1.82 1.67 1.66 1.63 1.71 1.70 1.68 1.70 1.70 1.52 1.78, 42s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+  set streaming: 70 sets, 0.3 GiB up / 0.3 GiB down
+  temporal anchor anc_mean100: μ_abs = 1.7913e6, λ_max 5.1342e1 → 5.4698e1 (M N)
+solver state: device (0.58 GiB per stack, 140 sets)
+  seg_zmshr1m_k1_zero_anc_mean100: started from zero
+    velocity error split: time-mean RMSE 0.250 m/s, temporal-detail RMSE 0.347 m/s (truth detail RMS 0.347 m/s, relative 1.000); |v − t| median 0.141, p90 0.606 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.427 m/s (rel 1.000)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 0.427 m/s (rel 1.000), frames 0.24 0.27 0.71 0.81 0.73 0.73 0.57 0.39 0.26 0.20 0.19 0.31 0.38 0.31 0.22 0.19 0.18 0.17 0.24 0.36, 1s
+    anchor it 0: μ 1.791e6, ‖R x − c‖/‖c‖ 1.000e0, f 3.8806e14 + anchor 3.7579e14
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.078 m/s, temporal-detail RMSE 1.047 m/s (truth detail RMS 0.347 m/s, relative 3.019); |v − t| median 0.593, p90 2.863 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.041 m/s (rel 2.437)
+  zmshr1m κ 1    it   1: f = 7.6385e14, velocity RMSE 1.502 m/s (rel 3.517), frames 1.48 1.47 1.58 1.61 1.59 1.58 1.56 1.47 1.51 1.46 1.48 1.47 1.50 1.44 1.49 1.44 1.52 1.47 1.43 1.48, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.7s
+    anchor it 1: μ 1.791e6, ‖R x − c‖/‖c‖ 9.400e-1, f 3.2175e14 + anchor 3.3201e14
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.244 m/s, temporal-detail RMSE 1.314 m/s (truth detail RMS 0.347 m/s, relative 3.789); |v − t| median 1.061, p90 3.225 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.231 m/s (rel 2.881)
+  zmshr1m κ 1    it   2: f = 6.5376e14, velocity RMSE 1.810 m/s (rel 4.236), frames 1.75 1.80 1.89 1.89 1.85 1.89 1.81 1.83 1.78 1.81 1.75 1.80 1.82 1.81 1.80 1.74 1.79 1.78 1.79 1.80, 8s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 2: μ 1.791e6, ‖R x − c‖/‖c‖ 6.304e-1, f 2.0667e14 + anchor 1.4933e14
+    velocity error split: time-mean RMSE 1.304 m/s, temporal-detail RMSE 1.534 m/s (truth detail RMS 0.347 m/s, relative 4.425); |v − t| median 1.457, p90 3.402 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.349 m/s (rel 3.158)
+  zmshr1m κ 1    it   3: f = 3.5600e14, velocity RMSE 2.014 m/s (rel 4.714), frames 1.99 2.05 2.06 2.08 2.06 2.07 2.03 1.97 1.97 2.02 1.99 1.96 2.02 2.06 2.00 1.97 2.03 2.00 1.94 1.99, 11s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.8s, report 0.7s
+    velocity error split: time-mean RMSE 1.338 m/s, temporal-detail RMSE 1.555 m/s (truth detail RMS 0.347 m/s, relative 4.485); |v − t| median 1.518, p90 3.423 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.374 m/s (rel 3.217)
+  zmshr1m κ 1    it   4: f = 2.1670e14, velocity RMSE 2.051 m/s (rel 4.802), frames 2.00 2.03 2.10 2.13 2.12 2.16 2.06 2.08 2.00 2.08 2.02 2.05 2.01 2.06 2.01 2.01 2.03 2.00 2.00 2.07, 15s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 1.351 m/s, temporal-detail RMSE 1.530 m/s (truth detail RMS 0.347 m/s, relative 4.413); |v − t| median 1.501, p90 3.418 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.367 m/s (rel 3.200)
+  zmshr1m κ 1    it   5: f = 1.6795e14, velocity RMSE 2.042 m/s (rel 4.779), frames 2.01 2.01 2.10 2.13 2.12 2.15 2.05 2.06 2.00 2.06 2.01 2.02 2.01 2.03 1.99 2.00 2.02 1.98 2.00 2.07, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 5: μ 1.791e6, ‖R x − c‖/‖c‖ 2.734e-1, f 1.2198e14 + anchor 2.8099e13
+    velocity error split: time-mean RMSE 1.357 m/s, temporal-detail RMSE 1.498 m/s (truth detail RMS 0.347 m/s, relative 4.320); |v − t| median 1.463, p90 3.407 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.353 m/s (rel 3.167)
+  zmshr1m κ 1    it   6: f = 1.5008e14, velocity RMSE 2.021 m/s (rel 4.732), frames 2.01 1.98 2.10 2.10 2.11 2.14 2.03 2.03 1.98 2.02 1.99 2.00 1.98 1.99 1.98 1.98 1.98 1.97 1.97 2.06, 22s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 1.341 m/s, temporal-detail RMSE 1.465 m/s (truth detail RMS 0.347 m/s, relative 4.226); |v − t| median 1.400, p90 3.382 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.331 m/s (rel 3.115)
+  zmshr1m κ 1    it   7: f = 1.3078e14, velocity RMSE 1.986 m/s (rel 4.650), frames 1.97 1.95 2.06 2.07 2.08 2.12 2.02 1.99 1.93 2.01 1.95 1.97 1.92 1.96 1.95 1.94 1.94 1.94 1.93 2.01, 25s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 1.296 m/s, temporal-detail RMSE 1.489 m/s (truth detail RMS 0.347 m/s, relative 4.293); |v − t| median 1.374, p90 3.366 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.322 m/s (rel 3.094)
+  zmshr1m κ 1    it   8: f = 1.1119e14, velocity RMSE 1.973 m/s (rel 4.620), frames 1.93 1.92 2.05 2.06 2.06 2.13 1.99 1.99 1.92 1.99 1.93 1.98 1.92 1.96 1.93 1.92 1.93 1.92 1.90 2.01, 28s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 1.253 m/s, temporal-detail RMSE 1.491 m/s (truth detail RMS 0.347 m/s, relative 4.299); |v − t| median 1.322, p90 3.344 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.304 m/s (rel 3.053)
+  zmshr1m κ 1    it   9: f = 1.0457e14, velocity RMSE 1.947 m/s (rel 4.558), frames 1.91 1.89 2.03 2.03 2.05 2.10 1.96 1.96 1.89 1.97 1.90 1.94 1.92 1.94 1.92 1.88 1.91 1.90 1.86 1.98, 32s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 1.202 m/s, temporal-detail RMSE 1.492 m/s (truth detail RMS 0.347 m/s, relative 4.302); |v − t| median 1.257, p90 3.318 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.286 m/s (rel 3.009)
+  zmshr1m κ 1    it  10: f = 9.9798e13, velocity RMSE 1.916 m/s (rel 4.484), frames 1.88 1.86 2.00 1.98 2.01 2.07 1.93 1.92 1.87 1.94 1.87 1.90 1.88 1.90 1.90 1.85 1.87 1.88 1.83 1.95, 35s
+    time it 9: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    anchor it 10: μ 1.791e6, ‖R x − c‖/‖c‖ 1.820e-1, f 8.4275e13 + anchor 1.2447e13
+    zmshr1-M it 10: tau 2.367e0..2.367e0, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -2.628e0)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 1.028 m/s, temporal-detail RMSE 1.542 m/s (truth detail RMS 0.347 m/s, relative 4.447); |v − t| median 1.121, p90 3.267 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.241 m/s (rel 2.904)
+  zmshr1m κ 1    it  11: f = 9.6722e13, velocity RMSE 1.853 m/s (rel 4.339), frames 1.81 1.76 1.93 1.92 1.95 2.03 1.87 1.86 1.84 1.87 1.81 1.86 1.81 1.86 1.84 1.78 1.82 1.81 1.75 1.85, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.864 m/s, temporal-detail RMSE 1.564 m/s (truth detail RMS 0.347 m/s, relative 4.509); |v − t| median 0.975, p90 3.210 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.185 m/s (rel 2.774)
+  zmshr1m κ 1    it  12: f = 9.0272e13, velocity RMSE 1.786 m/s (rel 4.181), frames 1.77 1.70 1.86 1.83 1.89 1.97 1.74 1.77 1.78 1.85 1.75 1.78 1.74 1.80 1.79 1.73 1.74 1.75 1.69 1.78, 42s
+    time it 11: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+  set streaming: 70 sets, 0.3 GiB up / 0.3 GiB down
+solver state: device (0.58 GiB per stack, 140 sets)
+  meanres start (step 0): f = 1.0294e14 (0.9s)
+  meanres step 1 (circulant, per-encode line search): f = 9.6329e13, scales 6.916e-2 7.433e-2 7.184e-2 6.724e-2 6.567e-2 7.239e-2 7.034e-2 (1.8s)
+  seg_zmshr1m_k1_mr1c: started from mean + residual deconvolution (1 step(s), Circ) (3.0s)
+    velocity error split: time-mean RMSE 1.440 m/s, temporal-detail RMSE 0.937 m/s (truth detail RMS 0.347 m/s, relative 2.701); |v − t| median 0.849, p90 3.129 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.134 m/s (rel 2.656)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 1.717 m/s (rel 4.020), frames 1.67 1.70 1.81 1.82 1.80 1.82 1.76 1.72 1.69 1.68 1.69 1.68 1.71 1.70 1.69 1.69 1.68 1.67 1.67 1.69, 4s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.433 m/s, temporal-detail RMSE 0.929 m/s (truth detail RMS 0.347 m/s, relative 2.680); |v − t| median 0.837, p90 3.122 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.130 m/s (rel 2.646)
+  zmshr1m κ 1    it   1: f = 9.6329e13, velocity RMSE 1.708 m/s (rel 3.998), frames 1.66 1.69 1.79 1.82 1.80 1.81 1.74 1.71 1.67 1.68 1.67 1.68 1.69 1.68 1.68 1.68 1.67 1.66 1.68 1.69, 7s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.8s, report 0.7s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 138, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.377 m/s, temporal-detail RMSE 0.979 m/s (truth detail RMS 0.347 m/s, relative 2.824); |v − t| median 0.812, p90 3.108 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.120 m/s (rel 2.622)
+  zmshr1m κ 1    it   2: f = 9.3683e13, velocity RMSE 1.690 m/s (rel 3.956), frames 1.64 1.66 1.77 1.81 1.79 1.79 1.72 1.70 1.65 1.66 1.65 1.67 1.68 1.67 1.65 1.65 1.66 1.63 1.66 1.68, 10s
+    time it 1: gradient 0.6s, step 0.5s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 1.199 m/s, temporal-detail RMSE 1.139 m/s (truth detail RMS 0.347 m/s, relative 3.284); |v − t| median 0.768, p90 3.071 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.099 m/s (rel 2.573)
+  zmshr1m κ 1    it   3: f = 9.0296e13, velocity RMSE 1.654 m/s (rel 3.871), frames 1.60 1.61 1.75 1.78 1.78 1.77 1.68 1.67 1.61 1.62 1.60 1.64 1.62 1.62 1.63 1.62 1.64 1.60 1.58 1.63, 14s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.677 m/s, temporal-detail RMSE 1.526 m/s (truth detail RMS 0.347 m/s, relative 4.401); |v − t| median 0.776, p90 3.098 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.106 m/s (rel 2.590)
+  zmshr1m κ 1    it   4: f = 8.3184e13, velocity RMSE 1.670 m/s (rel 3.909), frames 1.60 1.54 1.74 1.82 1.84 1.87 1.60 1.70 1.66 1.70 1.58 1.66 1.61 1.66 1.64 1.61 1.68 1.64 1.53 1.67, 18s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.627 m/s, temporal-detail RMSE 1.530 m/s (truth detail RMS 0.347 m/s, relative 4.413); |v − t| median 0.761, p90 3.080 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.099 m/s (rel 2.573)
+  zmshr1m κ 1    it   5: f = 6.6378e13, velocity RMSE 1.654 m/s (rel 3.871), frames 1.61 1.53 1.75 1.78 1.81 1.85 1.57 1.68 1.63 1.72 1.59 1.64 1.58 1.62 1.63 1.57 1.67 1.58 1.51 1.68, 21s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.639 m/s, temporal-detail RMSE 1.507 m/s (truth detail RMS 0.347 m/s, relative 4.347); |v − t| median 0.736, p90 3.056 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.091 m/s (rel 2.553)
+  zmshr1m κ 1    it   6: f = 6.4313e13, velocity RMSE 1.637 m/s (rel 3.832), frames 1.58 1.52 1.73 1.77 1.80 1.82 1.56 1.67 1.61 1.68 1.57 1.62 1.57 1.62 1.62 1.55 1.65 1.58 1.49 1.66, 24s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.640 m/s, temporal-detail RMSE 1.490 m/s (truth detail RMS 0.347 m/s, relative 4.297); |v − t| median 0.717, p90 3.037 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.081 m/s (rel 2.532)
+  zmshr1m κ 1    it   7: f = 6.0475e13, velocity RMSE 1.622 m/s (rel 3.796), frames 1.56 1.50 1.71 1.76 1.78 1.81 1.54 1.65 1.60 1.67 1.56 1.62 1.55 1.61 1.61 1.54 1.64 1.57 1.47 1.65, 27s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.642 m/s, temporal-detail RMSE 1.436 m/s (truth detail RMS 0.347 m/s, relative 4.140); |v − t| median 0.661, p90 2.973 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.052 m/s (rel 2.463)
+  zmshr1m κ 1    it   8: f = 5.9563e13, velocity RMSE 1.572 m/s (rel 3.681), frames 1.51 1.42 1.66 1.72 1.72 1.76 1.51 1.60 1.55 1.62 1.49 1.58 1.50 1.56 1.56 1.50 1.59 1.53 1.44 1.57, 31s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.588 m/s, temporal-detail RMSE 1.336 m/s (truth detail RMS 0.347 m/s, relative 3.851); |v − t| median 0.558, p90 2.788 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.985 m/s (rel 2.306)
+  zmshr1m κ 1    it   9: f = 5.7824e13, velocity RMSE 1.459 m/s (rel 3.416), frames 1.38 1.30 1.55 1.63 1.63 1.69 1.42 1.49 1.42 1.51 1.36 1.42 1.40 1.45 1.43 1.37 1.45 1.42 1.34 1.47, 34s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.580 m/s, temporal-detail RMSE 1.326 m/s (truth detail RMS 0.347 m/s, relative 3.823); |v − t| median 0.548, p90 2.768 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.978 m/s (rel 2.290)
+  zmshr1m κ 1    it  10: f = 5.5613e13, velocity RMSE 1.447 m/s (rel 3.388), frames 1.37 1.31 1.54 1.60 1.61 1.67 1.41 1.49 1.42 1.48 1.34 1.42 1.39 1.44 1.42 1.37 1.43 1.41 1.32 1.45, 38s
+    time it 9: gradient 0.6s, step 0.5s, prior 1.9s, report 0.7s
+    zmshr1-M it 10: tau 5.491e-1..5.491e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -1.567e0)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.560 m/s, temporal-detail RMSE 1.300 m/s (truth detail RMS 0.347 m/s, relative 3.750); |v − t| median 0.525, p90 2.711 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.961 m/s (rel 2.251)
+  zmshr1m κ 1    it  11: f = 5.4644e13, velocity RMSE 1.416 m/s (rel 3.314), frames 1.33 1.31 1.50 1.57 1.58 1.64 1.37 1.46 1.39 1.47 1.29 1.39 1.34 1.43 1.38 1.33 1.37 1.37 1.30 1.43, 42s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.443 m/s, temporal-detail RMSE 1.286 m/s (truth detail RMS 0.347 m/s, relative 3.709); |v − t| median 0.479, p90 2.591 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.928 m/s (rel 2.172)
+  zmshr1m κ 1    it  12: f = 5.3378e13, velocity RMSE 1.360 m/s (rel 3.184), frames 1.31 1.33 1.48 1.47 1.49 1.57 1.37 1.40 1.32 1.42 1.28 1.30 1.26 1.35 1.31 1.27 1.30 1.32 1.24 1.36, 45s
+    time it 11: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+  set streaming: 350 sets, 1.4 GiB up / 1.4 GiB down
+  temporal anchor anc_mean100: μ_abs = 1.7913e6, λ_max 5.1342e1 → 5.4698e1 (M N)
+solver state: device (0.58 GiB per stack, 140 sets)
+  seg_zmshr1m_k1_mr1c_anc_mean100: meanres start mr1c reused from the previous run
+  seg_zmshr1m_k1_mr1c_anc_mean100: started from mean + residual deconvolution (1 step(s), Circ) (0.0s)
+    velocity error split: time-mean RMSE 1.440 m/s, temporal-detail RMSE 0.937 m/s (truth detail RMS 0.347 m/s, relative 2.701); |v − t| median 0.849, p90 3.129 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.134 m/s (rel 2.656)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 1.717 m/s (rel 4.020), frames 1.67 1.70 1.81 1.82 1.80 1.82 1.76 1.72 1.69 1.68 1.69 1.68 1.71 1.70 1.69 1.69 1.68 1.67 1.67 1.69, 1s
+    anchor it 0: μ 1.791e6, ‖R x − c‖/‖c‖ 4.004e-2, f 9.6329e13 + anchor 6.0246e11
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.435 m/s, temporal-detail RMSE 0.926 m/s (truth detail RMS 0.347 m/s, relative 2.669); |v − t| median 0.837, p90 3.122 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.130 m/s (rel 2.645)
+  zmshr1m κ 1    it   1: f = 9.6931e13, velocity RMSE 1.708 m/s (rel 3.998), frames 1.66 1.69 1.79 1.81 1.80 1.81 1.74 1.70 1.67 1.68 1.67 1.68 1.70 1.68 1.68 1.67 1.67 1.66 1.68 1.70, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.7s
+    anchor it 1: μ 1.791e6, ‖R x − c‖/‖c‖ 3.656e-2, f 9.3827e13 + anchor 5.0227e11
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 139, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 1.391 m/s, temporal-detail RMSE 0.965 m/s (truth detail RMS 0.347 m/s, relative 2.784); |v − t| median 0.815, p90 3.112 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.122 m/s (rel 2.626)
+  zmshr1m κ 1    it   2: f = 9.4329e13, velocity RMSE 1.693 m/s (rel 3.963), frames 1.65 1.66 1.78 1.81 1.79 1.79 1.72 1.70 1.66 1.66 1.66 1.68 1.68 1.67 1.66 1.66 1.66 1.63 1.66 1.67, 7s
+    time it 1: gradient 0.6s, step 0.5s, prior 1.7s, report 0.7s
+    anchor it 2: μ 1.791e6, ‖R x − c‖/‖c‖ 4.164e-2, f 9.1081e13 + anchor 6.5160e11
+    velocity error split: time-mean RMSE 1.255 m/s, temporal-detail RMSE 1.097 m/s (truth detail RMS 0.347 m/s, relative 3.164); |v − t| median 0.784, p90 3.082 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.109 m/s (rel 2.595)
+  zmshr1m κ 1    it   3: f = 9.1732e13, velocity RMSE 1.667 m/s (rel 3.902), frames 1.62 1.62 1.75 1.80 1.78 1.77 1.70 1.67 1.63 1.63 1.61 1.66 1.65 1.64 1.64 1.63 1.65 1.60 1.61 1.65, 11s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.802 m/s, temporal-detail RMSE 1.472 m/s (truth detail RMS 0.347 m/s, relative 4.245); |v − t| median 0.795, p90 3.094 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.113 m/s (rel 2.605)
+  zmshr1m κ 1    it   4: f = 8.7191e13, velocity RMSE 1.676 m/s (rel 3.924), frames 1.63 1.56 1.76 1.82 1.83 1.87 1.66 1.73 1.67 1.68 1.60 1.69 1.65 1.64 1.64 1.61 1.66 1.59 1.56 1.65, 15s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.773 m/s, temporal-detail RMSE 1.480 m/s (truth detail RMS 0.347 m/s, relative 4.268); |v − t| median 0.784, p90 3.088 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.108 m/s (rel 2.594)
+  zmshr1m κ 1    it   5: f = 7.8855e13, velocity RMSE 1.670 m/s (rel 3.909), frames 1.61 1.55 1.77 1.80 1.82 1.87 1.65 1.69 1.65 1.70 1.60 1.68 1.63 1.64 1.63 1.60 1.65 1.58 1.54 1.67, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 5: μ 1.791e6, ‖R x − c‖/‖c‖ 1.795e-1, f 6.3255e13 + anchor 1.2109e13
+    velocity error split: time-mean RMSE 0.775 m/s, temporal-detail RMSE 1.471 m/s (truth detail RMS 0.347 m/s, relative 4.242); |v − t| median 0.773, p90 3.074 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.105 m/s (rel 2.587)
+  zmshr1m κ 1    it   6: f = 7.5364e13, velocity RMSE 1.663 m/s (rel 3.892), frames 1.60 1.54 1.76 1.80 1.81 1.86 1.64 1.70 1.64 1.68 1.59 1.67 1.62 1.63 1.64 1.59 1.64 1.58 1.53 1.67, 21s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.779 m/s, temporal-detail RMSE 1.454 m/s (truth detail RMS 0.347 m/s, relative 4.194); |v − t| median 0.751, p90 3.061 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.097 m/s (rel 2.567)
+  zmshr1m κ 1    it   7: f = 7.3575e13, velocity RMSE 1.650 m/s (rel 3.862), frames 1.59 1.53 1.75 1.80 1.80 1.85 1.62 1.69 1.62 1.65 1.57 1.66 1.61 1.64 1.62 1.58 1.63 1.59 1.51 1.65, 25s
+    time it 6: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.757 m/s, temporal-detail RMSE 1.427 m/s (truth detail RMS 0.347 m/s, relative 4.116); |v − t| median 0.713, p90 3.018 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.074 m/s (rel 2.515)
+  zmshr1m κ 1    it   8: f = 7.1826e13, velocity RMSE 1.615 m/s (rel 3.782), frames 1.53 1.49 1.72 1.77 1.78 1.81 1.59 1.66 1.58 1.62 1.54 1.62 1.57 1.60 1.59 1.55 1.58 1.56 1.49 1.61, 28s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.661 m/s, temporal-detail RMSE 1.407 m/s (truth detail RMS 0.347 m/s, relative 4.058); |v − t| median 0.660, p90 2.940 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.043 m/s (rel 2.441)
+  zmshr1m κ 1    it   9: f = 6.9168e13, velocity RMSE 1.555 m/s (rel 3.639), frames 1.50 1.45 1.68 1.70 1.72 1.76 1.53 1.57 1.50 1.56 1.47 1.53 1.51 1.54 1.53 1.50 1.50 1.51 1.43 1.56, 32s
+    time it 8: gradient 0.6s, step 0.5s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.668 m/s, temporal-detail RMSE 1.394 m/s (truth detail RMS 0.347 m/s, relative 4.019); |v − t| median 0.653, p90 2.924 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.039 m/s (rel 2.433)
+  zmshr1m κ 1    it  10: f = 6.6600e13, velocity RMSE 1.546 m/s (rel 3.618), frames 1.49 1.45 1.66 1.69 1.71 1.75 1.52 1.56 1.49 1.55 1.46 1.53 1.49 1.52 1.52 1.48 1.49 1.51 1.41 1.57, 35s
+    time it 9: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    anchor it 10: μ 1.791e6, ‖R x − c‖/‖c‖ 1.217e-1, f 6.0153e13 + anchor 5.5692e12
+    zmshr1-M it 10: tau 5.723e-1..5.723e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -6.887e-1)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.683 m/s, temporal-detail RMSE 1.370 m/s (truth detail RMS 0.347 m/s, relative 3.951); |v − t| median 0.640, p90 2.902 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.031 m/s (rel 2.413)
+  zmshr1m κ 1    it  11: f = 6.5723e13, velocity RMSE 1.531 m/s (rel 3.584), frames 1.48 1.43 1.65 1.68 1.70 1.74 1.50 1.56 1.47 1.52 1.44 1.52 1.48 1.51 1.50 1.47 1.47 1.49 1.40 1.55, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.654 m/s, temporal-detail RMSE 1.319 m/s (truth detail RMS 0.347 m/s, relative 3.803); |v − t| median 0.589, p90 2.798 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.999 m/s (rel 2.339)
+  zmshr1m κ 1    it  12: f = 6.5326e13, velocity RMSE 1.472 m/s (rel 3.446), frames 1.42 1.35 1.61 1.60 1.64 1.72 1.46 1.51 1.41 1.47 1.36 1.47 1.43 1.47 1.44 1.39 1.39 1.43 1.32 1.49, 42s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+  set streaming: 350 sets, 1.4 GiB up / 1.4 GiB down
+solver state: device (0.58 GiB per stack, 140 sets)
+  meanres start (step 0): f = 1.0294e14 (0.9s)
+    meanres pcg it 1: ‖r‖/‖r₀‖ median 9.73e-1, max 1.14e0
+    meanres pcg it 2: ‖r‖/‖r₀‖ median 1.37e0, max 1.97e0
+    meanres pcg it 3: ‖r‖/‖r₀‖ median 1.61e0, max 2.22e0
+  meanres step 1 (PCG 3 on the mean normal operator): f = 7.4519e13 (25.1s)
+  seg_zmshr1m_k1_mr1p3: started from mean + residual deconvolution (1 step(s), Pcg(3)) (26.3s)
+    velocity error split: time-mean RMSE 0.670 m/s, temporal-detail RMSE 1.963 m/s (truth detail RMS 0.347 m/s, relative 5.661); |v − t| median 1.510, p90 3.462 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.352 m/s (rel 3.165)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 2.074 m/s (rel 4.855), frames 2.07 2.00 2.18 2.19 2.19 2.15 2.05 2.07 2.02 2.10 2.03 2.08 2.07 2.04 2.08 2.03 2.10 1.98 1.98 2.05, 27s
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.695 m/s, temporal-detail RMSE 1.877 m/s (truth detail RMS 0.347 m/s, relative 5.414); |v − t| median 1.392, p90 3.407 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.309 m/s (rel 3.063)
+  zmshr1m κ 1    it   1: f = 7.4519e13, velocity RMSE 2.002 m/s (rel 4.685), frames 1.99 1.93 2.11 2.13 2.11 2.11 1.96 2.01 1.96 2.04 1.97 2.01 1.97 1.98 1.99 1.97 2.03 1.90 1.89 1.96, 30s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.7s
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.733 m/s, temporal-detail RMSE 1.742 m/s (truth detail RMS 0.347 m/s, relative 5.024); |v − t| median 1.164, p90 3.312 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.239 m/s (rel 2.901)
+  zmshr1m κ 1    it   2: f = 6.7068e13, velocity RMSE 1.890 m/s (rel 4.425), frames 1.86 1.78 1.95 2.03 2.01 2.03 1.82 1.90 1.84 1.91 1.86 1.91 1.87 1.88 1.89 1.87 1.93 1.81 1.77 1.87, 34s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.752 m/s, temporal-detail RMSE 1.593 m/s (truth detail RMS 0.347 m/s, relative 4.595); |v − t| median 0.921, p90 3.189 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.162 m/s (rel 2.720)
+  zmshr1m κ 1    it   3: f = 6.4289e13, velocity RMSE 1.762 m/s (rel 4.125), frames 1.71 1.66 1.82 1.91 1.89 1.93 1.69 1.78 1.73 1.80 1.71 1.78 1.74 1.74 1.77 1.73 1.79 1.68 1.61 1.74, 37s
+    time it 2: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.750 m/s, temporal-detail RMSE 1.501 m/s (truth detail RMS 0.347 m/s, relative 4.328); |v − t| median 0.788, p90 3.100 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.110 m/s (rel 2.599)
+  zmshr1m κ 1    it   4: f = 6.2018e13, velocity RMSE 1.678 m/s (rel 3.927), frames 1.64 1.56 1.73 1.82 1.83 1.85 1.62 1.69 1.65 1.72 1.61 1.69 1.64 1.67 1.69 1.64 1.69 1.60 1.51 1.67, 41s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.717 m/s, temporal-detail RMSE 1.405 m/s (truth detail RMS 0.347 m/s, relative 4.051); |v − t| median 0.666, p90 2.976 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.051 m/s (rel 2.460)
+  zmshr1m κ 1    it   5: f = 6.0906e13, velocity RMSE 1.577 m/s (rel 3.692), frames 1.54 1.45 1.64 1.72 1.74 1.77 1.54 1.57 1.57 1.61 1.51 1.58 1.53 1.58 1.57 1.52 1.60 1.50 1.42 1.55, 44s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.672 m/s, temporal-detail RMSE 1.320 m/s (truth detail RMS 0.347 m/s, relative 3.805); |v − t| median 0.576, p90 2.838 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.993 m/s (rel 2.324)
+  zmshr1m κ 1    it   6: f = 6.0067e13, velocity RMSE 1.481 m/s (rel 3.466), frames 1.44 1.34 1.57 1.63 1.65 1.67 1.43 1.49 1.47 1.52 1.42 1.48 1.42 1.48 1.48 1.41 1.48 1.41 1.31 1.47, 48s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.621 m/s, temporal-detail RMSE 1.257 m/s (truth detail RMS 0.347 m/s, relative 3.624); |v − t| median 0.516, p90 2.689 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.949 m/s (rel 2.222)
+  zmshr1m κ 1    it   7: f = 5.9457e13, velocity RMSE 1.402 m/s (rel 3.282), frames 1.34 1.26 1.52 1.55 1.56 1.60 1.36 1.42 1.38 1.43 1.34 1.39 1.34 1.43 1.40 1.33 1.40 1.34 1.24 1.37, 51s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.511 m/s, temporal-detail RMSE 1.170 m/s (truth detail RMS 0.347 m/s, relative 3.374); |v − t| median 0.437, p90 2.354 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.879 m/s (rel 2.057)
+  zmshr1m κ 1    it   8: f = 5.8943e13, velocity RMSE 1.277 m/s (rel 2.988), frames 1.21 1.14 1.39 1.42 1.42 1.51 1.22 1.31 1.27 1.29 1.21 1.25 1.19 1.30 1.29 1.19 1.24 1.21 1.14 1.25, 54s
+    time it 7: gradient 0.6s, step 0.4s, prior 1.9s, report 0.6s
+    velocity error split: time-mean RMSE 0.428 m/s, temporal-detail RMSE 1.179 m/s (truth detail RMS 0.347 m/s, relative 3.401); |v − t| median 0.411, p90 2.303 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.862 m/s (rel 2.017)
+  zmshr1m κ 1    it   9: f = 5.8235e13, velocity RMSE 1.254 m/s (rel 2.936), frames 1.19 1.21 1.34 1.37 1.40 1.51 1.21 1.31 1.24 1.32 1.20 1.17 1.18 1.25 1.27 1.12 1.21 1.19 1.10 1.22, 58s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.6s
+    velocity error split: time-mean RMSE 0.425 m/s, temporal-detail RMSE 1.145 m/s (truth detail RMS 0.347 m/s, relative 3.303); |v − t| median 0.391, p90 2.203 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.842 m/s (rel 1.970)
+  zmshr1m κ 1    it  10: f = 5.8165e13, velocity RMSE 1.222 m/s (rel 2.859), frames 1.15 1.13 1.33 1.36 1.38 1.49 1.18 1.28 1.21 1.25 1.16 1.15 1.13 1.21 1.23 1.10 1.19 1.15 1.08 1.20, 61s
+    time it 9: gradient 0.6s, step 0.5s, prior 1.9s, report 0.6s
+    zmshr1-M it 10: tau 4.545e-1..4.545e-1, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -5.725e-1)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.422 m/s, temporal-detail RMSE 1.114 m/s (truth detail RMS 0.347 m/s, relative 3.213); |v − t| median 0.376, p90 2.119 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.825 m/s (rel 1.932)
+  zmshr1m κ 1    it  11: f = 5.6406e13, velocity RMSE 1.192 m/s (rel 2.789), frames 1.12 1.10 1.31 1.33 1.35 1.45 1.16 1.25 1.18 1.19 1.12 1.11 1.09 1.18 1.19 1.08 1.17 1.11 1.06 1.17, 65s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.6s
+    velocity error split: time-mean RMSE 0.415 m/s, temporal-detail RMSE 1.087 m/s (truth detail RMS 0.347 m/s, relative 3.136); |v − t| median 0.360, p90 2.047 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.811 m/s (rel 1.898)
+  zmshr1m κ 1    it  12: f = 5.5989e13, velocity RMSE 1.164 m/s (rel 2.724), frames 1.08 1.06 1.28 1.31 1.33 1.43 1.13 1.23 1.14 1.16 1.09 1.08 1.06 1.16 1.17 1.06 1.15 1.08 1.03 1.15, 68s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.5s, report 0.6s
+  set streaming: 1057 sets, 4.4 GiB up / 4.4 GiB down
+  temporal anchor anc_mean100: μ_abs = 1.7913e6, λ_max 5.1342e1 → 5.4698e1 (M N)
+solver state: device (0.58 GiB per stack, 140 sets)
+  seg_zmshr1m_k1_mr1p3_anc_mean100: meanres start mr1p3 reused from the previous run
+  seg_zmshr1m_k1_mr1p3_anc_mean100: started from mean + residual deconvolution (1 step(s), Pcg(3)) (0.0s)
+    velocity error split: time-mean RMSE 0.670 m/s, temporal-detail RMSE 1.963 m/s (truth detail RMS 0.347 m/s, relative 5.661); |v − t| median 1.510, p90 3.462 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.352 m/s (rel 3.165)
+  zmshr1m κ 1    it   0: f = NaN, velocity RMSE 2.074 m/s (rel 4.855), frames 2.07 2.00 2.18 2.19 2.19 2.15 2.05 2.07 2.02 2.10 2.03 2.08 2.07 2.04 2.08 2.03 2.10 1.98 1.98 2.05, 1s
+    anchor it 0: μ 1.791e6, ‖R x − c‖/‖c‖ 2.722e-1, f 7.4519e13 + anchor 2.7840e13
+    LLR on GPU [0]: 1360 blocks (0 left unchanged), k ≤ 140, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.691 m/s, temporal-detail RMSE 1.877 m/s (truth detail RMS 0.347 m/s, relative 5.413); |v − t| median 1.389, p90 3.404 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.308 m/s (rel 3.061)
+  zmshr1m κ 1    it   1: f = 1.0236e14, velocity RMSE 2.000 m/s (rel 4.682), frames 1.99 1.93 2.12 2.12 2.10 2.11 1.95 2.01 1.95 2.04 1.97 2.01 1.97 1.98 1.99 1.96 2.04 1.89 1.89 1.96, 4s
+    time it 0: gradient 0.6s, step 0.1s, prior 1.7s, report 0.7s
+    anchor it 1: μ 1.791e6, ‖R x − c‖/‖c‖ 2.562e-1, f 6.6679e13 + anchor 2.4663e13
+    LLR on GPU [0]: 1377 blocks (0 left unchanged), k ≤ 136, pass 1 0.9s, pass 2 0.7s
+    velocity error split: time-mean RMSE 0.734 m/s, temporal-detail RMSE 1.658 m/s (truth detail RMS 0.347 m/s, relative 4.782); |v − t| median 1.011, p90 3.244 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.192 m/s (rel 2.790)
+  zmshr1m κ 1    it   2: f = 9.1342e13, velocity RMSE 1.814 m/s (rel 4.245), frames 1.77 1.71 1.85 1.95 1.95 1.97 1.75 1.84 1.77 1.83 1.80 1.84 1.79 1.80 1.82 1.78 1.84 1.73 1.67 1.79, 8s
+    time it 1: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 2: μ 1.791e6, ‖R x − c‖/‖c‖ 2.267e-1, f 6.3619e13 + anchor 1.9316e13
+    velocity error split: time-mean RMSE 0.694 m/s, temporal-detail RMSE 1.466 m/s (truth detail RMS 0.347 m/s, relative 4.229); |v − t| median 0.723, p90 3.037 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.080 m/s (rel 2.529)
+  zmshr1m κ 1    it   3: f = 8.2935e13, velocity RMSE 1.622 m/s (rel 3.798), frames 1.58 1.48 1.70 1.76 1.78 1.81 1.58 1.60 1.60 1.62 1.60 1.64 1.59 1.62 1.61 1.58 1.64 1.55 1.47 1.60, 11s
+    time it 2: gradient 0.6s, step 0.5s, prior 1.7s, report 0.7s
+    velocity error split: time-mean RMSE 0.688 m/s, temporal-detail RMSE 1.378 m/s (truth detail RMS 0.347 m/s, relative 3.972); |v − t| median 0.636, p90 2.916 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.033 m/s (rel 2.417)
+  zmshr1m κ 1    it   4: f = 7.8550e13, velocity RMSE 1.540 m/s (rel 3.604), frames 1.50 1.39 1.64 1.69 1.72 1.72 1.49 1.55 1.51 1.53 1.51 1.56 1.51 1.54 1.51 1.48 1.54 1.45 1.39 1.52, 15s
+    time it 3: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.674 m/s, temporal-detail RMSE 1.275 m/s (truth detail RMS 0.347 m/s, relative 3.677); |v − t| median 0.560, p90 2.754 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.977 m/s (rel 2.287)
+  zmshr1m κ 1    it   5: f = 7.6686e13, velocity RMSE 1.442 m/s (rel 3.376), frames 1.39 1.29 1.56 1.60 1.62 1.66 1.40 1.46 1.40 1.42 1.42 1.46 1.42 1.43 1.44 1.36 1.42 1.34 1.27 1.42, 18s
+    time it 4: gradient 0.6s, step 0.4s, prior 1.7s, report 0.7s
+    anchor it 5: μ 1.791e6, ‖R x − c‖/‖c‖ 1.681e-1, f 6.4745e13 + anchor 1.0620e13
+    velocity error split: time-mean RMSE 0.708 m/s, temporal-detail RMSE 1.220 m/s (truth detail RMS 0.347 m/s, relative 3.518); |v − t| median 0.546, p90 2.681 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.961 m/s (rel 2.249)
+  zmshr1m κ 1    it   6: f = 7.5365e13, velocity RMSE 1.410 m/s (rel 3.301), frames 1.35 1.27 1.56 1.53 1.59 1.63 1.38 1.43 1.36 1.39 1.37 1.41 1.39 1.40 1.40 1.32 1.36 1.34 1.26 1.40, 21s
+    time it 5: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+    velocity error split: time-mean RMSE 0.709 m/s, temporal-detail RMSE 1.209 m/s (truth detail RMS 0.347 m/s, relative 3.485); |v − t| median 0.548, p90 2.655 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.962 m/s (rel 2.251)
+  zmshr1m κ 1    it   7: f = 7.3015e13, velocity RMSE 1.401 m/s (rel 3.279), frames 1.37 1.28 1.51 1.54 1.57 1.61 1.37 1.44 1.36 1.38 1.33 1.37 1.35 1.41 1.40 1.32 1.34 1.35 1.27 1.39, 25s
+    time it 6: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.729 m/s, temporal-detail RMSE 1.208 m/s (truth detail RMS 0.347 m/s, relative 3.485); |v − t| median 0.556, p90 2.671 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.968 m/s (rel 2.266)
+  zmshr1m κ 1    it   8: f = 7.1180e13, velocity RMSE 1.412 m/s (rel 3.304), frames 1.37 1.30 1.53 1.54 1.58 1.62 1.40 1.46 1.37 1.39 1.34 1.40 1.36 1.41 1.39 1.32 1.35 1.36 1.28 1.40, 28s
+    time it 7: gradient 0.6s, step 0.5s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.758 m/s, temporal-detail RMSE 1.196 m/s (truth detail RMS 0.347 m/s, relative 3.449); |v − t| median 0.560, p90 2.687 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 0.971 m/s (rel 2.272)
+  zmshr1m κ 1    it   9: f = 7.0620e13, velocity RMSE 1.416 m/s (rel 3.314), frames 1.37 1.30 1.53 1.56 1.59 1.62 1.41 1.45 1.37 1.38 1.33 1.40 1.36 1.42 1.40 1.34 1.36 1.36 1.29 1.42, 32s
+    time it 8: gradient 0.6s, step 0.4s, prior 1.6s, report 0.7s
+    velocity error split: time-mean RMSE 0.757 m/s, temporal-detail RMSE 1.322 m/s (truth detail RMS 0.347 m/s, relative 3.813); |v − t| median 0.643, p90 2.884 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.033 m/s (rel 2.418)
+  zmshr1m κ 1    it  10: f = 7.0225e13, velocity RMSE 1.524 m/s (rel 3.566), frames 1.47 1.43 1.62 1.66 1.70 1.73 1.52 1.55 1.47 1.50 1.39 1.51 1.48 1.51 1.51 1.47 1.45 1.48 1.42 1.54, 35s
+    time it 9: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    anchor it 10: μ 1.791e6, ‖R x − c‖/‖c‖ 9.775e-2, f 6.5151e13 + anchor 3.5905e12
+    zmshr1-M it 10: tau 1.191e0..1.191e0, a > 0 in 0/140 sets (a 0.000), rank-one in 140/140 (c -2.799e-1)
+    LLR on GPU [0]: 1530 blocks (0 left unchanged), k ≤ 140, pass 1 1.0s, pass 2 0.8s
+    velocity error split: time-mean RMSE 0.772 m/s, temporal-detail RMSE 1.319 m/s (truth detail RMS 0.347 m/s, relative 3.803); |v − t| median 0.652, p90 2.882 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.038 m/s (rel 2.430)
+  zmshr1m κ 1    it  11: f = 6.8741e13, velocity RMSE 1.528 m/s (rel 3.577), frames 1.47 1.44 1.63 1.66 1.69 1.74 1.55 1.56 1.48 1.51 1.40 1.51 1.48 1.51 1.50 1.48 1.46 1.48 1.43 1.55, 39s
+    time it 10: gradient 0.6s, step 0.4s, prior 1.9s, report 0.7s
+    velocity error split: time-mean RMSE 0.799 m/s, temporal-detail RMSE 1.281 m/s (truth detail RMS 0.347 m/s, relative 3.694); |v − t| median 0.637, p90 2.858 m/s
+    hierarchical decoder (±1.50 m/s): velocity RMSE 1.028 m/s (rel 2.406)
+  zmshr1m κ 1    it  12: f = 6.7971e13, velocity RMSE 1.510 m/s (rel 3.534), frames 1.44 1.42 1.61 1.63 1.68 1.72 1.52 1.56 1.47 1.50 1.37 1.50 1.45 1.50 1.48 1.46 1.42 1.47 1.40 1.54, 42s
+    time it 11: gradient 0.6s, step 0.4s, prior 1.5s, report 0.7s
+  set streaming: 1057 sets, 4.4 GiB up / 4.4 GiB down
+4 figures in data/hasty/phantom/factory_arms/ph0001/tpyr_dev/run/figs
+figures: data/hasty/phantom/factory_arms/ph0001/tpyr_dev/run/figs
+exit 0

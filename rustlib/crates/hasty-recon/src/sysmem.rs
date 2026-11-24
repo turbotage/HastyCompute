@@ -12,6 +12,14 @@ pub fn rss_bytes() -> usize {
         .map_or(0, |kb| kb * 1024)
 }
 
+/// peak resident set size so far (bytes, VmHWM) from /proc/self/status (0 where unavailable)
+pub fn peak_rss_bytes() -> usize {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM:")).and_then(|l| l.split_whitespace().nth(1)).and_then(|v| v.parse::<usize>().ok()))
+        .map_or(0, |kb| kb * 1024)
+}
+
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 extern "C" {
     fn malloc_trim(pad: usize) -> i32;

@@ -253,6 +253,12 @@ impl SimData {
     /// readouts, from memory or the file, with optional coil compression (y is `nvc × m` coil-major) and sample
     /// filter. Without `o.data` y is empty.
     pub fn load_set(&self, ros: &[usize], o: &LoadOpts) -> Result<SampleSet, Error> {
+        self.load_set_window(ros, o, None)
+    }
+
+    /// [`load_set`](Self::load_set) keeping only the ADC samples n ∈ [w0, w1) of every readout (`window`, e.g. the
+    /// outgoing half of `pyramid::OutHalf`); the `keep` filter is evaluated first, on every sample
+    pub fn load_set_window(&self, ros: &[usize], o: &LoadOpts, window: Option<(usize, usize)>) -> Result<SampleSet, Error> {
         let (na, nc) = (self.na, self.nc);
         let nout = o.cc.map_or(nc, |c| c.len());
         let wf: Vec<f64> = o.w.iter().flat_map(|r| r.iter().copied()).collect();
@@ -277,6 +283,9 @@ impl SimData {
                 for n in 0..na {
                     let c = [0, 1, 2].map(|a| (k[n][a] * self.vox[a]) as f32);
                     if o.keep.is_some_and(|f| !f(&c)) {
+                        continue;
+                    }
+                    if window.is_some_and(|(w0, w1)| n < w0 || n >= w1) {
                         continue;
                     }
                     sel.push(n);

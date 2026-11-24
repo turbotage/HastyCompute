@@ -1,0 +1,79 @@
+2-D toy n=32, 96 out-and-back spokes x 48 samples (density ~k^-1.7), 4 coils, support r<=12.5; kappa = cond(P Q), PCG iterations to ||x - xhat||/||xhat|| <= 1e-3 / 1e-6
+
+## max local shift |g| t=1: 0.00 π rad/voxel (= 0.00 k_max); ridge μ = 1e-3 diag; |xhat - x*|/|x*| = 0.059  (2s build)
+  none                         kappa  1.61e+05   PCG its to 1e-3 / 1e-6:   223 /  >600
+  jacobi                       kappa  1.87e+05   PCG its to 1e-3 / 1e-6:   233 /  >600
+  dcd eps=0.001 p=1            kappa   6.4e+03   PCG its to 1e-3 / 1e-6:    88 /   193
+  dcd eps=0.01 p=1             kappa   3.1e+04   PCG its to 1e-3 / 1e-6:   131 /   355
+  dcd eps=0.1 p=1              kappa  9.96e+04   PCG its to 1e-3 / 1e-6:   197 /   548
+  dcd eps=0.01 p=0.5           kappa   6.5e+04   PCG its to 1e-3 / 1e-6:   167 /   466
+  dcd eps=0.1 p=0.5            kappa  1.25e+05   PCG its to 1e-3 / 1e-6:   212 /   590
+  dcd eps=0.03 p=0.75          kappa  7.35e+04   PCG its to 1e-3 / 1e-6:   179 /   493
+  seg L=2 exact inverse        kappa       804   PCG its to 1e-3 / 1e-6:    76 /   130
+  seg L=4 exact inverse        kappa       804   PCG its to 1e-3 / 1e-6:    76 /   130
+  seg L=4 + coils (circ) inv   kappa      59.9   PCG its to 1e-3 / 1e-6:    19 /    44
+  seg L=4 + coils (Toeplitz) inv kappa         1   PCG its to 1e-3 / 1e-6:     1 /     1
+  (D½ C D½ + μ)⁻¹, no field    kappa       804   PCG its to 1e-3 / 1e-6:    76 /   130
+  seg L=8 exact inverse        kappa       804   PCG its to 1e-3 / 1e-6:    76 /   130
+  pc J=4                       kappa   6.4e+03   PCG its to 1e-3 / 1e-6:    88 /   193
+  pc J=16                      kappa   6.4e+03   PCG its to 1e-3 / 1e-6:    88 /   193
+  U dcd U^H, t_ref=0.5         kappa   6.4e+03   PCG its to 1e-3 / 1e-6:    88 /   193
+  U dcd U^H, t_ref=1           kappa   6.4e+03   PCG its to 1e-3 / 1e-6:    88 /   193
+  2-level k: dense |k|<=3 (29) kappa  4.46e+03   PCG its to 1e-3 / 1e-6:    68 /   171
+  2-level k: dense |k|<=6 (113) kappa   3.4e+03   PCG its to 1e-3 / 1e-6:    67 /   166
+  seg L=4, 5 inner PCG (flex)  kappa         -   PCG its to 1e-3 / 1e-6:   151 /   330
+  seg L=4, 20 inner PCG (flex) kappa         -   PCG its to 1e-3 / 1e-6:   104 /   181
+  coil-seg, 10 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    26 /    53
+  coil-seg, 30 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    20 /    46
+
+## max local shift |g| t=1: 0.25 π rad/voxel (= 0.25 k_max); ridge μ = 1e-3 diag; |xhat - x*|/|x*| = 0.059  (2s build)
+  none                         kappa  1.51e+05   PCG its to 1e-3 / 1e-6:   228 /  >600
+  jacobi                       kappa  1.74e+05   PCG its to 1e-3 / 1e-6:   240 /  >600
+  dcd eps=0.001 p=1            kappa   6.8e+03   PCG its to 1e-3 / 1e-6:    96 /   216
+  dcd eps=0.01 p=1             kappa  3.22e+04   PCG its to 1e-3 / 1e-6:   140 /   381
+  dcd eps=0.1 p=1              kappa  9.56e+04   PCG its to 1e-3 / 1e-6:   205 /   571
+  dcd eps=0.01 p=0.5           kappa  6.33e+04   PCG its to 1e-3 / 1e-6:   175 /   488
+  dcd eps=0.1 p=0.5            kappa  1.19e+05   PCG its to 1e-3 / 1e-6:   220 /  >600
+  dcd eps=0.03 p=0.75          kappa  7.18e+04   PCG its to 1e-3 / 1e-6:   185 /   514
+  seg L=2 exact inverse        kappa       912   PCG its to 1e-3 / 1e-6:    76 /   133
+  seg L=4 exact inverse        kappa       766   PCG its to 1e-3 / 1e-6:    73 /   126
+  seg L=4 + coils (circ) inv   kappa      61.3   PCG its to 1e-3 / 1e-6:    20 /    45
+  seg L=4 + coils (Toeplitz) inv kappa      5.58   PCG its to 1e-3 / 1e-6:     7 /    14
+  (D½ C D½ + μ)⁻¹, no field    kappa  2.22e+03   PCG its to 1e-3 / 1e-6:   104 /   198
+  seg L=8 exact inverse        kappa       768   PCG its to 1e-3 / 1e-6:    73 /   127
+  pc J=4                       kappa  1.14e+04   PCG its to 1e-3 / 1e-6:   159 /   304
+  pc J=16                      kappa  2.53e+04   PCG its to 1e-3 / 1e-6:   190 /   374
+  U dcd U^H, t_ref=0.5         kappa  6.43e+03   PCG its to 1e-3 / 1e-6:    88 /   197
+  U dcd U^H, t_ref=1           kappa  6.94e+03   PCG its to 1e-3 / 1e-6:    90 /   209
+  2-level k: dense |k|<=3 (29) kappa   4.8e+03   PCG its to 1e-3 / 1e-6:    79 /   190
+  2-level k: dense |k|<=6 (113) kappa  3.45e+03   PCG its to 1e-3 / 1e-6:    73 /   174
+  seg L=4, 5 inner PCG (flex)  kappa         -   PCG its to 1e-3 / 1e-6:   162 /   419
+  seg L=4, 20 inner PCG (flex) kappa         -   PCG its to 1e-3 / 1e-6:   104 /   186
+  coil-seg, 10 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    25 /    54
+  coil-seg, 30 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    22 /    48
+
+## max local shift |g| t=1: 0.50 π rad/voxel (= 0.50 k_max); ridge μ = 1e-3 diag; |xhat - x*|/|x*| = 0.058  (2s build)
+  none                         kappa  1.46e+05   PCG its to 1e-3 / 1e-6:   231 /  >600
+  jacobi                       kappa  1.68e+05   PCG its to 1e-3 / 1e-6:   246 /  >600
+  dcd eps=0.001 p=1            kappa  1.26e+04   PCG its to 1e-3 / 1e-6:   115 /   261
+  dcd eps=0.01 p=1             kappa  3.92e+04   PCG its to 1e-3 / 1e-6:   151 /   402
+  dcd eps=0.1 p=1              kappa   9.4e+04   PCG its to 1e-3 / 1e-6:   212 /   585
+  dcd eps=0.01 p=0.5           kappa  6.36e+04   PCG its to 1e-3 / 1e-6:   182 /   502
+  dcd eps=0.1 p=0.5            kappa  1.17e+05   PCG its to 1e-3 / 1e-6:   225 /  >600
+  dcd eps=0.03 p=0.75          kappa  7.18e+04   PCG its to 1e-3 / 1e-6:   193 /   531
+  seg L=2 exact inverse        kappa  1.39e+03   PCG its to 1e-3 / 1e-6:    82 /   156
+  seg L=4 exact inverse        kappa       782   PCG its to 1e-3 / 1e-6:    72 /   127
+  seg L=4 + coils (circ) inv   kappa      68.9   PCG its to 1e-3 / 1e-6:    21 /    47
+  seg L=4 + coils (Toeplitz) inv kappa      28.1   PCG its to 1e-3 / 1e-6:    14 /    31
+  (D½ C D½ + μ)⁻¹, no field    kappa  6.18e+03   PCG its to 1e-3 / 1e-6:   149 /   311
+  seg L=8 exact inverse        kappa       705   PCG its to 1e-3 / 1e-6:    71 /   122
+  pc J=4                       kappa  1.37e+04   PCG its to 1e-3 / 1e-6:   156 /   307
+  pc J=16                      kappa  2.54e+04   PCG its to 1e-3 / 1e-6:   192 /   374
+  U dcd U^H, t_ref=0.5         kappa  6.82e+03   PCG its to 1e-3 / 1e-6:    89 /   206
+  U dcd U^H, t_ref=1           kappa  1.33e+04   PCG its to 1e-3 / 1e-6:   107 /   254
+  2-level k: dense |k|<=3 (29) kappa  1.17e+04   PCG its to 1e-3 / 1e-6:    97 /   237
+  2-level k: dense |k|<=6 (113) kappa  6.39e+03   PCG its to 1e-3 / 1e-6:    97 /   224
+  seg L=4, 5 inner PCG (flex)  kappa         -   PCG its to 1e-3 / 1e-6:   173 /   464
+  seg L=4, 20 inner PCG (flex) kappa         -   PCG its to 1e-3 / 1e-6:    98 /   177
+  coil-seg, 10 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    30 /    66
+  coil-seg, 30 inner (flex)    kappa         -   PCG its to 1e-3 / 1e-6:    24 /    52

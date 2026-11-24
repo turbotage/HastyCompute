@@ -24,6 +24,11 @@
 //!                            --spoil flowcomp); --t-adc then bounds the span of the reconstruction samples, the final
 //!                            rewinder is navigator ADC at the tail's slew factor. Writes recon_mask.npy (1 =
 //!                            reconstruction sample, per raster segment).
+//!             [--nav-adc on|off] [--nav-rules ge|system]  navigator ADC during the encode and the tail blocks (default
+//!                            on, GE / pge2 timing rules; `hasty_seq::nav`): writes k_nav_{encode,tail}.npy [n_enc][n][3]
+//!                            (k, cycles/m, physical axes, the rotation of tr_grad.npy) and t_nav_{encode,tail}.npy
+//!                            [n] (s after the RF centre) at the --dwell (default 2 µs), and summary.json best.nav_adc
+//!                            (windows, ADC events, rules). Navigator samples are never reconstruction data.
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -289,6 +294,9 @@ fn main() {
         let v: Vec<f64> = a.split(',').map(|x| x.parse().unwrap()).collect();
         Shape { kg0: v[0], wobble: v[1], wobble_freq: v[2] }
     });
+    // navigator ADC during the encode and tail blocks (user decision: the ADC runs there too; never reconstructed)
+    let nav_adc = take("--nav-adc").map_or(true, |v| match v.as_str() { "on" => true, "off" => false, o => panic!("--nav-adc {o}: on | off") });
+    let nav_rules_name = take("--nav-rules").unwrap_or_else(|| "ge".into());
     let flag = |a: &mut Vec<String>, n: &str| a.iter().position(|x| x == n).map(|i| { a.remove(i); true }).unwrap_or(false);
     let check = flag(&mut args, "--check");
     let out = PathBuf::from(&args[0]);
@@ -693,6 +701,50 @@ fn main() {
     f8(&out.join("k_adc.npy"), &[k_all.len(), 3], &flat3(&k_all));
     let mask: Vec<f64> = (0..sp.i_adc).map(|i| sp.is_recon(i) as u8 as f64).collect();
     f8(&out.join("recon_mask.npy"), &[mask.len()], &mask);
+    // navigator ADC windows (encode block, tail block) and their k(t) per encode; the encode block is on physical axes
+    // and so is the FlowComp tail (rotation-independent k), other tails rotate: the rotation of tr_grad.npy
+    let nav_json = if nav_adc {
+        let nd = dwell.unwrap_or(2e-6);
+        let rules = match nav_rules_name.as_str() {
+            "ge" => hasty_seq::nav::AdcRules::ge_pge2(nd),
+            "system" => hasty_seq::nav::AdcRules::from_system(&sys, nd),
+            o => panic!("--nav-rules {o}: ge | system"),
+        };
+        let wins = tr.nav_windows(&rules);
+        let mut wj = vec![];
+        for w in &wins {
+            let mut kk = vec![];
+            let mut kmx = 0.0f64;
+            let mut n_in = 0usize;
+            for e in 0..n_enc {
+                let k = tr.nav_k(e, &rots_f[0], w);
+                for q in &k {
+                    let a = hasty_seq::norm(q) / kmax;
+                    kmx = kmx.max(a);
+                    n_in += (a <= 1.0) as usize;
+                }
+                kk.extend(flat3(&k));
+            }
+            f8(&out.join(format!("k_nav_{}.npy", w.name())), &[n_enc, w.n(), 3], &kk);
+            let t: Vec<f64> = w.times().iter().map(|x| x - tr.t_rf).collect();
+            f8(&out.join(format!("t_nav_{}.npy", w.name())), &[w.n()], &t);
+            let mut j = w.to_json(tr.t_rf);
+            j["kmax_frac_max"] = json!(kmx);
+            j["frac_inside_kmax"] = json!(n_in as f64 / (n_enc * w.n()).max(1) as f64);
+            j["rotation_dependent"] = json!(w.part == hasty_seq::tr::Part::Tail && tr.enc_tail.is_none());
+            println!(
+                "  navigator ADC {}: {} samples in {} event(s), {:.3}–{:.3} ms after the RF centre, |k| ≤ {kmx:.2} kmax ({:.0} % inside kmax; never reconstructed)",
+                w.name(), w.n(), w.events.len(), t[0] * 1e3, t.last().unwrap() * 1e3, 100.0 * n_in as f64 / (n_enc * w.n()).max(1) as f64
+            );
+            wj.push(j);
+        }
+        json!({"enabled": true, "rules_name": nav_rules_name, "rules": rules.to_json(), "rf_end": tr.rf_end, "t_rf": tr.t_rf,
+               "readout_adc": {"t0_exc": tr.te(), "n": ((sp.i_adc as f64 * tr.dt) / nd).floor() as usize, "t_end_tr": tr.readout_adc_end(nd)},
+               "windows": wj, "use": "navigator / auxiliary data only, never reconstructed",
+               "files": {"k": "k_nav_<name>.npy [n_enc][n][3] cycles/m physical (rotation of tr_grad.npy)", "t": "t_nav_<name>.npy [n] s after the RF centre"}})
+    } else {
+        json!({"enabled": false})
+    };
     let mut trp = vec![];
     for e in 0..n_enc {
         trp.extend(flat3(&tr.physical(e, &rots[0]).g));
@@ -819,6 +871,7 @@ fn main() {
         ("t_recon_samples", json!(sp.t_recon_samples())),
         ("te_echo", json!(tr.te() + sp.i_echo as f64 * tr.dt)),
         ("readout_gamma_m1_end", json!(hasty_seq::GAMMA * hasty_seq::norm(&sp.m1_end()))),
+        ("nav_adc", nav_json),
     ] {
         summary["best"][key] = val;
     }

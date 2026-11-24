@@ -973,6 +973,31 @@ impl SegPoints {
 }
 
 /// Segment diagonals P_l and interpolator table a_l(τ), built by [`SegNufft::segments`] (e.g. one per encode).
+/// Host copy of a [`SegSegments`] ([`SegSegments::host_tables`]): g(v, τ) ≈ Σ_l segph[l·nv + v] a_l(τ), with a_l(τ)
+/// linear in τ on the table atab[i·nseg + l] at τ_i = t0 + i·dt (the device kernels' `interp_a`).
+#[derive(Clone, Debug)]
+pub struct SegHostTables {
+    pub segph: Vec<C32>,
+    pub atab: Vec<C32>,
+    pub nseg: usize,
+    pub ntab: usize,
+    pub t0: f64,
+    pub dt: f64,
+}
+
+impl SegHostTables {
+    /// a_l(τ) for l < nseg, the device's linear interpolation (clamped to the table)
+    pub fn interp(&self, tau: f64, out: &mut [num_complex::Complex64]) {
+        let u = ((tau - self.t0) / self.dt).clamp(0.0, (self.ntab - 1) as f64 - 1e-3);
+        let i = u as usize;
+        let fr = u - i as f64;
+        for (l, o) in out.iter_mut().enumerate().take(self.nseg) {
+            let (p, q) = (self.atab[i * self.nseg + l], self.atab[(i + 1).min(self.ntab - 1) * self.nseg + l]);
+            *o = num_complex::Complex64::new(p.re as f64 + fr * (q.re - p.re) as f64, p.im as f64 + fr * (q.im - p.im) as f64);
+        }
+    }
+}
+
 pub struct SegSegments {
     segph: CudaSlice<C32>,
     atab: CudaSlice<C32>,
@@ -1013,6 +1038,18 @@ impl SegSegments {
     /// frames with their own segments (0 = shared)
     pub fn per_frame(&self) -> usize {
         self.per_frame
+    }
+    /// host copies of the STORED diagonals and interpolator table (research/precond_estimator.md §7, G2/G3: the
+    /// recentring diagonal and the segment surrogate are built from these, never from an on-the-fly map). Shared
+    /// (non-per-frame), non-fat segments only.
+    pub fn host_tables(&self, st: &Arc<CudaStream>) -> Result<SegHostTables, NufftError> {
+        if self.per_frame > 0 || self.fatc.is_some() {
+            return Err(NufftError::Invalid("host_tables: per-frame or fat segments are not supported".into()));
+        }
+        let (ntab, t0, dt) = self.tab;
+        let atab = st.clone_dtoh(&self.atab)?;
+        let nseg = atab.len() / ntab.max(1);
+        Ok(SegHostTables { segph: st.clone_dtoh(&self.segph)?, atab, nseg, ntab, t0: t0 as f64, dt: dt as f64 })
     }
 }
 

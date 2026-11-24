@@ -1,0 +1,22 @@
+nav smoke: GPU sims ran 2026-11-23 10:15–10:18 (scratchpad smoke.sh under the GPU lock); checks Mon Nov 23 10:18:57 AM CET 2026
+meta nav blocks: [('encode', 685, 0.15, 1.518, [[0, 685]]), ('tail', 720, 9.66, 11.098, [[0, 720]])]
+rules: {'dead': 4e-05, 'dwell': 2e-06, 'max_samples': 8192, 'rf_ringdown': 6e-05}
+encode: data (175, 685, 32) complex64, samples (175, 685, 4)
+  τ: 0.1500–1.5180 ms, max |τ − window| 1.74e-10 s
+  k vs k_nav_encode.npy: max |Δk| 4.859e-05 cycles/m (|k| up to 329; f32 storage)
+  k vs k_tr.npy at the 137 samples on raster points: max |Δk| 4.176e-05 cycles/m
+tail: data (175, 720, 32) complex64, samples (175, 720, 4)
+  τ: 9.6600–11.0980 ms, max |τ − window| 1.40e-09 s
+  k vs k_nav_tail.npy: max |Δk| 1.808e-04 cycles/m (|k| up to 1083; f32 storage)
+  k vs k_tr.npy at the 122 samples on raster points: max |Δk| 1.656e-04 cycles/m
+data_clean on/off shapes (175, 3990, 32) (175, 3990, 32)
+readout data nav on vs off: bitwise equal True, max |Δ| / max |y| 0.00e+00
+noise sigma on/off 40.39636523856283 40.39636523856283 kspace_step 0.4947524114879128 0.4947524114879128
+samples.hv identical
+sched_nominal.hv identical
+readouts.npy identical
+rss over coils, mean over readouts: readout sample 0 (TE, k = 0) 1.200e+05; encode sample 0 (τ 0.15 ms, k = 0) 9.660e+04; encode mean 2.562e+03; tail first 2.162e+04, last 3.238e+03
+girf run encode: played (42, 685, 8), max |k_played − k_nominal| 15.45 cycles/m, data (42, 685, 32)
+girf run tail: played (42, 720, 8), max |k_played − k_nominal| 22.46 cycles/m, data (42, 720, 32)
+all checks passed
+VERDICT: PASS

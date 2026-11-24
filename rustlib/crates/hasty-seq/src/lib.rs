@@ -17,14 +17,17 @@
 //! - [`pnsge`]: GE's PNS model (TOPPE `pns.m` / pge2 checks, IEC 60601-2-33 form) with the Premier coil parameters.
 //! - [`girfqa`]: the GIRF QA measurement protocol (thin slices, phase encoding, inputs, heating, v2 validation).
 //! - [`girfmeas`]: measured-GIRF file (JSON) → [`girf::Girf`] at a thermal state, resonance list for the designer.
+//! - [`nav`]: navigator ADC windows during the encode and tail blocks (timing rules, pge2 limits), their k(t).
 //!
 //! Units: SI throughout (T/m, T/m/s, s, m); k in cycles/m (k = γ̄ M0).
 
+pub mod acoustic;
 pub mod encode;
 pub mod girf;
 pub mod metrics;
 pub mod multiecho;
 pub mod girfmeas;
+pub mod nav;
 pub mod girfqa;
 pub mod optim;
 pub mod pns;

@@ -1,0 +1,17 @@
+T1 stationary p=0: |N_c - S^H N_f S|/|N_c| = 3.1e-15; |S c_c - Pi_H c_f|/|S c_c| = 1.8e-15
+T1 stationary p=1: |N_c - S^H N_f S|/|N_c| = 1.2e-15; |S c_c - Pi_H c_f|/|S c_c| = 8.8e-16
+T1 stationary p=3: |N_c - S^H N_f S|/|N_c| = 9.1e-16; |S c_c - Pi_H c_f|/|S c_c| = 1.7e-15
+T1 line-sampled p=0: |N_c - S^H N_f S|/|N_c| = 3.0e-15; |S c_c - Pi_H c_f|/|S c_c| = 3.7e-15
+T1 line-sampled p=1: |N_c - S^H N_f S|/|N_c| = 1.3e-15; |S c_c - Pi_H c_f|/|S c_c| = 7.8e-15
+T1 line-sampled p=3: |N_c - S^H N_f S|/|N_c| = 8.5e-16; |S c_c - Pi_H c_f|/|S c_c| = 1.1e-14
+T2 stationary p=0: max_k |sum_r B^c_k(t_r)(x_f - x_c)| / scale = 9.8e-16; data-weighted time mean gap 7.7e-16; p=0 weighted-average identity 8.7e-16 (plain mean 7.4e-16)
+T2 stationary p=1: max_k |sum_r B^c_k(t_r)(x_f - x_c)| / scale = 1.6e-15; data-weighted time mean gap 9.6e-16
+T2 stationary p=3: max_k |sum_r B^c_k(t_r)(x_f - x_c)| / scale = 2.5e-15; data-weighted time mean gap 9.4e-16
+T2 line-sampled 1 coil p=0: per-voxel moment identity 1.8e-01 (fails), per-ky moment identity with that line's own sample times 1.5e-09
+T2 line-sampled 1 coil p=3: per-voxel moment identity 2.8e+00 (fails), per-ky moment identity with that line's own sample times 8.6e-08
+T3 arg of weighted mean: exact 0.126315, magnitude-weighted phase mean 0.117500, cubic term predicted 0.008111, actual gap 0.008815
+T4: variable-density line sampling, 4 coils, noise; truth error vs knots and regulariser (p = 3)
+  K= 6: none truth 0.353 heldout 0.0976
+  K=12: none truth 0.282 heldout 0.0766; avg_mu1 truth 0.277 heldout 0.0761; avg_mu100 truth 0.279 heldout 0.0755; detail_uniform0.3 truth 0.279 heldout 0.0763; detail_kadapt0.3 truth 0.281 heldout 0.0766; detail_uniform3 truth 0.275 heldout 0.0744; detail_kadapt3 truth 0.277 heldout 0.0765; avgH_mu100 truth 0.282 heldout 0.0766; avg1+detail3 truth 0.276 heldout 0.0744; tr_inv_schur 1505.9372465574786; tr_inv_Hdd 1152.706145893616; lmin_schur_rel 0.006853687028704177; lmin_Hdd_rel 0.009592016005540372; coverage_per_ky [0.75, 0.75, 1.0, 1.0, 1.0, 1.0, 1.0, 0.67]
+  K=24: none truth 0.198 heldout 0.0223; avg_mu1 truth 0.153 heldout 0.0226; avg_mu100 truth 0.159 heldout 0.0237; detail_uniform0.3 truth 0.156 heldout 0.0216; detail_kadapt0.3 truth 0.160 heldout 0.0218; detail_uniform3 truth 0.130 heldout 0.0215; detail_kadapt3 truth 0.129 heldout 0.0212; avgH_mu100 truth 0.198 heldout 0.0223; avg1+detail3 truth 0.145 heldout 0.0231; tr_inv_schur 13217.375716761599; tr_inv_Hdd 6641.452176814134; lmin_schur_rel 0.0003999527808680026; lmin_Hdd_rel 0.001519961458910408; coverage_per_ky [0.5, 0.54, 0.83, 0.92, 1.0, 0.88, 0.92, 0.54]
+  K=48: none truth 1.296 heldout 0.0599; avg_mu1 truth 0.258 heldout 0.0258; avg_mu100 truth 0.256 heldout 0.0257; detail_uniform0.3 truth 0.297 heldout 0.0286; detail_kadapt0.3 truth 0.270 heldout 0.0279; detail_uniform3 truth 0.207 heldout 0.0233; detail_kadapt3 truth 0.203 heldout 0.0235; avgH_mu100 truth 1.296 heldout 0.0599; avg1+detail3 truth 0.199 heldout 0.0222; tr_inv_schur 1044837.5840030527; tr_inv_Hdd 88303.21934596996; lmin_schur_rel 3.5197806225393838e-06; lmin_Hdd_rel 4.9410183047353563e-05; coverage_per_ky [0.31, 0.35, 0.46, 0.71, 1.0, 0.65, 0.52, 0.33]

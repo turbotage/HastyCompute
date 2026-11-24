@@ -13,6 +13,7 @@
 
 pub mod direct;
 pub mod gnl;
+pub mod inflow;
 pub mod physio;
 pub mod rf;
 pub mod sequence;

@@ -76,6 +76,8 @@ pub enum Spoil {
 #[derive(Clone, Debug)]
 pub struct Tr {
     pub dt: f64,
+    /// RF end (s from the TR start; the navigator ADC starts after its ring-down, [`crate::nav`])
+    pub rf_end: f64,
     /// RF centre (s from the TR start), and raster indices: encode start, readout start (echo), tail start, TR end
     pub t_rf: f64,
     pub i_enc: usize,
@@ -113,7 +115,7 @@ impl Tr {
         };
         let i_ro = i_enc + encode.waves[0].len() - 1;
         let i_tail = i_ro + spoke.i_adc;
-        let mut tr = Tr { dt, t_rf, i_enc, i_ro, i_tail, n: 0, encode, spoke, spoil: spec.spoil, tail_gmax: sys.gmax, tail_smax: sys.smax * spec.tail_slew, n_tail: 0, enc_tail: None };
+        let mut tr = Tr { dt, rf_end: sys.rf_dead + spec.rf_dur, t_rf, i_enc, i_ro, i_tail, n: 0, encode, spoke, spoil: spec.spoil, tail_gmax: sys.gmax, tail_smax: sys.smax * spec.tail_slew, n_tail: 0, enc_tail: None };
         if let Spoil::FlowComp(sp) = spec.spoil {
             assert!(norm(&tr.spoke.g_end()) == 0.0, "FlowComp needs a readout ending at rest");
             // total TR M1 of encode e = M1_enc,e + M1_readout + tail M1; the tail targets −M1_enc,e + offset, so every

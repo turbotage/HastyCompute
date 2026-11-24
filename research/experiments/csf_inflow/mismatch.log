@@ -1,0 +1,28 @@
+  stage 0: cost 2.8816e-1, v [12.234975943937147, 0.0, 0.0] mm/s
+  stage 1: cost 1.5236e-1, v [12.217066069755283, 1.0600315801487976, 0.0] mm/s
+  stage 2: cost 1.4152e-1, v [11.700639084311515, 1.0582612322645537, -0.15910029315561] mm/s
+nominal                            v  11.70  1.06  0.16 mm/s   δ  0.75  2.11  4.54   R² 0.830
+noise seed 1                       v  11.00  1.22  0.20 mm/s   δ  0.73  2.20  4.35   R² 0.839
+noise seed 2                       v  11.18  1.22  0.21 mm/s   δ  0.77  2.20  4.67   R² 0.827
+noise seed 3                       v  10.96  1.23  0.22 mm/s   δ  0.76  2.10  4.20   R² 0.831
+noise seed 4                       v  11.01  1.32  0.15 mm/s   δ  0.77  2.08  4.52   R² 0.828
+noise seed 5                       v  11.41  1.15  0.16 mm/s   δ  0.75  2.14  4.40   R² 0.840
+estimator D = 3 cm²/min (truth 6)  v   7.62  0.67  0.10 mm/s   δ  0.74  2.14  4.53   R² 0.829
+estimator D = 9 cm²/min (truth 6)  v  15.63  1.44  0.22 mm/s   δ  0.77  2.07  4.55   R² 0.830
+estimator T1 = 4.2 s (truth 4.74)  v  12.64  1.13  0.17 mm/s   δ  0.77  2.09  4.51   R² 0.830
+estimator T1 = 5.3 s (truth 4.74)  v  10.94  1.00  0.15 mm/s   δ  0.73  2.12  4.55   R² 0.830
+estimator flip = 70° (truth 80)    v  14.31  1.33  0.20 mm/s   δ  0.73  2.11  4.58   R² 0.830
+estimator flip = 90° (truth 80)    v  10.02  0.88  0.14 mm/s   δ  0.76  2.11  4.50   R² 0.829
+estimator gap = 1.0 mm (truth 0.5) v  12.36  1.12  0.17 mm/s   δ  0.73  2.13  4.56   R² 0.829
+cardiac clock late 0.10 s          v  11.77  1.06  0.15 mm/s   δ  1.32  2.10  4.48   R² 0.830
+cardiac clock late 0.25 s          v  11.86  1.06  0.15 mm/s   δ  2.18  2.10  4.38   R² 0.826
+respiratory clock late 1.0 s       v  11.59  1.08  0.16 mm/s   δ  0.75  3.47  4.52   R² 0.828
+R-peak jitter 30 ms                v  11.37  1.07  0.16 mm/s   δ  0.75  2.11  4.46   R² 0.807
+R-peak jitter 60 ms                v  10.57  1.08  0.19 mm/s   δ  0.75  2.11  4.38   R² 0.755
+slow confound locked to regressor 0.25 % v  11.69  1.06  0.13 mm/s   δ  0.74  2.11  4.46   R² 0.828
+slow confound locked to regressor 0.50 % v  11.65  1.06  0.10 mm/s   δ  0.75  2.11  4.38   R² 0.827
+slow confound locked to regressor 1.00 % v  11.67  1.06  0.04 mm/s   δ  0.75  2.11  3.82   R² 0.824
+slow noise 1 % rms, unlocked       v  11.38  1.06  0.16 mm/s   δ  0.77  2.11  4.45   R² 0.800
+laminar profile truth (m=2)        v  11.41  1.02  0.15 mm/s   δ  0.74  2.16  4.38   R² 0.825
+blunt profile truth (m=6)          v  11.65  1.02  0.15 mm/s   δ  0.73  2.11  4.42   R² 0.820
+done in 347.1 s → research/experiments/csf_inflow/mismatch

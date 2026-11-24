@@ -28,8 +28,14 @@ Facts that matter:
   physiology, B0 drift and the known RF-spoiling phase** (eddy / GIRF errors of the lobes are identical and cancel).
 - Encode M1 differs between the 7 encodes (flow phase), so compare each encode with its own history, never across encodes.
 - The k = 0 samples (TE, the rewinder end) are one complex value per coil: FIDnav-type data (Kober 2011; Wallace 2019).
-- The simulator currently writes only the readout window plus the rewinder (`recon_adc`); encode and tail ADC are **not
-  simulated yet**, so nothing below has been run on simulated flow data (see §6).
+- Until 2026-11-23 the simulator wrote only the readout window plus the rewinder (`recon_adc`). The numbers below were
+  not run on simulated flow navigator data.
+- **Since 2026-11-23** the encode and tail ADC exist. They are defined in `hasty_seq::nav` and written by `seqdesign`
+  (`k_nav_*.npy`, `summary.json best.nav_adc`). `simphantom` simulates them by default (`--nav off` disables them),
+  with the same per-sample physics as the readout. They are stored apart from the readout data: `nav_{encode,tail}.hv`
+  [readout][sample][coil], `nav_*_samples.hv`, and meta.json `nav`. flow_thorax at 2 µs under GE timing gives an encode
+  window of 685 samples (0.150–1.518 ms after the RF) and a tail window of 720 samples (9.660–11.098 ms).
+  See research/sequence_design.md §10. The ph0001 10-min scan has not been re-simulated with them yet.
 
 ## 2. What rigid motion does to the data
 
@@ -135,7 +141,8 @@ Reconstruction (stage 2, the user's idea made precise):
 
 Experiments (pre-registered, one factor each, dev scale, with controls per the measure-before-claiming rule):
 1. Simulator: `simphantom --pose-schedule` (rigid pose(t), 2 s smooth transition, applied to tissue and blood sources,
-   velocities rotated, coils fixed) **and write the encode and tail ADC** (needed for everything here).
+   velocities rotated, coils fixed). The encode and tail ADC part is done (2026-11-23, `--nav`, default on); the pose
+   schedule is still open.
 2. Detection: ROC over move size (0.2–10 mm, 0.1–5°) and time; metric = detection delay and false alarms in the
    no-move scan (with respiration, cardiac, flow).
 3. Pose accuracy vs truth; noise-free and inverse-crime controls (pose from navigators computed with the true image vs

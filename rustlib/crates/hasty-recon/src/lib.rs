@@ -1,6 +1,7 @@
 //! Reconstruction for the synthetic 4D-flow benchmark: data loading (simulator output), physics grids (GNL inverse
 //! warp, off-resonance, concomitant monomials), low-rank phase models, multi-coil NUFFT encoding operators, solvers.
 
+pub mod admm;
 pub mod cg;
 pub mod checkpoint;
 pub mod coils;
@@ -20,6 +21,9 @@ pub mod llr;
 pub mod llr_gpu;
 pub mod tlp;
 pub mod red;
+pub mod tanchor;
+pub mod meanres;
+pub mod pcscore;
 pub mod tsub;
 pub mod knotsolve;
 pub mod knotlock;
@@ -37,6 +41,8 @@ pub mod vobj;
 pub mod wavelet;
 pub mod vinit;
 pub mod precond;
+pub mod ppre;
+pub mod surrogate;
 pub mod pyramid;
 pub mod rcompress;
 pub mod played;
@@ -46,6 +52,7 @@ pub mod selfgate;
 pub mod sepwt;
 pub mod wavgpu;
 pub mod setop;
+pub mod smapfit;
 pub mod store;
 pub mod synth;
 pub mod sysmem;

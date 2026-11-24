@@ -165,6 +165,104 @@ impl AdcStats {
     }
 }
 
+// ───────────────────────────────────────────────────────────── ADC part of the out-and-back readout
+
+/// The ADC samples of every readout the reconstruction uses (`recon_p2np --adc-part`). `Out`: the outgoing half of
+/// the out-and-back yarn, where |k| increases ([`OutHalf`]); the returning half (and any samples during spoilers /
+/// encoders) is left for navigators: it stays in the data files and the k-space store, only the operator's sample
+/// selection drops it (the same mechanism as [`KCrop`], intersected with it). `Full`: every ADC sample.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdcPart {
+    Out,
+    Full,
+}
+
+impl AdcPart {
+    pub fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "out" => Ok(Self::Out),
+            "full" => Ok(Self::Full),
+            o => Err(Error::Format(format!("--adc-part '{o}': out | full"))),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Out => "out",
+            Self::Full => "full",
+        }
+    }
+}
+
+/// Outgoing part [i0, i1) of one readout from its |k| profile `r`: i1 − 1 = the first maximum of |k| (the first
+/// sample within 1e-3 of the readout's largest |k|, then climbed to the local maximum, so a ripple below the peak
+/// does not end the window), i0 = the |k| minimum before it (the first k-centre pass).
+pub fn out_range(r: &[f64]) -> (usize, usize) {
+    if r.is_empty() {
+        return (0, 0);
+    }
+    let rmax = r.iter().copied().fold(f64::MIN, f64::max);
+    let mut p = r.iter().position(|&x| x >= rmax * (1.0 - 1e-3)).unwrap_or(0);
+    while p + 1 < r.len() && r[p + 1] > r[p] {
+        p += 1;
+    }
+    let i0 = (0..=p).fold(0, |b, n| if r[n] < r[b] { n } else { b });
+    (i0, p + 1)
+}
+
+/// The common outgoing window of all readouts (every set's readouts of `na` samples, coordinates k·Δ with voxel
+/// `vox`: |k| = ‖k·Δ / Δ‖). The readouts are rotations of one base readout, so their ranges agree up to rounding
+/// at the flat |k| maximum; the window is their intersection (every kept sample is on every readout's outgoing part).
+#[derive(Clone, Debug)]
+pub struct OutHalf {
+    pub i0: usize,
+    pub i1: usize,
+    /// smallest / largest per-readout i0 and i1
+    pub i0_span: (usize, usize),
+    pub i1_span: (usize, usize),
+    pub readouts: usize,
+    /// samples in each readout's own outgoing range where |k| decreases by more than 1e-4 of its peak (all
+    /// readouts; 0 for a monotone out half)
+    pub decreasing: usize,
+}
+
+impl OutHalf {
+    pub fn detect(sets: &[&[Vec<f32>; 3]], na: usize, vox: [f64; 3]) -> Self {
+        assert!(na > 1, "out half: readouts of {na} samples");
+        // per readout (i0, i1, samples in its own range where |k| decreases)
+        let per: Vec<(usize, usize, usize)> = sets
+            .par_iter()
+            .flat_map_iter(|c| {
+                let m = c[0].len();
+                assert_eq!(m % na, 0, "out half: {m} samples are not readouts of {na}");
+                (0..m / na).map(move |r| {
+                    let k: Vec<f64> = (r * na..(r + 1) * na).map(|j| (0..3).map(|a| (c[a][j] as f64 / vox[a]).powi(2)).sum::<f64>().sqrt()).collect();
+                    let (i0, i1) = out_range(&k);
+                    let tol = 1e-4 * k[i1 - 1];
+                    (i0, i1, (i0 + 1..i1).filter(|&n| k[n] < k[n - 1] - tol).count())
+                })
+            })
+            .collect();
+        assert!(!per.is_empty(), "out half: no readouts");
+        let i0_span = (per.iter().map(|p| p.0).min().unwrap(), per.iter().map(|p| p.0).max().unwrap());
+        let i1_span = (per.iter().map(|p| p.1).min().unwrap(), per.iter().map(|p| p.1).max().unwrap());
+        let (i0, i1) = (i0_span.1, i1_span.0);
+        assert!(i0 < i1, "out half: the readouts' outgoing ranges do not overlap (i0 up to {i0}, i1 from {i1})");
+        Self { i0, i1, i0_span, i1_span, readouts: per.len(), decreasing: per.iter().map(|p| p.2).sum() }
+    }
+
+    /// keep only the window's samples of a selection (ascending indices into a set of readouts of `na`)
+    pub fn restrict(&self, sel: &mut Vec<u32>, na: usize) {
+        sel.retain(|&j| (self.i0..self.i1).contains(&(j as usize % na)));
+    }
+
+    /// the window's samples of a set of `m` samples (readouts of `na`)
+    pub fn select(&self, m: usize, na: usize) -> Vec<u32> {
+        assert!(m < u32::MAX as usize, "set too large for u32 sample indices");
+        (0..m / na).flat_map(|r| (r * na + self.i0..r * na + self.i1).map(|j| j as u32)).collect()
+    }
+}
+
 // ───────────────────────────────────────────────────────────── band-limited resampling
 
 /// Fourier coefficients of one line of length `n` (unnormalised FFT, bin k = m mod n) → the line of length `n2`
@@ -465,6 +563,49 @@ mod tests {
         assert!(!kb.keep(&[3.2, 0.0, 0.0]) && kb.keep(&[3.1, 0.0, 0.0]) && kb.keep(&[3.0, 3.0, 3.0]) && !kb.keep(&[3.1, 3.1, 3.1]));
         assert!(KCrop::parse("0").is_err() && KCrop::parse("x").is_err());
         assert_eq!(KCrop::parse("prefix").unwrap(), KCrop { frac: 1.0, prefix: true });
+    }
+
+    #[test]
+    fn out_half_of_an_out_and_back_readout() {
+        // ADC starting 5 samples before the centre pass, |k| rising to the peak at n = 60 (a ripple below the peak is
+        // not the first maximum), back towards 0 at the end; three random rotations, anisotropic voxel
+        let na = 121;
+        let prof = |n: usize| -> f64 {
+            let t = n as f64 - 5.0;
+            if t < 0.0 { -0.01 * t } else if t <= 55.0 { 2.0 * (t / 55.0) - (t / 55.0).powi(2) + if (20.0..=24.0).contains(&t) { -0.02 * (t - 20.0) * (24.0 - t) } else { 0.0 } } else { 1.0 - ((t - 55.0) / 61.0).powi(2) }
+        };
+        let r: Vec<f64> = (0..na).map(prof).collect();
+        // a dip at t ∈ (20, 24): |k| decreases at t = 21 (counted), the window still runs to the peak
+        assert_eq!(out_range(&r), (5, 61));
+        let mut u = rng(7);
+        let vox = [1.0, 2.0, 0.5];
+        let mut c: [Vec<f32>; 3] = [vec![], vec![], vec![]];
+        for _ in 0..3 {
+            let d = [u(), u(), u()];
+            let nd = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            for n in 0..na {
+                for a in 0..3 {
+                    c[a].push((r[n] * d[a] / nd * vox[a]) as f32);
+                }
+            }
+        }
+        let oh = OutHalf::detect(&[&c], na, vox);
+        assert_eq!((oh.i0, oh.i1, oh.readouts), (5, 61, 3));
+        assert_eq!((oh.i0_span, oh.i1_span), ((5, 5), (61, 61)));
+        assert_eq!(oh.decreasing, 3, "one decreasing step (n = 26) per readout");
+        let sel = oh.select(3 * na, na);
+        assert_eq!(sel.len(), 3 * 56);
+        assert!(sel.iter().all(|&j| (5..61).contains(&(j as usize % na))));
+        // intersection with a ball crop: the ball's prefix and suffix minus everything outside [5, 61)
+        let mut kc = KCrop::parse("0.5").unwrap().select(&c, na);
+        oh.restrict(&mut kc, na);
+        assert!(!kc.is_empty() && kc.iter().all(|&j| (5..61).contains(&(j as usize % na))));
+        // a strictly monotone out-and-back profile: no decreasing samples
+        let tri: Vec<f64> = (0..na).map(|n| 60.0 - (n as f64 - 60.0).abs()).collect();
+        assert_eq!(out_range(&tri), (0, 61));
+        assert_eq!(AdcPart::parse("out").unwrap(), AdcPart::Out);
+        assert_eq!(AdcPart::parse("full").unwrap().as_str(), "full");
+        assert!(AdcPart::parse("half").is_err());
     }
 
     #[test]

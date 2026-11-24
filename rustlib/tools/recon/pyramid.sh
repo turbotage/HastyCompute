@@ -3,11 +3,14 @@
 # grid of the same FOV at scale s (--grid-scale s, only the k-space samples inside that grid's band: --kcrop) and
 # starts from the previous level's images (--init-from <previous level dir>, band-limited resampling).
 #   rustlib/tools/recon/pyramid.sh <sim_dir> <out_root> [--levels 0.25,0.5,1] [--iters 10,10,20] [--kcrop FRAC[:prefix]]
-#       [--first-args "ARGS"] [--next-args "ARGS"] [--mem GB] [--bin DIR] [--redo] [--allow-new-store] -- <recon_p2np arguments for every level>
+#       [--first-args "ARGS"] [--next-args "ARGS"] [--mem GB] [--bin DIR] [--redo] [--allow-new-store]
+#       [--truth-sampling box,point,..] -- <recon_p2np arguments for every level>
 # --levels: grid scales, coarse to fine; 1 = the native grid (no --grid-scale, no crop: every sample is in its band).
 # --iters: iterations per level (one number: all levels).
 # --kcrop: crop of the levels with s < 1 (default 1 = the grid's whole band; `:prefix` = outgoing readout prefixes
 #   only, fewer B0 / concomitant segments; see recon_p2np --kcrop). Coarse levels also get --truth-sampling box.
+# --truth-sampling: per level (one value: all coarse levels) point|box, the sampling of the truth maps on levels with
+#   s < 1 (default box, as before; point = what a single-level --grid-scale run without the flag uses).
 # --first-args: extra arguments of the first level only (e.g. "--warm-full 10": a physics-model warm start is cheap on
 #   the coarsest grid; at a finer level it would replace the per-frame --init-from start by an encode average).
 # --next-args: extra arguments of every level after the first; `{prev}` becomes the previous level's directory
@@ -27,14 +30,15 @@
 #     --fat-model joint --r2s truth --kappa 1 --precond zmshr1s --warm 20
 set -uo pipefail
 R=$(cd "$(dirname "$0")/../../.." && pwd)
-[[ $# -ge 2 ]] || { sed -n '2,27p' "$0"; exit 2; }
+[[ $# -ge 2 ]] || { sed -n '2,30p' "$0"; exit 2; }
 SIM=$(realpath "$1"); ROOT=$(realpath -m "$2"); shift 2
-LEVELS=0.25,0.5,1; ITERS=10,10,20; KCROP=1; FIRST=""; NEXT=""; MEM=60; BIN=$R/rustlib/target/release; REDO=0; NEWSTORE=0
+LEVELS=0.25,0.5,1; ITERS=10,10,20; KCROP=1; TSAMP=box; FIRST=""; NEXT=""; MEM=60; BIN=$R/rustlib/target/release; REDO=0; NEWSTORE=0
 while [[ $# -gt 0 ]]; do
   case $1 in
     --levels) LEVELS=$2; shift 2 ;;
     --iters) ITERS=$2; shift 2 ;;
     --kcrop) KCROP=$2; shift 2 ;;
+    --truth-sampling) TSAMP=$2; shift 2 ;;
     --first-args) FIRST=$2; shift 2 ;;
     --next-args) NEXT=$2; shift 2 ;;
     --mem) MEM=$2; shift 2 ;;
@@ -56,6 +60,9 @@ IFS=, read -r -a LV <<< "$LEVELS"
 IFS=, read -r -a IT <<< "$ITERS"
 [[ ${#IT[@]} -eq 1 ]] && for ((i = 1; i < ${#LV[@]}; i++)); do IT[i]=${IT[0]}; done
 [[ ${#IT[@]} -eq ${#LV[@]} ]] || { echo "!! --iters: one value or one per level (${#LV[@]})"; exit 2; }
+IFS=, read -r -a TS <<< "$TSAMP"
+[[ ${#TS[@]} -eq 1 ]] && for ((i = 1; i < ${#LV[@]}; i++)); do TS[i]=${TS[0]}; done
+[[ ${#TS[@]} -eq ${#LV[@]} ]] || { echo "!! --truth-sampling: one value or one per level (${#LV[@]})"; exit 2; }
 export HASTY_KSTORE_DIR=${HASTY_KSTORE_DIR:-$R/rustlib/target/kstore}
 export HASTY_REPO=${HASTY_REPO:-$R}
 # never write a new k-space file store from a pyramid level (reuse the full-resolution runs' store; --allow-new-store)
@@ -77,7 +84,7 @@ for ((i = 0; i < ${#LV[@]}; i++)); do
   [[ -e $ROOT/STOP ]] && { echo "== STOP file: ending before level $i"; exit 0; }
   ARGS=("$SIM" "${COMMON[@]}" --iters "${IT[i]}" --out "$L")
   if [[ $(awk -v s="$s" 'BEGIN { print (s + 0 == 1) }') -ne 1 ]]; then
-    ARGS+=(--grid-scale "$s" --kcrop "$KCROP" --truth-sampling box)
+    ARGS+=(--grid-scale "$s" --kcrop "$KCROP" --truth-sampling "${TS[i]}")
   fi
   if [[ -z $PREV && -n $FIRST ]]; then
     read -r -a FX <<< "$FIRST"
@@ -107,9 +114,9 @@ for ((i = 0; i < ${#LV[@]}; i++)); do
   [[ $rc -eq 0 ]] || { echo "!! level $i failed (exit $rc): $L/log.txt"; exit 1; }
   # finished: results written and no solver state left (a stopped run exits 0 with its state saved; the warm
   # starts' final states state_warm*_done_* stay by design)
-  if compgen -G "$L/recon_*.npy" >/dev/null && [[ -z $(find "$L" -maxdepth 1 -name 'state_*.hv' ! -name 'state_warm*' -print -quit) ]]; then
+  if { compgen -G "$L/recon_*.npy" >/dev/null || compgen -G "$L/recon_*.hv" >/dev/null; } && [[ -z $(find "$L" -maxdepth 1 -name 'state_*.hv' ! -name 'state_warm*' -print -quit) ]]; then
     touch "$L/DONE"
-    echo "== level $i done: $(ls -t "$L"/recon_*.npy | head -1)"
+    echo "== level $i done: $(ls -t "$L"/recon_*.npy "$L"/recon_*.hv 2>/dev/null | head -1)"
   else
     echo "== level $i paused (checkpoint in $L): rerun the same command to continue"
     exit 0

@@ -434,3 +434,34 @@ ideal but leaves 2.6–4.6 % random TR-to-TR modulation that no model captures.
 
 Still unmodelled in the check: velocity spread within a voxel (laminar profile), pulsatility (velocity changing over
 the RF-spoiling memory), inflow / residence time, acceleration (the per-encode blocks equalise M1, not M2), diffusion.
+
+## 10. Navigator ADC during the encode and the tail (2026-11-23)
+
+User decision: the ADC also runs during the velocity-encode block and the tail (ramp-down, rewinder, spoiler). These
+samples are navigator / auxiliary data and are never reconstructed. Every reconstruction sample stays inside kmax.
+
+- `hasty_seq::nav`: `AdcRules` and `AdcWindow`, `Tr::nav_windows`, `Tr::nav_k` (k = γ̄ M0 of the physical TR at the
+  sample times, the same exact moments as the readout).
+- Timing rules: the ADC dead time is kept before and after every ADC event, so consecutive events are ≥ 2 dead times
+  apart. The encode window starts after the RF ring-down. The tail window ends one dead time before the TR end.
+  Samples lie on the dwell grid from the TR start, like the readout. A window above `max_samples` is split into events.
+- Default rules: GE / pge2 (`AdcRules::ge_pge2`): dwell 2 µs, ADC dead 40 µs, RF ring-down 60 µs. The per-event cap
+  is unknown for GE [CHECK]; 8192 is assumed, and no window reaches it. `--nav-rules system` uses the Prisma numbers.
+- `seqdesign --nav-adc on|off` (default on) writes `k_nav_{encode,tail}.npy` [n_enc][n][3] (cycles/m, physical axes),
+  `t_nav_{encode,tail}.npy` [n] (s after the RF centre), and `summary.json best.nav_adc` (rules, windows, ADC events).
+  There is no flow-sequence `.seq` export yet (the Pulseq writer is used only by the GIRF QA protocol), so the windows
+  live in the design files.
+- `flow_thorax`: the same design was regenerated from its cache in a scratch copy, and every existing array is bitwise
+  unchanged. The nav files and the new `summary.json` were added; the old file is kept as `summary.pre_nav.json`.
+
+| flow_thorax, GE rules, 2 µs | samples | after the RF centre | max \|k\| | inside kmax |
+|---|---|---|---|---|
+| encode block (raster 23–175) | 685 | 0.150–1.518 ms | 2.28 kmax | 43 % |
+| readout (unchanged) | 3990 | 1.600–9.578 ms | 1.00 kmax | 100 % |
+| tail block (raster 973–1129) | 720 | 9.660–11.098 ms | 4.42 kmax | 23 % |
+
+This adds 35 % samples per TR. For each encode the encode and tail curves are rotation-independent (physical encode
+block, FlowComp tail after a readout closed at k = 0), so the same curves repeat every TR (`research/motion_navigators.md`).
+The pge2 overhead of 117 µs per segment instance is not modelled.
+`flow_thorax_v2` has the same encode window. Its tail window holds 720 samples at 12.470–13.908 ms; the rewinder
+samples were already navigator data inside its readout ADC.

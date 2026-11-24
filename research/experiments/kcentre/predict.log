@@ -1,0 +1,27 @@
+mask voxels 2405028
+smaps (2405028, 32) 1 s
+E1 water median 0.9864 (T1 823 ms), fat 0.9700 (T1 371 ms); 3 s
+truth PD inside the ratemap mask: 1.0000
+static done 4 s
+subset 3325 readouts, sched read 5 s
+cardiac frame 0 done 17 s
+cardiac frame 1 done 30 s
+cardiac frame 2 done 42 s
+cardiac frame 3 done 55 s
+cardiac frame 4 done 67 s
+cardiac frame 5 done 79 s
+cardiac frame 6 done 91 s
+cardiac frame 7 done 103 s
+cardiac frame 8 done 115 s
+cardiac frame 9 done 127 s
+cardiac frame 10 done 139 s
+cardiac frame 11 done 151 s
+cardiac frame 12 done 163 s
+cardiac frame 13 done 175 s
+cardiac frame 14 done 187 s
+cardiac frame 15 done 199 s
+cardiac frame 16 done 211 s
+cardiac frame 17 done 222 s
+cardiac frame 18 done 234 s
+cardiac frame 19 done 245 s
+done 245.43070769309998

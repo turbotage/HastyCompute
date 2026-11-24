@@ -1,0 +1,5 @@
+fx_dry_bfo exit 0
+fx_admm_a exit 0
+fx_admm_b exit 0
+fx_bfo exit 0
+fx_p2np exit 0

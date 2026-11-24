@@ -1,0 +1,5 @@
+h 16 mm: 13230 coefficients/coil (CG 60, rel res 5.3e-04); 1-|<s_fit,s>| object mean 1.02e-04 p99 1.80e-03; skin<=20mm 2.89e-04; deep>50mm 2.56e-06; lungs/holes 3.84e-06 (17s)
+h 24 mm: 4875 coefficients/coil (CG 60, rel res 1.1e-03); 1-|<s_fit,s>| object mean 4.16e-04 p99 7.19e-03; skin<=20mm 1.10e-03; deep>50mm 2.49e-05; lungs/holes 3.23e-05 (16s)
+h 32 mm: 2508 coefficients/coil (CG 60, rel res 2.0e-03); 1-|<s_fit,s>| object mean 1.05e-03 p99 1.45e-02; skin<=20mm 2.52e-03; deep>50mm 1.30e-04; lungs/holes 1.55e-04 (12s)
+h 48 mm: 1008 coefficients/coil (CG 60, rel res 3.2e-03); 1-|<s_fit,s>| object mean 3.91e-03 p99 4.69e-02; skin<=20mm 8.90e-03; deep>50mm 7.63e-04; lungs/holes 8.30e-04 (9s)
+h 64 mm: 616 coefficients/coil (CG 60, rel res 4.8e-03); 1-|<s_fit,s>| object mean 9.61e-03 p99 9.39e-02; skin<=20mm 2.09e-02; deep>50mm 2.42e-03; lungs/holes 2.51e-03 (10s)

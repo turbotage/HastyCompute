@@ -1,0 +1,93 @@
+
+running 2 tests
+test pooled_pcg_grouped_matches_replicate ...   pooled PCG it 1: ‖r‖/‖r₀‖ per group 4.25e-1 2.56e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.66e-1 1.18e-1
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 7.58e-2 6.07e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.84e-2 3.07e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.11e-2 2.32e-2
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.21e-2 1.78e-2
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 4.25e-1 2.56e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.66e-1 1.18e-1
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 7.58e-2 6.07e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.84e-2 3.07e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.11e-2 2.32e-2
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.21e-2 1.78e-2
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 4.25e-1 2.56e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.66e-1 1.18e-1
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 7.58e-2 6.07e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.84e-2 3.07e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.11e-2 2.32e-2
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.21e-2 1.78e-2
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 4.25e-1 2.56e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.66e-1 1.18e-1
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 7.58e-2 6.07e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.84e-2 3.07e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.11e-2 2.32e-2
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.21e-2 1.78e-2
+pooled PCG, 6 iterations, 2 groups of 3 sets: grouped vs replicate 2.9e-5 (store-staged 2.9e-5, one member per sub-group 2.2e-5); replicate vs object 1.72e-1; grid FFTs replicate 252 / grouped 84; wall 0.02s / 0.02s
+ok
+test pooled_pcg_synthetic_ignores_staged_data ...   pooled PCG it 1: ‖r‖/‖r₀‖ per group 3.21e-1 1.98e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.36e-1 5.79e-2
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 6.79e-2 3.22e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.80e-2 1.65e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.17e-2 9.61e-3
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.37e-2 6.79e-3
+  pooled PCG it 7: ‖r‖/‖r₀‖ per group 9.82e-3 4.90e-3
+  pooled PCG it 8: ‖r‖/‖r₀‖ per group 7.83e-3 4.84e-3
+  pooled PCG it 9: ‖r‖/‖r₀‖ per group 7.10e-3 5.04e-3
+  pooled PCG it 10: ‖r‖/‖r₀‖ per group 5.76e-3 5.41e-3
+  pooled PCG it 11: ‖r‖/‖r₀‖ per group 4.53e-3 4.70e-3
+  pooled PCG it 12: ‖r‖/‖r₀‖ per group 3.81e-3 4.15e-3
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 3.21e-1 1.98e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.36e-1 5.79e-2
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 6.79e-2 3.22e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.80e-2 1.65e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.17e-2 9.61e-3
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.37e-2 6.79e-3
+  pooled PCG it 7: ‖r‖/‖r₀‖ per group 9.82e-3 4.90e-3
+  pooled PCG it 8: ‖r‖/‖r₀‖ per group 7.83e-3 4.84e-3
+  pooled PCG it 9: ‖r‖/‖r₀‖ per group 7.10e-3 5.04e-3
+  pooled PCG it 10: ‖r‖/‖r₀‖ per group 5.76e-3 5.41e-3
+  pooled PCG it 11: ‖r‖/‖r₀‖ per group 4.53e-3 4.70e-3
+  pooled PCG it 12: ‖r‖/‖r₀‖ per group 3.81e-3 4.15e-3
+  pooled PCG it 1: ‖r‖/‖r₀‖ per group 3.21e-1 1.98e-1
+  pooled PCG it 2: ‖r‖/‖r₀‖ per group 1.36e-1 5.79e-2
+  pooled PCG it 3: ‖r‖/‖r₀‖ per group 6.79e-2 3.22e-2
+  pooled PCG it 4: ‖r‖/‖r₀‖ per group 3.80e-2 1.65e-2
+  pooled PCG it 5: ‖r‖/‖r₀‖ per group 2.17e-2 9.61e-3
+  pooled PCG it 6: ‖r‖/‖r₀‖ per group 1.37e-2 6.79e-3
+  pooled PCG it 7: ‖r‖/‖r₀‖ per group 9.82e-3 4.90e-3
+  pooled PCG it 8: ‖r‖/‖r₀‖ per group 7.83e-3 4.84e-3
+  pooled PCG it 9: ‖r‖/‖r₀‖ per group 7.10e-3 5.04e-3
+  pooled PCG it 10: ‖r‖/‖r₀‖ per group 5.76e-3 5.41e-3
+  pooled PCG it 11: ‖r‖/‖r₀‖ per group 4.53e-3 4.70e-3
+  pooled PCG it 12: ‖r‖/‖r₀‖ per group 3.81e-3 4.15e-3
+synthetic pooled PCG, 12 iterations: staged grouped vs staged replicate 1.2e-4, resident grouped vs replicate 1.3e-4; grouped vs x★ 2.27e-1, vs the store's object 1.11e0
+
+thread 'pooled_pcg_synthetic_ignores_staged_data' (236411) panicked at crates/hasty-recon/tests/grouped_sets.rs:749:5:
+synthetic pooled PCG paths disagree: 1.2e-4 1.3e-4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    pooled_pcg_synthetic_ignores_staged_data
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.67s
+
+
+running 1 test
+test grouped_setops_match_per_set ... SegSets, one encode: group vs per-set forward 3.4e-7, residual 3.8e-7, adjoint 4.8e-6; adjoint identity 4.1e-6
+  grid FFTs: 27
+SegSets, both encodes (two sub-groups): group vs per-set forward 3.4e-7, residual 3.8e-7, adjoint 5.3e-6; adjoint identity 5.7e-6
+WeightedSets(SegSets): group vs per-set forward 3.1e-7, residual 3.2e-7, adjoint 4.5e-6; adjoint identity 1.8e-5
+FatSets(SegSets), one map: group vs per-set forward 4.3e-6, residual 4.3e-6, adjoint 4.5e-6; adjoint identity 5.3e-6
+FatSets(SegSets), per-frame maps: group (mean map) vs per-set with the mean map: forward 5.4e-6, adjoint 4.6e-6
+FatJointSets, one map, streamed tables: group vs per-set forward 3.2e-7, residual 3.6e-7, adjoint 9.9e-6; adjoint identity 2.3e-5
+FatJointSets, one map, both encodes: group vs per-set forward 3.0e-7, residual 3.5e-7, adjoint 8.8e-6; adjoint identity 2.3e-5
+FatJointSets, per-frame maps: group (mean map) vs per-set with the mean map: forward 7.2e-6
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.27s
+

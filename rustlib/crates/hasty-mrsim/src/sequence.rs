@@ -315,6 +315,18 @@ impl Acquisition {
 /// What the direct-sum simulator needs from any sequence: the readout schedule (one record per excitation, a fixed
 /// number of ADC samples each) and the per-sample parameters in the [`SAMPLE_FLOATS`] layout. Implemented by the spiral
 /// [`Acquisition`] here and by the `hasty-seq` designs (hasty-bench `seqsched`).
+/// A navigator ADC window of every TR (e.g. during the velocity encode or the spoiler block): data stored apart from the
+/// readout data, never reconstructed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NavBlock {
+    /// "encode" | "tail"
+    pub name: String,
+    /// sample times after the excitation (RF centre), s
+    pub times: Vec<f64>,
+    /// ADC events within the block: [first sample, samples]
+    pub events: Vec<[usize; 2]>,
+}
+
 pub trait Schedule: Sync {
     fn n_readouts(&self) -> usize;
     fn n_adc(&self) -> usize;
@@ -328,6 +340,16 @@ pub trait Schedule: Sync {
     fn sample_params(&self, range: std::ops::Range<usize>) -> Vec<f32>;
     /// one-line description for logs
     fn describe(&self) -> String;
+    /// navigator ADC windows of every TR (default none)
+    fn nav_blocks(&self) -> Vec<NavBlock> {
+        vec![]
+    }
+    /// [readout][navigator sample (the blocks of `nav_blocks` concatenated)][SAMPLE_FLOATS] for readouts `range`, the same
+    /// records as `sample_params` (delta = 0; the driver sets it)
+    fn nav_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
+        let _ = range;
+        vec![]
+    }
 }
 
 impl Schedule for Acquisition {

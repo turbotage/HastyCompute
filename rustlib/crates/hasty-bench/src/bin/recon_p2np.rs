@@ -2,7 +2,7 @@
 //! compensation, whitened + coil-compressed data, LLR prior over all frames × encodes or the learned 7-point prior.
 //! Any encoding of the simulator (referenced / Hadamard 4-point, 7-point dual-VENC): velocities by hasty_recon::flow.
 //!   recon_p2np <sim_dir> [--model sense|seg] [--temporal off|linear|cubic] [--phys none|b0|full] [--gnl]
-//!              [--nseg L|auto|auto:noise[:R]] [--order o] [--precond none,circ,zmshr1,zmshr1m,zmshr1s,zmshr1ms] [--iters n] [--kappa k,k,..] [--block b] [--llr-devices 0[,1,..]|cpu]
+//!              [--nseg L|auto|auto:noise[:R]] [--order o] [--precond none,circ,zmshr1,zmshr1m,zmshr1s,zmshr1ms] [--step-guard F] [--iters n] [--kappa k,k,..] [--block b] [--llr-devices 0[,1,..]|cpu]
 //!              [--vcoils auto|n] [--coil-energy 0.999] [--coil-gram calib|data] [--every n] [--warm n] [--eps e] [--conc-dc] [--synthetic] [--out dir]
 //!              [--learned <export_dir> [--tile n] [--keep-frames n] [--learned-prec bf16|fp16|fp32] [--learned-cpu]]
 //!              [--fresh] [--ckpt-every n] [--fat-fraction <npy|truth> [--fat-model shared|separate|joint]]
@@ -10,7 +10,7 @@
 //!              [--field truth|est:<recon_b0 run>[:bin]] [--r2s off|truth|est:<run>] [--rate <z.npy>] [--smaps truth|espirit[:eig_min]] [--coil-mask auto|none|support]
 //!              [--coil-sampling keep:draw[:hold[:last[:seed]]]] [--lagged TAU[:LS|auto]] [--prior llr|wavelet] [--wavelet THR[:LEVELS]] [--wavelet-mix β] [--dfw sure[:TDF:TN]|fixed:TDF:TN [--dfw-levels L] [--dfw-mix β]] [--static-lock MU[:IT0[:EVERY]] [--lock-mode quad|group] [--lock-blur MM] [--lock-dilate MM] [--lock-score LO:HI] [--lock-vmin M/S] [--lock-detect OK:MAX]] [--air auto[:IT0[:EVERY]]|fixed [--air-init <npy>] [--air-margin MM] [--air-tau T] [--air-release R] [--air-blur MM[,MM..]]] [--state auto|device|host] [--state-store f32|bfpN|G:P] [--kstage f32|bfp[+qREL]|bfpN[:resident]] [--resp-bins NR [--resp bellows|truth]] [--seg-basis fixed|cheb|svd|svdw|svdn] [--seg-weight count|mass[:lo,hi]|energy] [--b0-absorb 0|1|2] [--kstore auto|legacy|<store spec>]
 //!              [--table-store auto|pinned|lz4|zstd|zstdN]   (env HASTY_KSTORE_DIR: k-space store directory, default <sim>/kstore)
-//!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]] [--seg-fit-stride N] [--seg-table-stride S]
+//!              [--grid-scale s|sx,sy,sz] [--kcrop [FRAC][:prefix]] [--adc-part out|full] [--init-from <npy|run dir>] [--truth-sampling point|box] [--init-truth] [--vdecode auto|hier|ml[:MARGIN]] [--seg-fit-stride N] [--seg-table-stride S]
 //!              [--vmodel knots [--knots2d RK:RDEG,CK:CDEG] [--resp bellows|truth] [--eval LABEL[@AMP]:idx.npy,..] [--eval-every N]] [--keep N]
 //! --vmodel knots: the velocity-parametrised model at the knots of the 2-D respiratory × cardiac knot operator
 //!   (hasty_recon::vmodel::VelSpec::at_knots, vobj at-knots mode, vknot): per knot k = r · CK + c a complex reference z_k
@@ -39,6 +39,17 @@
 //!     held as a dense RAM copy when they fit, < 30 % of the available RAM; HASTY_KCROP_VIEW=1: always the filtered
 //!     view). `prefix`: only each readout's outgoing part up to its first sample
 //!     outside the ball (the kept ADC window ends early: fewer B0 / concomitant segments with --nseg auto).
+//! --adc-part out|full: the ADC samples of every readout the operator uses (hasty_recon::pyramid::AdcPart). out
+//!   (default): the outgoing half of the out-and-back readout, from the first k-centre pass to the first |k| maximum,
+//!   detected on the per-sample coordinates (one ADC range [i0, i1) for all readouts: rotations of one base readout);
+//!   the returning half (and samples during spoilers / encoders) stays in the files and the k-space store for
+//!   navigators, dropped by the same sample selection as --kcrop (with --kcrop: the intersection); the segment
+//!   time window (--nseg auto, the segment basis) is the kept ADC window. full: every ADC sample (the behaviour
+//!   before --adc-part). Default output directories of out runs end in _aout.
+//! --calib-adc out|full: the ADC samples of the coil calibration (the ESPIRiT calibration region and the
+//!   --coil-gram data Gram). out (default with --adc-part out): the operator's outgoing half [i0, i1) only; full (the
+//!   behaviour before 2026-11-23; the default with --adc-part full): every ADC sample. Noise whitening uses the noise
+//!   covariance ψ of the scan metadata (noise statistics, no signal samples) either way.
 //!   --init-from <path>: start from a previous level's images, resampled band-limited to this grid (Fourier
 //!     coefficients kept: the same NUFFT data on the common band): recon_<tag>.npy (X, Y, Z, E, F) or warm.npy /
 //!     warm_full.npy (X, Y, Z, E); a run directory picks its newest recon_*.npy, else warm_full.npy, else warm.npy.
@@ -49,6 +60,13 @@
 //!     true positions (point, default) or averaged over the reconstruction voxel (box; differs only on grids coarser
 //!     than the native one). Native-grid maps given to --fat-fraction are resampled to the reconstruction grid.
 //!              [--warm-full n | --tpyramid RxC:n[,RxC:n..]] [--pooled-grad auto|grouped|replicate]
+//!              [--init warm|zero|meanres[:STEPS][:circ|pcgN][,..]] [--resid-steps n] [--anchor none|mean:μ|<dir>:μ[,..]]
+//!              [--report-detail]
+//! --init / --anchor (research/temporal_pyramid.md §10 eq. (8), Theorem 5 case B, §12): comma lists, every combination
+//!   one more run after one setup (run tags _mr<steps><c|pN>, _zero, _anc_mean<μ>, _anc<K>f<μ>). meanres = pooled
+//!   --warm-full solution + (N_tot/N)⁻¹ A_kᴴ(y_k − A_k x̄) per frame (hasty_recon::meanres); the anchor = ½ μ d̄ Σ_a
+//!   n_a ‖mean_a(x) − c_a‖² in the gradient (hasty_recon::tanchor), μ in units of the mean diagonal d̄ of one frame's
+//!   normal operator, included in λ_max. Frame mode only.
 //! --rate <z.npy>: per-voxel complex rate z = R2* + iΔω (complex64 [X, Y, Z], x fastest; s⁻¹ and rad/s) on the native or
 //!   the reconstruction grid: R2* folded into the segment functions (as --r2s) and Δω added to the field (--field): the
 //!   voxel's signal after the echo e^{−z (τ − τ0)} on top of the map's e^{−iω τ} (research/readout_physics_budget.md T4:
@@ -228,6 +246,8 @@ fn main() {
     let learned_cpu = flag("--learned-cpu");
     let table_prefetch = flag("--table-prefetch");
     let bin_group = flag("--bin-group");
+    // --prox-metric: see --llr-thr below (metric-consistent prox for global ZMSHR1)
+    let prox_metric = flag("--prox-metric");
     // --bin-group-mid: the group's frame from its middle readout (before 2026-11-13: lags by 0.44 frame with the
     // referenced 7-point scheme, encode 0 carries a first moment); default the readout nearest the velocity time
     let bin_group_mid = flag("--bin-group-mid");
@@ -235,8 +255,26 @@ fn main() {
     let save_smaps = flag("--save-smaps");
     // --no-full-save: no final full recon / velocity stacks (8.9 + 1.9 GB at 2 mm), e.g. with --save-lumen diagnostics
     let no_full_save = flag("--no-full-save");
+    // --adj-test: print the adjoint identity of the solver's operator and grouped vs member-wise application (setup)
+    let adj_test = flag("--adj-test");
+    // --report-detail: also print the lumen velocity error split into the time mean and the temporal detail (v_f − v̄)
+    let report_detail = flag("--report-detail");
     // --llr-hard: hard singular-value threshold of the LLR prior (keep above, drop below; Llr::hard), run tag suffix _h
     let llr_hard = flag("--llr-hard");
+    // --pp-band (with --pp-study / --pp-pool): band-limit the pooled estimator to the sampled ball (see --pp-study)
+    let pp_band = flag("--pp-band");
+    // --holdout-res (with --holdout N): the held-out readouts go through the solve's own operator pieces (the same
+    // engine options, coil maps, coil basis, field and segments; their own sample tables) and the relative held-out
+    // residual ‖E_h x − y_h‖ / ‖y_h‖ (whitened, compressed data, all held-out sets) is printed at every report
+    // iteration (it 0 and every --every); CSV holdout_<tag>.csv. Default off: identical runs.
+    let holdout_res = flag("--holdout-res");
+    // --warm-only (with --warm-full N): exit after the pooled warm start, keeping its checkpoints
+    // (state_warm_full_done_<e>: copied into other run directories, their --warm-full N loads them). Default off.
+    let warm_only = flag("--warm-only");
+    // --smaps-resp: coil maps per respiratory bin (see --smaps-fit below; research/smaps_estimation.md)
+    let smaps_resp = flag("--smaps-resp");
+    // --admm-rho-adapt (with --prior-mode admm): residual balancing of ρ (see --prior-mode below)
+    let admm_adapt = flag("--admm-rho-adapt");
     let mut take = |name: &str| -> Option<String> { args.iter().position(|a| a == name).map(|i| { args.remove(i); args.remove(i) }) };
     // --vdecode auto|hier|ml[:MARGIN]: velocity decoder. hier = hierarchical unwrapping (range of the least sensitive
     // encodes); ml = + search over the first stage's aliases inside the design's unaliased range
@@ -272,7 +310,59 @@ fn main() {
     // SENSE operator), n more pooled PCG iterations per encode through the full model operator (all frames of an encode
     // share one image; one gradient pass over all sets per iteration; the per-encode circulant as preconditioner when
     // the run builds circulants). The solver starts from that. 0 (default): the plain warm start only.
+    // --pool-metric circ|none: the preconditioner of the pooled PCG (--warm-full, --tpyramid). circ (default, the
+    // per-encode circulant whenever the solver's preconditioner uses the metric) or none (plain CG). At 1/16 .. 1/2 of
+    // the readouts with the full physics model the circulant makes the pooled image error GROW (2026-11-22,
+    // research/recon_diag_2026-11-22.md); plain CG converges.
+    let pool_metric_none = match take("--pool-metric").as_deref() {
+        None | Some("circ") => false,
+        Some("none") => true,
+        Some(o) => panic!("--pool-metric circ|none, got {o}"),
+    };
     let warm_full: usize = take("--warm-full").map(|s| s.parse().unwrap()).unwrap_or(0);
+    // Estimator-preserving pooled preconditioners (research/precond_estimator.md, hasty_recon::ppre; all off by default):
+    // --pp-study "name=SPEC:ITERS[:TOL];...": after setup, pooled PCG of the encodes --pp-groups e,.. (default 0) with
+    //   each preconditioner, scored per iteration (pp_mu*_name.csv, pp_summary.txt: residual, distance to the reference
+    //   x̂ = the final image of a run whose name starts with "ref", error vs x★ with --synth-x), Ritz report of P Q
+    //   (κ_eff, where the outliers sit in k and image space); then exit. SPEC = none | circ (the existing metric) | p0
+    //   (nominal Chan symbol, matched floor) | p1 | p1n (probed symbol; n = ratio to the nominal) | p12 | p12n (p1 with
+    //   D from the probed image diagonal) | p2 (that diagonal alone), + "+dT[,B]" = deflate the T largest (B smallest)
+    //   Ritz pairs harvested from the same base's earlier run.
+    // --pp-mu R[,R..]: estimator ridge μ = R × λ̄ (body mean of the probed image diagonal of the pooled normal
+    //   operator), several = the study per μ; --pp-band: + band-limit to the sampled ball; --pp-dfloor F (0.1): D floored
+    //   at F × its body median; --pp-probes J (8 per symbol / diagonal: one pooled pass each); --pp-smooth R (2): box
+    //   radius of the symbol / diagonal smoothing; --pp-eps E (1e-3): symbol floor ε λ_max when μ = 0; --pp-harvest K
+    //   (40): Lanczos vectors kept per group for the Ritz pairs; --pp-tol T (0): pooled stop at ‖r‖/‖r₀‖ ≤ T.
+    // §7 (G1–G4): the study prints the Ritz energy against the shift map s = Δt |∇f| / k_max (Δt between the two
+    //   k-centre passes, from the sample times; f the operator's ratemap field), s > 0.3. SPEC also: "+u" = G2
+    //   recentred metric U P Uᴴ (U from the STORED segment maps at --pp-tref MS, default the sample-weighted mid time of
+    //   the two centre passes); sur<L>k<K>[n] = G3 coil + segment circulant surrogate (L_s = L compressed stored maps)
+    //   inverted by K inner PCG steps (inner metric: the existing circulant; n: none), outer FLEXIBLE PCG;
+    //   cheb<L>k<K>[n] = the same with K-step Chebyshev (fixed SPD; --pp-cheb-ratio R, default 30: lo = hi / R; hi by
+    //   Lanczos), deflatable (+dT). --pp-sur-coils N: the surrogate's virtual coils (default all).
+    // --pp-pool SPEC (with --warm-full N): the pooled start with SPEC instead of --pool-metric (writes the warm_full_done
+    //   checkpoints the --warm-full block then loads); --pp-metric SPEC: the zmshr1m metric per encode from SPEC's probed
+    //   symbol (CirculantPrecond::from_factors; +dT[,B]: deflated with the --pp-pool harvest of the same base).
+    let pp_args = PpArgs {
+        study: take("--pp-study"),
+        pool: take("--pp-pool"),
+        metric: take("--pp-metric"),
+        groups: take("--pp-groups").map(|s| s.split(',').map(|v| v.parse().expect("--pp-groups e,e,..")).collect()),
+        mu: take("--pp-mu").map_or(vec![], |s| s.split(',').map(|v| v.parse().expect("--pp-mu R[,R..]")).collect()),
+        band: pp_band,
+        dfloor: take("--pp-dfloor").map_or(0.1, |v| v.parse().expect("--pp-dfloor F")),
+        probes: take("--pp-probes").map_or(8, |v| v.parse().expect("--pp-probes J")),
+        smooth: take("--pp-smooth").map_or(2, |v| v.parse().expect("--pp-smooth R")),
+        eps: take("--pp-eps").map_or(1e-3, |v| v.parse().expect("--pp-eps E")),
+        harvest: take("--pp-harvest").map_or(40, |v| v.parse().expect("--pp-harvest K")),
+        tol: take("--pp-tol").map_or(0.0, |v| v.parse().expect("--pp-tol T")),
+        tref: take("--pp-tref").map(|v| v.parse::<f64>().expect("--pp-tref MS") * 1e-3),
+        sur_coils: take("--pp-sur-coils").map(|v| v.parse().expect("--pp-sur-coils N")),
+        cheb_ratio: take("--pp-cheb-ratio").map_or(30.0, |v| v.parse().expect("--pp-cheb-ratio R")),
+    };
+    // --field-scale S (diagnostic, default 1): the operator's off-resonance ω (B0 field incl. --rate Δω) × S before the
+    // segment model (concomitant fields and GNL unchanged); with --synthetic the data follow (inverse crime)
+    let field_scale: f64 = take("--field-scale").map_or(1.0, |v| v.parse().expect("--field-scale S"));
     // --tpyramid SPEC: temporal pyramid of pooled PCG warm starts through the full model operator, coarse to fine:
     // comma-separated levels RxC:N = R respiratory-bin groups × C cardiac-phase groups (contiguous bins / phases, sizes
     // may differ by one; R ≤ --resp-bins, C ≤ cardiac frames), N pooled PCG iterations. Each (encode, resp group,
@@ -284,6 +374,34 @@ fn main() {
     // --pooled-grad auto|grouped|replicate: group gradients of pooled PCG (--warm-full, --tpyramid): auto / grouped =
     // the grouped operator (one grid FFT per segment, coil batch and group), replicate = every set separately
     let pooled_grad = take("--pooled-grad").map_or(hasty_recon::hoststack::PooledGrad::Auto, |s| hasty_recon::hoststack::PooledGrad::parse(&s).expect("--pooled-grad auto|grouped|replicate"));
+    // --init SPEC[,SPEC..] (frame mode; research/temporal_pyramid.md §10): the solver's start per run, each spec one
+    // more run (runs = preconditioners × κ × inits × anchors, one setup): warm (default: the existing start, --warm /
+    // --warm-full / --tpyramid), zero, or meanres[:STEPS][:circ|pcgN] = the pooled --warm-full solution x̄ plus the
+    // mean-operator deconvolution of each frame's residual back-projection, x_k = x̄ + (N_tot/N)⁻¹ A_kᴴ(y_k − A_k x̄),
+    // STEPS Richardson steps (default --resid-steps, 1), the inverse by the per-encode circulant with a line-searched
+    // scale (circ, default) or N PCG iterations on the mean normal operator (pcgN). Needs --warm-full n.
+    let init_specs: Vec<String> = take("--init").map_or(vec!["warm".to_string()], |s| s.split(',').map(|v| v.trim().to_string()).collect());
+    let resid_steps: usize = take("--resid-steps").map_or(1, |s| s.parse().expect("--resid-steps n"));
+    for s in &init_specs {
+        assert!(s == "warm" || s == "zero" || hasty_recon::meanres::MeanRes::parse(s, resid_steps).is_some(), "--init {s}: warm | zero | meanres[:STEPS][:circ|pcgN]");
+    }
+    // --anchor SPEC[,SPEC..] (research/temporal_pyramid.md Theorem 5 case B): ½ μ d̄ Σ_a n_a ‖R_a x − c_a‖² in the data
+    // term, R_a = the plain (data-independent) mean over the fine frames of encode e inside coarse frame a. SPEC =
+    // none | mean:μ (c = the pooled --warm-full solution, all frames of an encode) | <coarse run dir>:μ (its newest
+    // recon_*.npy, nested frames: integer ratio). μ in units of the mean diagonal d̄ of one frame's normal operator
+    // (anchor curvature on the group-constant mode = μ d̄); the step's λ_max includes it (Weyl bound).
+    let anchor_specs: Vec<Option<(String, f64)>> = take("--anchor").map_or(vec![None], |s| {
+        s.split(',')
+            .map(|v| {
+                let v = v.trim();
+                if v == "none" {
+                    return None;
+                }
+                let (src, mu) = v.rsplit_once(':').unwrap_or_else(|| panic!("--anchor {v}: none | mean:MU | <run dir>:MU"));
+                Some((src.to_string(), mu.parse::<f64>().unwrap_or_else(|_| panic!("--anchor {v}: MU is not a number"))))
+            })
+            .collect()
+    });
     let every: usize = take("--every").map(|s| s.parse().unwrap()).unwrap_or(5);
     let model = take("--model").unwrap_or("seg".into());
     let temporal: Option<u32> = match take("--temporal").as_deref() {
@@ -291,6 +409,16 @@ fn main() {
         Some("linear") => Some(1),
         Some("cubic") => Some(3),
         Some(o) => panic!("--temporal {o}"),
+    };
+    // --temporal-engine knot|interval (with --temporal): the knot-major operator (segnufft_knot.cu: one grid slot per
+    // knot; the only one with per-knot ratemaps, --ratemap truth-bc) or the interval-major one (frame slots per
+    // interval; the multi-image / group paths). Same operator up to f32 summation order. Default knot.
+    let temporal_engine: Option<String> = take("--temporal-engine");
+    assert!(temporal_engine.is_none() || temporal.is_some(), "--temporal-engine needs --temporal");
+    let temporal_knot = match temporal_engine.as_deref() {
+        None | Some("knot") => true,
+        Some("interval") => false,
+        Some(o) => panic!("--temporal-engine knot|interval, got {o}"),
     };
     let phys = take("--phys").unwrap_or("full".into());
     // time segments: --nseg L, or auto (default): from the phase cycles the field spans over the readout,
@@ -311,6 +439,14 @@ fn main() {
     // relative floor of the circulant preconditioner's Fourier diagonal (larger = weaker, better-posed metric)
     let eps: f64 = take("--eps").map(|s| s.parse().unwrap()).unwrap_or(1e-3);
     let preconds: Vec<String> = take("--precond").unwrap_or("zmshr1".into()).split(',').map(|s| s.to_string()).collect();
+    // --step-guard F: reject a ZMSHR1 iterate whose data term exceeds F × the previous one (back to the previous iterate,
+    // plain scalar step; no extra gradient except one final check). Default off.
+    let step_guard: Option<f64> = take("--step-guard").map(|s| s.parse().expect("--step-guard F (factor > 1)"));
+    if let Some(fa) = step_guard {
+        assert!(fa > 1.0, "--step-guard F: needs F > 1");
+        println!("step guard: a ZMSHR1 iterate is rejected when the data term rises by more than × {fa}");
+    }
+    hasty_recon::p2np::set_step_guard(step_guard);
     // --circ-share set|encode: circulant metrics per set, or one per encode shared by its frames (default: encode)
     let circ_share_arg: Option<String> = take("--circ-share");
     let out_arg = take("--out");
@@ -319,6 +455,48 @@ fn main() {
     // --save-lumen idx.npy: at every report iteration, the reconstruction at these flat (Fortran) native-grid voxels
     // only, it<k>_<tag>_lumen.npy = complex64 (n, ne, nf) C-order (research/experiments/recon_diag/frame_fit.py's
     // *_lumen.npy form): per-frame scoring along the iterations without full stacks on disk
+    // --score-pc DIR[:COVMIN] (scoring only, temporal_pyramid.md §13): per-frame velocity score against the sim's PC
+    // signal truth resampled to this grid (hasty_recon::pcscore; DIR from research/experiments/temporal_pyramid/
+    // pc_native.py), on the voxels that are blood (coverage ≥ COVMIN, default 0.99) throughout the cycle. Printed next
+    // to the legacy all-lumen yardstick, with oracle checks at setup; CSV pcscore_<tag>.csv
+    let score_pc: Option<(PathBuf, f64)> = take("--score-pc").map(|v| match v.rsplit_once(':') {
+        Some((d, c)) if c.parse::<f64>().is_ok() => (PathBuf::from(d), c.parse().unwrap()),
+        _ => (PathBuf::from(v), 0.99),
+    });
+    // --score-pc-bins D0,D1,..: one truth directory per respiratory bin (pc_native.py on bias_truth.py --resp R of the
+    // bin's TRUE breathing state, printed under "respiratory bins"), stacked in the operator's frame order on the voxels
+    // that are blood in every bin. Without it every bin is scored against the one --score-pc truth (one breathing state:
+    // a bin at another state counts its correct displacement as error). Needs --score-pc (COVMIN, --synth-x).
+    let score_pc_bins: Option<Vec<PathBuf>> = take("--score-pc-bins").map(|v| v.split(',').map(PathBuf::from).collect());
+    assert!(score_pc_bins.is_none() || score_pc.is_some(), "--score-pc-bins needs --score-pc");
+    // --synth-x pc (with --synthetic, staged data, --score-pc): the inverse-crime object x★ = PD_water + PD_fat + the
+    // truth's blood signal (box means on this grid, synth_pd.py resampled) instead of the warm images; the velocity
+    // score then decodes without the GNL J⁻¹ (x★ carries the nominal encoding phases)
+    // --synth-x pd: the static part only (PD_water + PD_fat, no blood signal): the static-object control of the pooled
+    // solve (research/recon_diag_2026-11-22.md)
+    let (synth_pc, synth_static) = match take("--synth-x").as_deref() {
+        None | Some("warm") => (false, false),
+        Some("pc") => (true, false),
+        Some("pd") => (true, true),
+        Some(o) => panic!("--synth-x warm|pc|pd, got {o}"),
+    };
+    assert!(score_pc_bins.is_none() || !synth_pc, "--score-pc-bins with --synth-x pc: x★ is built from the --score-pc truth (one state), the per-bin score would not be its own truth");
+    // --holdout N[:SEED]: a fixed 1/N of the (kept) readouts (hash, salt "HOLD" + SEED) is left out of every set — the
+    // held-out data for the data-space score; --holdout-eval N[:SEED]: ONLY those readouts (evaluate a recon with
+    // --init-from <recon npy> --init warm,zero --iters 1: f at it 1 = ½‖E x − y_h‖², the zero start gives ½‖y_h‖²).
+    // --cc-load FILE: the coil-compression basis of the solve run (it saves <out>/coil_basis.txt with --holdout), so
+    // the held-out residual lives in the same virtual coils. Default off: identical runs.
+    let holdout: Option<(usize, u64, bool)> = take("--holdout").map(|v| (v, false)).or_else(|| take("--holdout-eval").map(|v| (v, true))).map(|(v, ev)| {
+        let mut it = v.split(':');
+        let n: usize = it.next().unwrap().parse().expect("--holdout N[:SEED]");
+        let s: u64 = it.next().map_or(0, |x| x.parse().expect("--holdout N[:SEED]"));
+        assert!(n >= 2, "--holdout N: N ≥ 2");
+        (n, s, ev)
+    });
+    let cc_load: Option<PathBuf> = take("--cc-load").map(PathBuf::from);
+    // --no-vel-save: the final recon stack only (e.g. for a --holdout-eval run), no velocity stack
+    let no_vel_save = take("--no-vel-save").is_some_and(|v| v != "0");
+    let card_frames: Option<usize> = take("--card-frames").map(|v| v.parse().expect("--card-frames K"));
     let save_lumen: Option<Vec<usize>> = take("--save-lumen").map(|p| hasty_recon::data::read_npy(std::path::Path::new(&p)).expect("--save-lumen idx.npy").f32s().iter().map(|&v| v as usize).collect());
     // velocity-parametrised model (research/velocity_model_sr.md): --vmodel KZ,KV [--vdeg DZ,DV] [--vpoly d] [--vcont n]
     // --vmodel knots [--knots2d RK:RDEG,CK:CDEG]: the velocity model at the knots of the 2-D respiratory × cardiac knot
@@ -476,6 +654,18 @@ fn main() {
     let ratemap_static = ratemap_spec.as_deref() == Some("truth-bc:static");
     let ratemap_frames = ratemap_spec.as_deref() == Some("truth-bc") || ratemap_static;
     let ratemap_spec: Option<String> = ratemap_spec.filter(|r| !r.starts_with("truth-bc"));
+    // frame mode of --ratemap truth-bc (no knots, operator frames or temporal model): one segment table per (frame,
+    // encode). Its defaults follow knot mode, the trusted path of the same option: plain `auto` (or no --nseg) becomes the
+    // noise-referenced rule auto:noise:0.2 on every table's own model (the static rule sizes L from the static field
+    // without fat), the noise-weighted SVD basis svdn with energy voxel weights (research/segment_basis.md)
+    let frame_rm_mode = ratemap_frames && !knots_mode && op_frames.is_none() && temporal.is_none();
+    assert!(!(temporal.is_some() && !temporal_knot && ratemap_frames), "--ratemap truth-bc with --temporal needs the knot-major engine (per-knot tables; not --temporal-engine interval)");
+    let seg_noise_rule = if frame_rm_mode && nseg_arg.is_none() && seg_noise_rule.is_none() && seg_err_rule.is_none() {
+        println!("--ratemap truth-bc (frame mode): segment count by auto:noise:0.2 on every (frame, encode) model (as knot mode)");
+        Some(0.2)
+    } else {
+        seg_noise_rule
+    };
     let fat_fraction: Option<String> = take("--fat-fraction").or_else(|| ratemap_spec.clone());
     // measured instead of true fields / coil maps (the oracle-vs-estimate evaluation; defaults = the oracle as before):
     // --field truth|est:<recon_b0 run>[:bin]: off-resonance ω; --r2s off|truth|est:<run>[:bin]: T2* decay during the
@@ -486,6 +676,26 @@ fn main() {
     let rate_spec: Option<String> = take("--rate");
     assert!(rate_spec.is_none() || r2s_spec == "off", "--rate carries R2*: use it without --r2s");
     let smaps_spec = take("--smaps").unwrap_or("truth".into());
+    // research/smaps_estimation.md (both off by default; --smaps espirit only):
+    // --smaps-fit bspline:H_MM[:LAMBDA[:E0]]: replace the ESPIRiT maps by a weighted cubic B-spline fit (knot spacing
+    //   H_MM mm, second-difference penalty LAMBDA, default 1e-3; weights ((λ − E0)/(1 − E0))² of the ESPIRiT
+    //   eigenvalue λ inside the dilated support, E0 default 0.5, which is then also ESPIRiT's crop threshold): fills the
+    //   low-signal holes (lungs) that the eig_min crop zeroes, removes structure finer than ≈ H (image leakage),
+    //   renormalised Σ|s|² = 1 (hasty_recon::smapfit)
+    // --smaps-resp: one ESPIRiT map set per respiratory bin (calibration from the encode-0 sets of that bin only), phase
+    //   gauge aligned to the pooled maps; the operator uses bin r's maps for every set of bin r (setop::PerSetMaps,
+    //   also in --holdout-res). The warm start, preconditioners and support keep the pooled maps.
+    let smaps_fit: Option<(f64, f64, f64)> = take("--smaps-fit").map(|s| {
+        let p: Vec<&str> = s.split(':').collect();
+        assert!(p[0] == "bspline" && p.len() >= 2, "--smaps-fit bspline:H_MM[:LAMBDA[:E0]], got {s}");
+        let h = p[1].parse::<f64>().expect("--smaps-fit bspline:H_MM") * 1e-3;
+        let lam = p.get(2).map_or(1e-3, |v| v.parse().expect("--smaps-fit LAMBDA"));
+        let e0 = p.get(3).map_or(0.5, |v| v.parse().expect("--smaps-fit E0"));
+        assert!(h > 0.0 && lam >= 0.0 && (0.0..1.0).contains(&e0), "--smaps-fit: H > 0, LAMBDA ≥ 0, 0 ≤ E0 < 1");
+        (h, lam, e0)
+    });
+    assert!(smaps_fit.is_none() || smaps_spec.starts_with("espirit"), "--smaps-fit: with --smaps espirit");
+    assert!(!smaps_resp || smaps_spec.starts_with("espirit"), "--smaps-resp: with --smaps espirit");
     // --coil-sampling keep:draw[:hold[:last[:seed]]]: stochastic coil sampling of the data term (hasty_recon::p2np::
     // CoilSampling, random reshuffling; defaults hold 2, last 12, seed 1); off by default
     // --lagged TAU[:LS|auto]: lagged (control-variate) gradients with a reduced-segment surrogate on the same sample
@@ -522,7 +732,8 @@ fn main() {
     }
     // --prior llr|wavelet (complex-image prior without --learned; default llr); --wavelet THR[:LEVELS] (default 1:3):
     // 3D Daubechies-4 shrinkage per image, threshold THR × the MAD noise level of each image (scale-equivariant), cycle
-    // spinning; --wavelet-mix β: with --learned, x ← x + κ ((1 − β) D(x) + β W(x) − x) (research/wavelet_prior.md)
+    // spinning; --wavelet-mix β: with --learned, x ← x + κ ((1 − β) D(x) + β W(x) − x) (research/wavelet_prior.md);
+    // with --prior llr (no --learned) the LLR output is mixed the same way: x ← (1 − β) LLR(x) + β W(x) (run tag _llrwav{β})
     let prior_kind = take("--prior").unwrap_or("llr".into());
     // --llr-devices 0[,1,..] | cpu: the CUDA devices sharing the LLR prior's blocks (default: the solver's device 0),
     // or the CPU operator (same result to float rounding: tests/llr_gpu.rs)
@@ -540,11 +751,45 @@ fn main() {
     // denoising step). --red-shifts n (LLR only, default 1): the LLR shift is fixed in RED mode (a random shift per
     // iteration makes the gradient stochastic and breaks the ZMSHR1 secant pairs); n > 1 averages D over n fixed shifts
     // (n LLR calls per iteration, one extra stack). Run tag suffix _red{ρ}[_sh{n}].
+    // --prior-mode admm (hasty_recon::admm; research/precond_sampling_theory.md §2–§5): ADMM with the data step solved
+    // per set, x_t ← argmin ½‖E_t x − y_t‖² + (ρ/2)‖x − (z_t − u_t)‖² by --admm-inner K (default 3) PCG iterations on
+    // N_t + ρI (warm start x_t, on the device per set), z ← D(x + u) with the same prior pipeline as P²nP (LLR / wavelet
+    // mix, DFW, static lock, air), u ← u + x − z. Its fixed point does not depend on the inner metric. Output and scores
+    // are z (recon_<tag>); x is scored too (held-out residual, pc score). --admm-rho R: ρ = R ρ₁ (default 1), ρ₁ = one
+    // sample's curvature in one Nyquist cell, coil energy summed (measured at setup: Hutchinson trace of N_t, checked on
+    // plane waves). --admm-rho-adapt: residual balancing (×2 / ÷2 by the 10× rule, dual residual in units of ρ₁, u
+    // rescaled). --admm-metric none|clip (default none): clip = D^{-1/2} F⁻¹ diag(1/(max(μ̃_t, 1) + ρ/ρ₁)) F D^{-1/2},
+    // μ̃_t the set's expected samples per cell (per-encode coil-smoothed Chan symbol × the set's sample share). The κσ̂
+    // thresholds are re-estimated from x + u = z − ∇f(z)/ρ, so they carry the 1/ρ scale of prox_{(λ/ρ)R} themselves (no κ
+    // rescaling; hasty_recon::admm). Host state x, z, u (+ one work stack). Run tag suffix _admm{metric}{R}_K{K}[_ad].
     let prior_mode = take("--prior-mode").unwrap_or("pnp".into());
-    assert!(matches!(prior_mode.as_str(), "pnp" | "red"), "--prior-mode pnp|red");
+    assert!(matches!(prior_mode.as_str(), "pnp" | "red" | "admm"), "--prior-mode pnp|red|admm");
     let red = prior_mode == "red";
+    let admm = prior_mode == "admm";
+    let admm_rho: f64 = take("--admm-rho").map_or(1.0, |v| v.parse().expect("--admm-rho R (units of ρ₁)"));
+    let admm_inner: usize = take("--admm-inner").map_or(3, |v| v.parse().expect("--admm-inner K"));
+    let admm_metric = take("--admm-metric").map_or(hasty_recon::admm::AdmmMetric::None, |v| hasty_recon::admm::AdmmMetric::parse(&v).expect("--admm-metric none|clip"));
+    assert!(admm_rho > 0.0 && admm_inner >= 1, "--admm-rho R > 0, --admm-inner K ≥ 1");
+    assert!(admm || !admm_adapt, "--admm-rho-adapt needs --prior-mode admm");
+    let admm_tag = if admm { format!("_admm{}{admm_rho}_K{admm_inner}{}", admm_metric.name(), if admm_adapt { "_ad" } else { "" }) } else { String::new() };
     let red_rho: f64 = take("--red-rho").map_or(1.0, |v| v.parse().expect("--red-rho ρ"));
     let red_shifts: usize = take("--red-shifts").map_or(1, |v| v.parse().expect("--red-shifts n"));
+    // A FIXED objective f + λR for the LLR prior (research/solver_choice.md §2):
+    // --llr-shifts S: the LLR prox averaged over the fixed block shifts of seeds 0..S−1 in every call (the proximal
+    //   average of the shifted nuclear norms: itself a prox), instead of a new shift per iteration (cycle spinning);
+    // --llr-thr freeze: the penalty λ = κσ̂ / s from the first call (s = the prox step, hasty_recon::p2np::prox_step),
+    //   then every call thresholds at λ·s (P²nP: s = α; ADMM: 1/ρ; --prox-metric: ατ_k), instead of κσ̂ per call;
+    // --prox-metric: global ZMSHR1 with the prox in the step's metric (Becker–Fadili–Ochs; hasty_recon::p2np::
+    //   set_prox_in_metric): the fixed point no longer moves with the metric. Needs --llr-thr freeze and LLR only.
+    let llr_shifts: Option<usize> = take("--llr-shifts").map(|v| v.parse().expect("--llr-shifts S"));
+    assert!(llr_shifts.is_none_or(|s| s >= 1), "--llr-shifts S >= 1");
+    let llr_freeze = match take("--llr-thr").as_deref() {
+        None | Some("adaptive") => false,
+        Some("freeze") => true,
+        Some(o) => panic!("--llr-thr adaptive|freeze, got {o}"),
+    };
+    assert!(!prox_metric || llr_freeze, "--prox-metric needs --llr-thr freeze (a fixed prox scaled by the step)");
+    hasty_recon::p2np::set_prox_in_metric(prox_metric);
     assert!(red_shifts >= 1, "--red-shifts n >= 1");
     // --tsub fourier:K | bspline:M[:P]: temporal subspace, x = T c with T the same per voxel and encode (hasty_recon::tsub):
     // the cyclic cardiac Fourier basis |k| ≤ K (orthonormal) or M periodic B-splines of degree P (default 3), each per
@@ -636,14 +881,23 @@ fn main() {
     // --air-init: a seed on any grid of the same FOV (an air_map_*.npy, an air mask, or a coarse level's images, see
     // airmap::load_seed), applied from the first iteration; `fixed`: the seed only, never re-estimated.
     // Complex-image models only.
-    let air: Option<(hasty_recon::airmap::AirOpts, usize, usize)> = take("--air").map(|v| {
+    let air_spec: Option<String> = take("--air");
+    let air_start = air_spec.as_deref() == Some("start");
+    let air: Option<(hasty_recon::airmap::AirOpts, usize, usize)> = air_spec.map(|v| {
         let it: Vec<&str> = v.split(':').collect();
         let mut o = hasty_recon::airmap::AirOpts::default();
         let (it0, every) = match it[0] {
             "auto" => (it.get(1).map_or(0, |x| x.parse().expect("--air auto[:IT0[:EVERY]]")), it.get(2).map_or(2, |x| x.parse::<usize>().expect("--air auto[:IT0[:EVERY]]")).max(1)),
+            // start: estimated once, on the start stack x0 (the warm images in every frame; the same for every solver),
+            // never refreshed, binary (no ramp: a projection, so the denoiser stays the prox of a fixed function)
+            "start" => {
+                o.ramp_mm = 0.0;
+                (0, usize::MAX)
+            }
             "fixed" => (usize::MAX, usize::MAX),
-            _ => panic!("--air auto[:IT0[:EVERY]] | fixed"),
+            _ => panic!("--air auto[:IT0[:EVERY]] | start | fixed"),
         };
+        if let Some(b) = take("--air-ramp") { o.ramp_mm = b.parse().expect("--air-ramp MM"); }
         if let Some(b) = take("--air-margin") { o.margin_mm = b.parse().expect("--air-margin MM"); }
         if let Some(b) = take("--air-tau") { o.tau = b.parse().expect("--air-tau T"); }
         if let Some(b) = take("--air-release") { o.release = b.parse().expect("--air-release R"); }
@@ -666,12 +920,12 @@ fn main() {
     let resp_accept: f64 = take("--resp-accept").map_or(1.0, |v| v.parse().expect("--resp-accept FRAC"));
     assert!(resp_accept > 0.0 && resp_accept <= 1.0, "--resp-accept FRAC in (0, 1]");
     let ga_tag = if resp_accept < 1.0 { format!("_ga{resp_accept}") } else { String::new() };
-    let seg_basis_arg = take("--seg-basis").unwrap_or(if knots_mode { "svdn".into() } else { "fixed".into() });
+    let seg_basis_arg = take("--seg-basis").unwrap_or(if knots_mode || frame_rm_mode { "svdn".into() } else { "fixed".into() });
     // --seg-weight count|mass[:lo,hi]: voxel weights of the SVD basis, all data-derived (no labels): count = every voxel
     // of the warm-start support equally (default); mass = the smoothed warm-start magnitude relative to its median over
     // the support, clamped to [lo, hi] (default 0.3, 3): bright regions count more, dark tissue keeps a floor so the
     // basis is not biased away from it, air (outside the support) never counts
-    let seg_weight = take("--seg-weight").unwrap_or(if knots_mode { "energy".into() } else { "count".into() });
+    let seg_weight = take("--seg-weight").unwrap_or(if knots_mode || frame_rm_mode { "energy".into() } else { "count".into() });
     // energy (research/segment_basis.md): the smoothed warm-start magnitude squared × the coil energy Σ_c |S_c|² relative
     // to its median over the support: the signal energy each voxel feeds into the data (no clamp)
     let seg_energy = seg_weight == "energy";
@@ -746,6 +1000,15 @@ fn main() {
     // learned prior precision on CUDA: fp32 | bf16 (autocast, the training regime) | fp16
     let learned_prec = take("--learned-prec").unwrap_or("bf16".into());
     let init_from: Option<PathBuf> = take("--init-from").map(PathBuf::from);
+    // --adc-part out (default) | full: the operator's ADC samples per readout (hasty_recon::pyramid::AdcPart)
+    let adc_part = hasty_recon::pyramid::AdcPart::parse(&take("--adc-part").unwrap_or("out".into())).unwrap_or_else(|e| panic!("{e:?}"));
+    // --calib-adc out|full: the ADC samples of the coil calibration (ESPIRiT region, --coil-gram data); default = --adc-part
+    let calib_adc_out = match take("--calib-adc").as_deref() {
+        None => adc_part == hasty_recon::pyramid::AdcPart::Out,
+        Some("out") => true,
+        Some("full") => false,
+        Some(o) => panic!("--calib-adc out|full, got {o}"),
+    };
     let truth_box = match take("--truth-sampling").as_deref() {
         None | Some("point") => false,
         Some("box") => true,
@@ -763,6 +1026,9 @@ fn main() {
         }
     });
     let cmdline = std::env::args().collect::<Vec<_>>().join(" ");
+    // every argument must have been consumed: a misspelled or repeated option would otherwise be ignored silently
+    // (take() reads the first occurrence only)
+    assert!(args.len() == 1, "recon_p2np: unrecognised or repeated arguments {:?} (expected only the scan directory)", &args[1.min(args.len())..]);
     let dir = PathBuf::from(&args[0]);
     assert!(model == "seg" || temporal.is_none(), "--temporal needs --model seg");
     // run output directory: arrays, metrics and figures (tools/figs/run_figs.py)
@@ -773,7 +1039,8 @@ fn main() {
             + &coil_sampling.as_ref().map_or(String::new(), |c| format!("_cs{}-{}", c.keep, c.draw))
             + &if kcrop.is_some() || init_from.is_some() { format!("_g{}", grid_scale.map_or("1".into(), |g| g.map(|v| v.to_string()).join("-"))) } else { String::new() }
             + &kcrop.map_or(String::new(), |k| format!("_kc{}{}", k.frac, if k.prefix { "p" } else { "" }))
-            + if init_from.is_some() { "_init" } else { "" };
+            + if init_from.is_some() { "_init" } else { "" }
+            + if adc_part == hasty_recon::pyramid::AdcPart::Out { "_aout" } else { "" };
         hasty_site::runs().join(tag)
     });
     std::fs::create_dir_all(&out).unwrap();
@@ -784,6 +1051,41 @@ fn main() {
                 let _ = std::fs::remove_file(e.path());
             }
         }
+    }
+    // config fingerprint (audit 2026-11-24): saved states resume only under the same configuration. The arguments
+    // (without --out / --fresh) and the HASTY_* / NOISE_SCALE environment are recorded in config_fingerprint.txt; a
+    // state_* file with a missing or different fingerprint aborts (use --fresh or a new --out). The binary may differ
+    // (a fixed build resumes a stopped run).
+    {
+        let mut a: Vec<String> = Vec::new();
+        let mut it = std::env::args().skip(1);
+        // run-length / checkpoint-cadence options may change on a resume (extend --iters, report more often)
+        while let Some(x) = it.next() {
+            if ["--out", "--iters", "--every", "--ckpt-every"].contains(&x.as_str()) {
+                it.next();
+            } else if x != "--fresh" {
+                a.push(x);
+            }
+        }
+        let mut env: Vec<String> = std::env::vars().filter(|(k, _)| (k.starts_with("HASTY_") && k != "HASTY_TUNE") || k == "NOISE_SCALE").map(|(k, v)| format!("{k}={v}")).collect();
+        env.sort();
+        let fp = format!("args: {}\nenv: {}\n", a.join(" "), env.join(" "));
+        let fpath = out.join("config_fingerprint.txt");
+        // the pooled warm starts (state_warm_full_done_*) are shared between arms on purpose (precond_compare/run.sh
+        // copies them, --warm-only): not checked here; every other state_* is this run's own iterate
+        let names: Vec<String> = std::fs::read_dir(&out).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let has_state = names.iter().any(|n| n.starts_with("state_") && !n.starts_with("state_warm_full_done_"));
+        if names.iter().any(|n| n.starts_with("state_warm_full_done_")) {
+            println!("resume: pooled warm-start states state_warm_full_done_* present (shared between arms, not fingerprint-checked)");
+        }
+        if has_state {
+            match std::fs::read_to_string(&fpath) {
+                Ok(old) if old == fp => println!("resume: saved state with the same configuration fingerprint"),
+                Ok(old) => panic!("{}: saved state from a different configuration (use --fresh or a new --out)\n  saved:   {}\n  current: {}", out.display(), old.trim(), fp.trim()),
+                Err(_) => panic!("{}: saved state without a configuration fingerprint (written before 2026-11-24); use --fresh or a new --out", out.display()),
+            }
+        }
+        std::fs::write(&fpath, &fp).unwrap();
     }
     let ctl = RunCtl::new(&out, ckpt_every);
     let every_s = if ckpt_every > 0 { format!("checkpoint every {ckpt_every} iterations") } else { "no periodic checkpoints (--ckpt-every N)".to_string() };
@@ -809,11 +1111,26 @@ fn main() {
         sd.set_recon_grid(s);
         println!("reconstruction grid {:?} (native {:?}), voxel {:?} mm", sd.dims, sd.tdims, sd.vox.map(|v| (v * 1e4).round() / 10.0));
     }
+    // --card-frames K: K nested cardiac frames (K divides the sim's frames; readout frame f → f / (F / K)), e.g. the
+    // coarse level of a temporal anchor test (temporal_pyramid.md §13). The legacy lumen yardstick indexes the truth
+    // by frame and is not meaningful then; --score-pc averages its truth over the nested frames.
+    if let Some(k) = card_frames {
+        let f0 = sd.n_frames;
+        assert!(k > 0 && f0 % k == 0, "--card-frames {k}: must divide the {f0} cardiac frames");
+        let m = f0 / k;
+        for f in sd.ro.frame.iter_mut() {
+            if *f != usize::MAX {
+                *f /= m;
+            }
+        }
+        sd.n_frames = k;
+        println!("--card-frames {k}: {f0} cardiac frames pooled {m} by {m} (nested)");
+    }
     // respiratory bins: frame index r · F + f
     let nf_card = sd.n_frames;
     let mut resp_info = serde_json::Value::Null;
     if resp_bins > 1 || resp_accept < 1.0 {
-        assert!(temporal.is_none() && vmodel.is_none(), "--resp-bins / --resp-accept with --temporal / --vmodel: not yet (their time bases are cyclic over the cardiac frames)");
+        assert!(vmodel.is_none() && (temporal.is_none() || resp_bins == 1), "--resp-bins / --resp-accept with --vmodel, or --resp-bins > 1 with --temporal: not yet (their time bases are cyclic over the cardiac frames; --temporal with gating to one bin works: the gated readouts keep their cardiac times)");
         let npy_f64 = |p: &std::path::Path| -> (Vec<usize>, Vec<f64>) {
             let b = std::fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
             let hl = u16::from_le_bytes([b[8], b[9]]) as usize;
@@ -905,6 +1222,46 @@ fn main() {
             }
         }
         println!("--keep {keep_n}: {kept} of {} readouts kept (a shorter scan; hash-spread over all strata)", sd.n_readouts());
+    }
+    // --holdout-res: the frame of every held-out readout (usize::MAX: not held out)
+    let mut held_frame: Vec<usize> = vec![usize::MAX; if holdout_res { sd.n_readouts() } else { 0 }];
+    assert!(!holdout_res || holdout.is_some_and(|h| !h.2), "--holdout-res needs --holdout N (not --holdout-eval)");
+    if let Some((hn, hs, ev)) = holdout {
+        // stratified: every N-th readout of each (encode, frame) set from a hashed offset, so that every set keeps
+        // held-out readouts (≥ 1 when it has any) and the eval run has no empty set
+        let mut mask = vec![false; sd.n_readouts()];
+        let ne_h = 1 + sd.ro.enc.iter().copied().max().unwrap_or(0);
+        let off_h = hasty_recon::knotsolve::subset_mask(ne_h * sd.n_frames * hn, hn, 0x484F_4C44 ^ hs.wrapping_mul(0x9E37_79B9));
+        for e in 0..ne_h {
+            for f in 0..sd.n_frames {
+                let r = sd.readouts_of(e, Some(f));
+                let base = (e * sd.n_frames + f) * hn;
+                let off = (0..hn).find(|&j| off_h[base + j]).unwrap_or(0) % hn.min(r.len().max(1));
+                for (j, &i) in r.iter().enumerate() {
+                    mask[i] = j % hn == off;
+                }
+            }
+        }
+        let (mut held, mut left) = (0usize, 0usize);
+        for (i, &h) in mask.iter().enumerate() {
+            if sd.ro.frame[i] == usize::MAX {
+                continue;
+            }
+            if h == ev {
+                left += 1;
+            } else {
+                held += 1;
+                if holdout_res {
+                    held_frame[i] = sd.ro.frame[i];
+                }
+                sd.ro.frame[i] = usize::MAX;
+            }
+        }
+        if ev {
+            println!("--holdout-eval {hn}:{hs}: only the {left} held-out readouts ({held} solve readouts dropped): data-space score");
+        } else {
+            println!("--holdout {hn}:{hs}: {held} readouts held out of the solve, {left} used");
+        }
     }
     // knot mode: the 2-D basis over the breathing amplitude of the readouts used (bellows by default, truth = oracle)
     let knot_basis: Option<(hasty_recon::vknot::KnotBasis, Vec<(u32, f32)>, Vec<f64>)> = knots2d.map(|(kr, rdeg, mc, cdeg)| {
@@ -1054,13 +1411,30 @@ fn main() {
     // calibration region (whitened, all coils; encode 0, all frames, the samples inside the box) by a low-resolution CG
     // (hasty_recon::espirit::calib_from_noncart): the density-neutral coil Gram and the ESPIRiT input
     let cal_dims = sd.dims.map(|d| 24.min(d) & !1);
+    // --calib-adc out: the calibration sees the operator's ADC samples only (the outgoing half [i0, i1) of every readout,
+    // detected here as for the solve below)
+    let calib_win: Option<(usize, usize)> = calib_adc_out.then(|| {
+        let cs: Vec<&[Vec<f32>; 3]> = host_sets.iter().map(|s| &s.coords).collect();
+        let oh = hasty_recon::pyramid::OutHalf::detect(&cs, sd.na, sd.vox);
+        (oh.i0, oh.i1)
+    });
     let calib_raw: Option<(Vec<C32>, usize)> = (coil_gram == "calib" || coil_box_margin.is_some() || smaps_spec != "truth").then(|| {
         let t_c = std::time::Instant::now();
         let (mut kc, mut ky): ([Vec<f32>; 3], Vec<Vec<C32>>) = ([vec![], vec![], vec![]], vec![vec![]; nc]);
-        let in_box = |k: &[f32; 3]| (0..3).all(|a| (k[a] as f64 * sd.dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6));
+        // samples in the calibration box over the whole ADC (counted for the log), and the kept ones
+        let n_full = std::sync::atomic::AtomicUsize::new(0);
+        let in_box = |k: &[f32; 3]| {
+            let b = (0..3).all(|a| (k[a] as f64 * sd.dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6));
+            if b {
+                n_full.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            b
+        };
+        let na_ = sd.na;
+        let in_win = |j: usize| calib_win.map_or(true, |(w0, w1)| (w0..w1).contains(&(j % na_)));
         for t in (0..fe.len()).filter(|&t| enc_of(t) == 0) {
             if streamed {
-                let s = sd.load_set(&host_sets[t].readouts, &LoadOpts { w: &w, cc: None, keep: Some(&in_box), data: true }).unwrap();
+                let s = sd.load_set_window(&host_sets[t].readouts, &LoadOpts { w: &w, cc: None, keep: Some(&in_box), data: true }, calib_win).unwrap();
                 let m = s.tau.len();
                 for a in 0..3 {
                     kc[a].extend_from_slice(&s.coords[a]);
@@ -1072,7 +1446,7 @@ fn main() {
             }
             let hsx = &host_sets[t];
             let m = hsx.tau.len();
-            let sel: Vec<usize> = (0..m).filter(|&j| (0..3).all(|a| (hsx.coords[a][j] as f64 * sd.dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6))).collect();
+            let sel: Vec<usize> = (0..m).filter(|&j| in_box(&[hsx.coords[0][j], hsx.coords[1][j], hsx.coords[2][j]]) && in_win(j)).collect();
             for a in 0..3 {
                 kc[a].extend(sel.iter().map(|&j| hsx.coords[a][j]));
             }
@@ -1082,9 +1456,55 @@ fn main() {
         }
         let yall: Vec<C32> = ky.concat();
         let (cal, used) = hasty_recon::espirit::calib_from_noncart(&dev, &st, &kern, [&kc[0], &kc[1], &kc[2]], &yall, nc, sd.dims, cal_dims, 30, 1e-3).unwrap();
-        println!("calibration region {cal_dims:?}: {used} samples of encode 0, {nc} coils ({:.1}s)", t_c.elapsed().as_secs_f64());
+        let given = kc[0].len();
+        match calib_win {
+            Some((w0, w1)) => println!("calibration region {cal_dims:?}: {used} samples of encode 0, {nc} coils ({:.1}s); --calib-adc out: ADC samples {w0}..{w1} of {na_} per readout, {given} of the {} samples inside the region over the whole ADC", t_c.elapsed().as_secs_f64(), n_full.load(std::sync::atomic::Ordering::Relaxed)),
+            None => println!("calibration region {cal_dims:?}: {used} samples of encode 0, {nc} coils ({:.1}s); --calib-adc full: every ADC sample ({given} inside the region)", t_c.elapsed().as_secs_f64()),
+        }
         (cal, used)
     });
+    // --smaps-resp: the same calibration per respiratory bin (the encode-0 sets of frames r · nf_card + c, c any)
+    let calib_resp: Vec<(Vec<C32>, usize)> = if smaps_resp {
+        assert!(resp_bins > 1, "--smaps-resp: needs --resp-bins N > 1");
+        assert!(fe.iter().all(|f| f.0.is_some()), "--smaps-resp: one frame per set (no --temporal / knot sets)");
+        (0..resp_bins)
+            .map(|b| {
+                let t_c = std::time::Instant::now();
+                let (mut kc, mut ky): ([Vec<f32>; 3], Vec<Vec<C32>>) = ([vec![], vec![], vec![]], vec![vec![]; nc]);
+                let in_box = |k: &[f32; 3]| (0..3).all(|a| (k[a] as f64 * sd.dims[a] as f64 / cal_dims[a] as f64).abs() < std::f64::consts::PI * (1.0 - 1e-6));
+                let na_ = sd.na;
+                let in_win = |j: usize| calib_win.map_or(true, |(w0, w1)| (w0..w1).contains(&(j % na_)));
+                for t in (0..fe.len()).filter(|&t| enc_of(t) == 0 && fe[t].0.is_some_and(|f| f / nf_card == b)) {
+                    if streamed {
+                        let s = sd.load_set_window(&host_sets[t].readouts, &LoadOpts { w: &w, cc: None, keep: Some(&in_box), data: true }, calib_win).unwrap();
+                        let m = s.tau.len();
+                        for a in 0..3 {
+                            kc[a].extend_from_slice(&s.coords[a]);
+                        }
+                        for c in 0..nc {
+                            ky[c].extend_from_slice(&s.y[c * m..(c + 1) * m]);
+                        }
+                        continue;
+                    }
+                    let hsx = &host_sets[t];
+                    let m = hsx.tau.len();
+                    let sel: Vec<usize> = (0..m).filter(|&j| in_box(&[hsx.coords[0][j], hsx.coords[1][j], hsx.coords[2][j]]) && in_win(j)).collect();
+                    for a in 0..3 {
+                        kc[a].extend(sel.iter().map(|&j| hsx.coords[a][j]));
+                    }
+                    for c in 0..nc {
+                        ky[c].extend(sel.iter().map(|&j| hsx.y[c * m + j]));
+                    }
+                }
+                let yall: Vec<C32> = ky.concat();
+                let (cal, used) = hasty_recon::espirit::calib_from_noncart(&dev, &st, &kern, [&kc[0], &kc[1], &kc[2]], &yall, nc, sd.dims, cal_dims, 30, 1e-3).unwrap();
+                println!("calibration region {cal_dims:?}, respiratory bin {b}: {used} samples of encode 0 ({:.1}s)", t_c.elapsed().as_secs_f64());
+                (cal, used)
+            })
+            .collect()
+    } else {
+        vec![]
+    };
     let ncal = cal_dims[0] * cal_dims[1] * cal_dims[2];
     let mut coil_info;
     let cc = {
@@ -1102,14 +1522,20 @@ fn main() {
             box_mask = Some(mk);
             "whitened calibration region inside the prescription box"
         } else {
-            // the whitened data of set 0 (≤ 20000 samples, as before)
+            // the whitened data of set 0 (≤ 20000 samples, as before); --calib-adc out: its ADC samples [i0, i1) only
             let m0 = host_sets[0].tau.len();
-            if streamed {
-                let s0 = sd.load_set(&host_sets[0].readouts, &LoadOpts { w: &w, cc: None, keep: None, data: true }).unwrap();
-                g.add(&s0.y, m0, (m0 / 20000).max(1));
+            let y0: Vec<C32> = if streamed {
+                sd.load_set_window(&host_sets[0].readouts, &LoadOpts { w: &w, cc: None, keep: None, data: true }, calib_win).unwrap().y
+            } else if let Some((w0, w1)) = calib_win {
+                let sel: Vec<usize> = (0..m0).filter(|&j| (w0..w1).contains(&(j % sd.na))).collect();
+                let hy = &host_sets[0].y;
+                (0..nc).flat_map(|c| sel.iter().map(move |&j| hy[c * m0 + j])).collect()
             } else {
-                g.add(&host_sets[0].y, m0, (m0 / 20000).max(1));
-            }
+                host_sets[0].y.clone()
+            };
+            let m = y0.len() / nc;
+            println!("coil Gram from set 0: {m} of {m0} samples (--calib-adc {})", if calib_win.is_some() { "out" } else { "full" });
+            g.add(&y0, m, (m / 20000).max(1));
             "whitened samples of set 0"
         };
         let ccx = hasty_recon::coils::CoilCompression::from_gram(&g, coil_rule);
@@ -1164,6 +1590,24 @@ fn main() {
         },
         _ => cc,
     };
+    // --cc-load: the solve run's basis (held-out residual in the same virtual coils); --holdout saves it
+    let cc: Vec<Vec<Complex64>> = match &cc_load {
+        Some(p) => {
+            let s = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("--cc-load {}: {e}", p.display()));
+            let z: Vec<Vec<Complex64>> = s.lines().filter(|l| !l.trim().is_empty()).map(|l| l.split(';').filter(|p| !p.is_empty()).map(|p| {
+                let (a, b) = p.split_once(',').unwrap();
+                Complex64::new(a.parse().unwrap(), b.parse().unwrap())
+            }).collect()).collect();
+            assert!(z.iter().all(|r| r.len() == nc), "--cc-load {}: rows of {nc} coils expected", p.display());
+            println!("coil compression: basis loaded from {} ({} virtual coils)", p.display(), z.len());
+            z
+        }
+        None => cc,
+    };
+    if holdout.is_some_and(|h| !h.2) {
+        let s: String = cc.iter().map(|r| r.iter().map(|z| format!("{:.9e},{:.9e};", z.re, z.im)).collect::<String>() + "\n").collect();
+        std::fs::write(out.join("coil_basis.txt"), s).unwrap();
+    }
     let nvc = cc.len();
     // oracle-vs-estimate diagnostics for run.json
     let mut diag = serde_json::Map::new();
@@ -1250,15 +1694,26 @@ fn main() {
             Some(r)
         }
     };
+    if field_scale != 1.0 {
+        grid.omega.iter_mut().for_each(|w| *w *= field_scale);
+        println!("--field-scale {field_scale}: the operator's off-resonance field scaled (concomitant fields and GNL unchanged)");
+    }
     let ff_est: Option<Vec<f32>> = fat_fraction.as_deref().and_then(|s| s.strip_prefix("est:")).map(|spec| {
         let fm = est_maps(spec);
         xs.iter().map(|x| fm.sample(x).2.clamp(0.0, 1.0) as f32).collect()
     });
     let smaps_true_cc = apply_cc(&grid.smaps, nv, nc, &cc);
+    // ESPIRiT eigenvalue maps (pooled; per respiratory bin with --smaps-resp: maps, eigenvalues), for --smaps-fit
+    let mut espirit_eig: Option<Vec<f32>> = None;
+    let mut maps_resp: Vec<(Vec<C32>, Vec<f32>)> = Vec::new();
     let mut smaps = if let Some(arg) = smaps_spec.strip_prefix("espirit") {
         // the calibration region compressed (it is linear in the data)
         let cd = cal_dims;
-        let opts = hasty_recon::espirit::EspiritOpts { eig_min: arg.strip_prefix(':').map_or(0.8, |v| v.parse().unwrap()), ..Default::default() };
+        let mut opts = hasty_recon::espirit::EspiritOpts { eig_min: arg.strip_prefix(':').map_or(0.8, |v| v.parse().unwrap()), ..Default::default() };
+        if let Some((_, _, e0)) = smaps_fit {
+            // the fit weights the maps by their eigenvalue down to E0: keep them down to there
+            opts.eig_min = e0;
+        }
         let t_e = std::time::Instant::now();
         let (cal, used) = calib_raw.as_ref().unwrap();
         let used = *used;
@@ -1277,6 +1732,27 @@ fn main() {
         }
         println!("coil maps: ESPIRiT ({used} calibration samples of encode 0, calib {cd:?}, {} kernels, eig_min {}, {:.1}s; stages {:?}); vs the true maps over {cnt} signal voxels: mean 1 − |⟨ŝ, s⟩| {:.2e}, {masked} masked", em.n_kernels, opts.eig_min, t_e.elapsed().as_secs_f64(), em.timings.map(|v| (v * 10.0).round() / 10.0), err / cnt.max(1) as f64);
         diag.insert("espirit".into(), serde_json::json!({"kernels": em.n_kernels, "eig_min": opts.eig_min, "calib": cd, "calib_samples": used, "mean_1_minus_ip": err / cnt.max(1) as f64, "masked": masked, "signal_voxels": cnt}));
+        if smaps_resp {
+            // one map set per respiratory bin; the subspace iteration starts at the pooled kernel count
+            let ob = hasty_recon::espirit::EspiritOpts { block0: Some(em.n_kernels * 5 / 4 + 16), ..opts.clone() };
+            let mut rows = Vec::new();
+            for (b, (cal_b, used_b)) in calib_resp.iter().enumerate() {
+                let t_b = std::time::Instant::now();
+                let eb = hasty_recon::espirit::espirit(&apply_cc(cal_b, ncal, nc, &cc), cd, cc.len(), sd.dims, &ob);
+                let mut mb = eb.maps;
+                // the image phase convention of the pooled maps (no gauge phase jumps between bins)
+                hasty_recon::smapfit::align_phase(&mut mb, &em.maps, cc.len());
+                let (e_all, e_nz, zero) = smaps_agreement(&mb, &smaps_true_cc, cc.len(), &sig);
+                let d_pool = hasty_recon::smapfit::map_disagreement(&mb, &em.maps, cc.len());
+                let both: Vec<usize> = (0..nv).filter(|&q| sig[q] && eb.eig[q] as f64 > opts.eig_min && em.eig[q] as f64 > opts.eig_min).collect();
+                let dp = both.iter().map(|&q| d_pool[q]).sum::<f64>() / both.len().max(1) as f64;
+                println!("coil maps, respiratory bin {b}: ESPIRiT ({used_b} samples, {} kernels, {:.1}s); vs the true maps: mean 1 − |⟨ŝ, s⟩| {e_all:.2e} (zero maps as 1), {e_nz:.2e} over the {} nonzero, {zero} zero; vs the pooled maps {dp:.2e} over {} voxels where both are kept", eb.n_kernels, t_b.elapsed().as_secs_f64(), cnt - zero, both.len());
+                rows.push(serde_json::json!({"bin": b, "kernels": eb.n_kernels, "calib_samples": used_b, "mean_1_minus_ip": e_all, "mean_1_minus_ip_nonzero": e_nz, "zero": zero, "vs_pooled": dp}));
+                maps_resp.push((mb, eb.eig));
+            }
+            diag.insert("espirit_resp".into(), serde_json::json!(rows));
+        }
+        espirit_eig = Some(em.eig);
         em.maps
     } else {
         smaps_true_cc.clone()
@@ -1346,20 +1822,53 @@ fn main() {
         kstore_info = serde_json::json!({"path": "streamed", "spec": spec_s, "describe": ks.spec().describe(), "file": ks.spec().file, "raw_bytes": stt.raw_bytes, "stored_bytes": stt.stored_bytes, "ratio": stt.ratio(), "quant_step": ks.step(), "tag_hash": format!("{hash:016x}")});
         kstore = Some(std::sync::Arc::new(ks));
     }
-    // --kcrop: the samples inside the grid's band. The sample records are cropped (everything downstream sees the
-    // kept samples); the whole records stay for the segment tables (built per readout × ADC sample, then cropped);
-    // the store (keyed and filled with the whole sets, shared with the full-resolution runs) is filtered on read.
+    // --kcrop: the samples inside the grid's band; --adc-part out: the outgoing half of every readout (the returning
+    // half stays in the files and the store for navigators); both: their intersection. The sample records are cropped
+    // (everything downstream sees the kept samples); the whole records stay for the segment tables (built per
+    // readout × ADC sample, then cropped) and the segment time window is the kept ADC window; the store (keyed and
+    // filled with the whole sets, shared with the full-resolution runs) is filtered on read.
     let mut full_sets: Vec<SampleSet> = vec![];
     let mut crop_sel: Option<Vec<Vec<u32>>> = None;
     let mut crop_adc: Option<hasty_recon::pyramid::AdcStats> = None;
-    if let Some(kc) = kcrop {
+    let out_half: Option<hasty_recon::pyramid::OutHalf> = (adc_part == hasty_recon::pyramid::AdcPart::Out).then(|| {
+        let t_o = Instant::now();
+        let cs: Vec<&[Vec<f32>; 3]> = host_sets.iter().map(|s| &s.coords).collect();
+        let oh = hasty_recon::pyramid::OutHalf::detect(&cs, sd.na, sd.vox);
+        let tau = &host_sets[0].tau;
+        let ms = |n: usize| tau[n] * 1e3;
+        let ros: Vec<usize> = host_sets.iter().map(|s| s.readouts.len()).collect();
+        println!("ADC part out (outgoing half, |k| increasing): samples {}..{} of {} kept per readout ({:.3}..{:.3} ms after excitation; ADC {:.3}..{:.3} ms), {:.2} % of the samples; per-readout first centre pass {}..{}, first |k| maximum {}..{} over {} readouts; {} decreasing steps inside the readouts' ranges; {} .. {} readouts and {} .. {} samples per set ({:.1}s)",
+            oh.i0, oh.i1, sd.na, ms(oh.i0), ms(oh.i1 - 1), ms(0), ms(sd.na - 1), 100.0 * (oh.i1 - oh.i0) as f64 / sd.na as f64, oh.i0_span.0, oh.i0_span.1, oh.i1_span.0 - 1, oh.i1_span.1 - 1, oh.readouts, oh.decreasing,
+            ros.iter().min().unwrap_or(&0), ros.iter().max().unwrap_or(&0), ros.iter().min().unwrap_or(&0) * (oh.i1 - oh.i0), ros.iter().max().unwrap_or(&0) * (oh.i1 - oh.i0), t_o.elapsed().as_secs_f64());
+        pyr_info["adc_part"] = serde_json::json!({ "part": "out", "i0": oh.i0, "i1": oh.i1, "na": sd.na, "t_ms": [ms(oh.i0), ms(oh.i1 - 1)], "i0_span": oh.i0_span, "i1_span": oh.i1_span, "readouts": oh.readouts, "decreasing_steps": oh.decreasing, "fraction": (oh.i1 - oh.i0) as f64 / sd.na as f64 });
+        oh
+    });
+    if out_half.is_none() {
+        pyr_info["adc_part"] = serde_json::json!({ "part": "full", "na": sd.na });
+    }
+    if kcrop.is_some() || out_half.is_some() {
         use rayon::prelude::*;
         let t_c = Instant::now();
-        let sel: Vec<Vec<u32>> = host_sets.par_iter().map(|s| kc.select(&s.coords, sd.na)).collect();
+        let sel: Vec<Vec<u32>> = host_sets.par_iter().map(|s| match (kcrop, &out_half) {
+            (Some(kc), oh) => {
+                let mut v = kc.select(&s.coords, sd.na);
+                if let Some(oh) = oh {
+                    oh.restrict(&mut v, sd.na);
+                }
+                v
+            }
+            (None, Some(oh)) => oh.select(s.coords[0].len(), sd.na),
+            (None, None) => unreachable!(),
+        }).collect();
         let lens_full: Vec<usize> = host_sets.iter().map(|s| s.coords[0].len()).collect();
         let st = hasty_recon::pyramid::AdcStats::new(&sel, &lens_full, sd.na);
         let (w0, w1) = st.window;
         let (t_w0, t_w1) = (host_sets[0].tau[w0] * 1e3, host_sets[0].tau[w1] * 1e3);
+        let what = match (kcrop, &out_half) {
+            (Some(kc), Some(_)) => format!("{} ∩ outgoing half", kc.describe()),
+            (Some(kc), None) => kc.describe(),
+            _ => "outgoing half".to_string(),
+        };
         let cropped: Vec<SampleSet> = host_sets.par_iter().zip(sel.par_iter()).map(|(s, i)| hasty_recon::pyramid::crop_set(s, i)).collect();
         full_sets = std::mem::replace(&mut host_sets, cropped);
         for s in full_sets.iter_mut() {
@@ -1368,7 +1877,7 @@ fn main() {
         if model != "seg" {
             full_sets = vec![];
         }
-        println!("k-space crop ({}): {} of {} samples kept ({:.2} %), ADC window {w0}..{w1} of {} ({t_w0:.3}..{t_w1:.3} ms), {} .. {} per set ({:.1}s)", kc.describe(), st.kept, st.total, 100.0 * st.fraction(), sd.na, sel.iter().map(|s| s.len()).min().unwrap_or(0), sel.iter().map(|s| s.len()).max().unwrap_or(0), t_c.elapsed().as_secs_f64());
+        println!("k-space crop ({what}): {} of {} samples kept ({:.2} %), ADC window {w0}..{w1} of {} ({t_w0:.3}..{t_w1:.3} ms), {} .. {} per set ({:.1}s)", st.kept, st.total, 100.0 * st.fraction(), sd.na, sel.iter().map(|s| s.len()).min().unwrap_or(0), sel.iter().map(|s| s.len()).max().unwrap_or(0), t_c.elapsed().as_secs_f64());
         if let Some(ks) = kstore.take() {
             let ks = std::sync::Arc::try_unwrap(ks).unwrap_or_else(|_| panic!("k-space store shared before the crop"));
             let view = ks.with_selection(sel.clone()).unwrap();
@@ -1390,12 +1899,56 @@ fn main() {
             };
             kstore = Some(std::sync::Arc::new(ks));
         }
-        pyr_info["kcrop"] = serde_json::json!({ "frac": kc.frac, "prefix": kc.prefix, "kept": st.kept, "total": st.total, "fraction": st.fraction(), "adc_window": [w0, w1], "window_ms": [t_w0, t_w1] });
+        if let Some(kc) = kcrop {
+            pyr_info["kcrop"] = serde_json::json!({ "frac": kc.frac, "prefix": kc.prefix, "kept": st.kept, "total": st.total, "fraction": st.fraction(), "adc_window": [w0, w1], "window_ms": [t_w0, t_w1] });
+        }
+        pyr_info["adc_part"]["kept"] = serde_json::json!({ "samples": st.kept, "total": st.total, "fraction": st.fraction(), "adc_window": [w0, w1], "window_ms": [t_w0, t_w1], "per_set": [sel.iter().map(|s| s.len()).min().unwrap_or(0), sel.iter().map(|s| s.len()).max().unwrap_or(0)] });
         crop_sel = Some(sel);
         crop_adc = Some(st);
     }
     // (sizes below: the kept samples)
     let samples_total: usize = host_sets.iter().map(|s| s.coords[0].len()).sum();
+    // --holdout-res: the held-out readouts of every solve set (same frame and encode): whole sample records (for the
+    // segment tables, built with the solve's rules below), the kept-sample selection of the same --kcrop / --adc-part
+    // rule, and the kept data (whitened, the solve's coil basis) on the host
+    let mut held_host: Option<HeldHost> = holdout_res.then(|| {
+        assert!(model == "seg" && knots2d.is_none() && op_frames.is_none() && vmodel.is_none() && inject.is_none() && !synthetic && rc_mode.is_off() && fat_fraction.is_none(),
+            "--holdout-res: the frame-mode or --temporal segment model (no knots / --vmodel / --inject-phase / --synthetic / --rcompress / --fat-fraction)");
+        let t_h = Instant::now();
+        let opts = LoadOpts { w: &w, cc: Some(&cc), keep: None, data: true };
+        let mut hh = HeldHost { recs: Vec::with_capacity(fe.len()), sels: Vec::with_capacity(fe.len()), ys: Vec::with_capacity(fe.len()), nro: 0 };
+        for &(f, e) in &fe {
+            // frame mode: the set's frame; --temporal (one set per encode over all frames): every held-out readout of e
+            let ros: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.enc[i] == e && match f { Some(f) => held_frame[i] == f, None => held_frame[i] != usize::MAX }).collect();
+            hh.nro += ros.len();
+            let mut s = if streamed {
+                sd.load_set(&ros, &opts).unwrap()
+            } else {
+                let mut s = sd.sample_set(&ros, &w);
+                s.y = apply_cc(&s.y, s.tau.len(), nc, &cc);
+                s
+            };
+            let sel: Option<Vec<u32>> = match (kcrop, &out_half) {
+                (Some(kc), oh) => {
+                    let mut v = kc.select(&s.coords, sd.na);
+                    if let Some(oh) = oh {
+                        oh.restrict(&mut v, sd.na);
+                    }
+                    Some(v)
+                }
+                (None, Some(oh)) => Some(oh.select(s.coords[0].len(), sd.na)),
+                (None, None) => None,
+            };
+            let m = s.coords[0].len();
+            let y = std::mem::take(&mut s.y);
+            hh.ys.push(match &sel { Some(v) => hasty_recon::pyramid::gather_rows(&y, m, v), None => y });
+            hh.recs.push(s);
+            hh.sels.push(sel);
+        }
+        let kept: usize = hh.ys.iter().map(|y| y.len() / nvc).sum();
+        println!("--holdout-res: {} held-out readouts in {} sets, {kept} kept samples, {:.2} GiB data on the host ({:.1}s)", hh.nro, fe.len(), (kept * nvc * 8) as f64 / GIB, t_h.elapsed().as_secs_f64());
+        hh
+    });
     dev_mem(&dev, "after loading and coil compression");
     let (early_host, staged) = {
         let (free, total) = dev.ctx.mem_get_info().unwrap();
@@ -1474,6 +2027,12 @@ fn main() {
         if gnl { " + GNL" } else { "" },
         t0.elapsed().as_secs_f64()
     );
+    // the data term's noise floor (measured data with the sim's noise; whitening with the normalised Ψ keeps σ):
+    // ½ E‖n‖² = (σ² / 2) · samples · virtual coils. A model without mismatch ends near it (the inverse crime does).
+    if let Some(sig) = sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0) {
+        let m: usize = ms.iter().sum();
+        println!("data-term noise floor ½E‖n‖² ≈ {:.4e} (sim noise σ {sig:.2} per complex sample, {m} samples × {nvc} virtual coils in the solve)", 0.5 * sig * sig * (m * nvc) as f64);
+    }
     dev_mem(&dev, "after the data placement");
     // ESPIRiT-style normalisation Σ_c |S_c|² = 1 (receive bias moves into the image intensity; phases and hence
     // velocities are unchanged). Raw Biot–Savart maps blow up next to the loops and dominate λ_max of the normal operator.
@@ -1685,10 +2244,106 @@ fn main() {
         op = SenseOp::new(&dev, &st, kern.clone(), sd.dims, [&host_sets[0].coords[0], &host_sets[0].coords[1], &host_sets[0].coords[2]], &smaps, nvc, vec![], 1e-4).unwrap();
         println!("coil maps masked to {} voxels", dil.iter().filter(|&&b| b).count());
     }
+    // estimated maps against the truth over the object support (research/smaps_estimation.md: the whole-FOV number
+    // above counts every air voxel with a zero map as error 1); --smaps-fit / --smaps-resp maps
+    if smaps_spec != "truth" {
+        let (e_all, e_nz, zero) = smaps_agreement(&smaps, &smaps_true_cc, nvc, &support);
+        let ns = support.iter().filter(|&&b| b).count();
+        println!("coil maps vs the true maps over the {ns} support voxels: mean 1 − |⟨ŝ, s⟩| {e_all:.2e} (zero maps as 1), {e_nz:.2e} over the {} nonzero, {zero} zero", ns - zero);
+        diag.insert("smaps_support".into(), serde_json::json!({"voxels": ns, "mean_1_minus_ip": e_all, "mean_1_minus_ip_nonzero": e_nz, "zero": zero}));
+    }
+    if let (Some((h, lam, e0)), Some(eig)) = (smaps_fit, espirit_eig.as_ref()) {
+        let t_f = Instant::now();
+        let basis = hasty_recon::smapfit::Bspline3::new(sd.dims, sd.vox, h);
+        let fo = hasty_recon::smapfit::FitOpts { h, lambda: lam, ..Default::default() };
+        let fit_one = |m: &[C32], e: &[f32]| -> (Vec<C32>, hasty_recon::smapfit::FitReport) {
+            let wgt = hasty_recon::smapfit::eig_weights(e, &dil, e0);
+            let (mut f, rep) = hasty_recon::smapfit::fit_maps(&basis, m, nvc, &wgt, &fo);
+            hasty_recon::smapfit::normalise_rss(&mut f, nvc, &maps_mask);
+            (f, rep)
+        };
+        let (fit, rep) = fit_one(&smaps[..], &eig[..]);
+        let (e_all, e_nz, zero) = smaps_agreement(&fit, &smaps_true_cc, nvc, &support);
+        println!("--smaps-fit bspline {:.0} mm (λ {lam:.1e}, E0 {e0}): {} coefficients {:?} per coil, CG {} its (rel. res. {:.1e}), weighted misfit {:.2e} ({:.1}s); vs the true maps over the support: mean 1 − |⟨ŝ, s⟩| {e_all:.2e}, {e_nz:.2e} over the nonzero, {zero} zero", h * 1e3, rep.ncoef, rep.kdims, rep.iters, rep.rel_res, rep.misfit, t_f.elapsed().as_secs_f64());
+        diag.insert("smaps_fit".into(), serde_json::json!({"h_mm": h * 1e3, "lambda": lam, "e0": e0, "coefficients": rep.ncoef, "kdims": rep.kdims, "cg_iters": rep.iters, "misfit": rep.misfit, "mean_1_minus_ip": e_all, "mean_1_minus_ip_nonzero": e_nz, "zero": zero}));
+        smaps = fit;
+        for (b, (m, e)) in maps_resp.iter_mut().enumerate() {
+            let (mut f, rep) = fit_one(&m[..], &e[..]);
+            hasty_recon::smapfit::align_phase(&mut f, &smaps, nvc);
+            let (e_all, _, _) = smaps_agreement(&f, &smaps_true_cc, nvc, &support);
+            let dp = hasty_recon::smapfit::map_disagreement(&f, &smaps, nvc);
+            let dpm = (0..nv).filter(|&q| support[q]).map(|q| dp[q]).sum::<f64>() / (0..nv).filter(|&q| support[q]).count().max(1) as f64;
+            println!("--smaps-fit, respiratory bin {b}: misfit {:.2e}; vs the true maps over the support {e_all:.2e}; vs the pooled fit {dpm:.2e}", rep.misfit);
+            *m = f;
+        }
+        op = SenseOp::new(&dev, &st, kern.clone(), sd.dims, [&host_sets[0].coords[0], &host_sets[0].coords[1], &host_sets[0].coords[2]], &smaps, nvc, vec![], 1e-4).unwrap();
+    } else if mask_maps {
+        for (m, _) in maps_resp.iter_mut() {
+            for q in (0..nv).filter(|&q| !dil[q]) {
+                for c in 0..nvc {
+                    m[c * nv + q] = C32::new(0.0, 0.0);
+                }
+            }
+        }
+    }
     let maps: Vec<CudaSlice<C32>> = maps_host.iter().map(|m| st.clone_htod(m).unwrap()).collect();
     // lumen and truth at the true positions of the reconstruction voxels
     let lumen: Vec<usize> = (0..nv).filter(|&q| sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.9).collect();
     println!("lumen {} voxels: {} in the support, {} in the masked maps", lumen.len(), lumen.iter().filter(|&&q| support[q]).count(), lumen.iter().filter(|&&q| maps_mask[q]).count());
+    // --score-pc: the PC signal truth on this grid + the oracle checks of the score (scoring only)
+    let pc_nat = score_pc.as_ref().map(|(d, _)| hasty_recon::pcscore::PcNative::open(d, &sd).unwrap_or_else(|e| panic!("--score-pc {}: {e}", d.display())));
+    let pc_truth = score_pc.as_ref().map(|(d, covmin)| {
+        let t_p = Instant::now();
+        let nat = pc_nat.as_ref().unwrap();
+        let t = match &score_pc_bins {
+            None => hasty_recon::pcscore::PcTruth::build(nat, &sd, &grid.x_log, &dec, *covmin).coarsen(nf_card, &dec),
+            Some(dirs) => {
+                assert_eq!(dirs.len() * nf_card, nf, "--score-pc-bins: {} directories for {} respiratory bins", dirs.len(), nf / nf_card);
+                let mut per_state: Vec<f64> = Vec::new();
+                let per: Vec<hasty_recon::pcscore::PcTruth> = dirs
+                    .iter()
+                    .map(|d| {
+                        let nb = hasty_recon::pcscore::PcNative::open(d, &sd).unwrap_or_else(|e| panic!("--score-pc-bins {}: {e}", d.display()));
+                        // the directory's breathing state (pc_resp_state.txt, pc_native.py) must be its bin's true state
+                        let b = per_state.len();
+                        let st_d: f64 = std::fs::read_to_string(d.join("pc_resp_state.txt")).unwrap_or_else(|_| panic!("--score-pc-bins {}: no pc_resp_state.txt (rerun pc_native.py)", d.display())).trim().parse().expect("pc_resp_state.txt");
+                        let st_b = resp_info["true_state"][b].as_f64().unwrap_or_else(|| panic!("--score-pc-bins: no true breathing state of bin {b} (physio.npy)"));
+                        assert!((st_d - st_b).abs() < 0.02, "--score-pc-bins {}: truth at breathing state {st_d:.3}, bin {b} is at {st_b:.3}", d.display());
+                        per_state.push(st_d);
+                        let tb = hasty_recon::pcscore::PcTruth::build(&nb, &sd, &grid.x_log, &dec, *covmin).coarsen(nf_card, &dec);
+                        println!("pc score bin {b} truth {} (breathing state {st_d:.3}, bin true state {st_b:.3}): {} voxels blood throughout the cycle", d.display(), tb.n());
+                        tb
+                    })
+                    .collect();
+                hasty_recon::pcscore::PcTruth::stack_bins(per)
+            }
+        };
+        let in_lumen = { let l: std::collections::HashSet<usize> = lumen.iter().copied().collect(); t.vox.iter().filter(|q| l.contains(q)).count() };
+        println!("pc score: {} voxels blood throughout the cycle (coverage ≥ {covmin} at every native voxel of the box mean; {} truth frames) from {}: {} in the legacy lumen set, {} in the support ({:.1}s)", t.n(), t.nf, d.display(), in_lumen, t.vox.iter().filter(|&&q| support[q]).count(), t_p.elapsed().as_secs_f64());
+        assert_eq!(t.nf, if score_pc_bins.is_some() { nf } else { nf_card }, "--score-pc: truth frames vs cardiac frames");
+        for (name, s) in t.oracles(&dec, nf) {
+            println!("  pc score oracle {name:<20}: {}", s.line());
+        }
+        if score_pc_bins.is_some() {
+            // the --score-pc truth (one breathing state) scored as if it were a reconstruction against the per-bin
+            // truths: the bias of scoring every bin against one state; voxels not blood at that state count as exact
+            let tm = hasty_recon::pcscore::PcTruth::build(nat, &sd, &grid.x_log, &dec, *covmin).coarsen(nf_card, &dec);
+            let at_m: std::collections::HashMap<usize, usize> = tm.vox.iter().enumerate().map(|(j, &q)| (q, j)).collect();
+            let jm: Vec<Option<usize>> = t.vox.iter().map(|q| at_m.get(q).copied()).collect();
+            let miss = jm.iter().filter(|j| j.is_none()).count();
+            let s = t.score(
+                nf,
+                &|fr, i| jm[i].map_or(t.v[i * t.nf + fr % t.nf], |j| tm.v[j * tm.nf + fr % tm.nf]),
+                &|fr, e, i| jm[i].map_or(t.c_at(i, e, fr % t.nf), |j| tm.c_at(j, e, fr % tm.nf)),
+            );
+            println!("  pc score oracle {:<20}: {} ({miss} of {} voxels not blood there: scored as exact)", "--score-pc truth", s.line(), t.n());
+        }
+        // the legacy yardstick's truth (truth_vel, point / box at the voxel) scored as if it were a reconstruction
+        let tv = |fr: usize, i: usize| -> [f64; 3] { [0, 1, 2].map(|a| sample_truth(&sd.truth_vel, a + 3 * (fr % nf_card), &grid.x_log[t.vox[i]])) };
+        let s = t.score(nf, &tv, &|fr, e, i| t.c_at(i, e, fr % t.nf));
+        println!("  pc score oracle {:<20}: {} (velocity part only: the gap between the two yardsticks)", "truth_vel sampled", s.line());
+        t
+    });
     let dims4 = |n: usize| [sd.dims[0], sd.dims[1], sd.dims[2], n];
     if save_smaps {
         save(&out.join("smaps.npy"), "<c8", &dims4(nvc), c8(&smaps));
@@ -1703,6 +2358,14 @@ fn main() {
         let zs = (0..sd.dims[2]).rev().max_by_key(|&z| cnt[z]).unwrap_or(sd.dims[2] / 2);
         let sl: Vec<C32> = (0..nvc).flat_map(|c| smaps[c * nv + zs * nxy..c * nv + (zs + 1) * nxy].iter().copied()).collect();
         save(&out.join(format!("smaps_axial_z{zs}.npy")), "<c8", &[sd.dims[0], sd.dims[1], nvc], c8(&sl));
+        // --smaps-resp: the same slice of every respiratory bin's maps [x, y, coil, bin]; the ESPIRiT eigenvalue slice
+        if !maps_resp.is_empty() {
+            let sr: Vec<C32> = maps_resp.iter().flat_map(|(m, _)| (0..nvc).flat_map(move |c| m[c * nv + zs * nxy..c * nv + (zs + 1) * nxy].iter().copied())).collect();
+            save(&out.join(format!("smaps_resp_axial_z{zs}.npy")), "<c8", &[sd.dims[0], sd.dims[1], nvc, maps_resp.len()], c8(&sr));
+        }
+        if let Some(e) = &espirit_eig {
+            save(&out.join(format!("espirit_eig_axial_z{zs}.npy")), "<f4", &[sd.dims[0], sd.dims[1]], f4(e[zs * nxy..(zs + 1) * nxy].iter().copied()));
+        }
     }
     save(&out.join("mask_support.npy"), "<f4", &sd.dims, f4(support.iter().map(|&b| b as u8 as f32)));
     save(&out.join("mask_maps.npy"), "<f4", &sd.dims, f4(maps_mask.iter().map(|&b| b as u8 as f32)));
@@ -1760,6 +2423,100 @@ fn main() {
     } else {
         vec![]
     };
+    // --prior-mode admm: the clip metric's samples-per-cell symbols (one per encode, all its sets pooled: the
+    // coil-smoothed Chan symbol normalised to samples per Nyquist cell; set share = its samples / the encode's) and the
+    // data of the ρ₁ check (one set's own symbol, an isolated one-sample cell at high k and the k = 0 cell), while the
+    // sample coordinates are still on the host
+    let admm_sym: Option<AdmmSym> = admm.then(|| {
+        use hasty_recon::precond::{chan_spectrum, coil_convolved};
+        let ta = Instant::now();
+        let dsum: Vec<f32> = (0..nv).map(|q| (0..nvc).map(|c| { let s = smaps[c * nv + q]; s.re * s.re + s.im * s.im }).sum()).collect();
+        let dbar = dsum.iter().map(|&v| v as f64).sum::<f64>() / nv as f64;
+        let dims = sd.dims;
+        // |k| / (ball radius) of FFT index q (the --kcrop ball |k·Δ| ≤ π is 1)
+        let kball = |q: usize| -> f64 {
+            let i = [q % dims[0], (q / dims[0]) % dims[1], q / (dims[0] * dims[1])];
+            (0..3).map(|a| { let n = dims[a] as f64; let v = i[a] as f64; let f = if v <= n / 2.0 { v } else { v - n }; (f / (n / 2.0)).powi(2) }).sum::<f64>().sqrt()
+        };
+        let m_of = |t: usize| host_sets[t].coords[0].len();
+        let sym = |idx: &[usize]| -> (Vec<f32>, usize) {
+            let c: [Vec<f32>; 3] = [0, 1, 2].map(|a| idx.iter().flat_map(|&t| host_sets[t].coords[a].iter().copied()).collect());
+            let m = c[0].len();
+            let lc = chan_spectrum(&dev, &st, dims, [&c[0], &c[1], &c[2]]).unwrap();
+            let sum: f64 = lc.iter().map(|&v| v as f64).sum();
+            let conv = coil_convolved(&dev, &st, dims, &lc, &smaps, nvc).unwrap();
+            (hasty_recon::admm::samples_per_cell(&conv, sum, m, dbar), m)
+        };
+        // radial profile of a per-set symbol: the first |k| band (0.025 wide) whose mean count drops below 1
+        let r_dense = |mu: &[f32], sh: f64| -> f64 {
+            let nb = 40;
+            let (mut s, mut n) = (vec![0.0f64; nb], vec![0usize; nb]);
+            for q in 0..nv {
+                let b = (kball(q) / 0.025) as usize;
+                if b < nb {
+                    s[b] += sh * mu[q] as f64;
+                    n[b] += 1;
+                }
+            }
+            (0..nb).find(|&b| n[b] > 0 && s[b] / (n[b] as f64) < 1.0).map_or(1.0, |b| b as f64 * 0.025)
+        };
+        let ball = (0..nv).filter(|&q| kball(q) <= 1.0).count().max(1);
+        let (mut mu, mut of_set) = (vec![], vec![]);
+        if admm_metric == hasty_recon::admm::AdmmMetric::Clip {
+            of_set = vec![(0usize, 0.0f64); fe.len()];
+            for e in 0..ne {
+                let idx: Vec<usize> = (0..fe.len()).filter(|&t| enc_of(t) == e).collect();
+                let (me, m_e) = sym(&idx);
+                for &t in &idx {
+                    of_set[t] = (e, m_of(t) as f64 / m_e as f64);
+                }
+                let sh = idx.iter().map(|&t| of_set[t].1).sum::<f64>() / idx.len() as f64;
+                let dense = (0..nv).filter(|&q| sh * me[q] as f64 >= 1.0).count();
+                let dense_ball = (0..nv).filter(|&q| kball(q) <= 1.0 && sh * me[q] as f64 >= 1.0).count();
+                let mx = me.iter().cloned().fold(0f32, f32::max) as f64 * sh;
+                println!("admm clip metric, encode {e}: {} sets pooled ({m_e} samples, mean set share {sh:.4}); per set μ̃ ≥ 1 in {:.2} % of all cells, {:.2} % of the ball (mean μ̃ ≥ 1 out to |k| ≈ {:.3} of the ball radius), max μ̃ {mx:.1}", idx.len(), 100.0 * dense as f64 / nv as f64, 100.0 * dense_ball as f64 / ball as f64, r_dense(&me, sh));
+                mu.push(me);
+            }
+        }
+        // ρ₁ check set: the middle set of encode 0; its cells by snapping the samples (the sign convention that matches
+        // its own Chan symbol), an isolated one-sample cell at 0.5–0.9 of the ball radius, and k = 0
+        let e0: Vec<usize> = (0..fe.len()).filter(|&t| enc_of(t) == 0).collect();
+        let tc = e0[e0.len() / 2];
+        let (mu_t, m_t) = sym(&[tc]);
+        let hs = &host_sets[tc];
+        let counts = |sg: f64| -> Vec<u32> {
+            let mut n = vec![0u32; nv];
+            for j in 0..m_t {
+                let i: Vec<usize> = (0..3).map(|a| ((sg * hs.coords[a][j] as f64 * dims[a] as f64 / std::f64::consts::TAU).round() as i64).rem_euclid(dims[a] as i64) as usize).collect();
+                n[i[0] + dims[0] * (i[1] + dims[1] * i[2])] += 1;
+            }
+            n
+        };
+        let corr = |n: &[u32]| -> f64 { n.iter().zip(&mu_t).map(|(&a, &b)| a as f64 * b as f64).sum() };
+        let (np, nm) = (counts(1.0), counts(-1.0));
+        let (sign, n) = if corr(&np) >= corr(&nm) { (1, np) } else { (-1, nm) };
+        let nb = |q: usize| -> bool {
+            let i = [q % dims[0], (q / dims[0]) % dims[1], q / (dims[0] * dims[1])];
+            for d in 0..27usize {
+                let o = [d % 3, (d / 3) % 3, d / 9];
+                if o == [1, 1, 1] {
+                    continue;
+                }
+                let j: Vec<usize> = (0..3).map(|a| (i[a] + dims[a] + o[a] - 1) % dims[a]).collect();
+                if n[j[0] + dims[0] * (j[1] + dims[1] * j[2])] > 0 {
+                    return false;
+                }
+            }
+            true
+        };
+        let iso = (0..nv).filter(|&q| n[q] == 1 && kball(q) >= 0.5 && kball(q) <= 0.9 && nb(q)).min_by(|&a, &b| (kball(a) - 0.7).abs().partial_cmp(&(kball(b) - 0.7).abs()).unwrap().then(a.cmp(&b)));
+        let mut cells: Vec<(usize, u32, f64)> = vec![(0, n[0], 0.0)];
+        if let Some(q) = iso {
+            cells.push((q, n[q], kball(q)));
+        }
+        println!("admm ρ₁ check data: set {tc} ({m_t} samples; snapped with sign {sign:+}), cells {} ({:.1}s for the symbols)", cells.iter().map(|c| format!("{} (|k| {:.2} of the ball, {} samples, own μ̃ {:.3})", c.0, c.2, c.1, mu_t[c.0])).collect::<Vec<_>>().join(", "), ta.elapsed().as_secs_f64());
+        AdmmSym { mu, of_set, dsum, dbar, tc, mu_t, cells }
+    });
     if !warm.is_empty() {
         // diagnostic: warm-start velocity vs the time-averaged truth over the lumen
         let (mut mr, mut mt, mut e2, mut n) = ([0.0f64; 3], [0.0f64; 3], 0.0f64, 0usize);
@@ -1898,9 +2655,16 @@ fn main() {
     // the operator stack
     let mut sense_sets;
     let mut seg_sets;
+    // --ratemap truth-bc in frame mode: one host segment table per operator frame (setop::PerSetSegs)
+    let mut frame_tabs: Option<std::sync::Arc<Vec<hasty_recon::setop::HostSegTab>>> = None;
+    // --holdout-res: the held-out operator and data (built with the segment operator below)
+    let mut held_eval: Option<HeldOut> = None;
     let mut fat_joint_sets;
     // joint water + fat with per-frame fat maps (FatJointSets); a static map is folded into the segment diagonals
     let mut ff_per_frame = false;
+    let mut pp_seg_host: Option<Vec<hasty_nufft::SegHostTables>> = None;
+    // --pp-*: the operator's per-set sample coordinates (the segment tables', cropped) for the G3 surrogate
+    let mut pp_coords: Option<Vec<[Vec<f32>; 3]>> = pp_args.active().then(|| vec![[vec![], vec![], vec![]]; fe.len()]);
     let sop: &mut dyn SetOp = if model == "sense" {
         sense_sets = SenseSets { op: &mut op, coords, ms: ms.clone(), maps, map_of_set: if conc_dc { (0..fe.len()).map(enc_of).collect() } else { vec![] } };
         &mut sense_sets
@@ -1967,15 +2731,39 @@ fn main() {
         };
         // --ratemap truth-bc: the true ratemap of every knot's (breathing, cardiac) state, on the reconstruction grid
         // (built before the segment rule: with per-knot ratemaps the rule runs on every knot's own model)
-        let rm_knots: Option<Vec<RateFrame>> = ratemap_frames.then(|| {
-            assert!(knots2d.is_some() && op_frames.is_none(), "--ratemap truth-bc: complex 2-D knots (--knots2d) for now; the velocity model's operator frames come next");
-            let (b, per, _) = knot_basis.as_ref().unwrap();
+        // frame mode (one image per (frame, encode) set): the per-frame ratemaps below (rm_frames), not the knot path
+        let ratemap_frame_mode = ratemap_frames && knots2d.is_none() && op_frames.is_none() && temporal.is_none();
+        let rm_knots: Option<Vec<RateFrame>> = (ratemap_frames && !ratemap_frame_mode).then(|| {
+            assert!((knots2d.is_some() || temporal.is_some()) && op_frames.is_none(), "--ratemap truth-bc: complex 2-D knots (--knots2d), --temporal or the frame mode; the velocity model's operator frames come next");
             let t_ro: Vec<f32> = (0..sd.n_readouts()).map(|i| { let c = sd.ro.card[i]; (c.phase * nf as f64 - 0.5).rem_euclid(nf as f64) as f32 }).collect();
             let used: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
             let tf: Vec<f32> = used.iter().map(|&i| t_ro[i]).collect();
-            let (kt, ri, rv) = b.sample_coords(&tf, nf, per, &|j| used[j]);
-            let w: Vec<Vec<(usize, f64)>> = (0..used.len()).map(|j| b.sample_weights(kt[j] as f64, ri[j], rv[j])).collect();
-            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, b.nk(), &used, &w);
+            let (w, nk): (Vec<Vec<(usize, f64)>>, usize) = match (&knot_basis, temporal) {
+                (Some((b, per, _)), _) => {
+                    let (kt, ri, rv) = b.sample_coords(&tf, nf, per, &|j| used[j]);
+                    ((0..used.len()).map(|j| b.sample_weights(kt[j] as f64, ri[j], rv[j])).collect(), b.nk())
+                }
+                // --temporal: the periodic B-spline weights of the engine (knot k centred at t = k, hasty_recon::vmodel::
+                // bspline) at the readout's cardiac time; knot k's ratemap = the weighted mean state of its readouts
+                (None, Some(p)) => {
+                    let w = tf
+                        .iter()
+                        .map(|&t| {
+                            let t = t as f64;
+                            let i0 = t.floor() as i64;
+                            (i0 - 2..=i0 + 2)
+                                .filter_map(|k| {
+                                    let b = hasty_recon::vmodel::bspline(p, t - k as f64);
+                                    (b > 0.0).then(|| (k.rem_euclid(nf as i64) as usize, b))
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect();
+                    (w, nf)
+                }
+                (None, None) => unreachable!(),
+            };
+            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, nk, &used, &w);
             if ratemap_static {
                 // knot weights: the samples' basis weights summed per knot
                 let mut kw = vec![0.0f64; rm.len()];
@@ -1985,17 +2773,18 @@ fn main() {
                     }
                 }
                 let nvr = rm[0].om.len();
-                let avg = |get: &dyn Fn(&RateFrame) -> &Vec<f32>| -> Vec<f32> {
+                let avg64 = |get: &dyn Fn(&RateFrame, usize) -> f64| -> Vec<f64> {
                     (0..nvr).map(|v| {
                         let (mut s_, mut ws_) = (0.0f64, 0.0f64);
                         for (f, &k) in rm.iter().zip(&kw) {
-                            let x = get(f)[v];
-                            if x.is_finite() && k > 0.0 { s_ += k * x as f64; ws_ += k; }
+                            let x = get(f, v);
+                            if x.is_finite() && k > 0.0 { s_ += k * x; ws_ += k; }
                         }
-                        if ws_ > 0.0 { (s_ / ws_) as f32 } else { f32::NAN }
+                        if ws_ > 0.0 { s_ / ws_ } else { f64::NAN }
                     }).collect()
                 };
-                let mean = RateFrame { om: avg(&|f| &f.om), rw: avg(&|f| &f.rw), rf: avg(&|f| &f.rf), ff: avg(&|f| &f.ff) };
+                let avg = |get: &dyn Fn(&RateFrame, usize) -> f64| -> Vec<f32> { avg64(get).into_iter().map(|x| x as f32).collect() };
+                let mean = RateFrame { om: avg64(&|f, v| f.om[v]), rw: avg(&|f, v| f.rw[v] as f64), rf: avg(&|f, v| f.rf[v] as f64), ff: avg(&|f, v| f.ff[v] as f64) };
                 println!("ratemap truth-bc:static: every knot gets the data-weighted mean of the {} knot ratemaps (control)", rm.len());
                 for f in rm.iter_mut() {
                     *f = RateFrame { om: mean.om.clone(), rw: mean.rw.clone(), rf: mean.rf.clone(), ff: mean.ff.clone() };
@@ -2005,7 +2794,7 @@ fn main() {
             for f in rm.iter_mut() {
                 for (v, x) in f.om.iter_mut().enumerate() {
                     if !x.is_finite() {
-                        *x = grid.omega[v] as f32;
+                        *x = grid.omega[v];
                     }
                 }
             }
@@ -2018,6 +2807,34 @@ fn main() {
                 syy += grid.omega[v] * grid.omega[v];
             }
             println!("ratemap per frame (truth-bc, ORACLE): {} knots; knot-mean ω vs the static field: correlation {:.3}, rms {:.1} / {:.1} Hz", rm.len(), sxy / (sxx * syy).sqrt().max(1e-30), (sxx / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU, (syy / fit_vox.len().div_ceil(13) as f64).sqrt() / std::f64::consts::TAU);
+            rm
+        });
+        // --ratemap truth-bc in frame mode: one TRUE ratemap per operator frame f (oracle), the state of the frame's
+        // readouts (mean breathing amplitude, circular-mean cardiac time) from scan/truth_ratemap_bc, the same maps as
+        // the knot path (field, water / fat decay, fat fraction). The operator gets one segment table per frame
+        // (setop::PerSetSegs, below); the segment rule runs on every frame's own model.
+        let rm_frames: Option<Vec<RateFrame>> = ratemap_frame_mode.then(|| {
+            assert!(!ratemap_static, "--ratemap truth-bc:static: knot mode only (in frame mode the per-frame ratemap is the model)");
+            let used: Vec<usize> = (0..sd.n_readouts()).filter(|&i| sd.ro.frame[i] != usize::MAX).collect();
+            assert!(used.iter().all(|&i| sd.ro.frame[i] < nf), "--ratemap truth-bc: readout frame index ≥ the {nf} operator frames");
+            let w: Vec<Vec<(usize, f64)>> = used.iter().map(|&i| vec![(sd.ro.frame[i], 1.0)]).collect();
+            let mut rm = truth_ratemap_knots(std::path::Path::new(&dir), &sd, &grid.x_log, truth_box, nf, &used, &w);
+            // voxels without a source in a state: the static field (they carry no signal there)
+            for f in rm.iter_mut() {
+                for (v, x) in f.om.iter_mut().enumerate() {
+                    if !x.is_finite() {
+                        *x = grid.omega[v];
+                    }
+                }
+            }
+            // per-frame field vs the static field the warm start and the preconditioners use (rad/s → Hz), fit voxels
+            let hz = 1.0 / std::f64::consts::TAU;
+            let d: Vec<f64> = rm.iter().map(|f| {
+                let s: f64 = fit_vox.iter().step_by(13).map(|&v| (f.om[v] as f64 - grid.omega[v]).powi(2)).sum();
+                (s / fit_vox.len().div_ceil(13) as f64).sqrt() * hz
+            }).collect();
+            let (dmin, dmax) = d.iter().fold((f64::INFINITY, 0.0f64), |(a, b), &x| (a.min(x), b.max(x)));
+            println!("ratemap per frame (truth-bc, ORACLE, frame mode): {} frames; rms ω_f − static field over the fit voxels {dmin:.1}..{dmax:.1} Hz", rm.len());
             rm
         });
         // voxel weights of the segment basis over the fit voxels (seg_fit below): energy (--seg-weight energy)
@@ -2108,8 +2925,10 @@ fn main() {
             // decay and fat fraction, as `make_segs` builds them), the maximum over knots and encodes
             // (research/field_absorb.md: the static field with phase only gave L = 8–9 where the knot models need 11).
             // Env HASTY_SEG_RULE_KNOTS=static: the previous rule (static field) also here.
-            let rule_knots = rm_knots.is_some() && !std::env::var("HASTY_SEG_RULE_KNOTS").is_ok_and(|v| v == "static");
-            if let (true, Some(rm)) = (rule_knots, rm_knots.as_ref()) {
+            // (frame mode with --ratemap truth-bc: the same rule on every operator frame's model)
+            let rm_rule = rm_knots.as_ref().or(rm_frames.as_ref());
+            let rule_knots = rm_rule.is_some() && !std::env::var("HASTY_SEG_RULE_KNOTS").is_ok_and(|v| v == "static");
+            if let (true, Some(rm)) = (rule_knots, rm_rule) {
                 let t_rule = Instant::now();
                 let l_static = lsel;
                 let ta = tau_a[0];
@@ -2264,10 +3083,18 @@ fn main() {
             Some((_, _, mc, cdeg)) => SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: mc, bspline: cdeg, max_grid_bytes: knot_grid_budget },
             None => SegNufftOpts { sigma: 1.25, width: 10, nseg, order: if conc_hi { 3 } else { order }, frames: if temporal.is_some() { nf } else { 1 }, bspline: temporal.unwrap_or(1), max_grid_bytes: 6 << 30 },
         };
-        let mut eng = match eng_knots {
-            Some((kr, rdeg, _, _)) => SegNufft::new_temporal2d(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg), kr, rdeg).unwrap(),
-            None => SegNufft::new(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg)).unwrap(),
+        // --temporal: the knot-major engine unless --temporal-engine interval (the per-knot ratemaps need it)
+        let new_engine = |nseg: usize| -> SegNufft {
+            match eng_knots {
+                Some((kr, rdeg, _, _)) => SegNufft::new_temporal2d(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg), kr, rdeg).unwrap(),
+                None if temporal.is_some() => SegNufft::new_temporal(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg), temporal_knot).unwrap(),
+                None => SegNufft::new(&dev, sd.dims, sd.vox, nvc, seg_opts(nseg)).unwrap(),
+            }
         };
+        let mut eng = new_engine(nseg);
+        if temporal.is_some() {
+            println!("--temporal: {} B-spline over {nf} periodic knots (cardiac time; each sample at its own time), {} engine", if temporal == Some(3) { "cubic" } else { "linear" }, if temporal_knot { "knot-major" } else { "interval-major" });
+        }
         eng.set_maps(&st, &smaps).unwrap();
         // segments per encode from the encode-wide mean coefficients (all frames)
         let tau_adc: Vec<f64> = (0..sd.na).map(|n| rec_sets[0].tau[n]).collect();
@@ -2318,7 +3145,7 @@ fn main() {
         let seg_err_vox: Vec<usize> = fit_vox.iter().copied().step_by((fit_vox.len() / 20000).max(9)).collect();
         let seg_err_w: Vec<f64> = seg_err_vox.iter().map(|&q| (support_mag.get(q).copied().unwrap_or(1.0) as f64).powi(2) * coil_energy[q]).collect();
         let seg_err = |e: usize, sp: &[C32], at: &[C32], ta: f64, dt: f64, nseg: usize, g: &(dyn Fn(usize, f64) -> Complex64 + Sync)| {
-            if knots2d.is_none() {
+            if knots2d.is_none() && rm_frames.is_none() {
                 return;
             }
             let taus: Vec<f64> = (wa..=wb).step_by(16).map(|n| rec_sets[0].tau[n]).collect();
@@ -2421,7 +3248,76 @@ fn main() {
             })
             .collect()
         };
+        if let (Some(rm), Some(_)) = (&rm_knots, temporal) {
+            // --temporal with per-knot ratemaps: every encode's per-knot diagonals resident (solve, and again for the
+            // --holdout-res engine)
+            let per = rm.len() * nseg * nv * 8;
+            let need = ne * per * if holdout_res { 2 } else { 1 };
+            let (free, _) = dev.ctx.mem_get_info().unwrap();
+            println!("--temporal per-knot segment diagonals: {} encodes × {} knots × L = {nseg}: {:.2} GiB on the device{} ({:.2} GiB free)", ne, rm.len(), need as f64 / GIB, if holdout_res { " (solve + held-out engine)" } else { "" }, free as f64 / GIB);
+            assert!(need * 10 < free * 6, "--temporal per-knot diagonals need {:.2} GiB, more than 60 % of the {:.2} GiB free", need as f64 / GIB, free as f64 / GIB);
+        }
         let segs = make_segs(&eng, nseg);
+        // --ratemap truth-bc, frame mode: one segment table per (operator frame, encode) on the host, index f·ne + e
+        // (setop::PerSetSegs uploads the set's table). Each table is built exactly as the knot path builds a knot's
+        // table: the encode's own mean concomitant coefficients w̄_e (the per-sample tables take their deviations from
+        // the same w̄_e, as in the static path; the encodes' means differ by up to ~10 %, flow-encoding lobes), the
+        // frame's field, water / fat decay and fat fraction.
+        // g_{f,e}(v, τ) of frame model f and encode e, handed to `use_g` (one definition for the build, the
+        // self-check and the error report)
+        let frame_model = |f: &RateFrame, e: usize, use_g: &mut dyn FnMut(&(dyn Fn(usize, f64) -> Complex64 + Sync))| {
+            let conc0 = segment_phase(&grid, &wbar[e], &tau_adc, false);
+            let ta = tau_adc[0];
+            let psi_raw = |v: usize, t: f64| conc0(v, t) + f.om[v] as f64 * t;
+            let psi = field_poly.residual(&sd, &psi_raw);
+            let g = |v: usize, t: f64| -> Complex64 {
+                let ph = Complex64::from_polar(1.0, -psi(v, t));
+                let ffv = f.ff[v] as f64;
+                let wat = (1.0 - ffv) * (-(f.rw[v] as f64) * (t - ta)).exp();
+                let fat = ffv * (-(f.rf[v] as f64) * (t - ta)).exp();
+                ph * (Complex64::new(wat, 0.0) + fat * cfat(t))
+            };
+            use_g(&g);
+        };
+        let frame_tab = |f: &RateFrame, e: usize| -> hasty_recon::setop::HostSegTab {
+            let mut out = None;
+            frame_model(f, e, &mut |g| {
+                let (sp, at, ta_, dt_) = if seg_svd { svd_build(nseg, g) } else { build_segments_complex(nv, nseg, tw0, tw1, ntab, &seg_fit, g) };
+                out = Some(hasty_recon::setop::HostSegTab { segph: sp, atab: at, t0: ta_, dt: dt_ });
+            });
+            out.unwrap()
+        };
+        frame_tabs = rm_frames.as_ref().map(|rm| {
+            // host memory before the build (no-OOM ledger): nf · ne tables of L diagonals (+ interpolators, ~ntab · L)
+            let need = rm.len() * ne * (nseg * nv + ntab * nseg) * 8;
+            let avail = available_memory();
+            println!("per-frame ratemap segments (frame mode): {} tables × L = {nseg} need {:.2} GiB on the host, {:.2} GiB available", rm.len() * ne, need as f64 / GIB, avail as f64 / GIB);
+            assert!(need * 10 < avail * 7, "--ratemap truth-bc (frame mode): the per-(frame, encode) tables need {:.2} GiB, more than 70 % of the {:.2} GiB available", need as f64 / GIB, avail as f64 / GIB);
+            let t_seg = Instant::now();
+            let mut tabs: Vec<hasty_recon::setop::HostSegTab> = Vec::with_capacity(rm.len() * ne);
+            for (fi, f) in rm.iter().enumerate() {
+                for e in 0..ne {
+                    let tab = frame_tab(f, e);
+                    if (fi == 0 && e == 0) || (fi == rm.len() / 2 && e == ne - 1) {
+                        print!("  frame {fi}: ");
+                        frame_model(f, e, &mut |g| seg_err(e, &tab.segph, &tab.atab, tab.t0, tab.dt, nseg, g));
+                    }
+                    tabs.push(tab);
+                }
+            }
+            let bytes: usize = tabs.iter().map(|t| (t.segph.len() + t.atab.len()) * 8).sum();
+            println!(
+                "per-frame ratemap segments (frame mode): {} frames × {ne} encodes × L = {nseg}, {:.2} GiB on the host, built in {:.1}s",
+                rm.len(),
+                bytes as f64 / GIB,
+                t_seg.elapsed().as_secs_f64()
+            );
+            std::sync::Arc::new(tabs)
+        });
+        if pp_args.active() {
+            // host copies of the stored segment tables for --pp-* (G2 recentring, G3 surrogate); None if unsupported
+            pp_seg_host = segs.iter().map(|s| s.host_tables(&st)).collect::<Result<Vec<_>, _>>().map_err(|e| println!("pp: no host segment tables ({e:?})")).ok();
+        }
         println!("  [build timer] segment bases of all encodes done: {:.1}s since the build start", ts.elapsed().as_secs_f64());
         let mut resid = 0.0f64;
         // --b0-absorb 2: largest per-sample quadratic B0 phase handed to the ΔC Taylor correction
@@ -2473,6 +3369,9 @@ fn main() {
                     absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
                     let kc = knot_coords(&tab.t);
                     let (tab, dw) = match &crop_sel { Some(sel) => { let m = tab.tau.len(); (tab.select(&sel[t]), hasty_recon::pyramid::gather_rows(&dw, m, &sel[t])) } None => (tab, dw) };
+                    if let Some(pc) = pp_coords.as_mut() {
+                        pc[t] = tab.coords.clone();
+                    }
                     resid = resid.max(tab.max_resid_phase);
                     if let Some((kt, ri, rv)) = kc {
                         return eng.points2d_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &kt, &ri, &rv, &dw, h).unwrap();
@@ -2483,6 +3382,9 @@ fn main() {
                 absorb_q = absorb_q.max(hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox));
                 let kc = knot_coords(&tab.t);
                 let tab = match &crop_sel { Some(sel) => tab.select(&sel[t]), None => tab };
+                if let Some(pc) = pp_coords.as_mut() {
+                    pc[t] = tab.coords.clone();
+                }
                 resid = resid.max(tab.max_resid_phase);
                 if let Some((kt, ri, rv)) = kc {
                     return eng.points2d(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &kt, &ri, &rv).unwrap();
@@ -2588,7 +3490,246 @@ fn main() {
             let (mf, ma) = eng.autotune_multi(&st, &segs[0], &pts[0], 2).unwrap();
             println!("SegNufft water + fat: {g} images per gridding pass, coil batch {cbm}, extra grid memory {:.2} GiB, kernels {mf:.1}/{ma:.1} ms (set 0)", extra as f64 / (1u64 << 30) as f64);
         }
-        seg_sets = SegSets { eng, pts, segs, seg_of_set: (0..fe.len()).map(enc_of).collect(), kern: kern.clone(), surrogate: None };
+        if let Some(hh) = held_host.take() {
+            // --holdout-res: a second engine with the same options, coil maps and segment bases; the held-out sets'
+            // tables by the same builder as the solve's (degree-4 or quadratic fit, field absorption, kept samples);
+            // tables built before the engine's tuning, as above; the launch shapes from the solve's tune record (set 0)
+            let th = Instant::now();
+            println!("--holdout-res: held-out operator (second engine, same options; segment bases rebuilt):");
+            let mut eng_h = new_engine(nseg);
+            eng_h.set_maps(&st, &smaps).unwrap();
+            let segs_h = make_segs(&eng_h, nseg);
+            let build_h = |eng_h: &mut SegNufft, rec: &SampleSet, sel: Option<&[u32]>, t: usize| {
+                    let wb = with_conc.then(|| &wbar[enc_of(t)][..]);
+                    if let (Some(f4), Some(h)) = (&fit4, &htab) {
+                        let (mut tab, dw) = seg_tables_hi(&sd, rec, f4, with_conc, wb);
+                        hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox);
+                        let (tab, dw) = match sel { Some(v) => { let m = tab.tau.len(); (tab.select(v), hasty_recon::pyramid::gather_rows(&dw, m, v)) } None => (tab, dw) };
+                        return eng_h.points_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, &dw, h, temporal.map(|_| &tab.t[..])).unwrap();
+                    }
+                    let mut tab = seg_tables(&sd, rec, &fit, with_conc, wb);
+                    hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox);
+                    let tab = match sel { Some(v) => tab.select(v), None => tab };
+                    eng_h.points(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, temporal.map(|_| &tab.t[..])).unwrap()
+            };
+            let pts_h: Vec<_> = (0..fe.len()).map(|t| build_h(&mut eng_h, &hh.recs[t], hh.sels[t].as_deref(), t)).collect();
+            // check: solve set 0's own records through this builder and engine = the solve operator on set 0
+            let chk0 = build_h(&mut eng_h, &rec_sets[0], crop_sel.as_ref().map(|v| &v[0][..]), 0);
+            for (t, p) in pts_h.iter().enumerate() {
+                assert_eq!(p.m * nvc, hh.ys[t].len(), "--holdout-res: held-out set {t}: tables and data disagree");
+            }
+            if tables_host == Some(true) {
+                eng_h.stream_reserve(&st, &pts.iter().collect::<Vec<_>>()).unwrap();
+            }
+            let (kf, ka) = eng_h.autotune(&st, &segs_h[0], &pts[0]).unwrap();
+            {
+                let probe1: Vec<C32> = match warm.first() {
+                    Some(w0) => w0.clone(),
+                    None => (0..nv).map(|q| C32::new(((q * 7919) % 1000) as f32 / 1000.0 - 0.5, ((q * 104729) % 1000) as f32 / 1000.0 - 0.5)).collect(),
+                };
+                // --temporal: set 0 holds all knot images (the probe in every knot)
+                let probe: Vec<C32> = if temporal.is_some() { probe1.iter().cycle().take(nf * nv).copied().collect() } else { probe1 };
+                let dx = st.clone_htod(&probe).unwrap();
+                let mut ya = st.alloc_zeros::<C32>(nvc * pts[0].m).unwrap();
+                let mut yb = st.alloc_zeros::<C32>(nvc * chk0.m).unwrap();
+                eng.forward(&st, &segs[enc_of(0)], &pts[0], &dx, &mut ya).unwrap();
+                eng_h.forward(&st, &segs_h[enc_of(0)], &chk0, &dx, &mut yb).unwrap();
+                let na = kern.dot(&st, &ya, &ya).unwrap().re.sqrt();
+                kern.axpby(&st, Complex64::new(-1.0, 0.0), &ya, Complex64::new(1.0, 0.0), &mut yb).unwrap();
+                let d = kern.dot(&st, &yb, &yb).unwrap().re.sqrt() / na.max(1e-30);
+                println!("--holdout-res check: solve set 0 through the held-out builder + engine vs the solve operator: relative difference {d:.2e} ({})", if warm.is_empty() { "probe" } else { "warm image" });
+                assert!(d < 1e-5, "--holdout-res check failed: the held-out builder + engine differ from the solve operator by {d:.2e}");
+            }
+            drop(chk0);
+            let ny2: f64 = hh.ys.iter().flat_map(|y| y.iter()).map(|c| (c.re as f64).powi(2) + (c.im as f64).powi(2)).sum();
+            let tb: usize = pts_h.iter().map(|p| p.table_bytes()).sum();
+            println!("--holdout-res: {} sets, {} readouts, tables {:.2} GiB on the device, kernels {kf:.1}/{ka:.1} ms, ‖y_h‖² {ny2:.4e} ({:.1}s)", pts_h.len(), hh.nro, tb as f64 / GIB, th.elapsed().as_secs_f64());
+            let slot_h = |t: usize| if frame_tabs.is_some() { 0 } else { enc_of(t) };
+            held_eval = Some(HeldOut {
+                sets: SegSets { eng: eng_h, pts: pts_h, segs: segs_h, seg_of_set: (0..fe.len()).map(slot_h).collect(), kern: kern.clone(), surrogate: None },
+                ys: hh.ys,
+                ny2,
+                nro: hh.nro,
+                maps: Vec::new(),
+                map_of_set: Vec::new(),
+                seg_tabs: frame_tabs.clone(),
+                seg_tab_of_set: (0..fe.len()).map(|t| fe[t].0.unwrap_or(0) * ne + enc_of(t)).collect(),
+                seg_cur: None,
+            });
+            dev_free("after the held-out operator");
+        }
+        // per-frame tables (frame_tabs): every set uses slot 0, loaded with its frame's table (setop::PerSetSegs below)
+        let slot_of = |t: usize| if frame_tabs.is_some() { 0 } else { enc_of(t) };
+        seg_sets = SegSets { eng, pts, segs, seg_of_set: (0..fe.len()).map(slot_of).collect(), kern: kern.clone(), surrogate: None };
+        // frame mode self-check on the real sets (startup; aborts on failure): the frame-table builder in its degenerate
+        // case (the static field the static tables use, no fat, no decay) must reproduce the static table of the set's
+        // encode to the fp32 floor; then the size of the true per-frame model change on the same sets.
+        if let (Some(tabs), Some(rm)) = (&frame_tabs, &rm_frames) {
+            let t_chk = Instant::now();
+            let om_static: Vec<f64> = (0..nv).map(|v| if with_b0 { grid.omega[v] } else { 0.0 }).collect();
+            let deg = RateFrame { om: om_static, rw: vec![0.0; nv], rf: vec![0.0; nv], ff: vec![0.0; nv] };
+            let t_a = (0..fe.len()).find(|&t| enc_of(t) == 0).unwrap();
+            let t_b = (0..fe.len()).rev().find(|&t| enc_of(t) == ne - 1 && fe[t].0 == Some(rm.len() / 2)).unwrap_or(fe.len() - 1);
+            let mut worst = 0.0f64;
+            for &t in &[t_a, t_b] {
+                let (e, f) = (enc_of(t), fe[t].0.unwrap());
+                let lx = seg_sets.len_x(t);
+                let mut z = 0x9e3779b97f4a7c15u64 ^ t as u64;
+                // random image on the support (2026-11-24: with maps that are nonzero in air, the air voxels' large
+                // fields made the f32-stored field of the frame model differ by 7e-5 from the static f64 one there)
+                let x: Vec<C32> = (0..lx).map(|i| { let mut u = || { z ^= z << 13; z ^= z >> 7; z ^= z << 17; (z >> 11) as f32 / (1u64 << 53) as f32 - 0.5 }; let c = C32::new(u(), u()); if support[i % nv] { c } else { C32::new(0.0, 0.0) } }).collect();
+                let dx = st.clone_htod(&x).unwrap();
+                let ny = seg_sets.len_y(t);
+                let fw = |sets: &mut SegSets, slot: usize| -> Vec<C32> {
+                    sets.seg_of_set[t] = slot;
+                    let mut y = st.alloc_zeros::<C32>(ny).unwrap();
+                    sets.forward(&st, t, &dx, &mut y).unwrap();
+                    st.clone_dtoh(&y).unwrap()
+                };
+                let rel = |a: &[C32], b: &[C32]| -> f64 {
+                    let (mut d, mut n) = (0.0f64, 0.0f64);
+                    for (p, q) in a.iter().zip(b) { d += ((p.re - q.re) as f64).powi(2) + ((p.im - q.im) as f64).powi(2); n += (q.re as f64).powi(2) + (q.im as f64).powi(2); }
+                    assert!(n > 0.0, "frame-mode self-check: set {t} gives a zero reference (no samples?)");
+                    (d / n).sqrt()
+                };
+                assert!(ny > 0, "frame-mode self-check: set {t} has no samples");
+                // the table index f·ne + e: the stored table is the one the builder gives for (frame f, encode e)
+                let rebuilt = frame_tab(&rm[f], e);
+                let stored = &tabs[f * ne + e];
+                let tdiff = |a: &[C32], b: &[C32]| -> f64 {
+                    let ab = |re: f32, im: f32| ((re as f64).powi(2) + (im as f64).powi(2)).sqrt();
+                    let m = b.iter().map(|z| ab(z.re, z.im)).fold(0.0, f64::max).max(1e-30);
+                    a.iter().zip(b).map(|(p, q)| ab(p.re - q.re, p.im - q.im)).fold(0.0, f64::max) / m
+                };
+                let (d_sp, d_at) = (tdiff(&rebuilt.segph, &stored.segph), tdiff(&rebuilt.atab, &stored.atab));
+                assert!(rebuilt.segph.len() == stored.segph.len() && d_sp < 1e-5 && d_at < 1e-5, "frame-mode self-check: table {} is not (frame {f}, encode {e}): diagonals {d_sp:.2e}, interpolators {d_at:.2e}", f * ne + e);
+                let y_static = fw(&mut seg_sets, e);
+                let tab_d = frame_tab(&deg, e);
+                let slot = seg_sets.segs.len();
+                seg_sets.segs.push(seg_sets.eng.segments(&st, &tab_d.segph, &tab_d.atab, tab_d.t0, tab_d.dt).unwrap());
+                let y_deg = fw(&mut seg_sets, slot);
+                let tab_t = &tabs[f * ne + e];
+                seg_sets.segs[slot] = seg_sets.eng.segments(&st, &tab_t.segph, &tab_t.atab, tab_t.t0, tab_t.dt).unwrap();
+                let y_true = fw(&mut seg_sets, slot);
+                seg_sets.segs.pop();
+                seg_sets.seg_of_set[t] = slot_of(t);
+                let (e_deg, e_true) = (rel(&y_deg, &y_static), rel(&y_true, &y_static));
+                println!("frame-mode self-check, set {t} (frame {f}, encode {e}): degenerate frame table vs the static table {e_deg:.2e}; the frame's true ratemap vs the static table {e_true:.2e} (random image on the support)");
+                worst = worst.max(e_deg);
+            }
+            assert!(worst < 1e-5, "frame-mode self-check failed: the degenerate frame table differs from the static table by {worst:.2e} (builder or slot bug)");
+            println!("frame-mode self-check passed ({:.1}s)", t_chk.elapsed().as_secs_f64());
+        }
+        // --temporal self-check on a real set (startup; aborts on failure): set 0 (encode 0, every knot) through the
+        // temporal engine against an independent reference, the trusted static engine (one image) applied per knot k
+        // with knot k's table, each sample weighted on the host by B_p(t_s − k) (hasty_recon::vmodel::bspline, the
+        // engine's convention and the scores' box weights): y = Σ_k diag(B_p(t − k)) E[table_k] c_k. Then the adjoint
+        // (dot test) of the temporal operator.
+        // the static-ratemap reference (degenerate frame model) equals make_segs' static table only for phase-only
+        // static tables (no --rate / --r2s / joint fat / node-weighted builder): otherwise the check is skipped
+        let temporal_static_ok = rate_dw.is_none() && ff_joint.is_none() && r2v.is_none() && !seg_nodes_w;
+        if let (Some(pdeg), false) = (temporal, rm_knots.is_none() && !temporal_static_ok) {
+            let t_chk = Instant::now();
+            let om_static: Vec<f64> = (0..nv).map(|v| if with_b0 { grid.omega[v] } else { 0.0 }).collect();
+            let deg = RateFrame { om: om_static, rw: vec![0.0; nv], rf: vec![0.0; nv], ff: vec![0.0; nv] };
+            let mut z = 0x2545f4914f6cdd1du64;
+            let mut u = || { z ^= z << 13; z ^= z >> 7; z ^= z << 17; (z >> 11) as f32 / (1u64 << 53) as f32 - 0.5 };
+            // sets 0 and ne − 1: the first and the last encode
+            for t in [0usize, fe.len() - 1] {
+                let e = enc_of(t);
+                // the set's host sample tables, as the solve built them (field-poly absorption, k-space crop)
+                let wb = with_conc.then(|| &wbar[e][..]);
+                let (tab, dw) = match (&fit4, &htab) {
+                    (Some(f4), Some(_)) => {
+                        let (mut tab, dw) = seg_tables_hi(&sd, &rec_sets[t], f4, with_conc, wb);
+                        hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox);
+                        match &crop_sel { Some(sel) => { let m = tab.tau.len(); (tab.select(&sel[t]), Some(hasty_recon::pyramid::gather_rows(&dw, m, &sel[t]))) } None => (tab, Some(dw)) }
+                    }
+                    _ => {
+                        let mut tab = seg_tables(&sd, &rec_sets[t], &fit, with_conc, wb);
+                        hasty_recon::segphys::absorb_field_poly(&mut tab, &sd, &field_poly, &fit_vox);
+                        (match &crop_sel { Some(sel) => tab.select(&sel[t]), None => tab }, None)
+                    }
+                };
+                let m = tab.tau.len();
+                assert!(m > 0, "--temporal self-check: set {t} has no samples");
+                assert_eq!(m * nvc, seg_sets.len_y(t), "--temporal self-check: the rebuilt tables of set {t} differ from the solve's ({m} samples)");
+                let mut o_ref = seg_opts(nseg);
+                o_ref.frames = 1;
+                o_ref.max_grid_bytes = 1 << 30;
+                let mut eng_r = SegNufft::new(&dev, sd.dims, sd.vox, nvc, o_ref).unwrap();
+                eng_r.set_maps(&st, &smaps).unwrap();
+                let pts_r = match (&dw, &htab) {
+                    (Some(dw), Some(h)) => eng_r.points_hi(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, dw, h, None).unwrap(),
+                    _ => eng_r.points(&st, [&tab.coords[0], &tab.coords[1], &tab.coords[2]], &tab.tau, &tab.phi0, &tab.dc, None).unwrap(),
+                };
+                // random knot images on the support
+                let c: Vec<C32> = (0..nf * nv).map(|i| { let c = C32::new(u(), u()); if support[i % nv] { c } else { C32::new(0.0, 0.0) } }).collect();
+                let dc_ = st.clone_htod(&c).unwrap();
+                let mut y_t = st.alloc_zeros::<C32>(nvc * m).unwrap();
+                seg_sets.forward(&st, t, &dc_, &mut y_t).unwrap();
+                let y_t = st.clone_dtoh(&y_t).unwrap();
+                // knot k's static-engine forward E[table_j] c_k for table j = k (reference) and j = k + 1 (control: a
+                // one-knot table shift must show, or the check cannot see per-knot table mistakes)
+                let tabs_k: Vec<hasty_recon::setop::HostSegTab> = (0..nf).map(|k| frame_tab(rm_knots.as_ref().map_or(&deg, |rm| &rm[k]), e)).collect();
+                let shift_ctl = rm_knots.is_some();
+                let mut y_ref = vec![Complex64::new(0.0, 0.0); nvc * m];
+                let mut y_sh = vec![Complex64::new(0.0, 0.0); nvc * m];
+                for k in 0..nf {
+                    let wk: Vec<f64> = tab.t.iter().map(|&ts| { let mut d = ts as f64 - k as f64; d -= (d / nf as f64).round() * nf as f64; hasty_recon::vmodel::bspline(pdeg, d) }).collect();
+                    if wk.iter().all(|&x| x == 0.0) {
+                        continue;
+                    }
+                    let xk = st.clone_htod(&c[k * nv..(k + 1) * nv]).unwrap();
+                    for (j, acc, is_ctl) in [(k, &mut y_ref, false), ((k + 1) % nf, &mut y_sh, true)] {
+                        if is_ctl && !shift_ctl {
+                            continue;
+                        }
+                        let tk = &tabs_k[j];
+                        let sk = eng_r.segments(&st, &tk.segph, &tk.atab, tk.t0, tk.dt).unwrap();
+                        let mut yk = st.alloc_zeros::<C32>(nvc * m).unwrap();
+                        eng_r.forward(&st, &sk, &pts_r, &xk, &mut yk).unwrap();
+                        let yk = st.clone_dtoh(&yk).unwrap();
+                        for ch in 0..nvc {
+                            for (s_, &w) in wk.iter().enumerate() {
+                                if w != 0.0 {
+                                    let v = yk[ch * m + s_];
+                                    acc[ch * m + s_] += Complex64::new(v.re as f64, v.im as f64) * w;
+                                }
+                            }
+                        }
+                    }
+                }
+                let rel_to = |r: &[Complex64]| -> f64 {
+                    let (mut d2, mut n2) = (0.0f64, 0.0f64);
+                    for (a, b) in y_t.iter().zip(r) {
+                        d2 += (a.re as f64 - b.re).powi(2) + (a.im as f64 - b.im).powi(2);
+                        n2 += b.norm_sqr();
+                    }
+                    assert!(n2 > 0.0, "--temporal self-check: zero reference");
+                    (d2 / n2).sqrt()
+                };
+                let e_fwd = rel_to(&y_ref);
+                let e_sh = if shift_ctl { rel_to(&y_sh) } else { f64::NAN };
+                drop(pts_r);
+                drop(eng_r);
+                // adjoint: ⟨A c, y⟩ = ⟨c, Aᴴ y⟩
+                let yr: Vec<C32> = (0..nvc * m).map(|_| C32::new(u(), u())).collect();
+                let dyr = st.clone_htod(&yr).unwrap();
+                let mut ah = st.alloc_zeros::<C32>(nf * nv).unwrap();
+                seg_sets.adjoint(&st, t, &dyr, &mut ah).unwrap();
+                let ah = st.clone_dtoh(&ah).unwrap();
+                let lhs: Complex64 = y_t.iter().zip(&yr).map(|(a, b)| Complex64::new(b.re as f64, -b.im as f64) * Complex64::new(a.re as f64, a.im as f64)).sum();
+                let rhs: Complex64 = c.iter().zip(&ah).map(|(a, b)| Complex64::new(b.re as f64, -b.im as f64) * Complex64::new(a.re as f64, a.im as f64)).sum();
+                let e_adj = (lhs - rhs).norm() / lhs.norm().max(1e-300);
+                println!("--temporal self-check, set {t} (encode {e}, {m} samples, {} knot ratemaps): forward vs the per-knot static reference {e_fwd:.2e}; one-knot table shift (control) {e_sh:.2e}; adjoint dot test {e_adj:.2e}", if rm_knots.is_some() { "true" } else { "static" });
+                assert!(e_fwd < 1e-4 && e_adj < 1e-4, "--temporal self-check failed: forward {e_fwd:.2e}, adjoint {e_adj:.2e} (engine, time weights or per-knot tables)");
+                assert!(!shift_ctl || e_sh > 10.0 * e_fwd.max(1e-7), "--temporal self-check cannot discriminate per-knot tables: the one-knot shift gives {e_sh:.2e} vs {e_fwd:.2e}");
+            }
+            println!("--temporal self-check passed ({:.1}s)", t_chk.elapsed().as_secs_f64());
+        } else if temporal.is_some() {
+            println!("--temporal self-check skipped: the static reference covers phase-only static tables only (--rate / --r2s / joint fat / node-weighted segments)");
+        }
         if let Some((tau, ls_arg)) = lagged {
             assert!(joint_maps.is_none(), "--lagged: not with joint water + fat per-frame maps");
             // probe: the warm start of encode 0 (every frame of a time-resolved set), else a smooth blob
@@ -2649,7 +3790,8 @@ fn main() {
     // coordinates and τ unless a step below needs them (voxel-basis weights, fat spectrum weights) — 11 GB of the
     // 10-minute scan otherwise held for nothing
     {
-        let (keep_coords, keep_tau) = (voxel_basis.is_some(), fat_fraction.is_some() && !fat_joint);
+        // (--pp-*: the surrogate symbols and the centre-pass times need the kept samples' coordinates and times)
+        let (keep_coords, keep_tau) = (voxel_basis.is_some() || pp_args.active(), (fat_fraction.is_some() && !fat_joint) || pp_args.active());
         let mut freed = 0usize;
         // --kcrop: the whole records the segment tables were built from
         for s in std::mem::take(&mut full_sets) {
@@ -2674,6 +3816,37 @@ fn main() {
         let (b, a) = hasty_recon::sysmem::trim();
         println!("memory after setup: RSS {:.1} GiB → {:.1} GiB (malloc_trim)", b as f64 / 1073741824.0, a as f64 / 1073741824.0);
     }
+    // --ratemap truth-bc in frame mode: set t = (frame f, encode e) uses frame f's segment table (slot 0 of the
+    // segment operator), in the warm start, the solve and the held-out residual
+    let mut frame_seg_sets;
+    let sop: &mut dyn SetOp = match frame_tabs.clone() {
+        None => sop,
+        Some(tabs) => {
+            assert!(model == "seg" && lag_tau.is_none() && coil_sampling.is_none() && !pp_args.active(), "--ratemap truth-bc (frame mode): --model seg, without --lagged / --coil-sampling / --pp-*");
+            let tab_of_set: Vec<usize> = (0..fe.len()).map(|t| fe[t].0.expect("--ratemap truth-bc: frame mode sets carry a frame") * ne + enc_of(t)).collect();
+            assert!(tab_of_set.iter().all(|&k| k < tabs.len()), "--ratemap truth-bc (frame mode): table index ≥ {} tables", tabs.len());
+            frame_seg_sets = hasty_recon::setop::PerSetSegs::new(&st, sop, tabs.clone(), tab_of_set, vec![0; fe.len()]).unwrap();
+            println!("--ratemap truth-bc (frame mode): {} per-frame segment tables, one uploaded per frame change into the operator's slot 0", tabs.len());
+            &mut frame_seg_sets
+        }
+    };
+    // --smaps-resp: respiratory bin r's maps for every set of bin r (frame f = r · nf_card + c), in the solve and in the
+    // held-out residual
+    let mut resp_sets;
+    let sop: &mut dyn SetOp = if maps_resp.is_empty() {
+        sop
+    } else {
+        assert!(model == "seg" && lag_tau.is_none() && coil_sampling.is_none(), "--smaps-resp: --model seg, without --lagged / --coil-sampling");
+        let map_of_set: Vec<Option<usize>> = (0..fe.len()).map(|t| fe[t].0.map(|f| f / nf_card)).collect();
+        let mh: Vec<Vec<C32>> = maps_resp.iter().map(|(m, _)| m.clone()).collect();
+        if let Some(h) = held_eval.as_mut() {
+            h.maps = mh.iter().map(|m| st.clone_htod(m).unwrap()).collect();
+            h.map_of_set = map_of_set.clone();
+        }
+        resp_sets = hasty_recon::setop::PerSetMaps::new(&st, sop, &mh, map_of_set).unwrap();
+        println!("--smaps-resp: {} coil-map sets ({:.2} GiB on the device), one per respiratory bin", mh.len(), (mh.len() * nvc * nv * 8) as f64 / GIB);
+        &mut resp_sets
+    };
     let mut wsets;
     let sop: &mut dyn SetOp = match voxel_basis {
         None => sop,
@@ -2722,6 +3895,14 @@ fn main() {
     let lens: Vec<usize> = (0..ns).map(|t| sop.len_x(t)).collect();
     // image (frame f, encode e) inside the stack: (set, offset)
     let at = |f: usize, e: usize| -> (usize, usize) { if temporal.is_some() { (e, f * nv) } else { (f * ne + e, 0) } };
+    // --temporal: the scores read frame f as the knot model's box average over the frame, x̄_f = Σ_k W_fk c_k with
+    // W_fk = ∫_{f−½}^{f+½} B_p(t − k) dt (periodic): the observable of the binned images and of the truth (frame means);
+    // knot coefficients are not frame values (cubic: c_k ≠ x(k))
+    let tbox: Option<Vec<f64>> = temporal.map(|p| temporal_box_weights(nf, p));
+    if let Some(w) = &tbox {
+        let row: Vec<String> = (0..nf.min(5)).map(|k| format!("{:.4}", w[k])).collect();
+        println!("--temporal scoring: frame box averages of the knot model, W[0][0..] = {} … (rows sum to 1)", row.join(" "));
+    }
     // --synthetic with data staged from the store (they do not fit on the device): the residuals of model-consistent
     // data y_t = E_t x★_t − n_t, formed on the fly as E_t (x − x★_t) + n_t (hasty_recon::synth; no second store; the
     // staged measured data are not read). x★ is the --init-truth image (warm images per encode, the true velocity
@@ -2730,9 +3911,12 @@ fn main() {
     // measured data. Noise: complex Gaussian, σ / √2 per component (σ: HASTY_NOISE_SIGMA, else the sim's noise_sigma;
     // × NOISE_SCALE), counter-based per (seed, set, coil, sample): the same in every pass and coil subset.
     let mut synth_sets;
+    // --synth-x pc|pd: the per-encode frame mean of x★ (what a pooled solve should reach) and the blood-voxel mask, for
+    // the pooled-solve image error printed by --warm-full (scoring only)
+    let mut synth_ref: Option<(Vec<Vec<C32>>, Vec<f32>, Vec<bool>)> = None;
     let sop: &mut dyn SetOp = if synthetic && staged {
         assert!(vmodel.is_none(), "--synthetic with staged data: image-space P²nP only (not --vmodel)");
-        assert!(warm_full == 0, "--synthetic with staged data: no --warm-full (the reference uses the warm images)");
+        assert!(warm_full == 0 || synth_pc, "--synthetic with staged data: no --warm-full (the reference uses the warm images; --synth-x pc does not)");
         let t_s = Instant::now();
         let sigma = std::env::var("HASTY_NOISE_SIGMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| *v > 0.0).or_else(|| sd.meta["noise_sigma"].as_f64().filter(|v| *v > 0.0)).unwrap_or(1.0)
             / 2f64.sqrt()
@@ -2741,7 +3925,7 @@ fn main() {
         let mut lumen: Vec<(usize, C32)> = vec![];
         for q in 0..nv {
             if sample_truth(&sd.truth_frac, 0, &grid.x_log[q]) > 0.5 {
-                lumen.push((q, warm[0][q]));
+                lumen.push((q, warm.first().map_or(C32::new(0.0, 0.0), |w| w[q])));
             }
         }
         let nl = lumen.len();
@@ -2764,7 +3948,51 @@ fn main() {
         let floor: f64 = sigma * sigma * (0..ns).map(|t| sop.len_y(t) as f64).sum::<f64>();
         // own copy of the warm images (the solver start consumes `warm` later)
         let (warm_r, dec_r) = (warm.clone(), &dec);
-        let truth: hasty_recon::synth::TruthFn = Box::new(move |t: usize, out: &mut [C32]| {
+        // --synth-x pc: x★ = PD + the truth's blood signal on this grid (hasty_recon::pcscore::synth_object)
+        let pc_obj = synth_pc.then(|| {
+            let nat = pc_nat.as_ref().expect("--synth-x pc needs --score-pc");
+            let (stat, mut blood) = hasty_recon::pcscore::synth_object(nat, &sd, &grid.x_log, &dir).unwrap();
+            if synth_static {
+                blood.clear();
+                println!("--synth-x pd: static object only (no blood signal)");
+            }
+            println!("synthetic x★ (--synth-x pc): static PD_water + PD_fat box means on this grid, {} voxels with blood signal (truth box means, encode 0 real); median |blood| / median PD in the body: {:.3}", blood.len(), {
+                let mut b: Vec<f64> = blood.iter().map(|(_, c)| c[0].norm()).collect();
+                let mut s: Vec<f64> = stat.iter().filter(|&&v| v > 0.0).map(|&v| v as f64).collect();
+                b.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                b.get(b.len() / 2).copied().unwrap_or(0.0) / s.get(s.len() / 2).copied().unwrap_or(1.0)
+            });
+            (stat, blood, nat.nf)
+        });
+        if let Some((stat, blood, nfc)) = &pc_obj {
+            let mut xm: Vec<Vec<C32>> = (0..ne).map(|_| stat.iter().map(|&v| C32::new(v, 0.0)).collect()).collect();
+            let mut bm = vec![false; nv];
+            for (q, b) in blood {
+                bm[*q] = true;
+                for (e, x) in xm.iter_mut().enumerate() {
+                    let z: Complex64 = (0..nf).map(|fr| b[e * nfc + fr % nfc]).sum::<Complex64>() / nf as f64;
+                    x[*q] = C32::new(x[*q].re + z.re as f32, x[*q].im + z.im as f32);
+                }
+            }
+            // the static object (2 MB at this grid): the error spectra of research/experiments/pooled_diag/err_spec.py
+            save(&out.join("synth_pd.npy"), "<f4", &sd.dims, f4(stat.iter().copied()));
+            synth_ref = Some((xm, stat.clone(), bm));
+        }
+        let truth: hasty_recon::synth::TruthFn = if let Some((stat, blood, nfc)) = pc_obj {
+            Box::new(move |t: usize, out: &mut [C32]| {
+                for &(fr, e, o) in &members[t] {
+                    for (d, &s) in out[o..o + nv].iter_mut().zip(&stat) {
+                        *d = C32::new(s, 0.0);
+                    }
+                    let c = fr % nfc;
+                    for (q, b) in &blood {
+                        let z = b[e * nfc + c];
+                        { let a = out[o + q]; out[o + q] = C32::new(a.re + z.re as f32, a.im + z.im as f32); }
+                    }
+                }
+            })
+        } else { Box::new(move |t: usize, out: &mut [C32]| {
             for &(fr, e, o) in &members[t] {
                 out[o..o + nv].copy_from_slice(&warm_r[e]);
                 let c = fr % nf_card;
@@ -2774,12 +4002,14 @@ fn main() {
                     out[o + q] = C32::new(z.re as f32, z.im as f32);
                 }
             }
-        });
+        }) };
         synth_sets = hasty_recon::synth::SynthSets::new(&dev, sop, nvc, sigma, seed, truth).unwrap();
-        println!(
+        if synth_pc {
+            println!("synthetic model-consistent residuals E(x − x★) + n (staged data unused): x★ = --synth-x pc (above); noise σ {sigma:.3} per component, seed {seed}; data-term floor ½ E‖n‖² = {floor:.4e}");
+        } else { println!(
             "synthetic model-consistent residuals E(x − x★) + n (staged data unused): x★ = warm images with the true velocity phases in {nl} lumen voxels (lumen fraction > 0.5); noise σ {sigma:.3} per component, seed {seed}; data-term floor ½ E‖n‖² = {floor:.4e} ({:.1}s)",
             t_s.elapsed().as_secs_f64()
-        );
+        ); }
         &mut synth_sets
     } else {
         sop
@@ -2925,6 +4155,9 @@ fn main() {
         }
         if keep_n > 1 {
             dev_target.push(format!("--keep {keep_n}: 1/{keep_n} of the readouts"));
+        }
+        if adc_part != hasty_recon::pyramid::AdcPart::Out {
+            dev_target.push(format!("--adc-part {} (target out: the outgoing half of every readout)", adc_part.as_str()));
         }
         if grid_scale.is_some() || kcrop.is_some() {
             dev_target.push(format!("pyramid level (grid {:?}, kcrop {})", sd.dims, kcrop.map_or("no".into(), |k| k.describe())));
@@ -3150,6 +4383,7 @@ fn main() {
             "coils": coil_info, "kstore": kstore_info, "setup_s": t0.elapsed().as_secs_f64(),
         });
         info["pyramid"] = pyr_info.clone();
+        info["adc_part"] = serde_json::json!(adc_part.as_str());
         info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight, "nseg": nseg });
         info["vspline"] = match &op_frames {
             Some(of) => serde_json::json!({ "param": "polar (m, ψ, v)", "fop": of.fop, "odeg": of.odeg, "kre": of.kre, "groups": of.r0, "images_per_encode": of.images_per_encode(), "kbar": spec.kbar(), "init": init_desc, "vmwav": vmwav.map(|(t, l)| format!("{t}:{l}")) }),
@@ -3843,6 +5077,7 @@ fn main() {
             "prior": if vkappas.iter().any(|&k| k > 0.0) { "llr(z, p)" } else { "none" }, "vkappas": vkappas, "vmodel": {"kz": kz, "kv": kv, "deg": [vdeg.0, vdeg.1], "poly": vpoly, "vcont": vcont, "low_venc_encodes": low, "anchor": vanchor.as_ref().map(|(m, s)| format!("{m},{s}"))}, "injected_phase": injected, "setup_s": t0.elapsed().as_secs_f64(),
         });
         info["pyramid"] = pyr_info.clone();
+        info["adc_part"] = serde_json::json!(adc_part.as_str());
         info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight }); info["respiration"] = resp_info.clone(); info["prior_detail"] = serde_json::json!({ "prior": prior_kind, "wavelet": { "thr": wav_thr, "levels": wav_levels, "mix": wav_mix } });
         info["prior_detail"]["dfw"] = serde_json::json!(dfw_rule.map(|r| serde_json::json!({ "rule": format!("{r:?}"), "levels": dfw_levels, "mix": dfw_mix })));
         assert!(static_lock.is_none(), "--static-lock: complex-image models only (not --vmodel)");
@@ -4124,6 +5359,67 @@ fn main() {
     if let Ok((free, total)) = dev.ctx.mem_get_info() {
         println!("device memory before the solver: {:.2} GiB free of {:.2} GiB", free as f64 / GIB, total as f64 / GIB);
     }
+    // --adj-test: ⟨E x, y⟩ = ⟨x, Eᴴ y⟩ of the exact operator the solver uses (random x, y; a few sets), and the grouped
+    // forward / adjoint against the member-wise ones (the pooled gradient path)
+    if adj_test {
+        let mut seed = 0x2545_F491_4F6C_DD1Du64;
+        let mut rnd = |n: usize| -> Vec<C32> {
+            (0..n)
+                .map(|_| {
+                    let mut u = || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; ((seed >> 11) as f64 / (1u64 << 53) as f64 - 0.5) as f32 };
+                    C32::new(u(), u())
+                })
+                .collect()
+        };
+        let dotc = |a: &[C32], b: &[C32]| -> Complex64 { a.iter().zip(b).map(|(p, q)| Complex64::new(p.re as f64, -p.im as f64) * Complex64::new(q.re as f64, q.im as f64)).sum() };
+        let nrm = |a: &[C32]| -> f64 { a.iter().map(|v| (v.re as f64).powi(2) + (v.im as f64).powi(2)).sum::<f64>().sqrt() };
+        let ns_all = sop.nsets();
+        for &t in &[0, ns_all / 2, ns_all - 1] {
+            let (nx, ny) = (sop.len_x(t), sop.len_y(t));
+            let (xh, yh) = (rnd(nx), rnd(ny));
+            let (xd, yd) = (st.clone_htod(&xh).unwrap(), st.clone_htod(&yh).unwrap());
+            let mut ax = st.alloc_zeros::<C32>(ny).unwrap();
+            let mut ahy = st.alloc_zeros::<C32>(nx).unwrap();
+            sop.forward(&st, t, &xd, &mut ax).unwrap();
+            sop.adjoint(&st, t, &yd, &mut ahy).unwrap();
+            let (axh, ahyh) = (st.clone_dtoh(&ax).unwrap(), st.clone_dtoh(&ahy).unwrap());
+            let (l, r) = (dotc(&axh, &yh), dotc(&xh, &ahyh));
+            println!("adjoint test set {t}: ⟨Ex, y⟩ = {l:.6e}, ⟨x, Eᴴy⟩ = {r:.6e}, |diff| / (‖Ex‖‖y‖) = {:.2e}", (l - r).norm() / (nrm(&axh) * nrm(&yh)));
+        }
+        // grouped vs member-wise: the first 4 sets of encode 0
+        let mem: Vec<usize> = (0..ns_all).filter(|&t| enc_of(t) == 0).take(4).collect();
+        let nx = sop.len_x(mem[0]);
+        let xh = rnd(nx);
+        let xd = st.clone_htod(&xh).unwrap();
+        let mut ys_g: Vec<CudaSlice<C32>> = mem.iter().map(|&t| st.alloc_zeros::<C32>(sop.len_y(t)).unwrap()).collect();
+        {
+            let mut refs: Vec<&mut CudaSlice<C32>> = ys_g.iter_mut().collect();
+            sop.forward_group(&st, &mem, &xd, &mut refs).unwrap();
+        }
+        let (mut ef, mut nf2) = (0.0f64, 0.0f64);
+        let mut sum_adj = vec![Complex64::new(0.0, 0.0); nx];
+        for (j, &t) in mem.iter().enumerate() {
+            let mut y1 = st.alloc_zeros::<C32>(sop.len_y(t)).unwrap();
+            sop.forward(&st, t, &xd, &mut y1).unwrap();
+            let (a, b) = (st.clone_dtoh(&y1).unwrap(), st.clone_dtoh(&ys_g[j]).unwrap());
+            ef += a.iter().zip(&b).map(|(p, q)| ((p.re - q.re) as f64).powi(2) + ((p.im - q.im) as f64).powi(2)).sum::<f64>();
+            nf2 += nrm(&a).powi(2);
+            let mut g1 = st.alloc_zeros::<C32>(nx).unwrap();
+            sop.adjoint(&st, t, &y1, &mut g1).unwrap();
+            for (s, v) in sum_adj.iter_mut().zip(st.clone_dtoh(&g1).unwrap()) {
+                *s += Complex64::new(v.re as f64, v.im as f64);
+            }
+        }
+        let mut gg = st.alloc_zeros::<C32>(nx).unwrap();
+        {
+            let refs: Vec<&CudaSlice<C32>> = ys_g.iter().collect();
+            sop.adjoint_group(&st, &mem, &refs, &mut gg).unwrap();
+        }
+        let ggh = st.clone_dtoh(&gg).unwrap();
+        let ea: f64 = ggh.iter().zip(&sum_adj).map(|(p, q)| (Complex64::new(p.re as f64, p.im as f64) - q).norm_sqr()).sum::<f64>();
+        let na: f64 = sum_adj.iter().map(|q| q.norm_sqr()).sum();
+        println!("grouped vs member-wise ({} sets of encode 0): forward rel {:.2e}, adjoint rel {:.2e}", mem.len(), (ef / nf2).sqrt(), (ea / na).sqrt());
+    }
     let mut p = if staged {
         let sg = hasty_recon::kstage::Stager::new(&dev.ctx, kstore.clone().unwrap()).unwrap();
         println!("data staged from the store: {} pinned staging buffers of {:.2} GiB", 2, sg.pinned_bytes() as f64 / 2.0 / GIB);
@@ -4150,6 +5446,13 @@ fn main() {
         }
         println!("λ compare: {:.0}s", tc.elapsed().as_secs_f64());
     }
+    // --pp-study / --pp-pool / --pp-metric (research/precond_estimator.md): before the step sizes, so λ_max(M N) is the
+    // new metric's
+    if pp_args.active() {
+        assert!(temporal.is_none() && vmodel.is_none() && knots2d.is_none(), "--pp-*: frame mode (one image per set)");
+        let enc: Vec<usize> = (0..fe.len()).map(enc_of).collect();
+        pp_run(&pp_args, &mut p, &st, &dev, &kern, sd.dims, &enc, ne, &support, &smaps, nvc, &grid.omega, synth_ref.as_ref(), &out, &ctl, circ_ws.as_ref(), warm_full, &host_sets, pp_seg_host.as_deref(), pp_coords.as_deref());
+    }
     // λ_max(N) only when a precondition without the metric uses it, λ_max(M N) only when one with it does
     let need_plain = preconds.iter().any(|q| !Precond::parse(q).unwrap_or(Precond::Zmshr1).metric());
     let tl = Instant::now();
@@ -4175,7 +5478,9 @@ fn main() {
     println!("lambda_max(N) = {lmax:.3e}, lambda_max(M N) = {lmax_c:.3e}, setup {:.0}s", t0.elapsed().as_secs_f64());
     // physics-model warm start (--warm-full): pooled PCG per encode through the full objective
     let warm: Vec<Vec<C32>> = if warm_full > 0 {
-        assert!(temporal.is_none(), "--warm-full needs one frame per set (no --temporal)");
+        // --temporal: one set per encode holding all knot images; the pooled start ties them (ConstOverFrames: every knot
+        // the same image, the time-static problem through the full operator since Σ_k B_k = 1), one group per set
+        assert!(temporal.is_none() || !(need_circ && !pool_metric_none), "--warm-full with --temporal: the plain pooled start only (--pool-metric none)");
         let group_of: Vec<usize> = (0..fe.len()).map(enc_of).collect();
         let done: Vec<String> = (0..ne).map(|e| format!("warm_full_done_{e}")).collect();
         let loaded: Vec<Option<Vec<C32>>> = done.iter().map(|d| ctl.load(d).unwrap().map(|v| st.clone_dtoh(&value_dev(&st, &v, nv).unwrap()).unwrap())).collect();
@@ -4185,9 +5490,18 @@ fn main() {
         } else {
             let mut xw: Vec<Vec<C32>> = if warm.is_empty() { vec![vec![C32::new(0.0, 0.0); nv]; ne] } else { warm.clone() };
             let tw = Instant::now();
-            let lens_w = p.lens();
+            let mut p_const = temporal.map(|_| hasty_recon::p2np::ConstOverFrames::new(&mut p, nf));
+            let obj_w: &mut dyn hasty_recon::p2np::Objective = match p_const.as_mut() { Some(c) => c, None => &mut p };
+            let lens_w = obj_w.lens();
             assert!(lens_w.iter().all(|&l| l == nv), "--warm-full: one image per set");
-            let oc = hasty_recon::hoststack::pooled_pcg_host_with(&mut p, &st, &group_of, &mut xw, warm_full, need_circ, Some((&ctl, "warm_full")), 2, pooled_grad).unwrap();
+            let mut probe = synth_ref.as_ref().map(|(xm, stat, bm)| {
+                move |k: usize, xs: &hasty_recon::hoststack::HostStack| {
+                    if k <= 3 || k % 5 == 0 {
+                        println!("  pooled image vs x★ frame mean, it {k}: {}", pooled_image_error(xs, xm, stat, bm));
+                    }
+                }
+            });
+            let oc = hasty_recon::hoststack::pooled_pcg_host_probe(obj_w, &st, &group_of, &mut xw, warm_full, need_circ && !pool_metric_none, Some((&ctl, "warm_full")), 2, pooled_grad, probe.as_mut().map(|f| f as &mut dyn FnMut(usize, &hasty_recon::hoststack::HostStack))).unwrap();
             if let Outcome::Stopped(k) = oc {
                 println!("stopped in the physics-model warm start (PCG iteration {k}): state saved, rerun the same command to resume");
                 std::process::exit(0);
@@ -4195,7 +5509,7 @@ fn main() {
             for (e, d) in done.iter().enumerate() {
                 ctl.save(d, &hasty_recon::checkpoint::dev_value(&st, &st.clone_htod(&xw[e]).unwrap()).unwrap()).unwrap();
             }
-            println!("physics-model warm start: {warm_full} pooled PCG iterations per encode{} ({:.0}s)", if need_circ { " (per-encode circulant)" } else { "" }, tw.elapsed().as_secs_f64());
+            println!("physics-model warm start: {warm_full} pooled PCG iterations per encode{} ({:.0}s)", if need_circ && !pool_metric_none { " (per-encode circulant)" } else { "" }, tw.elapsed().as_secs_f64());
             xw
         };
         save(&out.join("warm_full.npy"), "<c8", &dims4(ne), c8(&xw.concat()));
@@ -4212,6 +5526,10 @@ fn main() {
         }
         if n > 0 {
             println!("physics-model warm-start velocity in the lumen: RMSE {:.3} m/s vs the time-averaged truth", (e2 / n as f64).sqrt());
+        }
+        if warm_only {
+            println!("--warm-only: pooled warm start done, checkpoints state_warm_full_done_<e> kept in {}", out.display());
+            std::process::exit(0);
         }
         xw
     } else {
@@ -4253,7 +5571,7 @@ fn main() {
             println!("temporal pyramid level {} / {}: {rg}x{cg} → {ng} groups of {}..{} sets, {it} pooled PCG iterations", li + 1, levels.len(), sizes.iter().min().unwrap(), sizes.iter().max().unwrap());
             if it > 0 {
                 let tl = Instant::now();
-                let oc = hasty_recon::hoststack::pooled_pcg_host_with(&mut p, &st, &gof, &mut xg, it, need_circ, Some((&ctl, &format!("tpyr_{li}"))), 2, pooled_grad).unwrap();
+                let oc = hasty_recon::hoststack::pooled_pcg_host_with(&mut p, &st, &gof, &mut xg, it, need_circ && !pool_metric_none, Some((&ctl, &format!("tpyr_{li}"))), 2, pooled_grad).unwrap();
                 if let Outcome::Stopped(k) = oc {
                     println!("stopped in temporal pyramid level {} (PCG iteration {k}): state saved, rerun the same command to resume", li + 1);
                     std::process::exit(0);
@@ -4290,8 +5608,135 @@ fn main() {
         println!("temporal pyramid: {} levels ({:.0}s); time-averaged velocity in the lumen: RMSE {:.3} m/s vs the time-averaged truth", levels.len(), tw.elapsed().as_secs_f64(), (e2 / n.max(1) as f64).sqrt());
         (gof, xg)
     });
+    // --init meanres / --anchor: frame mode, the pooled solution, the data scale d̄ and λ_max(M) for the step bound
+    let need_meanres = init_specs.iter().any(|s| s.starts_with("meanres"));
+    let any_anchor = anchor_specs.iter().any(|a| a.is_some());
+    if need_meanres || any_anchor || init_specs.iter().any(|s| s == "zero") {
+        assert!(temporal.is_none() && p.lens().iter().all(|&l| l == nv), "--init / --anchor: frame mode (one image per set, no --temporal)");
+        assert!(init_from.is_none() && !init_truth && tpyramid.is_none() || !need_meanres, "--init meanres: no --init-from / --init-truth / --tpyramid");
+    }
+    if need_meanres || anchor_specs.iter().any(|a| a.as_ref().is_some_and(|(s, _)| s == "mean")) {
+        assert!(warm_full > 0, "--init meanres / --anchor mean: need the pooled solution (--warm-full n)");
+    }
+    let anc_scale: Option<(f64, f64)> = any_anchor.then(|| {
+        assert!(lag_tau.is_none() && coil_sampling.is_none(), "--anchor with --lagged / --coil-sampling: not yet");
+        let ta = Instant::now();
+        let dbar = p.mean_diag(&st).unwrap();
+        // one set per distinct circulant (per encode when shared), +5 % for the power iteration's approach from below
+        let lam_m = if need_circ {
+            let reps: Vec<usize> = (0..ne).map(|e| (0..fe.len()).find(|&t| enc_of(t) == e).unwrap()).collect();
+            1.05 * p.metric_lmax(&st, &reps, 30).unwrap()
+        } else {
+            f64::NAN
+        };
+        println!("temporal anchor: mean diagonal of one frame's normal operator d̄ = {dbar:.4e} (λ_max(N)/d̄ = {:.2}), λ_max(M) = {lam_m:.4e} (λ_max(M N)/λ_max(M) = {:.3e}) ({:.1}s)", lmax / dbar, lmax_c / lam_m, ta.elapsed().as_secs_f64());
+        (dbar, lam_m)
+    });
+    // anchor groups and targets per spec (set → group, group images), built once
+    let anchor_data: Vec<Option<(Vec<usize>, Vec<Vec<C32>>, f64, String)>> = anchor_specs
+        .iter()
+        .map(|a| {
+            let (src, mu) = a.as_ref()?;
+            let (dbar, _) = anc_scale.unwrap();
+            if src == "mean" {
+                let gof: Vec<usize> = (0..fe.len()).map(enc_of).collect();
+                return Some((gof, warm.clone(), mu * dbar, format!("_anc_mean{mu}")));
+            }
+            let ini = hasty_recon::pyramid::InitImages::open(std::path::Path::new(src)).unwrap_or_else(|e| panic!("--anchor {src}: {e}"));
+            assert_eq!(ini.ne, ne, "--anchor {src}: {} encodes, this scan has {ne}", ini.ne);
+            let ta = Instant::now();
+            let gof: Vec<usize> = (0..fe.len()).map(|t| hasty_recon::tanchor::nested_frame(fe[t].0.unwrap(), nf_card, resp_bins, ini.nf) * ne + enc_of(t)).collect();
+            let tg: Vec<Vec<C32>> = (0..ini.nf * ne).map(|a| ini.image(a / ne, a % ne, sd.dims).unwrap()).collect();
+            println!("temporal anchor {src}: {} coarse frames → {nf} frames, resampled {:?} → {:?} ({:.1}s)", ini.nf, ini.dims, sd.dims, ta.elapsed().as_secs_f64());
+            Some((gof, tg, mu * dbar, format!("_anc{}f{mu}", ini.nf)))
+        })
+        .collect();
+    // --prior-mode admm: ρ₁ = c · D_body from the operator (c by a Hutchinson trace of N_t: tr N_t = c m_t D̄ in the
+    // per-cell model N_t ≈ D^{1/2} F⁻¹ diag(c n_t) F D^{1/2}; an unnormalised NUFFT gives c = nv × the samples' mean
+    // physics attenuation), a plane-wave check of N_t at two cells of one set, and the clip metric on the device
+    let mut admm_info = serde_json::Value::Null;
+    let mut admm_rho1 = f64::NAN;
+    let mut admm_clip: Option<hasty_recon::admm::ClipMetric> = None;
+    if let Some(a) = admm_sym {
+        assert!(temporal.is_none() && vmodel.is_none() && knots2d.is_none() && lag_tau.is_none() && coil_sampling.is_none(), "--prior-mode admm: frame mode with exact gradients (no --temporal, velocity model, --lagged, --coil-sampling)");
+        let ta = Instant::now();
+        let nt = p.op.nsets();
+        let dims = sd.dims;
+        let ly: Vec<usize> = (0..nt).map(|t| p.op.len_y(t)).collect();
+        // ‖E_t v‖² = vᴴ N_t v (one forward)
+        let mut quad = |t: usize, v: &[C32]| -> f64 {
+            let vd = st.clone_htod(v).unwrap();
+            let mut e = st.alloc_zeros::<C32>(ly[t]).unwrap();
+            p.op.forward(&st, t, &vd, &mut e).unwrap();
+            kern.dot(&st, &e, &e).unwrap().re
+        };
+        // Hutchinson: complex ±1 ± i probes (|z_q|² = 2), 4 per set, 4 sets
+        let mut sets = vec![0, nt / 3, 2 * nt / 3, nt - 1];
+        sets.dedup();
+        let mut cs: Vec<f64> = vec![];
+        for &t in &sets {
+            let mut acc = 0.0;
+            for pr in 0..4u64 {
+                let mut sd_ = 0x9E37_79B9_7F4A_7C15u64 ^ ((t as u64) << 8 | pr).wrapping_mul(0xD1B5_4A32_D192_ED03);
+                let z: Vec<C32> = (0..nv)
+                    .map(|_| {
+                        sd_ ^= sd_ << 13;
+                        sd_ ^= sd_ >> 7;
+                        sd_ ^= sd_ << 17;
+                        C32::new(if sd_ & 1 == 0 { 1.0 } else { -1.0 }, if sd_ & 2 == 0 { 1.0 } else { -1.0 })
+                    })
+                    .collect();
+                acc += quad(t, &z);
+            }
+            let tr = acc / 4.0 / 2.0;
+            let m = ly[t] / nvc;
+            cs.push(tr / (m as f64 * a.dbar));
+        }
+        let c_op = cs.iter().sum::<f64>() / cs.len() as f64;
+        let mut db: Vec<f32> = (0..nv).filter(|&q| support[q]).map(|q| a.dsum[q]).collect();
+        db.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let d_body = db.get(db.len() / 2).copied().unwrap_or(1.0) as f64;
+        let rho1 = c_op * d_body;
+        println!("admm ρ₁: c = tr(N_t) / (m_t D̄) = {c_op:.5e} = {:.4} nv (sets {sets:?}: {}; an unnormalised NUFFT gives nv × the mean physics attenuation), D = Σ_c |S_c|²: mean {:.4e}, body median {d_body:.4e} → ρ₁ = c · D_body = {rho1:.5e}; λ_max(N) / ρ₁ = {:.1}", c_op / nv as f64, cs.iter().map(|c| format!("{:.4}", c / nv as f64)).collect::<Vec<_>>().join(" "), a.dbar, lmax / rho1);
+        // plane waves e_k (unit norm, FFT index k: F e_k ∝ δ_k) at the check set's cells; the per-cell model predicts
+        // ⟨e_k, N_t e_k⟩ = c D̄ μ̃_t(k) with the set's own coil-smoothed count
+        let mut checks = vec![];
+        for &(q, cnt, kb) in &a.cells {
+            let kq = [q % dims[0], (q / dims[0]) % dims[1], q / (dims[0] * dims[1])];
+            let pw = |sg: f64| -> Vec<C32> {
+                let s0 = 1.0 / (nv as f64).sqrt();
+                (0..nv)
+                    .map(|n| {
+                        let i = [n % dims[0], (n / dims[0]) % dims[1], n / (dims[0] * dims[1])];
+                        let ph = sg * std::f64::consts::TAU * (0..3).map(|ax| (kq[ax] * i[ax]) as f64 / dims[ax] as f64).sum::<f64>();
+                        C32::new((s0 * ph.cos()) as f32, (s0 * ph.sin()) as f32)
+                    })
+                    .collect()
+            };
+            let (rp, rm) = (quad(a.tc, &pw(1.0)), quad(a.tc, &pw(-1.0)));
+            let model = c_op * a.dbar * a.mu_t[q] as f64;
+            println!("  plane wave at cell {q} (|k| {kb:.2} of the ball radius, {cnt} sample(s) of set {} in the cell): ⟨e_k, N e_k⟩ = {rp:.4e} = {:.4} ρ₁ (mirror −k: {rm:.4e}); per-cell model c D̄ μ̃_t(k) = {model:.4e} (μ̃_t = {:.3}), measured / model {:.3}", a.tc, rp / rho1, a.mu_t[q], rp / model.max(1e-300));
+            checks.push(serde_json::json!({ "cell": q, "k_ball": kb, "samples": cnt, "rayleigh": rp, "mirror": rm, "rho1_units": rp / rho1, "model": model, "mu_t": a.mu_t[q] }));
+        }
+        admm_rho1 = rho1;
+        if admm_metric == hasty_recon::admm::AdmmMetric::Clip {
+            let dfl = (0.1 * d_body) as f32;
+            let dinv: Vec<f32> = a.dsum.iter().map(|&d| 1.0 / d.max(dfl).sqrt()).collect();
+            let cm = hasty_recon::admm::ClipMetric::new(&dev, &st, kern.clone(), sd.dims, a.mu, a.of_set, rho1, &dinv).unwrap();
+            let fr: Vec<String> = (0..ne)
+                .map(|e| {
+                    let (fa, fo) = cm.dense_fraction(e);
+                    format!("{:.2} % ({:.2} % of the occupied)", 100.0 * fa, 100.0 * fo)
+                })
+                .collect();
+            println!("admm clip metric: D = max(Σ_c |S_c|², 0.1 × body median {d_body:.3e}); cells with μ̃ ≥ 1 per encode {}", fr.join(", "));
+            admm_clip = Some(cm);
+        }
+        println!("admm setup: ρ = {admm_rho} ρ₁ = {:.5e}{}, K = {admm_inner} inner PCG iterations per set, metric {} ({:.1}s)", admm_rho * rho1, if admm_adapt { " (residual balancing)" } else { "" }, admm_metric.name(), ta.elapsed().as_secs_f64());
+        admm_info = serde_json::json!({ "rho_rel": admm_rho, "rho1": rho1, "c": c_op, "c_over_nv": c_op / nv as f64, "c_sets": cs, "d_mean": a.dbar, "d_body": d_body, "inner": admm_inner, "metric": admm_metric.name(), "adapt": admm_adapt, "lambda_max_over_rho1": lmax / rho1, "plane_waves": checks });
+    }
     let ttag = temporal.map_or(String::new(), |b| format!("_t{b}"));
-    let runs: Vec<String> = preconds.iter().flat_map(|p| kappas.iter().map(|k| (p.clone(), *k)).collect::<Vec<_>>()).map(|(p, k)| format!("{model}{ttag}_{p}{}_k{k}{}", if learned.is_some() { "_learned" } else { "" }, llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" } + &red_tag + &ga_tag)).collect();
+    let runs: Vec<String> = preconds.iter().flat_map(|p| kappas.iter().map(|k| (p.clone(), *k)).collect::<Vec<_>>()).map(|(p, k)| format!("{model}{ttag}_{p}{}_k{k}{}", if learned.is_some() { "_learned" } else { "" }, llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" } + &red_tag + &admm_tag + &ga_tag)).collect();
     let mut info = serde_json::json!({
         "cmdline": cmdline, "sim_dir": dir, "model": model, "temporal": temporal, "phys": phys, "gnl": gnl, "nseg": nseg,
         "order": order, "conc_fit": conc_fit, "fat_model": fat_fraction.as_ref().map(|_| fat_model.clone()), "eps": eps, "iters": iters, "warm_iters": warm_iters, "block": block, "vcoils": nvc, "dims": sd.dims, "vox": sd.vox, "native_dims": sd.tdims,
@@ -4301,17 +5746,28 @@ fn main() {
         "field": field_spec, "r2s": r2s_spec, "smaps": smaps_spec, "coil_mask": coil_mask_mode, "coils": coil_info, "estimates": diag, "kdata": kstore_info, "lagged": lag_info, "vdecode": vdec_info,
     });
     info["pyramid"] = pyr_info.clone();
+    info["adc_part"] = serde_json::json!(adc_part.as_str());
+    info["admm"] = admm_info.clone();
     info["segments"] = serde_json::json!({ "basis": seg_basis_arg, "weight": seg_weight }); info["respiration"] = resp_info.clone(); info["prior_detail"] = serde_json::json!({ "prior": prior_kind, "wavelet": { "thr": wav_thr, "levels": wav_levels, "mix": wav_mix } });
     info["prior_detail"]["dfw"] = serde_json::json!(dfw_rule.map(|r| serde_json::json!({ "rule": format!("{r:?}"), "levels": dfw_levels, "mix": dfw_mix })));
     info["prior_detail"]["static_lock"] = serde_json::json!(static_lock.as_ref().map(|(o, it0, ev)| serde_json::json!({ "opts": format!("{o:?}"), "it0": it0, "every": ev })));
     info["prior_detail"]["air"] = serde_json::json!(air.as_ref().map(|(o, it0, ev)| serde_json::json!({ "opts": format!("{o:?}"), "it0": if *it0 == usize::MAX { None } else { Some(it0) }, "every": if *ev == usize::MAX { None } else { Some(ev) }, "init": air_init })));
     std::fs::write(out.join("run.json"), serde_json::to_string_pretty(&info).unwrap()).unwrap();
     let rt = transpose(&sd.rot);
-    for (pc, kappa) in preconds.iter().flat_map(|p| kappas.iter().map(move |&k| (p, k))) {
+    let variants: Vec<(&String, f64, &String, usize)> = preconds.iter().flat_map(|p| kappas.iter().map(move |&k| (p, k))).flat_map(|(p, k)| { let na = anchor_specs.len(); init_specs.iter().flat_map(move |i| (0..na).map(move |a| (p, k, i, a))) }).collect();
+    let mut meanres_last: Option<(String, hasty_recon::hoststack::HostStack)> = None;
+    for (pc, kappa, init_spec, anc_i) in variants {
         let precond = Precond::parse(pc).unwrap_or(Precond::Zmshr1);
-        let alpha = if precond.metric() { 1.0 / lmax_c } else { 1.0 / lmax };
+        // the anchor's curvature μ_abs on the group-constant mode adds to λ_max (Weyl): μ_abs, or μ_abs λ_max(M)
+        let anc = anchor_data[anc_i].as_ref();
+        let lam_anchor = anc.map_or(0.0, |a| if precond.metric() { a.2 * anc_scale.unwrap().1 } else { a.2 });
+        let alpha = if precond.metric() { 1.0 / (lmax_c + lam_anchor) } else { 1.0 / (lmax + lam_anchor) };
+        if let Some(a) = anc {
+            println!("  temporal anchor {}: μ_abs = {:.4e}, λ_max {:.4e} → {:.4e} ({})", &a.3[1..], a.2, if precond.metric() { lmax_c } else { lmax }, 1.0 / alpha, if precond.metric() { "M N" } else { "N" });
+        }
         let stack_bytes = lens.iter().sum::<usize>() * 8;
-        let host_state = match state_arg.as_str() {
+        // --prior-mode admm: host stacks always (x, z, u and a work stack; the data step streams set by set)
+        let host_state = admm || match state_arg.as_str() {
             "host" => true,
             "device" => false,
             _ => {
@@ -4354,6 +5810,8 @@ fn main() {
         let mut llr = Llr::new(sd.dims, block, kappa, support.clone());
         llr.rank = llr_rank;
         llr.hard = llr_hard;
+        // --llr-thr freeze: λ of the fixed objective, set by the first LLR call of this arm
+        let mut llr_lambda: Option<f64> = None;
         let mut llr_gpu = (llr_devices != "cpu" && prior_kind == "llr" && kappa > 0.0 && learned.is_none()).then(|| {
             let ords: Vec<usize> = llr_devices.split(',').map(|v| v.trim().parse().expect("--llr-devices 0[,1,..] | cpu")).collect();
             let mut l = Llr::new(sd.dims, block, kappa, support.clone());
@@ -4363,6 +5821,53 @@ fn main() {
         });
         let mut wav = hasty_recon::wavelet::Wavelet::new(sd.dims, wav_levels, wav_thr);
         let nimg = nf * ne;
+        // the start stack (the warm images in every frame, the solver's x0), host layout of the denoiser: shared by
+        // every solver arm, so the frozen LLR penalty and the start-image air map are the same objective for all
+        let lens_h = lens.clone();
+        let start_stack = |warm: &Vec<Vec<C32>>| -> Vec<C32> {
+            let off: Vec<usize> = lens_h.iter().scan(0, |a, &n| { let o = *a; *a += n; Some(o) }).collect();
+            let mut h0 = vec![C32::new(0.0, 0.0); lens_h.iter().sum()];
+            for fr in 0..nf {
+                for e in 0..ne {
+                    let (t, o) = at(fr, e);
+                    h0[off[t] + o..off[t] + o + nv].copy_from_slice(&warm[e]);
+                }
+            }
+            h0
+        };
+        let h0: Option<Vec<C32>> = (llr_freeze || air_start).then(|| {
+            assert!(!warm.is_empty(), "--llr-thr freeze / --air start: need a warm start (--warm-full N)");
+            start_stack(&warm)
+        });
+        // --llr-thr freeze: λ of the fixed objective f + λR in objective units, from the start stack: λ = κσ̂(x0)/α with
+        // α = 1/λ_max(N) (the PnP-ISTA step); every prox call then thresholds at λ·s, s its own step (P²nP α, the metric
+        // prox ατ_k, ADMM 1/ρ): all solvers minimise the same objective, and a resume recomputes the same λ
+        if llr_freeze {
+            assert!(llr_shifts.unwrap_or(1) == 1 || !prox_metric, "--prox-metric with --llr-thr freeze needs --llr-shifts 1 (a proximal average over S > 1 shifts is not homogeneous in the step)");
+            if llr_shifts.unwrap_or(1) > 1 {
+                eprintln!("warning: --llr-shifts > 1 with --llr-thr freeze: the proximal average over S shifts is not homogeneous in the prox step, so solvers with different steps (P²nP vs ADMM) minimise slightly different objectives");
+            }
+            // σ̂ on PnP-ISTA's first prox input z0 = x0 − α∇f(x0), α = 1/λ_max(N) (the start stack itself is rank ≤ ne
+            // per block — every frame the same image — so its lower singular values are 0): deterministic given x0
+            let mut v = {
+                let x0 = h0.as_ref().unwrap();
+                let mut xs = hasty_recon::hoststack::HostStack::zeros(&lens);
+                xs.data.copy_from_slice(x0);
+                let mut gs = hasty_recon::hoststack::HostStack::zeros(&lens);
+                let f0 = hasty_recon::p2np::Objective::gradient_host(&mut p, &st, &xs, &mut gs).unwrap();
+                let a0 = 1.0 / lmax;
+                println!("  start stack: data term f(x0) = {f0:.4e}; σ̂ measured on z0 = x0 − ∇f(x0)/λ_max");
+                x0.iter().zip(&gs.data).map(|(x, g)| C32::new(x.re - (a0 * g.re as f64) as f32, x.im - (a0 * g.im as f64) as f32)).collect::<Vec<C32>>()
+            };
+            let sig = match llr_gpu.as_mut() {
+                Some(g) => { g.set_iteration(0); g.llr.thr_abs = None; g.apply(&mut v, nimg).unwrap(); g.llr.last.sigma }
+                None => { llr.set_iteration(0); llr.thr_abs = None; llr.apply(&mut v, nimg); llr.last.sigma }
+            };
+            let lam = kappa * sig * lmax;
+            assert!(lam.is_finite() && lam > 0.0, "--llr-thr freeze: no σ̂ on z0 (σ̂ {sig:.3e})");
+            llr_lambda = Some(lam);
+            println!("  LLR penalty frozen (objective units): λ = κσ̂(z0) λ_max(N) = {kappa} × {sig:.4e} × {lmax:.4e} = {lam:.4e}; every prox thresholds at λ·s");
+        }
         let tr = Instant::now();
         let (mut td, mut tn) = (0.0f64, 0usize);
         let mut denoise_prior = |k: usize, h: &mut Vec<C32>| {
@@ -4388,19 +5893,31 @@ fn main() {
                     { use rayon::prelude::*; h.par_iter_mut().zip(w.par_iter()).for_each(|(x, d)| *x = C32::new(x.re + (d.re - x.re) * kf, x.im + (d.im - x.im) * kf)); }
                 } else {
                     // RED: fixed shifts (seeds 0..n, averaged), else the cycle-spinning shift of iteration k
-                    let seeds: Vec<u64> = if red { (0..red_shifts as u64).collect() } else { vec![k as u64] };
+                    let seeds: Vec<u64> = if red { (0..red_shifts as u64).collect() } else if let Some(sn) = llr_shifts { (0..sn as u64).collect() } else { vec![k as u64] };
+                    let step_now = hasty_recon::p2np::prox_step().unwrap_or(1.0);
+                    assert!(!llr_freeze || llr_lambda.is_some(), "--llr-thr freeze: λ not set");
+                    let thr_now: Option<f64> = llr_lambda.map(|l| l * step_now);
                     let mut one = |seed: u64, v: &mut Vec<C32>| {
                         if let Some(g) = llr_gpu.as_mut() {
                             g.set_iteration(seed);
+                            g.llr.thr_abs = thr_now;
                             g.apply(v, nimg).unwrap();
                             if k < 2 || k % 10 == 0 {
-                                eprintln!("    LLR on GPU {:?}: {} blocks ({} left unchanged), k ≤ {}, pass 1 {:.1}s, pass 2 {:.1}s", g.devices(), g.last.blocks, g.last.skipped, g.last.k_max, g.last.secs[0], g.last.secs[1]);
+                                eprintln!("    LLR on GPU {:?}: {} blocks ({} left unchanged), k ≤ {}, pass 1 {:.1}s, pass 2 {:.1}s, threshold {:.4e}", g.devices(), g.last.blocks, g.last.skipped, g.last.k_max, g.last.secs[0], g.last.secs[1], g.llr.last.thr);
                             }
                         } else {
                             llr.set_iteration(seed);
+                            llr.thr_abs = thr_now;
                             llr.apply(v, nimg);
                         }
                     };
+                    // --wavelet-mix β without --learned: D(x) = (1 − β) LLR(x) + β W(x) (both on the same x)
+                    let wv0: Option<Vec<C32>> = (wav_mix > 0.0).then(|| {
+                        wav.set_iteration(k as u64);
+                        let mut w = h.clone();
+                        wav.apply(&mut w, nimg);
+                        w
+                    });
                     if seeds.len() == 1 {
                         one(seeds[0], h);
                     } else {
@@ -4416,6 +5933,11 @@ fn main() {
                             acc.par_iter_mut().zip(v.par_iter()).for_each(|(a, b)| *a = C32::new(a.re + wn * b.re, a.im + wn * b.im));
                         }
                         *h = acc;
+                    }
+                    if let Some(w) = &wv0 {
+                        use rayon::prelude::*;
+                        let (bl, bw) = ((1.0 - wav_mix) as f32, wav_mix as f32);
+                        h.par_iter_mut().zip(w.par_iter()).for_each(|(x, d)| *x = C32::new(bl * x.re + bw * d.re, bl * x.im + bw * d.im));
                     }
                 }
                 return;
@@ -4459,6 +5981,7 @@ fn main() {
             (true, _, true) => format!("_learned_wav{wav_mix}"),
             (true, _, false) => "_learned".to_string(),
             (false, "wavelet", _) => format!("_wav{wav_thr}"),
+            (false, "llr", true) => format!("_llrwav{wav_mix}"),
             (false, "tlp", _) => format!("_tlp{tlp_k}"),
             _ => String::new(),
         };
@@ -4472,13 +5995,56 @@ fn main() {
             }
         });
         let ts_tag = tsub_basis.as_ref().map_or(String::new(), |b| format!("_ts{}", b.name));
-        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{}{dfw_tag}{lock_tag}{air_tag}{red_tag}{ts_tag}{ga_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")), llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" });
-        let resuming = out.join(format!("state_{tag}.hv")).exists();
+        let tag = format!("{model}{}_{pc}{ptag}_k{kappa}{}{dfw_tag}{lock_tag}{air_tag}{red_tag}{admm_tag}{ts_tag}{ga_tag}", temporal.map_or(String::new(), |b| format!("_t{b}")), llr_rank.map_or(String::new(), |r| format!("_r{r}")) + if llr_hard { "_h" } else { "" });
+        // --init / --anchor variants (default tags unchanged)
+        let meanres = hasty_recon::meanres::MeanRes::parse(init_spec, resid_steps);
+        let tag = tag + &match (init_spec.as_str(), &meanres) {
+            ("warm", _) => String::new(),
+            (_, Some(m)) => format!("_{}", m.tag()),
+            (s, None) => format!("_{s}"),
+        } + anc.map_or("", |a| a.3.as_str());
+        // (host-resident state: raw checkpoints state_<tag>.hsk)
+        let resuming = out.join(format!("state_{tag}.hv")).exists() || out.join(format!("state_{tag}.hsk")).exists();
         if !resuming && hasty_value::store::exists_any(&out.join(format!("recon_{tag}.npy"))) {
             println!("  {tag}: finished in an earlier run (recon_{tag}), skipped (--fresh to redo)");
             continue;
         }
-        if let (Some(ini), false, 0) = (&init, resuming, warm_full) {
+        if !resuming && init_spec == "zero" {
+            if host_state {
+                xh.data.iter_mut().for_each(|v| *v = C32::new(0.0, 0.0));
+            } else {
+                for v in x.v.iter_mut() {
+                    st.memset_zeros(v).unwrap();
+                }
+            }
+            println!("  {tag}: started from zero");
+        }
+        if let (Some(m), false) = (&meanres, resuming) {
+            let ti = Instant::now();
+            let gof: Vec<usize> = (0..fe.len()).map(enc_of).collect();
+            // the previous run's start is reused when only the anchor differs (variants are init-major: one stack kept)
+            if meanres_last.as_ref().is_none_or(|(s, _)| s != &m.tag()) {
+                meanres_last = None;
+                let (xs, oc) = hasty_recon::meanres::meanres_init(&mut p, &st, &gof, &warm, *m, need_circ, Some((&ctl, &format!("meanres_{}", m.tag())))).unwrap();
+                if let Outcome::Stopped(k) = oc {
+                    println!("stopped in the meanres initialiser of {tag} (step {k}): state saved, rerun the same command to resume");
+                    std::process::exit(0);
+                }
+                meanres_last = Some((m.tag(), xs));
+            } else {
+                println!("  {tag}: meanres start {} reused from the previous run", m.tag());
+            }
+            let xs = &meanres_last.as_ref().unwrap().1;
+            for t in 0..xs.nsets() {
+                if host_state {
+                    xh.chunk_mut(t).copy_from_slice(xs.chunk(t));
+                } else {
+                    st.memcpy_htod(xs.chunk(t), &mut x.v[t]).unwrap();
+                }
+            }
+            println!("  {tag}: started from mean + residual deconvolution ({} step(s), {:?}) ({:.1}s)", m.steps, m.inner, ti.elapsed().as_secs_f64());
+        }
+        if let (Some(ini), false, 0, false) = (&init, resuming, warm_full, init_spec == "zero") {
             // --init-from: the previous level's images frame by frame (each source frame resampled once); one source
             // frame is the warm start already
             if ini.nf > 1 {
@@ -4579,6 +6145,20 @@ fn main() {
                 air_seed_pending = true;
             }
         }
+        // oracle diagnostic of the air map (scoring only, never used by the method): the true PD (water + fat, box mean
+        // at the voxel's true position, reference pose) relative to its median over the body; a zeroed voxel above 5 %
+        // of that median holds tissue
+        let truth_pd_rel: Option<Vec<f32>> = air.as_ref().and_then(|_| {
+            let pw = hasty_recon::data::read_npy(&std::path::Path::new(&dir).join("truth_pd_water.npy")).ok()?.f32s();
+            let pf = hasty_recon::data::read_npy(&std::path::Path::new(&dir).join("truth_pd_fat.npy")).ok()?.f32s();
+            let pd: Vec<f32> = pw.iter().zip(&pf).map(|(a, b)| if (a + b).is_finite() { a + b } else { 0.0 }).collect();
+            use rayon::prelude::*;
+            let g: Vec<f32> = (0..nv).into_par_iter().map(|q| sd.sample_log_box(&pd, 0, &grid.x_log[q]) as f32).collect();
+            let mut body: Vec<f32> = g.iter().copied().filter(|&v| v > 0.0).collect();
+            body.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let med = body.get(body.len() / 2).copied().unwrap_or(1.0).max(1e-30);
+            Some(g.iter().map(|&v| v / med).collect())
+        });
         let (mut tdf, mut ndf, mut tlk, mut nlk) = (0.0f64, 0usize, 0.0f64, 0usize);
         let mut denoise = |k: usize, h: &mut Vec<C32>| {
             // air map: estimated on the iterate after the gradient step (zeroed voxels show what the step put back),
@@ -4589,9 +6169,19 @@ fn main() {
                     if std::mem::take(&mut air_seed_pending) {
                         hasty_recon::airmap::apply(h, &lay, amap.as_ref().unwrap());
                     }
-                    let m = hasty_recon::airmap::estimate(h, &lay, ao, amap.as_ref(), k);
+                    // --air start: on the start stack x0 (shared by every solver), not on this call's input
+                    let m = match (air_start, h0.as_ref()) {
+                        (true, Some(x0)) => hasty_recon::airmap::estimate(x0, &lay, ao, amap.as_ref(), k),
+                        _ => hasty_recon::airmap::estimate(h, &lay, ao, amap.as_ref(), k),
+                    };
                     let in_dil = (0..nv).filter(|&q| dil[q] && m.w[q] >= 0.5).count();
                     let lz = lumen.iter().filter(|&&q| m.w[q] > 0.0).count();
+                    if let Some(tp) = &truth_pd_rel {
+                        let zeroed: Vec<usize> = (0..nv).filter(|&q| m.w[q] >= 0.5).collect();
+                        let tissue = zeroed.iter().filter(|&&q| tp[q] > 0.05).count();
+                        let mx = zeroed.iter().map(|&q| tp[q]).fold(0.0f32, f32::max);
+                        println!("    air map oracle (scoring only): {tissue} of {} zeroed voxels hold true tissue (PD > 5 % of the body median; max {mx:.3} of the median)", zeroed.len());
+                    }
                     save_exact(&air_npy, "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 4], f4(m.stacked()));
                     let mut j = hasty_recon::airmap::sidecar(&m, ao, sd.dims, vox_mm);
                     j["seed"] = serde_json::json!(false);
@@ -4710,7 +6300,8 @@ fn main() {
         };
         // metrics / outputs of iteration k from per-set host images (device stacks are downloaded by the wrapper below)
         let report_due = |k: usize| { let k = k.wrapping_add(1); !(k % every != 0 && k != iters && k != 0) };
-        let mut report_imgs = |k: usize, imgs: &[&[C32]], f: f64| {
+        // `ximgs` (--prior-mode admm): the data-step iterate x, scored next to the reported z (held-out residual, pc score)
+        let mut report_imgs = |k: usize, imgs: &[&[C32]], f: f64, ximgs: Option<&[&[C32]]>| {
             let k = k.wrapping_add(1);
             if k % every != 0 && k != iters && k != 0 {
                 return;
@@ -4729,6 +6320,10 @@ fn main() {
                 hasty_value::store::save_bytes(&out.join(format!("it{k}_{tag}_lumen.npy")), hasty_value::DType::C64, &[li.len(), ne, nf], hasty_value::Order::C, c32_bytes(&v), &hasty_value::Save::image()).unwrap();
             }
             let img = |fr: usize, e: usize, q: usize| -> Complex64 {
+                if let Some(w) = &tbox {
+                    let (t, _) = at(fr, e);
+                    return (0..nf).filter(|&k| w[fr * nf + k] != 0.0).map(|k| { let c = imgs[t][k * nv + q]; Complex64::new(c.re as f64, c.im as f64) * w[fr * nf + k] }).sum();
+                }
                 let (t, o) = at(fr, e);
                 let c = imgs[t][o + q];
                 Complex64::new(c.re as f64, c.im as f64)
@@ -4772,8 +6367,80 @@ fn main() {
                 }
                 per_frame.push((fe2 / fn_.max(1) as f64).sqrt());
             }
+            if report_detail && nf > 1 {
+                // split of the lumen velocity error: time mean v̄ − t̄ and temporal detail (v_f − v̄) − (t_f − t̄)
+                let (mut em, mut ed, mut td2, mut nm) = (0.0f64, 0.0f64, 0.0f64, 0usize);
+                let mut ev: Vec<f64> = Vec::with_capacity(lumen.len() * nf);
+                for &q in &lumen {
+                    let vs: Vec<[f64; 3]> = (0..nf).map(|fr| vel(fr, q)).collect();
+                    let ts: Vec<[f64; 3]> = (0..nf).map(|fr| [0, 1, 2].map(|a| sd.sample_log(&sd.truth_vel, a + 3 * (fr % nf_card), &grid.x_log[q]))).collect();
+                    ev.extend((0..nf).map(|fr| (0..3).map(|a| (vs[fr][a] - ts[fr][a]).powi(2)).sum::<f64>().sqrt()));
+                    for a in 0..3 {
+                        let vm = vs.iter().map(|v| v[a]).sum::<f64>() / nf as f64;
+                        let tm = ts.iter().map(|v| v[a]).sum::<f64>() / nf as f64;
+                        em += (vm - tm).powi(2);
+                        for fr in 0..nf {
+                            ed += ((vs[fr][a] - vm) - (ts[fr][a] - tm)).powi(2);
+                            td2 += (ts[fr][a] - tm).powi(2);
+                        }
+                    }
+                    nm += 1;
+                }
+                let nm = nm.max(1) as f64;
+                ev.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let pct = |p: f64| ev.get(((ev.len() as f64 - 1.0) * p).round() as usize).copied().unwrap_or(f64::NAN);
+                println!("    velocity error split: time-mean RMSE {:.3} m/s, temporal-detail RMSE {:.3} m/s (truth detail RMS {:.3} m/s, relative {:.3}); |v − t| median {:.3}, p90 {:.3} m/s", (em / nm).sqrt(), (ed / (nm * nf as f64)).sqrt(), (td2 / (nm * nf as f64)).sqrt(), (ed / td2.max(1e-300)).sqrt(), pct(0.5), pct(0.9));
+            }
             if dec_cmp {
                 println!("    hierarchical decoder (±{r_first:.2} m/s): velocity RMSE {:.3} m/s (rel {:.3})", (e2h / n as f64).sqrt(), (e2h / t2).sqrt());
+            }
+            if let Some(pt) = &pc_truth {
+                // the validated per-frame score (hasty_recon::pcscore): PC signal truth on this grid, blood voxels only
+                let vg = gnl && !synth_pc;
+                let vpc = |d: &FlowDecoder, fr: usize, i: usize| -> [f64; 3] {
+                    let q = pt.vox[i];
+                    let z: Vec<Complex64> = (0..ne).map(|e| img(fr, e, q)).collect();
+                    let mut v = d.velocity(&z);
+                    if vg {
+                        v = mat_vec(&rt, &mat_vec(&inv3(&grid.jac[q]), &mat_vec(&sd.rot, &v)));
+                    }
+                    v
+                };
+                let s = pt.score(nf, &|fr, i| vpc(&dec, fr, i), &|fr, e, i| img(fr, e, pt.vox[i]));
+                println!("    pc score ({} voxels): {}; frames {}", pt.n(), s.line(), s.per_frame.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(" "));
+                let sh = dec_cmp.then(|| pt.score(nf, &|fr, i| vpc(&dec_h, fr, i), &|fr, e, i| img(fr, e, pt.vox[i])));
+                if let Some(sh) = &sh {
+                    println!("    pc score, hierarchical decoder: {}", sh.line());
+                }
+                use std::io::Write;
+                let p = out.join(format!("pcscore_{tag}.csv"));
+                let new = !p.exists();
+                let mut fcsv = std::fs::OpenOptions::new().create(true).append(true).open(&p).unwrap();
+                if new {
+                    writeln!(fcsv, "it,f,rmse,rel,mean,detail,median,p90,wrap,phase,rmse_hier,median_hier,p90_hier").unwrap();
+                }
+                if k == iters {
+                    // per voxel-frame diagnostics for offline analysis (small): |Δv| (decoder), |Δv| (hierarchical),
+                    // |x_0| of the recon, |C_0| of the truth; pc_vox.npy = the scored voxels (flat Fortran, this grid)
+                    let n = pt.n();
+                    let mut d = vec![0f32; n * nf * 4];
+                    for i in 0..n {
+                        for fr in 0..nf {
+                            let t = pt.v[i * pt.nf + fr % pt.nf];
+                            let a = vpc(&dec, fr, i);
+                            let b = vpc(&dec_h, fr, i);
+                            let o = (i * nf + fr) * 4;
+                            d[o] = (0..3).map(|c| (a[c] - t[c]).powi(2)).sum::<f64>().sqrt() as f32;
+                            d[o + 1] = (0..3).map(|c| (b[c] - t[c]).powi(2)).sum::<f64>().sqrt() as f32;
+                            d[o + 2] = img(fr, 0, pt.vox[i]).norm() as f32;
+                            d[o + 3] = pt.c_at(i, 0, fr % pt.nf).norm() as f32;
+                        }
+                    }
+                    save(&out.join(format!("pcerr_{tag}.npy")), "<f4", &[4, nf, n], f4(d.iter().copied())); // numpy (4, nf, n) F = this (n, nf, 4) C layout
+                    save(&out.join("pc_vox.npy"), "<f4", &[n], f4(pt.vox.iter().map(|&q| q as f32)));
+                }
+                let shv = sh.unwrap_or_default();
+                writeln!(fcsv, "{k},{f:.6e},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}", s.rmse, s.rel, s.mean_rmse, s.detail_rmse, s.median, s.p90, s.wrap, s.phase_rms, shv.rmse, shv.median, shv.p90).unwrap();
             }
             {
                 use std::io::Write;
@@ -4790,11 +6457,94 @@ fn main() {
                     }
                 }
                 // streamed from the buffers: no reordered stack copy, no byte copy (≈ 2 stacks at the end otherwise)
-                save_parts(&out.join(format!("vel_{tag}.npy")), "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 3, nf], std::iter::once(f32_bytes(&vout)));
-                save_parts(&out.join(format!("recon_{tag}.npy")), "<c8", &[sd.dims[0], sd.dims[1], sd.dims[2], ne, nf], (0..nf).flat_map(|fr| (0..ne).map(move |e| (fr, e))).map(|(fr, e)| {
-                    let (t, o) = at(fr, e);
-                    c32_bytes(&imgs[t][o..o + nv])
-                }));
+                if !no_vel_save {
+                    save_parts(&out.join(format!("vel_{tag}.npy")), "<f4", &[sd.dims[0], sd.dims[1], sd.dims[2], 3, nf], std::iter::once(f32_bytes(&vout)));
+                }
+                if let Some(w) = &tbox {
+                    // --temporal: the frame images are the knot model's box averages (as the scores read them), not
+                    // the knot coefficients (those stay in the solver state / checkpoint)
+                    let mut fx = vec![C32::new(0.0, 0.0); nv * ne * nf];
+                    for fr in 0..nf {
+                        for e in 0..ne {
+                            let (t, _) = at(fr, e);
+                            let dst = &mut fx[nv * (e + ne * fr)..nv * (e + ne * fr + 1)];
+                            for k in (0..nf).filter(|&k| w[fr * nf + k] != 0.0) {
+                                let wk = w[fr * nf + k] as f32;
+                                for (d, c) in dst.iter_mut().zip(&imgs[t][k * nv..(k + 1) * nv]) {
+                                    d.re += wk * c.re;
+                                    d.im += wk * c.im;
+                                }
+                            }
+                        }
+                    }
+                    save_parts(&out.join(format!("recon_{tag}.npy")), "<c8", &[sd.dims[0], sd.dims[1], sd.dims[2], ne, nf], std::iter::once(c32_bytes(&fx)));
+                } else {
+                    save_parts(&out.join(format!("recon_{tag}.npy")), "<c8", &[sd.dims[0], sd.dims[1], sd.dims[2], ne, nf], (0..nf).flat_map(|fr| (0..ne).map(move |e| (fr, e))).map(|(fr, e)| {
+                        let (t, o) = at(fr, e);
+                        c32_bytes(&imgs[t][o..o + nv])
+                    }));
+                }
+            }
+            if let Some(h) = held_eval.as_mut() {
+                // --holdout-res: wall time of the iterate (before this evaluation), then the held-out residual
+                let (secs, th) = (tr.elapsed().as_secs_f64(), Instant::now());
+                let rel = h.rel_residual(&st, imgs);
+                println!("    held-out residual ({} readouts, {} sets): ‖E_h x − y_h‖ / ‖y_h‖ = {rel:.6} at it {k}, {secs:.1}s ({:.1}s)", h.nro, h.ys.len(), th.elapsed().as_secs_f64());
+                use std::io::Write;
+                let p = out.join(format!("holdout_{tag}.csv"));
+                let new = !p.exists();
+                let mut hcsv = std::fs::OpenOptions::new().create(true).append(true).open(&p).unwrap();
+                if new {
+                    writeln!(hcsv, "it,rel,seconds").unwrap();
+                }
+                writeln!(hcsv, "{k},{rel:.8},{secs:.2}").unwrap();
+            }
+            // --prior-mode admm: the data-step iterate x (not before the first iteration: x = z = the start)
+            if let (Some(xi), true) = (ximgs, k > 0) {
+                if let Some(h) = held_eval.as_mut() {
+                    let th = Instant::now();
+                    let rel = h.rel_residual(&st, xi);
+                    println!("    held-out residual of x (data step): ‖E_h x − y_h‖ / ‖y_h‖ = {rel:.6} at it {k} ({:.1}s)", th.elapsed().as_secs_f64());
+                    use std::io::Write;
+                    let p = out.join(format!("holdout_x_{tag}.csv"));
+                    let new = !p.exists();
+                    let mut hcsv = std::fs::OpenOptions::new().create(true).append(true).open(&p).unwrap();
+                    if new {
+                        writeln!(hcsv, "it,rel").unwrap();
+                    }
+                    writeln!(hcsv, "{k},{rel:.8}").unwrap();
+                }
+                if let Some(pt) = &pc_truth {
+                    let vg = gnl && !synth_pc;
+                    let imgx = |fr: usize, e: usize, q: usize| -> Complex64 {
+                        if let Some(w) = &tbox {
+                            let (t, _) = at(fr, e);
+                            return (0..nf).filter(|&k| w[fr * nf + k] != 0.0).map(|k| { let c = xi[t][k * nv + q]; Complex64::new(c.re as f64, c.im as f64) * w[fr * nf + k] }).sum();
+                        }
+                        let (t, o) = at(fr, e);
+                        let c = xi[t][o + q];
+                        Complex64::new(c.re as f64, c.im as f64)
+                    };
+                    let vpcx = |fr: usize, i: usize| -> [f64; 3] {
+                        let q = pt.vox[i];
+                        let z: Vec<Complex64> = (0..ne).map(|e| imgx(fr, e, q)).collect();
+                        let mut v = dec.velocity(&z);
+                        if vg {
+                            v = mat_vec(&rt, &mat_vec(&inv3(&grid.jac[q]), &mat_vec(&sd.rot, &v)));
+                        }
+                        v
+                    };
+                    let s = pt.score(nf, &vpcx, &|fr, e, i| imgx(fr, e, pt.vox[i]));
+                    println!("    pc score of x ({} voxels): {}", pt.n(), s.line());
+                    use std::io::Write;
+                    let p = out.join(format!("pcscore_x_{tag}.csv"));
+                    let new = !p.exists();
+                    let mut fcsv = std::fs::OpenOptions::new().create(true).append(true).open(&p).unwrap();
+                    if new {
+                        writeln!(fcsv, "it,rmse,rel,mean,detail,median,p90,wrap,phase").unwrap();
+                    }
+                    writeln!(fcsv, "{k},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}", s.rmse, s.rel, s.mean_rmse, s.detail_rmse, s.median, s.p90, s.wrap, s.phase_rms).unwrap();
+                }
             }
             println!(
                 "  {:<7} κ {kappa:<4} it {:>3}: f = {:.4e}, velocity RMSE {:.3} m/s (rel {:.3}), frames {}, {:.0}s",
@@ -4849,7 +6599,68 @@ fn main() {
             println!("  {tag}: RED secant groups: {} of {nt} sets", g.iter().copied().max().map_or(0, |m| m + 1));
             g
         });
-        let outcome = if host_state {
+        let outcome = if admm {
+            // --prior-mode admm (hasty_recon::admm): x-step per set on the device, z = D(x + u) with this run's denoiser
+            assert!(red_lambda.is_none() && anc.is_none() && tsub_basis.is_none(), "--prior-mode admm: no --anchor / --tsub");
+            use hasty_recon::admm::{run_admm, AdmmCfg, AdmmIter, AdmmP2np};
+            use hasty_recon::hoststack::HostStack;
+            // start: z = x (the warm start), u = 0 (a resumed run loads x, z, u, ρ)
+            let mut zh = xh.clone();
+            let mut uh = HostStack::zeros(&lens);
+            let mut cfg = AdmmCfg::new(iters, admm_rho, admm_rho1, admm_inner);
+            if admm_adapt {
+                cfg.adapt = Some((2.0, 10.0));
+            }
+            println!("  {tag}: ADMM, ρ = {admm_rho} ρ₁ = {:.5e}{}, {admm_inner} PCG iterations per set on N_t + ρI (inner metric {}), z = D(x + u) with the P²nP prior pipeline; host stacks x, z, u + one work stack ({:.2} GiB)", cfg.rho, if admm_adapt { " (residual balancing ×2 by the 10× rule)" } else { "" }, admm_metric.name(), 4.0 * stack_bytes as f64 / GIB);
+            let mut data = AdmmP2np { p: &mut p, st: st.clone(), metric: admm_clip.take() };
+            let mut rep = |k: usize, zs: &HostStack, xs: &HostStack, info: Option<&AdmmIter>| {
+                let f = info.map_or(f64::NAN, |i| i.x.f);
+                if let Some(i) = info {
+                    println!(
+                        "    admm it {k}: time inner PCG {:.1}s, prior {:.1}s, other {:.1}s; inner ‖r_K‖/‖r₀‖ {:.3e} (per set median {:.3e}, max {:.3e}{}){}; primal ‖x − z‖ {:.4e} (rel {:.3e}), dual ρ‖z − z_prev‖ {:.4e} (rel {:.3e}; ρ₁ units {:.4e}); ρ {:.4} ρ₁{}; f(x) {:.5e} (step start {:.5e})",
+                        i.t_inner,
+                        i.t_prior,
+                        i.t_other,
+                        i.x.rk / i.x.r0.max(1e-300),
+                        i.x.median,
+                        i.x.worst,
+                        if i.x.early > 0 { format!(", {} sets stopped early", i.x.early) } else { String::new() },
+                        if i.x.metric_updates > 0 { format!(", clip symbol {} uploads {:.1}s", i.x.metric_updates, i.x.metric_secs) } else { String::new() },
+                        i.primal,
+                        i.primal_rel,
+                        i.dual,
+                        i.dual_rel,
+                        i.dual_nat,
+                        i.rho / admm_rho1,
+                        if i.rho_next != i.rho { format!(" → {:.4} ρ₁", i.rho_next / admm_rho1) } else { String::new() },
+                        i.x.f,
+                        i.x.f0
+                    );
+                    // host memory per outer iteration (memory ledger): RSS now, peak so far, RSS after returning free
+                    // heap to the OS (the difference is glibc arena fragmentation, not live data)
+                    let gib = |b: usize| b as f64 / 1073741824.0;
+                    let peak = hasty_recon::sysmem::peak_rss_bytes();
+                    let (b, a) = hasty_recon::sysmem::trim();
+                    println!("    admm it {k}: host RSS {:.2} GiB (peak {:.2} GiB), {:.2} GiB after malloc_trim", gib(b), gib(peak), gib(a));
+                }
+                if !report_due(k) {
+                    return;
+                }
+                let t_r = Instant::now();
+                let zi: Vec<&[C32]> = (0..zs.nsets()).map(|t| zs.chunk(t)).collect();
+                let xi: Vec<&[C32]> = (0..xs.nsets()).map(|t| xs.chunk(t)).collect();
+                report_imgs(k, &zi, f, Some(&xi));
+                if info.is_some() {
+                    println!("    admm it {k}: report {:.1}s", t_r.elapsed().as_secs_f64());
+                }
+            };
+            let (oc, rho_end) = run_admm(&mut data, &mut xh, &mut zh, &mut uh, &cfg, &mut denoise, &mut rep, Some((&ctl, &tag))).unwrap();
+            admm_clip = data.metric.take();
+            if admm_adapt {
+                println!("  {tag}: ρ at the end {:.4} ρ₁", rho_end / admm_rho1);
+            }
+            oc
+        } else if host_state {
             let mut noop = |_: usize, _: &mut Vec<C32>| {};
             let mut ro_store;
             let (obj, den): (&mut dyn hasty_recon::p2np::Objective, &mut dyn FnMut(usize, &mut Vec<C32>)) = match red_lambda {
@@ -4859,6 +6670,16 @@ fn main() {
                     (&mut ro_store, &mut noop)
                 }
                 None => (&mut p, &mut denoise),
+            };
+            // --anchor: the temporal anchor around the data term (and RED)
+            let mut anc_store;
+            let obj: &mut dyn hasty_recon::p2np::Objective = match anc {
+                Some((gof, tg, mu, _)) => {
+                    assert!(tsub_basis.is_none(), "--anchor with --tsub: not yet");
+                    anc_store = hasty_recon::tanchor::TAnchor::new(obj, gof.clone(), tg.clone(), *mu);
+                    &mut anc_store
+                }
+                None => obj,
             };
             if let Some(basis) = &tsub_basis {
                 use hasty_recon::tsub::apply_sets;
@@ -4891,13 +6712,13 @@ fn main() {
                     let mut xb = xbuf.borrow_mut();
                     apply_sets(&bb, nfb, nkb, ne, nvs, &cs.data, &mut xb.data);
                     let r: Vec<&[C32]> = (0..xb.nsets()).map(|t| xb.chunk(t)).collect();
-                    report_imgs(k, &r, f)
+                    report_imgs(k, &r, f, None)
                 };
                 hasty_recon::hoststack::run_objective_host(&mut sub, &st, &mut ch, precond, alpha_c, iters, &mut den_c, &mut rep_c, Some((&ctl, &tag))).unwrap()
             } else {
                 let mut report = |k: usize, xs: &hasty_recon::hoststack::HostStack, f: f64| {
                     let r: Vec<&[C32]> = (0..xs.nsets()).map(|t| xs.chunk(t)).collect();
-                    report_imgs(k, &r, f)
+                    report_imgs(k, &r, f, None)
                 };
                 hasty_recon::hoststack::run_objective_host(obj, &st, &mut xh, precond, alpha, iters, den, &mut report, Some((&ctl, &tag))).unwrap()
             }
@@ -4909,9 +6730,19 @@ fn main() {
                 }
                 let h: Vec<Vec<C32>> = xs.v.iter().map(|v| st.clone_dtoh(v).unwrap()).collect();
                 let r: Vec<&[C32]> = h.iter().map(|v| v.as_slice()).collect();
-                report_imgs(k, &r, f)
+                report_imgs(k, &r, f, None)
             };
-            if let Some(l) = red_lambda {
+            if let (Some(l), Some((gof, tg, mu, _))) = (red_lambda, anc) {
+                // RED inside the anchor
+                let mut ro = hasty_recon::red::Red::new(&mut p, &mut denoise, l);
+                ro.groups = red_groups.clone();
+                let mut ao = hasty_recon::tanchor::TAnchor::new(&mut ro, gof.clone(), tg.clone(), *mu);
+                hasty_recon::p2np::run_objective(&mut ao, &st, &mut x, precond, alpha, iters, &mut |_, _| {}, &mut report, Some((&ctl, &tag))).unwrap()
+            } else if let Some((gof, tg, mu, _)) = anc {
+                // the anchor around the data term (no lagged gradients: asserted at the anchor setup)
+                let mut ao = hasty_recon::tanchor::TAnchor::new(&mut p, gof.clone(), tg.clone(), *mu);
+                hasty_recon::p2np::run_objective(&mut ao, &st, &mut x, precond, alpha, iters, &mut denoise, &mut report, Some((&ctl, &tag))).unwrap()
+            } else if let Some(l) = red_lambda {
                 assert!(lag_tau.is_none(), "--prior-mode red with --lagged: not yet");
                 let mut ro = hasty_recon::red::Red::new(&mut p, &mut denoise, l);
                 ro.groups = red_groups.clone();
@@ -4944,11 +6775,101 @@ fn main() {
     }
 }
 
+/// --prior-mode admm: the clip metric's per-encode samples-per-cell symbols, set → (encode, share), the coil energy
+/// D = Σ_c |S_c|² and its mean, and the ρ₁ check set with its own symbol and cells (index, samples, |k| / ball radius)
+struct AdmmSym {
+    mu: Vec<Vec<f32>>,
+    of_set: Vec<(usize, f64)>,
+    dsum: Vec<f32>,
+    dbar: f64,
+    tc: usize,
+    mu_t: Vec<f32>,
+    cells: Vec<(usize, u32, f64)>,
+}
+
 /// Groups of a temporal-pyramid level with `rg` respiratory × `cg` cardiac groups (clamped to the bins / phases):
 /// set t of (frame f = r · nf_card + c, encode e) → (e · rg + ⌊r · rg / resp_bins⌋) · cg + ⌊c · cg / nf_card⌋
 /// (contiguous bins and phases, group sizes differing by at most one). Returns (groups, group of every set).
 /// Union of set partitions: sets sharing a key in any of `keys` (one key per set each) end in one group; group ids
 /// 0.. in order of first appearance
+/// --holdout-res: the held-out sets on the host before their tables are built (whole records, kept-sample selection,
+/// kept data: whitened, coil-compressed, coil-major)
+struct HeldHost {
+    recs: Vec<SampleSet>,
+    sels: Vec<Option<Vec<u32>>>,
+    ys: Vec<Vec<C32>>,
+    nro: usize,
+}
+
+/// --holdout-res: the held-out operator (second engine, the solve's options, maps, segments) and data (host, uploaded
+/// set by set: one set's image, data and residual on the device at a time)
+struct HeldOut {
+    sets: SegSets,
+    ys: Vec<Vec<C32>>,
+    ny2: f64,
+    nro: usize,
+    /// --smaps-resp: per-set coil maps (device; empty = the engine's own maps for every set)
+    maps: Vec<cudarc::driver::CudaSlice<C32>>,
+    map_of_set: Vec<Option<usize>>,
+    /// --ratemap truth-bc in frame mode: the solve's per-frame segment tables, loaded into slot 0 per set
+    seg_tabs: Option<std::sync::Arc<Vec<hasty_recon::setop::HostSegTab>>>,
+    seg_tab_of_set: Vec<usize>,
+    seg_cur: Option<usize>,
+}
+
+impl HeldOut {
+    /// ‖E_h x − y_h‖ / ‖y_h‖ over all held-out sets, x = the per-set images of the solve (frame mode: set t = its image)
+    fn rel_residual(&mut self, st: &std::sync::Arc<cudarc::driver::CudaStream>, imgs: &[&[C32]]) -> f64 {
+        assert_eq!(imgs.len(), self.ys.len(), "--holdout-res: one image per held-out set");
+        let mut r2 = 0.0f64;
+        for t in 0..self.ys.len() {
+            if self.ys[t].is_empty() {
+                continue;
+            }
+            let x = st.clone_htod(imgs[t]).unwrap();
+            let y = st.clone_htod(&self.ys[t]).unwrap();
+            let mut r = st.alloc_zeros::<C32>(self.ys[t].len()).unwrap();
+            // the set's own maps swapped in for this set only (a pointer exchange)
+            let mi = self.map_of_set.get(t).copied().flatten().filter(|_| !self.maps.is_empty());
+            if let Some(i) = mi {
+                self.sets.eng.swap_smaps(&mut self.maps[i]);
+            }
+            // the set's frame table (per-frame ratemap), uploaded when the frame changes
+            if let Some(tabs) = &self.seg_tabs {
+                let k = self.seg_tab_of_set[t];
+                if self.seg_cur != Some(k) {
+                    assert!(self.sets.load_segs(st, 0, &tabs[k]).unwrap(), "--holdout-res: per-frame segment table load refused");
+                    self.seg_cur = Some(k);
+                }
+            }
+            self.sets.forward_residual(st, t, &x, &y, &mut r).unwrap();
+            if let Some(i) = mi {
+                self.sets.eng.swap_smaps(&mut self.maps[i]);
+            }
+            r2 += self.sets.kern.dot(st, &r, &r).unwrap().re;
+        }
+        (r2 / self.ny2.max(1e-300)).sqrt()
+    }
+}
+
+/// coil-map agreement with reference maps over `region` (coil-major nc × nv both): (mean of 1 − |⟨ŝ, s⟩| / (‖ŝ‖ ‖s‖)
+/// with zero estimates counted as 1, the mean over the nonzero estimates, the number of zero estimates)
+fn smaps_agreement(est: &[C32], tru: &[C32], nc: usize, region: &[bool]) -> (f64, f64, usize) {
+    let nv = region.len();
+    let d = hasty_recon::smapfit::map_disagreement(est, tru, nc);
+    let (mut all, mut nz, mut n, mut zero) = (0.0f64, 0.0f64, 0usize, 0usize);
+    for q in (0..nv).filter(|&q| region[q]) {
+        n += 1;
+        all += d[q];
+        if (0..nc).all(|c| est[c * nv + q] == C32::new(0.0, 0.0)) {
+            zero += 1;
+        } else {
+            nz += d[q];
+        }
+    }
+    (all / n.max(1) as f64, nz / (n - zero).max(1) as f64, zero)
+}
+
 fn union_groups(nt: usize, keys: &[Vec<usize>]) -> Vec<usize> {
     let mut par: Vec<usize> = (0..nt).collect();
     fn find(p: &mut [usize], mut a: usize) -> usize {
@@ -5436,7 +7357,8 @@ fn op_frame_error(chunk: &dyn Fn(usize) -> Vec<C32>, spec: &hasty_recon::vmodel:
 /// The true ratemap of one operator frame on the reconstruction grid (oracle): off-resonance ω (rad/s, the field the
 /// signal sees, no chemical shift), water / fat decay rates (1/s) and the fat fraction.
 struct RateFrame {
-    om: Vec<f32>,
+    /// off-resonance (rad/s), f64: the degenerate frame model (static field) is then the static path's field exactly
+    om: Vec<f64>,
     rw: Vec<f32>,
     rf: Vec<f32>,
     ff: Vec<f32>,
@@ -5521,7 +7443,7 @@ fn truth_ratemap_knots(dir: &std::path::Path, sd: &SimData, x_log: &[[f64; 3]], 
         };
         let om_full = interp(&om_s, f32::NAN);
         let om_g = to_grid(om_full);
-        let om: Vec<f32> = om_g.iter().map(|&x| if x.is_finite() { (x as f64 * std::f64::consts::TAU) as f32 } else { f32::NAN }).collect();
+        let om: Vec<f64> = om_g.iter().map(|&x| if x.is_finite() { x as f64 * std::f64::consts::TAU } else { f64::NAN }).collect();
         let rw = to_grid(interp(&rw_s, 0.0)).into_iter().map(|x| if x.is_finite() { x } else { 0.0 }).collect();
         let rf = to_grid(interp(&rf_s, 0.0)).into_iter().map(|x| if x.is_finite() { x } else { 0.0 }).collect();
         let ff = to_grid(interp(&ff_s, 0.0)).into_iter().map(|x| if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 }).collect();
@@ -5531,4 +7453,909 @@ fn truth_ratemap_knots(dir: &std::path::Path, sd: &SimData, x_log: &[[f64; 3]], 
         out.push(RateFrame { om, rw, rf, ff });
     }
     out
+}
+
+/// Pooled image x_e against the inverse-crime frame mean x̄★_e (scoring only): relative error over all voxels, the
+/// body (PD > 0) without blood, the blood voxels and the air; the complex LS scale ⟨x̄★, x⟩ / ‖x̄★‖² (all encodes); the
+/// Pearson correlation of |x_0| with the PD over the body and over all voxels.
+fn pooled_image_error(xs: &hasty_recon::hoststack::HostStack, xm: &[Vec<C32>], stat: &[f32], bm: &[bool]) -> String {
+    let nv = stat.len();
+    let (mut num, mut den) = ([0.0f64; 4], [0.0f64; 4]);
+    let mut sc = (Complex64::new(0.0, 0.0), 0.0f64);
+    for (e, x) in xm.iter().enumerate() {
+        let v = xs.chunk(e);
+        for q in 0..nv {
+            let (a, b) = (Complex64::new(v[q].re as f64, v[q].im as f64), Complex64::new(x[q].re as f64, x[q].im as f64));
+            let cls = if bm[q] { 2 } else if stat[q] > 0.0 { 1 } else { 3 };
+            for c in [0, cls] {
+                num[c] += (a - b).norm_sqr();
+                den[c] += b.norm_sqr();
+            }
+            sc.0 += b.conj() * a;
+            sc.1 += b.norm_sqr();
+        }
+    }
+    let corr = |mask: &dyn Fn(usize) -> bool| -> f64 {
+        let v = xs.chunk(0);
+        let (mut n, mut sa, mut sb, mut saa, mut sbb, mut sab) = (0.0f64, 0.0, 0.0, 0.0, 0.0, 0.0);
+        for q in (0..nv).filter(|&q| mask(q)) {
+            let (a, b) = ((v[q].re as f64).hypot(v[q].im as f64), stat[q] as f64);
+            n += 1.0;
+            sa += a;
+            sb += b;
+            saa += a * a;
+            sbb += b * b;
+            sab += a * b;
+        }
+        let cov = sab / n - sa / n * sb / n;
+        cov / ((saa / n - (sa / n).powi(2)).max(0.0).sqrt() * (sbb / n - (sb / n).powi(2)).max(0.0).sqrt()).max(1e-300)
+    };
+    let r = |c: usize| if den[c] > 0.0 { (num[c] / den[c]).sqrt() } else { f64::NAN };
+    let s = sc.0 / sc.1.max(1e-300);
+    // x★ = 0 in the air: its error relative to the whole object's norm
+    let air = (num[3] / den[0].max(1e-300)).sqrt();
+    format!(
+        "rel error all {:.4}, static body {:.4}, blood {:.4}, air (/‖x★‖) {air:.4}; LS scale {:.4}{:+.4}i; corr |x|~PD body {:.4}, all {:.4}",
+        r(0), r(1), r(2), s.re, s.im, corr(&|q| stat[q] > 0.0), corr(&|_| true)
+    )
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Estimator-preserving pooled preconditioners (research/precond_estimator.md, hasty_recon::ppre): --pp-study (pooled
+// solves of a few encodes with several preconditioners, scored, then exit), --pp-pool (the --warm-full pooled start
+// with one of them), --pp-metric (the P²nP circulant metric of zmshr1m from the probed symbol, + deflation).
+// ---------------------------------------------------------------------------------------------------------------------
+
+/// the --pp-* switches (all off by default: no change to existing runs)
+struct PpArgs {
+    /// `name=SPEC:ITERS[:TOL]` runs separated by ';' (a name starting with "ref" sets the reference x̂ of its μ)
+    study: Option<String>,
+    pool: Option<String>,
+    metric: Option<String>,
+    /// encodes of the study (default 0)
+    groups: Option<Vec<usize>>,
+    /// ridge μ relative to the body mean of the probed image diagonal of the pooled N (0: no ridge); several for the study
+    mu: Vec<f64>,
+    band: bool,
+    dfloor: f64,
+    probes: usize,
+    smooth: usize,
+    eps: f64,
+    harvest: usize,
+    tol: f64,
+    /// G2: reference time of the recentring (s; None: the sample-weighted mid time of the two k-centre passes)
+    tref: Option<f64>,
+    /// G3: virtual coils of the surrogate (None: all)
+    sur_coils: Option<usize>,
+    /// G3 Chebyshev: lo = hi / ratio
+    cheb_ratio: f64,
+}
+
+impl PpArgs {
+    fn active(&self) -> bool {
+        self.study.is_some() || self.pool.is_some() || self.metric.is_some()
+    }
+}
+
+enum PpBase<'r> {
+    Id,
+    /// the existing per-encode circulant (Objective::metric_host of the group's first set)
+    Circ(Vec<usize>),
+    Sym(&'r [hasty_recon::ppre::SymPre]),
+    /// the coil + segment surrogate (G3) inverted by its inner solver on the device; `ci`: the group's circulant (inner
+    /// metric when `metric`)
+    Sur { devs: &'r mut [hasty_recon::surrogate::SurDev], ci: Vec<usize>, inner: hasty_recon::surrogate::Inner, metric: bool },
+}
+
+/// PCG operators of the pooled problem B (N + μ) B on the host (B = band-limit, optional)
+struct PpOps<'r, 'a> {
+    p: &'r mut P2np<'a>,
+    st: std::sync::Arc<cudarc::driver::CudaStream>,
+    groups: &'r [Vec<usize>],
+    g0: &'r hasty_recon::hoststack::HostStack,
+    mu: Vec<f64>,
+    band: Option<(std::sync::Arc<hasty_recon::ppre::Fft3>, std::sync::Arc<Vec<bool>>)>,
+    base: PpBase<'r>,
+    defl: Vec<Option<hasty_recon::ppre::Deflation>>,
+    pre_s: f64,
+    pre_n: usize,
+    q_s: f64,
+    q_n: usize,
+    /// G2 recentring per group: U (unit modulus); the metric is U P Uᴴ
+    rec: Option<Vec<Vec<C32>>>,
+}
+
+impl hasty_recon::ppre::PcgOps for PpOps<'_, '_> {
+    fn q(&mut self, v: &hasty_recon::hoststack::HostStack, out: &mut hasty_recon::hoststack::HostStack) -> Result<(), hasty_recon::Error> {
+        let t = Instant::now();
+        // N v = Σ ∇f(v) − Σ ∇f(0)
+        self.p.gradient_groups_host(&self.st, self.groups, v, out)?;
+        hasty_recon::hoststack::HostStack::axpby(-1.0, self.g0, 1.0, out);
+        for g in 0..v.nsets() {
+            if self.mu[g] > 0.0 {
+                hasty_recon::ppre::caxpy(Complex64::new(self.mu[g], 0.0), v.chunk(g), out.chunk_mut(g));
+            }
+            if let Some((f, m)) = &self.band {
+                hasty_recon::ppre::project_band(f, m, out.chunk_mut(g));
+            }
+        }
+        self.q_s += t.elapsed().as_secs_f64();
+        self.q_n += 1;
+        Ok(())
+    }
+    fn p(&mut self, g: usize, r: &[C32], z: &mut [C32]) -> Result<(), hasty_recon::Error> {
+        let t = Instant::now();
+        if let PpBase::Sur { devs, ci, inner, metric } = &mut self.base {
+            let st = &self.st;
+            let dr = st.clone_htod(r)?;
+            let mut dz = st.alloc_zeros::<C32>(r.len())?;
+            let m = if *metric { Some(&mut self.p.circ[ci[g]][0]) } else { None };
+            devs[g].solve(st, m, *inner, &dr, &mut dz)?;
+            st.memcpy_dtoh(&dz, z)?;
+            if let Some(d) = self.defl[g].as_ref() {
+                d.add(r, z);
+            }
+            self.pre_s += t.elapsed().as_secs_f64();
+            self.pre_n += 1;
+            return Ok(());
+        }
+        // G2: z = U P (Uᴴ r)
+        let rr: Option<Vec<C32>> = self.rec.as_ref().map(|u| {
+            let mut v = r.to_vec();
+            hasty_recon::ppre::mul_cx(&mut v, &u[g], true);
+            v
+        });
+        let r = rr.as_deref().unwrap_or(r);
+        let band = self.band.as_ref().map(|(f, m)| (&**f, &m[..]));
+        let defl = self.defl[g].as_ref();
+        let (pp, st, base) = (&mut *self.p, &self.st, &self.base);
+        hasty_recon::ppre::apply_composite(band, defl, r, z, &mut |a, b| match base {
+            PpBase::Id => {
+                b.copy_from_slice(a);
+                Ok(())
+            }
+            PpBase::Circ(reps) => hasty_recon::p2np::Objective::metric_host(&mut *pp, st, reps[g], a, b, false),
+            PpBase::Sym(s) => {
+                s[g].apply(a, b);
+                Ok(())
+            }
+            PpBase::Sur { .. } => unreachable!(),
+        })?;
+        if let Some(u) = &self.rec {
+            hasty_recon::ppre::mul_cx(z, &u[g], false);
+        }
+        self.pre_s += t.elapsed().as_secs_f64();
+        self.pre_n += 1;
+        Ok(())
+    }
+}
+
+/// image error of one encode's pooled image vs the frame mean of x★: [all, static body, blood, air (/‖x★‖), corr(|x|, PD) body]
+fn pp_score(x: &[C32], xm: &[C32], stat: &[f32], bm: &[bool]) -> [f64; 5] {
+    let (mut num, mut den) = ([0.0f64; 4], [0.0f64; 4]);
+    for q in 0..x.len() {
+        let (a, b) = (Complex64::new(x[q].re as f64, x[q].im as f64), Complex64::new(xm[q].re as f64, xm[q].im as f64));
+        let cls = if bm[q] { 2 } else if stat[q] > 0.0 { 1 } else { 3 };
+        for c in [0, cls] {
+            num[c] += (a - b).norm_sqr();
+            den[c] += b.norm_sqr();
+        }
+    }
+    let (mut n, mut sa, mut sb, mut saa, mut sbb, mut sab) = (0.0f64, 0.0, 0.0, 0.0, 0.0, 0.0);
+    for q in (0..x.len()).filter(|&q| stat[q] > 0.0) {
+        let (a, b) = ((x[q].re as f64).hypot(x[q].im as f64), stat[q] as f64);
+        n += 1.0;
+        sa += a;
+        sb += b;
+        saa += a * a;
+        sbb += b * b;
+        sab += a * b;
+    }
+    let corr = (sab / n - sa / n * sb / n) / ((saa / n - (sa / n).powi(2)).max(0.0).sqrt() * (sbb / n - (sb / n).powi(2)).max(0.0).sqrt()).max(1e-300);
+    let r = |c: usize| if den[c] > 0.0 { (num[c] / den[c]).sqrt() } else { f64::NAN };
+    [r(0), r(1), r(2), (num[3] / den[0].max(1e-300)).sqrt(), corr]
+}
+
+/// the probed quantities shared by all runs of one pp invocation (per group)
+struct PpProbes {
+    /// D^{-1/2} of the floored coil power Σ_c |S_c|² (P0, P1)
+    dinv_c: Vec<f32>,
+    dmed_c: f32,
+    /// body mean of the probed image diagonal of N per group (the unit of μ), and the smoothed, floored diagonal (P2)
+    lam_bar: Vec<f64>,
+    diag: Vec<Option<Vec<f32>>>,
+    /// probed Fourier symbols (two halves) with the coil D and with the diagonal D
+    sym_c: Option<Vec<[Vec<f32>; 2]>>,
+    sym_d: Option<Vec<[Vec<f32>; 2]>>,
+    /// nominal (no-physics) symbol per group: the existing circulant's coil-convolved spectrum, if built
+    nominal: Vec<Option<Vec<f32>>>,
+}
+
+/// the symbol (λ_eff > 0) and D^{-1/2} of a probed base for group g with ridge μ_g (absolute)
+fn pp_factors(base: &str, g: usize, pr: &PpProbes, mu: f64, a: &PpArgs, dims: [usize; 3], support: &[bool]) -> (Vec<f32>, Vec<f32>) {
+    let nv = dims.iter().product::<usize>();
+    let finish = |raw: Vec<f32>, dmed: f32| -> Vec<f32> {
+        let lmax = raw.iter().cloned().fold(0f32, f32::max);
+        // the floor IS the ridge's symbol (μ / D in the body) when there is a ridge, else ε λ_max (as the old metric)
+        let fl = if mu > 0.0 { (mu / dmed.max(f32::MIN_POSITIVE) as f64) as f32 } else { (a.eps * lmax as f64) as f32 };
+        let lam: Vec<f32> = if mu > 0.0 { raw.iter().map(|&l| l.max(0.0) + fl).collect() } else { raw.iter().map(|&l| l.max(fl)).collect() };
+        let at_floor = raw.iter().filter(|&&l| l < fl).count();
+        println!("    {base} symbol, group {g}: λ_max {lmax:.3e}, floor {fl:.3e} ({}), {:.1} % of the modes below it", if mu > 0.0 { "μ / D_body, added" } else { "ε λ_max" }, 100.0 * at_floor as f64 / nv as f64);
+        lam
+    };
+    match base {
+        "p0" => {
+            let nom = pr.nominal[g].as_ref().expect("--pp p0: needs the nominal circulant (add zmshr1m to --precond)");
+            let h = &pr.sym_c.as_ref().unwrap()[g];
+            let pm: f64 = h[0].iter().chain(&h[1]).map(|&v| v as f64).sum::<f64>() / (2 * nv) as f64;
+            let nm: f64 = nom.iter().map(|&v| v as f64).sum::<f64>() / nv as f64;
+            let c = (pm / nm.max(1e-300)) as f32;
+            (finish(nom.iter().map(|&v| c * v).collect(), pr.dmed_c), pr.dinv_c.clone())
+        }
+        "p1" | "p1n" => {
+            let h = &pr.sym_c.as_ref().unwrap()[g];
+            let nom = if base == "p1n" { Some(&pr.nominal[g].as_ref().expect("--pp p1n: needs the nominal circulant (add zmshr1m to --precond)")[..]) } else { None };
+            let (lam, noise) = hasty_recon::ppre::smooth_symbol(h, nom, dims, a.smooth);
+            println!("    {base} probe noise after smoothing (median split-half relative difference): {noise:.3}");
+            (finish(lam, pr.dmed_c), pr.dinv_c.clone())
+        }
+        "p12" | "p12n" => {
+            let h = &pr.sym_d.as_ref().unwrap()[g];
+            let d = pr.diag[g].as_ref().unwrap();
+            let dmed = hasty_recon::ppre::median_on(d, support);
+            let nom = if base == "p12n" { Some(&pr.nominal[g].as_ref().expect("--pp p12n: needs the nominal circulant")[..]) } else { None };
+            let (lam, noise) = hasty_recon::ppre::smooth_symbol(h, nom, dims, a.smooth);
+            println!("    {base} probe noise after smoothing: {noise:.3}");
+            (finish(lam, dmed), d.iter().map(|&v| 1.0 / v.sqrt()).collect())
+        }
+        "p2" => {
+            // Jacobi: P = (diag N + μ)⁻¹ (constant symbol 1)
+            let d = pr.diag[g].as_ref().unwrap();
+            let lam = vec![1f32; nv];
+            (lam, d.iter().map(|&v| 1.0 / (v as f64 + mu).sqrt() as f32).collect())
+        }
+        b if b.starts_with("pe") => {
+            // bounded dynamic range: (λ_nom + ε λ_max)^p (P applies its inverse), nominal symbol, coil D (floored)
+            let (eps, pw) = hasty_recon::ppre::PreSpec::parse(b).and_then(|s| s.power()).expect("pe<ε>_<p>");
+            let nom = pr.nominal[g].as_ref().expect("--pp pe: needs the nominal circulant (add zmshr1m to --precond)");
+            let lmax = nom.iter().cloned().fold(0f32, f32::max) as f64;
+            let lam: Vec<f32> = nom.iter().map(|&v| ((v.max(0.0) as f64 + eps * lmax) / lmax).powf(pw) as f32).collect();
+            let lmin = lam.iter().cloned().fold(f32::MAX, f32::min);
+            println!("    {b} symbol, group {g}: (λ/λ_max + {eps:e})^{pw}: dynamic range {:.2e}", 1.0 / lmin as f64 * lam.iter().cloned().fold(0f32, f32::max) as f64);
+            (lam, pr.dinv_c.clone())
+        }
+        b => panic!("pp_factors: {b} is not a probed base"),
+    }
+}
+
+/// G3 setup: the coil + segment surrogate of every group (encode sel[g]) from its pooled kept samples (coordinates,
+/// times) and the STORED segment tables, rank-`ls` compressed; then the operator check that fixes Λ's conventions
+/// (k mirror, pair transpose) and scale: for a random x per group, min over the four conventions of
+/// ‖c Ñx − Nx‖ / ‖Nx‖ with the best real c (data-free: the recon's own N). μ is set by the caller.
+#[allow(clippy::too_many_arguments)]
+fn pp_build_sur(p: &mut P2np<'_>, st: &std::sync::Arc<cudarc::driver::CudaStream>, dev: &Device, kern: &std::sync::Arc<Kernels>, dims: [usize; 3], groups: &[Vec<usize>], sel: &[usize], sets: &[SampleSet], omega: &[f64], op_coords: Option<&[[Vec<f32>; 3]]>, seg_host: &[hasty_nufft::SegHostTables], dcoil: &[f32], smaps: &[C32], ncoil: usize, g0: &hasty_recon::hoststack::HostStack, ls: usize) -> Vec<hasty_recon::surrogate::SurDev> {
+    use hasty_recon::hoststack::HostStack;
+    use hasty_recon::ppre::{phases, rdot};
+    use hasty_recon::surrogate::{build_symbols, SurConv, SurDev};
+    let nv: usize = dims.iter().product();
+    let tb = Instant::now();
+    let mut devs = Vec::with_capacity(sel.len());
+    for (g, &e) in sel.iter().enumerate() {
+        let mem = &groups[g];
+        // the OPERATOR's sample coordinates (seg_tables: + the concomitant linear terms and the absorbed linear field
+        // c₁ τ, cropped), else the nominal ones (2026-11-22: with the nominal coordinates the full-physics surrogate was
+        // uncorrelated with N, error 0.99; the stored maps hold only the residual field)
+        let c: [Vec<f32>; 3] = [0, 1, 2].map(|a| mem.iter().flat_map(|&t| match op_coords { Some(oc) if !oc[t][a].is_empty() => oc[t][a].clone(), _ => sets[t].coords[a].clone() }).collect());
+        let taus: Vec<f64> = mem.iter().flat_map(|&t| sets[t].tau.iter().copied()).collect();
+        assert!(!taus.is_empty() && taus.len() == c[0].len(), "--pp sur: the kept samples' coordinates / times are missing ({} / {})", c[0].len(), taus.len());
+        let tb_ = &seg_host[e];
+        {
+            // decomposition check (diagnostic): |Σ_l B_l(v) a_l(τ)| and its distance from e^{−iωτ} (exact for --phys b0
+            // without decay; with concomitant fields it includes their phase), magnitudes of B and a
+            let mut a = vec![num_complex::Complex64::new(0.0, 0.0); tb_.nseg];
+            let (mut m1, mut d1, mut n, mut amax) = (0.0f64, 0.0f64, 0usize, 0.0f64);
+            for j in 0..20 {
+                let tau = tb_.t0 + (tb_.ntab - 1) as f64 * tb_.dt * j as f64 / 19.0;
+                tb_.interp(tau, &mut a);
+                amax = a.iter().map(|z| z.norm()).fold(amax, f64::max);
+                for v in (0..nv).step_by(997) {
+                    let g: num_complex::Complex64 = (0..tb_.nseg).map(|l| { let b = tb_.segph[l * nv + v]; num_complex::Complex64::new(b.re as f64, b.im as f64) * a[l] }).sum();
+                    m1 += g.norm();
+                    d1 += (g - num_complex::Complex64::from_polar(1.0, -omega[v] * tau)).norm();
+                    n += 1;
+                }
+            }
+            let bmax = tb_.segph.iter().map(|z| (z.re * z.re + z.im * z.im).sqrt()).fold(0f32, f32::max);
+            println!("  segment decomposition check encode {e}: mean |Σ B a| {:.3}, mean |Σ B a − e^(−iωτ)| {:.3}, max |B| {bmax:.3}, max |a| {amax:.3} ({} nodes, nseg {})", m1 / n as f64, d1 / n as f64, tb_.ntab, tb_.nseg);
+        }
+        let (tmin, tmax) = taus.iter().fold((f64::MAX, f64::MIN), |(a, b), &t| (a.min(t), b.max(t)));
+        println!("  surrogate encode {e}: sample τ {:.4}..{:.4} ms, table {:.4}..{:.4} ms ({} nodes); coordinates: {}", 1e3 * tmin, 1e3 * tmax, 1e3 * tb_.t0, 1e3 * (tb_.t0 + (tb_.ntab - 1) as f64 * tb_.dt), tb_.ntab, if op_coords.is_some() { "the operator's (shifted)" } else { "nominal" });
+        let (maps, lam, loss) = build_symbols(dev, st, dims, &seg_host[e], [&c[0], &c[1], &c[2]], &taus, dcoil, ls).unwrap();
+        let sm: Vec<&[C32]> = (0..ncoil).map(|cc| &smaps[cc * nv..(cc + 1) * nv]).collect();
+        let sd = SurDev::new(dev, st, kern.clone(), dims, &maps, lam, &sm, 0.0).unwrap();
+        println!("  surrogate encode {e}: L_s {} of {} stored maps (coil-power-weighted energy not kept {loss:.2e}), {ncoil} coils, {} pooled samples, {:.0} MB device", sd.ls, seg_host[e].nseg, taus.len(), sd.device_bytes() as f64 / 1e6);
+        devs.push(sd);
+    }
+    let glens = vec![nv; groups.len()];
+    let mut xs = HostStack::zeros(&glens);
+    for g in 0..groups.len() {
+        xs.chunk_mut(g).copy_from_slice(&phases(nv, 0xCA11 + g as u64));
+    }
+    let mut nx = HostStack::zeros(&glens);
+    p.gradient_groups_host(st, groups, &xs, &mut nx).unwrap();
+    HostStack::axpby(-1.0, g0, 1.0, &mut nx);
+    for g in 0..groups.len() {
+        let dx = st.clone_htod(xs.chunk(g)).unwrap();
+        let mut dy = st.alloc_zeros::<C32>(nv).unwrap();
+        let target = nx.chunk(g);
+        let tn = rdot(target, target).sqrt();
+        let mut best = (f64::MAX, SurConv::default());
+        let mut line = String::new();
+        for (mirror, transpose, conj_maps) in [(false, false, false), (true, false, false), (false, true, false), (true, true, false), (false, false, true), (true, false, true), (false, true, true), (true, true, true)] {
+            devs[g].set_conv(st, SurConv { mirror, transpose, conj_maps, scale: 1.0 }).unwrap();
+            devs[g].apply(st, &dx, &mut dy).unwrap();
+            let y = st.clone_dtoh(&dy).unwrap();
+            let c = rdot(&y, target) / rdot(&y, &y).max(1e-300);
+            let d: Vec<C32> = y.iter().zip(target).map(|(a, b)| C32::new(c as f32 * a.re - b.re, c as f32 * a.im - b.im)).collect();
+            let err = rdot(&d, &d).sqrt() / tn.max(1e-300);
+            line += &format!(" m{}t{}c{}: {err:.3} ({c:.2e});", mirror as u8, transpose as u8, conj_maps as u8);
+            if err < best.0 && c > 0.0 {
+                best = (err, SurConv { mirror, transpose, conj_maps, scale: c });
+            }
+        }
+        devs[g].set_conv(st, best.1).unwrap();
+        devs[g].applies = 0;
+        println!("  surrogate encode {}: ‖(N − c Ñ) x‖ / ‖N x‖ by convention:{line} chosen {:?} (error {:.3})", sel[g], best.1, best.0);
+    }
+    println!("  surrogate setup (L_s {ls}): {:.1}s", tb.elapsed().as_secs_f64());
+    devs
+}
+
+/// all --pp-* work. Returns after a --pp-pool / --pp-metric setup; --pp-study exits the process.
+#[allow(clippy::too_many_arguments)]
+fn pp_run(
+    a: &PpArgs,
+    p: &mut P2np<'_>,
+    st: &std::sync::Arc<cudarc::driver::CudaStream>,
+    dev: &Device,
+    kern: &std::sync::Arc<Kernels>,
+    dims: [usize; 3],
+    enc: &[usize],
+    ne: usize,
+    support: &[bool],
+    smaps: &[C32],
+    nvc: usize,
+    omega: &[f64],
+    synth: Option<&(Vec<Vec<C32>>, Vec<f32>, Vec<bool>)>,
+    out: &std::path::Path,
+    ctl: &RunCtl,
+    circ_ws: Option<&std::sync::Arc<std::sync::Mutex<hasty_recon::precond::CircShared>>>,
+    warm_full: usize,
+    sets: &[SampleSet],
+    seg_host: Option<&[hasty_nufft::SegHostTables]>,
+    op_coords: Option<&[[Vec<f32>; 3]]>,
+) {
+    use hasty_recon::hoststack::HostStack;
+    use hasty_recon::ppre::{self, Fft3, PcgCfg, PreSpec, SymPre};
+    use std::io::Write;
+    use std::sync::Arc;
+    let tp = Instant::now();
+    let nv: usize = dims.iter().product();
+    let fft = Arc::new(Fft3::new(dims));
+    let ball = Arc::new(ppre::ball_mask(dims));
+    let study = a.study.is_some();
+    // the runs: (name, spec, iterations, tol)
+    let runs: Vec<(String, PreSpec, usize, f64)> = match &a.study {
+        Some(s) => s
+            .split(';')
+            .filter(|r| !r.trim().is_empty())
+            .map(|r| {
+                let (name, rest) = r.trim().split_once('=').unwrap_or_else(|| panic!("--pp-study run {r}: name=SPEC:ITERS[:TOL]"));
+                let f: Vec<&str> = rest.split(':').collect();
+                let spec = PreSpec::parse(f[0]).unwrap_or_else(|| panic!("--pp-study: bad preconditioner {}", f[0]));
+                let it: usize = f.get(1).map_or(100, |v| v.parse().expect("--pp-study ITERS"));
+                let tol: f64 = f.get(2).map_or(0.0, |v| v.parse().expect("--pp-study TOL"));
+                (name.to_string(), spec, it, tol)
+            })
+            .collect(),
+        None => vec![],
+    };
+    let pool = a.pool.as_ref().map(|s| PreSpec::parse(s).unwrap_or_else(|| panic!("--pp-pool {s}: none|circ|p0|p1|p1n|p12|p12n|p2[+dT[,B]]")));
+    let metric = a.metric.as_ref().map(|s| PreSpec::parse(s).unwrap_or_else(|| panic!("--pp-metric {s}")));
+    if let Some(m) = &metric {
+        // p2 = the Jacobi metric (diag N + μ)⁻¹: from_factors with the constant symbol 1 and D^{-1/2} = (diag + μ)^{-1/2}
+        assert!(m.base != "none" && m.base != "circ" && m.sur().is_none() && !m.recentre, "--pp-metric: a circulant base (p0, p1, p1n, p12, p12n, pe<ε>_<p>) or the Jacobi metric p2");
+        assert!(!m.deflates() || pool.as_ref().is_some_and(|q| q.base == m.base), "--pp-metric with deflation: --pp-pool must use the same base (its harvest gives the Ritz vectors)");
+        assert!(p.circ.len() == ne && !p.circ_map.is_empty(), "--pp-metric: needs the per-encode circulants (--precond zmshr1m, --circ-share encode)");
+    }
+    assert!(pool.is_none() || warm_full > 0, "--pp-pool: give the pooled iteration count with --warm-full N");
+    let sel: Vec<usize> = if study { a.groups.clone().unwrap_or_else(|| vec![0]) } else { (0..ne).collect() };
+    assert!(sel.iter().all(|&e| e < ne), "--pp-groups: encodes < {ne}");
+    let groups: Vec<Vec<usize>> = sel.iter().map(|&e| (0..enc.len()).filter(|&t| enc[t] == e).collect()).collect();
+    let ng = groups.len();
+    let glens = vec![nv; ng];
+    let reps: Vec<usize> = groups.iter().map(|g| g[0]).collect();
+    println!("pp: {} group(s) (encodes {:?}, {} sets each), grid {:?}; estimator: ridge μ = {:?} × λ̄_body{}, D floor {} × body median; {} probes per symbol, smoothing radius {}",
+        ng, sel, groups[0].len(), dims, a.mu, if a.band { ", band-limited to the sampled ball" } else { "" }, a.dfloor, a.probes, a.smooth);
+    // b = −Σ ∇f(0)
+    let mut g0 = HostStack::zeros(&glens);
+    p.gradient_groups_host(st, &groups, &HostStack::zeros(&glens), &mut g0).unwrap();
+    // ---- probes (one pooled pass each) --------------------------------------------------------------------------
+    let all_specs: Vec<&PreSpec> = runs.iter().map(|r| &r.1).chain(pool.iter()).chain(metric.iter()).collect();
+    let need_c = all_specs.iter().any(|s| matches!(s.base.as_str(), "p0" | "p1" | "p1n"));
+    // the symbol with the diagonal D only for p12 / p12n (p2 needs the diagonal alone)
+    let need_d = all_specs.iter().any(|s| s.base.starts_with("p12"));
+    let need_diag = all_specs.iter().any(|s| s.diag()) || a.mu.iter().any(|&m| m > 0.0);
+    let dcoil: Vec<f32> = (0..nv).map(|q| (0..nvc).map(|c| { let s = smaps[c * nv + q]; s.re * s.re + s.im * s.im }).sum()).collect();
+    let dfl = ppre::floor_at_median(&dcoil, support, a.dfloor);
+    let dmed_c = ppre::median_on(&dfl, support);
+    let dinv_c: Vec<f32> = dfl.iter().map(|&v| 1.0 / v.sqrt()).collect();
+    let nominal: Vec<Option<Vec<f32>>> = reps.iter().map(|&t| {
+        if p.circ.is_empty() {
+            return None;
+        }
+        let ci = if p.circ_map.is_empty() { t } else { p.circ_map[t] };
+        Some(p.circ[ci][0].lambda.clone())
+    }).collect();
+    let tpr = Instant::now();
+    let (lam_bar, diag, sym_c, sym_d) = {
+        let mut napply = |v: &HostStack, o: &mut HostStack| -> Result<(), hasty_recon::Error> {
+            p.gradient_groups_host(st, &groups, v, o)?;
+            HostStack::axpby(-1.0, &g0, 1.0, o);
+            Ok(())
+        };
+        let (lam_bar, diag) = if need_diag {
+            let h = ppre::probe_diag(ng, nv, a.probes, 0xD1A6, &mut napply).unwrap();
+            let mut lb = vec![];
+            let mut dg = vec![];
+            for (g, [h0, h1]) in h.into_iter().enumerate() {
+                let raw: Vec<f32> = h0.iter().zip(&h1).map(|(x, y)| 0.5 * (x + y)).collect();
+                let nb = support.iter().filter(|&&b| b).count().max(1);
+                let mean_body = raw.iter().zip(support).filter(|(_, &b)| b).map(|(&v, _)| v as f64).sum::<f64>() / nb as f64;
+                let mut sm = raw.clone();
+                ppre::smooth_box(&mut sm, dims, a.smooth.max(1), 2, false);
+                let (mut s0, mut s1) = (h0.clone(), h1.clone());
+                ppre::smooth_box(&mut s0, dims, a.smooth.max(1), 2, false);
+                ppre::smooth_box(&mut s1, dims, a.smooth.max(1), 2, false);
+                let mut rd: Vec<f64> = (0..nv).filter(|&q| support[q] && sm[q] > 0.0).map(|q| ((s0[q] - s1[q]) as f64 / sm[q] as f64).abs()).collect();
+                rd.sort_by(|x, y| x.total_cmp(y));
+                let dmean = dcoil.iter().zip(support).filter(|(_, &b)| b).map(|(&v, _)| v as f64).sum::<f64>() / nb as f64;
+                println!("  probed image diagonal of N, group {g}: body mean λ̄ = {mean_body:.4e} (coil power body mean {dmean:.3e}); probe noise after smoothing (median split-half) {:.3}", rd.get(rd.len() / 2).copied().unwrap_or(f64::NAN));
+                lb.push(mean_body);
+                dg.push(Some(ppre::floor_at_median(&sm, support, a.dfloor)));
+            }
+            (lb, dg)
+        } else {
+            (vec![f64::NAN; ng], vec![None; ng])
+        };
+        let sym_c = need_c.then(|| ppre::probe_symbol(&fft, &vec![Some(&dinv_c[..]); ng], a.probes, 0x5E1C, &mut napply).unwrap());
+        let sym_d = need_d.then(|| {
+            let di: Vec<Vec<f32>> = diag.iter().map(|d| d.as_ref().unwrap().iter().map(|&v| 1.0 / v.sqrt()).collect()).collect();
+            let r: Vec<Option<&[f32]>> = di.iter().map(|v| Some(&v[..])).collect();
+            ppre::probe_symbol(&fft, &r, a.probes, 0x5E1D, &mut napply).unwrap()
+        });
+        (lam_bar, diag, sym_c, sym_d)
+    };
+    let pr = PpProbes { dinv_c, dmed_c, lam_bar, diag, sym_c, sym_d, nominal };
+    println!("  pp probes: {:.1}s", tpr.elapsed().as_secs_f64());
+    // where the physics moves the symbol (E1): probed vs scaled nominal per k shell, group 0
+    if let (Some(sc), Some(nom)) = (&pr.sym_c, &pr.nominal[0]) {
+        let h = &sc[0];
+        let pm: Vec<f64> = h[0].iter().zip(&h[1]).map(|(x, y)| 0.5 * (*x as f64 + *y as f64)).collect();
+        let c = pm.iter().sum::<f64>() / nom.iter().map(|&v| v as f64).sum::<f64>().max(1e-300);
+        let edges = [0.125, 0.25, 0.5, 0.75, 0.9, 1.0, 1.2, f64::INFINITY];
+        let (mut sp, mut sn, mut cnt) = ([0.0f64; 8], [0.0f64; 8], [0usize; 8]);
+        for q in 0..nv {
+            let i = edges.iter().position(|&e| ppre::kradius(dims, q) <= e).unwrap_or(7);
+            sp[i] += pm[q];
+            sn[i] += c * nom[q] as f64;
+            cnt[i] += 1;
+        }
+        println!("  probed / nominal symbol (coil D, nominal scaled to the probed mean ×{c:.3e}) per k shell r ≤ {:?}: {}", edges, (0..8).map(|i| format!("{:.3}", sp[i] / sn[i].max(1e-300))).collect::<Vec<_>>().join(" "));
+        println!("    mean probed symbol per shell: {}", (0..8).map(|i| format!("{:.2e}", sp[i] / cnt[i].max(1) as f64)).collect::<Vec<_>>().join(" "));
+    }
+    // image masks for the Ritz reports: air, body, the 10 % highest |Δf| in the body
+    let air: Vec<bool> = support.iter().map(|&b| !b).collect();
+    let thr = {
+        let mut f: Vec<f64> = (0..nv).filter(|&q| support[q]).map(|q| omega[q].abs()).collect();
+        f.sort_by(|x, y| x.total_cmp(y));
+        f.get(f.len() * 9 / 10).copied().unwrap_or(0.0)
+    };
+    let hi: Vec<bool> = (0..nv).map(|q| support[q] && omega[q].abs() > thr).collect();
+    println!("  Ritz masks: air {} voxels, body {}, high field (|Δf| > {:.0} Hz, top 10 % of the body) {}", air.iter().filter(|&&b| b).count(), support.iter().filter(|&&b| b).count(), thr / std::f64::consts::TAU, hi.iter().filter(|&&b| b).count());
+    // G1 / G2: the two k-centre passes of the readout from the kept samples of encode 0 (lowest 0.5 % of |k|, split at
+    // the middle of the ADC time range): Δt between them and t_ref, their sample-weighted mid time
+    let (dt_c, t_ref) = {
+        let mem: Vec<usize> = (0..enc.len()).filter(|&t| enc[t] == 0).collect();
+        let mut v: Vec<(f32, f64)> = mem.iter().flat_map(|&t| { let s = &sets[t]; (0..s.tau.len().min(s.coords[0].len())).map(move |i| (s.coords[0][i].powi(2) + s.coords[1][i].powi(2) + s.coords[2][i].powi(2), s.tau[i])) }).collect();
+        if v.is_empty() {
+            println!("  pp: no sample times kept, Δt / t_ref unknown");
+            (f64::NAN, f64::NAN)
+        } else {
+            let (tmin, tmax) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(x.1), b.max(x.1)));
+            v.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let nlow = (v.len() / 200).max(10).min(v.len());
+            let mid = 0.5 * (tmin + tmax);
+            let (mut s1, mut n1, mut s2, mut n2) = (0.0, 0usize, 0.0, 0usize);
+            for &(_, t) in &v[..nlow] {
+                if t < mid { s1 += t; n1 += 1 } else { s2 += t; n2 += 1 }
+            }
+            let (t1, t2) = (s1 / n1.max(1) as f64, s2 / n2.max(1) as f64);
+            let tr = (s1 + s2) / (n1 + n2).max(1) as f64;
+            println!("  k-centre passes (lowest {nlow} |k| samples of encode 0): {n1} at {:.3} ms, {n2} at {:.3} ms → Δt {:.3} ms, t_ref {:.3} ms (sample-weighted)", 1e3 * t1, 1e3 * t2, 1e3 * (t2 - t1), 1e3 * tr);
+            (if n1 > 0 && n2 > 0 { t2 - t1 } else { f64::NAN }, tr)
+        }
+    };
+    let t_ref = a.tref.unwrap_or(t_ref);
+    // G1: shift of the second centre pass s(x) = Δt |∇ω(x)| / π (rad per voxel over k_max = π per voxel), ω the
+    // operator's ratemap field, central differences in voxel units
+    let shift: Vec<f32> = {
+        let [nx, ny, _] = dims;
+        let strides = [1usize, nx, nx * ny];
+        (0..nv)
+            .map(|q| {
+                let i = [q % nx, (q / nx) % ny, q / (nx * ny)];
+                let mut g2 = 0.0f64;
+                for ax in 0..3 {
+                    if dims[ax] < 2 {
+                        continue;
+                    }
+                    let sd = strides[ax];
+                    let lo = if i[ax] > 0 { q - sd } else { q };
+                    let hi = if i[ax] + 1 < dims[ax] { q + sd } else { q };
+                    let d = (omega[hi] - omega[lo]) / ((hi - lo) / sd) as f64;
+                    g2 += d * d;
+                }
+                (dt_c * g2.sqrt() / std::f64::consts::PI) as f32
+            })
+            .collect()
+    };
+    let shifted: Vec<bool> = (0..nv).map(|q| support[q] && shift[q] > 0.3).collect();
+    let vol_shift = shifted.iter().filter(|&&b| b).count() as f64 / nv as f64;
+    {
+        let mut b: Vec<f32> = (0..nv).filter(|&q| support[q]).map(|q| shift[q]).collect();
+        b.sort_by(|x, y| x.total_cmp(y));
+        let pc = |f: f64| b.get(((b.len() as f64 - 1.0) * f) as usize).copied().unwrap_or(f32::NAN);
+        println!("  G1 shift map s = Δt |∇f| / k_max in the body: median {:.2}, 75 % {:.2}, 90 % {:.2}, 95 % {:.2}; s > 0.3 in {:.1} % of the grid", pc(0.5), pc(0.75), pc(0.9), pc(0.95), 100.0 * vol_shift);
+    }
+    let ritz_report = |tag: &str, hv: &ppre::Harvest| -> ppre::RitzSet {
+        let rs = ppre::ritz(hv);
+        let n = rs.theta.len();
+        if n == 0 {
+            return rs;
+        }
+        let conv = rs.res.iter().filter(|&&r| r <= 1e-2).count();
+        let show = |i: usize| format!("{:.3e} (res {:.1e})", rs.theta[i], rs.res[i]);
+        println!("  Ritz {tag}: m {} basis, {n} pairs, {conv} with residual ≤ 1e-2; κ_eff (converged) {:.3e}; top {}; bottom {}", rs.m, rs.kappa(1e-2),
+            (0..n.min(5)).map(|j| show(n - 1 - j)).collect::<Vec<_>>().join(", "), (0..n.min(3)).map(show).collect::<Vec<_>>().join(", "));
+        let masks: [(&str, &[bool]); 4] = [("air", &air), ("body", support), ("high-field", &hi), ("s>0.3", &shifted)];
+        for (lab, i) in [("top 1", n - 1), ("top 2", n.saturating_sub(2)), ("top 3", n.saturating_sub(3)), ("bottom 1", 0), ("bottom 2", 1usize.min(n - 1))] {
+            let u = rs.vector(hv, i);
+            let e_all: f64 = u.iter().map(|v| v.re as f64 * v.re as f64 + v.im as f64 * v.im as f64).sum();
+            let e_sh: f64 = u.iter().zip(&shifted).filter(|(_, &b)| b).map(|(v, _)| v.re as f64 * v.re as f64 + v.im as f64 * v.im as f64).sum();
+            let share = e_sh / e_all.max(1e-300);
+            println!("    {lab} θ {:.3e}: {} | G1: energy share in s > 0.3 {share:.3} vs volume share {vol_shift:.3} → ratio {:.2}", rs.theta[i], ppre::energy_where(&fft, &u, &masks), share / vol_shift.max(1e-300));
+        }
+        rs
+    };
+    // ---- the study -------------------------------------------------------------------------------------------------
+    if study {
+        let mut summary = std::fs::File::create(out.join("pp_summary.txt")).unwrap();
+        let need_harvest: Vec<String> = runs.iter().filter(|r| r.1.deflates()).map(|r| r.1.base.clone()).collect();
+        let mus: Vec<f64> = if a.mu.is_empty() { vec![0.0] } else { a.mu.clone() };
+        let mut sur_cache: std::collections::HashMap<usize, Vec<hasty_recon::surrogate::SurDev>> = std::collections::HashMap::new();
+        let ncoil = a.sur_coils.unwrap_or(nvc).min(nvc).max(1);
+        for &mu_rel in &mus {
+            let mu_g: Vec<f64> = pr.lam_bar.iter().map(|&l| if mu_rel > 0.0 { mu_rel * l } else { 0.0 }).collect();
+            let mut syms: std::collections::HashMap<String, Vec<SymPre>> = std::collections::HashMap::new();
+            let mut harvests: std::collections::HashMap<String, (Vec<ppre::Harvest>, Vec<ppre::RitzSet>)> = std::collections::HashMap::new();
+            let mut xref: Option<HostStack> = None;
+            let mut b = g0.clone();
+            b.data.iter_mut().for_each(|v| *v = C32::new(-v.re, -v.im));
+            if a.band {
+                for g in 0..ng {
+                    ppre::project_band(&fft, &ball, b.chunk_mut(g));
+                }
+            }
+            for (name, spec, iters, tol) in &runs {
+                let tr = Instant::now();
+                println!("== pp run {name}: {} {}{} μ_rel {mu_rel:e}, {iters} iterations{}", spec.base, if spec.deflates() { format!("+deflation top {} bottom {}", spec.top, spec.bot) } else { String::new() }, if a.band { ", band" } else { "" }, if *tol > 0.0 { format!(", tol {tol:e}") } else { String::new() });
+                if spec.sym() {
+                    if !syms.contains_key(&spec.base) {
+                        let v: Vec<SymPre> = (0..ng).map(|g| { let (l, d) = pp_factors(&spec.base, g, &pr, mu_g[g], a, dims, support); SymPre::new(fft.clone(), l, Some(d)) }).collect();
+                        syms.insert(spec.base.clone(), v);
+                    }
+                }
+                let defl: Vec<Option<ppre::Deflation>> = if spec.deflates() {
+                    let (hv, rs) = harvests.get(&spec.base).unwrap_or_else(|| panic!("pp run {name}: run the base {} (no deflation) earlier in --pp-study", spec.base));
+                    (0..ng).map(|g| {
+                        let d = rs[g].deflation(&hv[g], spec.top, spec.bot, 1e-2);
+                        if let Some(d) = &d {
+                            println!("    deflation group {g}: rank {}, θ {:?} → {:?}", d.rank(), d.theta.iter().map(|v| format!("{v:.3e}")).collect::<Vec<_>>(), d.target.iter().map(|v| format!("{v:.3e}")).collect::<Vec<_>>());
+                        } else {
+                            println!("    deflation group {g}: no converged Ritz pair, none");
+                        }
+                        d
+                    }).collect()
+                } else {
+                    vec![None; ng]
+                };
+                assert!(!(spec.recentre && spec.deflates()), "pp run {name}: +u with +d is not supported");
+                let rec: Option<Vec<Vec<C32>>> = spec.recentre.then(|| {
+                    let sh = seg_host.expect("+u: needs the stored segment tables (--model seg)");
+                    sel.iter().map(|&e| hasty_recon::surrogate::recentre_diag(&sh[e], nv, t_ref)).collect()
+                });
+                let ci: Vec<usize> = reps.iter().map(|&t| if p.circ_map.is_empty() { 0 } else { p.circ_map[t] }).collect();
+                let base = if let Some((cheb, ls, kk, met)) = spec.sur() {
+                    assert!(!met || !p.circ.is_empty(), "pp run {name}: the inner metric needs the circulants (--precond zmshr1m), or use the n suffix");
+                    if !sur_cache.contains_key(&ls) {
+                        let sh = seg_host.expect("sur / cheb: needs the stored segment tables (--model seg)");
+                        let v = pp_build_sur(&mut *p, st, dev, kern, dims, &groups, &sel, sets, omega, op_coords, sh, &dcoil, smaps, ncoil, &g0, ls);
+                        sur_cache.insert(ls, v);
+                    }
+                    let devs = sur_cache.get_mut(&ls).unwrap();
+                    for (g, d) in devs.iter_mut().enumerate() {
+                        d.mu = mu_g[g];
+                        if cheb {
+                            let m = if met { Some(&mut p.circ[ci[g]][0]) } else { None };
+                            let (lo, hi) = d.bounds(st, m, 12, a.cheb_ratio).unwrap();
+                            println!("    Chebyshev interval of M Q̃, group {g}: [{lo:.3e}, {hi:.3e}] (Lanczos 12 + 5 %, ratio {})", a.cheb_ratio);
+                        }
+                    }
+                    let inner = if cheb { hasty_recon::surrogate::Inner::Cheb(kk) } else { hasty_recon::surrogate::Inner::Pcg(kk) };
+                    PpBase::Sur { devs: &mut devs[..], ci, inner, metric: met }
+                } else {
+                    match spec.base.as_str() {
+                        "none" => PpBase::Id,
+                        "circ" => {
+                            assert!(!p.circ.is_empty(), "pp run {name}: circ needs the circulants (--precond zmshr1m)");
+                            PpBase::Circ(reps.clone())
+                        }
+                        s => PpBase::Sym(&syms[s][..]),
+                    }
+                };
+                // every run harvests its Lanczos data (the Ritz report: κ_eff, where the outliers sit); only a base run
+                // that a later run deflates keeps it; none for a variable (flexible) preconditioner
+                let harvest = if spec.flexible() { 0 } else { a.harvest };
+                let t_setup = tr.elapsed().as_secs_f64();
+                let t_solve = Instant::now();
+                let mut tol_hit: [Option<(usize, f64)>; 3] = [None; 3];
+                let mut csv = std::fs::File::create(out.join(format!("pp_mu{mu_rel:e}_{name}.csv"))).unwrap();
+                writeln!(csv, "it,rel_res,err_ref,err_all,err_body,err_blood,air,corr_pd").unwrap();
+                let (mut it1, mut it01, mut best) = (None::<usize>, None::<usize>, (f64::MAX, 0usize));
+                let mut last = [f64::NAN; 5];
+                let mut last_ref = f64::NAN;
+                let mut x = HostStack::zeros(&glens);
+                let o = {
+                    let mut ops = PpOps { p: &mut *p, st: st.clone(), groups: &groups, g0: &g0, mu: mu_g.clone(), band: a.band.then(|| (fft.clone(), ball.clone())), base, defl, pre_s: 0.0, pre_n: 0, q_s: 0.0, q_n: 0, rec: rec.clone() };
+                    let xr = xref.as_ref();
+                    let mut cb = |k: usize, xs: &HostStack, rel: &[f64]| -> Result<bool, hasty_recon::Error> {
+                        let e_ref = xr.map_or(f64::NAN, |r| {
+                            let (mut n, mut d) = (0.0f64, 0.0f64);
+                            for g in 0..ng {
+                                let (u, v) = (xs.chunk(g), r.chunk(g));
+                                n += u.iter().zip(v).map(|(p, q)| ((p.re - q.re) as f64).powi(2) + ((p.im - q.im) as f64).powi(2)).sum::<f64>();
+                                d += v.iter().map(|q| (q.re as f64).powi(2) + (q.im as f64).powi(2)).sum::<f64>();
+                            }
+                            (n / d.max(1e-300)).sqrt()
+                        });
+                        let sc = synth.map_or([f64::NAN; 5], |(xm, stat, bm)| pp_score(xs.chunk(0), &xm[sel[0]], stat, bm));
+                        let rmax = rel.iter().cloned().fold(0.0, f64::max);
+                        writeln!(csv, "{k},{rmax:.6e},{e_ref:.6e},{:.6e},{:.6e},{:.6e},{:.6e},{:.6e}", sc[0], sc[1], sc[2], sc[3], sc[4]).unwrap();
+                        for (j, th) in [1e-2, 1e-3, 1e-4].iter().enumerate() {
+                            if e_ref <= *th && tol_hit[j].is_none() {
+                                tol_hit[j] = Some((k, t_solve.elapsed().as_secs_f64()));
+                            }
+                        }
+                        if e_ref <= 1e-2 && it1.is_none() {
+                            it1 = Some(k);
+                        }
+                        if e_ref <= 1e-3 && it01.is_none() {
+                            it01 = Some(k);
+                        }
+                        if sc[0] < best.0 {
+                            best = (sc[0], k);
+                        }
+                        last = sc;
+                        last_ref = e_ref;
+                        if k <= 3 || k % 10 == 0 {
+                            println!("  it {k}: ‖r‖/‖r₀‖ {rmax:.2e}, vs x̂ {e_ref:.3e}, vs x★ all {:.4} body {:.4} blood {:.4} air {:.4} corr {:.3}", sc[0], sc[1], sc[2], sc[3], sc[4]);
+                        }
+                        Ok(!ctl.stop_requested())
+                    };
+                    let o = ppre::pcg_groups(&mut ops, &b, &mut x, &PcgCfg { iters: *iters, tol: *tol, harvest, flexible: spec.flexible() }, &mut cb).unwrap();
+                    let ms_p = 1e3 * ops.pre_s / ops.pre_n.max(1) as f64;
+                    let ms_q = 1e3 * ops.q_s / ops.q_n.max(1) as f64;
+                    (o, ms_p, ms_q)
+                };
+                let (o, ms_p, ms_q) = o;
+                let mut ext = (f64::NAN, f64::NAN);
+                let kap = if harvest > 0 {
+                    let rs: Vec<ppre::RitzSet> = (0..ng).map(|g| ritz_report(&format!("{name} group {g}"), &o.harvest[g])).collect();
+                    let k0 = rs[0].kappa(1e-2);
+                    ext = (rs[0].theta.last().copied().unwrap_or(f64::NAN), rs[0].theta.first().copied().unwrap_or(f64::NAN));
+                    if !spec.deflates() && need_harvest.contains(&spec.base) {
+                        harvests.insert(spec.base.clone(), (o.harvest.clone(), rs));
+                    }
+                    k0
+                } else {
+                    f64::NAN
+                };
+                let line = format!("pp {name} spec {}{} mu_rel {mu_rel:e} band {}: iters {} final rel {:.2e} conv {:?}; it to 1% / 0.1% of x̂ {:?} / {:?}; vs x̂ end {last_ref:.3e}; vs x★ end all {:.4} body {:.4} blood {:.4} air {:.4} corr {:.3}; best all {:.4} at it {}; kappa_ritz {kap:.3e}; ritz extremes {:.3e} / {:.3e} (ratio {:.3e}); x̂-tol it/s 1e-2 {} 1e-3 {} 1e-4 {}; setup {t_setup:.1}s solve {:.1}s; ms per P {ms_p:.1}, per Q {ms_q:.0}; {:.0}s",
+                    format!("{}{}", spec.base, if spec.recentre { "+u" } else { "" }), if spec.deflates() { format!("+d{},{}", spec.top, spec.bot) } else { String::new() }, a.band, o.iters, o.rel.iter().cloned().fold(0.0, f64::max), o.converged, it1, it01, last[0], last[1], last[2], last[3], last[4], best.0, best.1, ext.0, ext.1, ext.0 / ext.1,
+                    tol_hit.map(|h| h.map_or("–".to_string(), |(k, t)| format!("{k}/{t:.1}")))[0], tol_hit.map(|h| h.map_or("–".to_string(), |(k, t)| format!("{k}/{t:.1}")))[1], tol_hit.map(|h| h.map_or("–".to_string(), |(k, t)| format!("{k}/{t:.1}")))[2], t_solve.elapsed().as_secs_f64(), tr.elapsed().as_secs_f64());
+                println!("{line}");
+                writeln!(summary, "{line}").unwrap();
+                if name.starts_with("ref") {
+                    xref = Some(x.clone());
+                    println!("  reference x̂ (μ_rel {mu_rel:e}) set from run {name}");
+                }
+                if ctl.stop_requested() {
+                    println!("stopped in --pp-study (run {name}); rerun repeats the study");
+                    std::process::exit(0);
+                }
+            }
+        }
+        println!("pp study done, {:.0}s", tp.elapsed().as_secs_f64());
+        std::process::exit(0);
+    }
+    // ---- --pp-pool: the pooled start of --warm-full with this preconditioner -------------------------------------
+    let mu_rel = a.mu.first().copied().unwrap_or(0.0);
+    let mu_g: Vec<f64> = pr.lam_bar.iter().map(|&l| if mu_rel > 0.0 { mu_rel * l } else { 0.0 }).collect();
+    let mut pool_harvest: Option<(Vec<ppre::Harvest>, Vec<ppre::RitzSet>)> = None;
+    if let Some(spec) = &pool {
+        assert!(!spec.deflates(), "--pp-pool: give the base only (the deflation is harvested from it)");
+        let done: Vec<String> = (0..ne).map(|e| format!("warm_full_done_{e}")).collect();
+        let have = done.iter().all(|d| ctl.load(d).unwrap().is_some());
+        let need_h = metric.as_ref().is_some_and(|m| m.deflates());
+        if have && !need_h {
+            println!("pp pool: pooled start already done (warm_full_done_*), not repeated");
+        } else {
+            let syms: Option<Vec<SymPre>> = spec.sym().then(|| (0..ng).map(|g| { let (l, d) = pp_factors(&spec.base, g, &pr, mu_g[g], a, dims, support); SymPre::new(fft.clone(), l, Some(d)) }).collect());
+            let rec: Option<Vec<Vec<C32>>> = spec.recentre.then(|| {
+                let sh = seg_host.expect("+u: needs the stored segment tables (--model seg)");
+                sel.iter().map(|&e| hasty_recon::surrogate::recentre_diag(&sh[e], nv, t_ref)).collect()
+            });
+            let ci: Vec<usize> = reps.iter().map(|&t| if p.circ_map.is_empty() { 0 } else { p.circ_map[t] }).collect();
+            let mut sur_devs: Vec<hasty_recon::surrogate::SurDev> = vec![];
+            if let Some((cheb, ls, _, met)) = spec.sur() {
+                let sh = seg_host.expect("sur / cheb: needs the stored segment tables (--model seg)");
+                let ncoil = a.sur_coils.unwrap_or(nvc).min(nvc).max(1);
+                sur_devs = pp_build_sur(&mut *p, st, dev, kern, dims, &groups, &sel, sets, omega, op_coords, sh, &dcoil, smaps, ncoil, &g0, ls);
+                for (g, d) in sur_devs.iter_mut().enumerate() {
+                    d.mu = mu_g[g];
+                    if cheb {
+                        let m = if met { Some(&mut p.circ[ci[g]][0]) } else { None };
+                        d.bounds(st, m, 12, a.cheb_ratio).unwrap();
+                    }
+                }
+            }
+            let base = match spec.sur() {
+                Some((cheb, _, kk, met)) => PpBase::Sur { devs: &mut sur_devs[..], ci: ci.clone(), inner: if cheb { hasty_recon::surrogate::Inner::Cheb(kk) } else { hasty_recon::surrogate::Inner::Pcg(kk) }, metric: met },
+                None => match spec.base.as_str() {
+                    "none" => PpBase::Id,
+                    "circ" => PpBase::Circ(reps.clone()),
+                    _ => PpBase::Sym(&syms.as_ref().unwrap()[..]),
+                },
+            };
+            let mut b = g0.clone();
+            b.data.iter_mut().for_each(|v| *v = C32::new(-v.re, -v.im));
+            if a.band {
+                for g in 0..ng {
+                    ppre::project_band(&fft, &ball, b.chunk_mut(g));
+                }
+            }
+            let mut x = HostStack::zeros(&glens);
+            let tw = Instant::now();
+            let harvest = if need_h { a.harvest.max(8) } else { 0 };
+            let (o, ms_p) = {
+                let mut ops = PpOps { p: &mut *p, st: st.clone(), groups: &groups, g0: &g0, mu: mu_g.clone(), band: a.band.then(|| (fft.clone(), ball.clone())), base, defl: vec![None; ng], pre_s: 0.0, pre_n: 0, q_s: 0.0, q_n: 0, rec: rec.clone() };
+                let mut cb = |k: usize, xs: &HostStack, rel: &[f64]| -> Result<bool, hasty_recon::Error> {
+                    if k <= 3 || k % 5 == 0 {
+                        let rmax = rel.iter().cloned().fold(0.0, f64::max);
+                        match synth {
+                            Some((xm, stat, bm)) => println!("  pp pooled it {k}: ‖r‖/‖r₀‖ max {rmax:.2e}; pooled image vs x★ frame mean: {}", pooled_image_error(xs, xm, stat, bm)),
+                            None => println!("  pp pooled it {k}: ‖r‖/‖r₀‖ max {rmax:.2e}"),
+                        }
+                    }
+                    Ok(true)
+                };
+                let o = ppre::pcg_groups(&mut ops, &b, &mut x, &PcgCfg { iters: warm_full, tol: a.tol, harvest, flexible: spec.flexible() }, &mut cb).unwrap();
+                (o, 1e3 * ops.pre_s / ops.pre_n.max(1) as f64)
+            };
+            println!("pp pooled start ({}, μ_rel {mu_rel:e}{}): {} iterations, final ‖r‖/‖r₀‖ max {:.2e}, converged {:?}; {ms_p:.1} ms per preconditioner application; {:.0}s",
+                spec.base, if a.band { ", band" } else { "" }, o.iters, o.rel.iter().cloned().fold(0.0, f64::max), o.converged, tw.elapsed().as_secs_f64());
+            for (e, d) in done.iter().enumerate() {
+                ctl.save(d, &hasty_recon::checkpoint::dev_value(st, &st.clone_htod(x.chunk(e)).unwrap()).unwrap()).unwrap();
+            }
+            if need_h {
+                let rs: Vec<ppre::RitzSet> = (0..ng).map(|g| ritz_report(&format!("pool encode {g}"), &o.harvest[g])).collect();
+                pool_harvest = Some((o.harvest, rs));
+            }
+        }
+    }
+    // ---- --pp-metric: the P²nP circulant metric from the probed symbol (+ deflation) ------------------------------
+    if let Some(spec) = &metric {
+        let tm = Instant::now();
+        for g in 0..ng {
+            let (mut lam, dinv) = pp_factors(&spec.base, g, &pr, mu_g[g], a, dims, support);
+            let ci = p.circ_map[reps[g]];
+            // device vs host on a random vector: the FFT conventions must agree (else the symbol is mirrored)
+            let host = SymPre::new(fft.clone(), lam.clone(), Some(dinv.clone()));
+            let xr = ppre::phases(nv, 77 + g as u64);
+            let mut want = vec![C32::new(0.0, 0.0); nv];
+            host.apply(&xr, &mut want);
+            let check = |pc: &mut CirculantPrecond| -> f64 {
+                let dx = st.clone_htod(&xr).unwrap();
+                let mut z = st.alloc_zeros::<C32>(nv).unwrap();
+                pc.apply(st, &dx, &mut z).unwrap();
+                let got = st.clone_dtoh(&z).unwrap();
+                let n: f64 = got.iter().zip(&want).map(|(p, q)| ((p.re - q.re) as f64).powi(2) + ((p.im - q.im) as f64).powi(2)).sum();
+                let d: f64 = want.iter().map(|q| (q.re as f64).powi(2) + (q.im as f64).powi(2)).sum();
+                (n / d).sqrt()
+            };
+            let mut pc = CirculantPrecond::from_factors(dev, st, kern.clone(), dims, &lam, &dinv).unwrap();
+            let err = check(&mut pc);
+            if err > 1e-4 {
+                let lm = ppre::mirror_symbol(&lam, dims);
+                let mut pm = CirculantPrecond::from_factors(dev, st, kern.clone(), dims, &lm, &dinv).unwrap();
+                let em = check(&mut pm);
+                println!("  pp metric encode {}: device vs host {err:.2e}, mirrored symbol {em:.2e}: {}", sel[g], if em < err { "the device FFT has the other sign: symbol mirrored" } else { "MISMATCH (kept as is)" });
+                if em < err {
+                    pc = pm;
+                    lam = lm;
+                }
+            }
+            let _ = &lam;
+            if spec.deflates() {
+                let (hv, rs) = pool_harvest.as_ref().expect("--pp-metric deflation: no pool harvest");
+                match rs[g].deflation(&hv[g], spec.top, spec.bot, 1e-2) {
+                    Some(d) => {
+                        println!("  pp metric encode {}: deflation rank {}, θ {:?} → {:?}", sel[g], d.rank(), d.theta.iter().map(|v| format!("{v:.3e}")).collect::<Vec<_>>(), d.target.iter().map(|v| format!("{v:.3e}")).collect::<Vec<_>>());
+                        pc = pc.with_deflation(st, &d.u, &d.theta, &d.target).unwrap();
+                    }
+                    None => println!("  pp metric encode {}: no converged Ritz pair, no deflation", sel[g]),
+                }
+            }
+            if let Some(ws) = circ_ws {
+                pc = pc.to_host(st, ws).unwrap();
+            }
+            // ms per application (device)
+            let dx = st.clone_htod(&xr).unwrap();
+            let mut z = st.alloc_zeros::<C32>(nv).unwrap();
+            st.synchronize().unwrap();
+            let t5 = Instant::now();
+            for _ in 0..5 {
+                pc.apply(st, &dx, &mut z).unwrap();
+            }
+            st.synchronize().unwrap();
+            println!("  pp metric encode {} ({}{}): {:.2} ms per device application, dynamic range {:.2e}", sel[g], spec.base, if pc.deflation_rank() > 0 { format!("+d{}", pc.deflation_rank()) } else { String::new() }, 1e3 * t5.elapsed().as_secs_f64() / 5.0, pc.dyn_range);
+            p.circ[ci] = vec![pc];
+        }
+        println!("pp metric: per-encode circulants replaced ({:.0}s)", tm.elapsed().as_secs_f64());
+    }
+    println!("pp setup total {:.0}s", tp.elapsed().as_secs_f64());
+}
+
+/// `--temporal` scoring weights (nf × nf, row-major): W[f][k] = ∫_{f−½}^{f+½} B_p(t − k) dt, the box average of the
+/// periodic B-spline model over frame f (knot k centred at t = k, `hasty_recon::vmodel::bspline`, as the engine's
+/// kernels), by the midpoint rule on 2000 points per frame (exact to ~1e-7 for these piecewise polynomials). Rows sum
+/// to 1 (partition of unity).
+fn temporal_box_weights(nf: usize, p: u32) -> Vec<f64> {
+    let nq = 2000;
+    let mut w = vec![0.0f64; nf * nf];
+    for f in 0..nf {
+        for q in 0..nq {
+            let t = f as f64 - 0.5 + (q as f64 + 0.5) / nq as f64;
+            for k in 0..nf {
+                // periodic: the nearest image of knot k
+                let mut d = t - k as f64;
+                d -= (d / nf as f64).round() * nf as f64;
+                w[f * nf + k] += hasty_recon::vmodel::bspline(p, d) / nq as f64;
+            }
+        }
+        let sum: f64 = w[f * nf..(f + 1) * nf].iter().sum();
+        assert!((sum - 1.0).abs() < 1e-9, "temporal_box_weights: row {f} sums to {sum}");
+    }
+    w
 }

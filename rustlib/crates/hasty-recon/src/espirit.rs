@@ -42,11 +42,14 @@ pub struct EspiritOpts {
     /// full dense eigendecomposition of the calibration Gram (exact, O(n³) single-threaded; n = nc · kernel³) instead
     /// of the randomized subspace iteration for the kept kernels only
     pub dense_eigen: bool,
+    /// first block size of the randomized subspace iteration (None: min(n, 256), doubled while too small); a known
+    /// kernel count (e.g. of the pooled calibration, for the per-respiratory-bin ones) × 1.25 skips the doubling rounds
+    pub block0: Option<usize>,
 }
 
 impl Default for EspiritOpts {
     fn default() -> Self {
-        Self { kernel: 6, sv_rel: 0.02, eig_min: 0.8, coarse: None, dense_eigen: false }
+        Self { kernel: 6, sv_rel: 0.02, eig_min: 0.8, coarse: None, dense_eigen: false, block0: None }
     }
 }
 
@@ -244,8 +247,8 @@ fn matmul_small(y: &[Complex64], t: &[Complex64], n: usize, b: usize, c: usize) 
 /// leading eigenpairs of a Hermitian PSD n × n (row-major) down to `thr` · λ_max, descending, by randomized subspace
 /// iteration (block b, 4 power steps, Rayleigh–Ritz); b doubles while the smallest Ritz value is still above the
 /// threshold. Returns all Ritz pairs of the final block (the caller thresholds).
-fn subspace_top(g: &[Complex64], n: usize, thr: f64) -> (Vec<f64>, Vec<Vec<Complex64>>) {
-    let mut b = n.min(256);
+fn subspace_top(g: &[Complex64], n: usize, thr: f64, block0: Option<usize>) -> (Vec<f64>, Vec<Vec<Complex64>>) {
+    let mut b = block0.unwrap_or(256).clamp(1, n);
     let mut seed = 0x9E3779B97F4A7C15u64;
     loop {
         let mut rnd = || {
@@ -343,7 +346,7 @@ pub fn espirit(calib: &[C32], cdims: [usize; 3], nc: usize, out: [usize; 3], o: 
     drop(rows);
     lap(0, &mut tm);
     let thr = o.sv_rel * o.sv_rel; // on eigenvalues σ² relative to σ²_max
-    let (vals, vecs) = if o.dense_eigen { dense_top(&g, n, thr) } else { subspace_top(&g, n, thr) };
+    let (vals, vecs) = if o.dense_eigen { dense_top(&g, n, thr) } else { subspace_top(&g, n, thr, o.block0) };
     drop(g);
     let sv: Vec<f64> = vals.iter().map(|v| v.max(0.0).sqrt()).collect();
     let nkeep = sv.iter().take_while(|&&s| s > o.sv_rel * sv[0]).count().max(1);

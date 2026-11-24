@@ -683,3 +683,69 @@ fn grouped_timing() {
         assert_eq!(fm, n * fg, "grouped: one transform set per group instead of per member");
     }
 }
+
+/// Regression (2026-11-22): the staged grouped gradient built its residuals as E x − y_store, so an operator that
+/// forms its own residuals (`synth::SynthSets`, the inverse crime: r = E(x − x★)) silently solved the STORE's data.
+/// The store here holds a different object; every pooled PCG path must solve the synthetic problem.
+#[test]
+fn pooled_pcg_synthetic_ignores_staged_data() {
+    use hasty_recon::kstore::{KStore, StoreSpec};
+    use hasty_recon::synth::SynthSets;
+    let dev = Device::new(0).expect("CUDA device");
+    let st = dev.default_stream();
+    let kern = Arc::new(Kernels::new(&dev).unwrap());
+    let nv: usize = DIMS.iter().product();
+    let mut r = Rng::new(46);
+    let (mut sets, _) = two_encode_sets(&dev, &kern, &mut r, 2);
+    let obj = |e: usize, s: f64| -> Vec<C32> {
+        (0..nv)
+            .map(|q| {
+                let (i, j, k) = (q % DIMS[0], (q / DIMS[0]) % DIMS[1], q / (DIMS[0] * DIMS[1]));
+                let u = [i as f64 / DIMS[0] as f64 - 0.5, j as f64 / DIMS[1] as f64 - 0.5, k as f64 / DIMS[2] as f64 - 0.5];
+                let a = if u[0] * u[0] / 0.16 + u[1] * u[1] / 0.12 + u[2] * u[2] / 0.1 < 1.0 { 1.0 + 0.3 * (u[0] * s).sin() } else { 0.0 };
+                let z = C64::from_polar(a, 0.8 * e as f64 * u[1]);
+                C32::new(z.re as f32, z.im as f32)
+            })
+            .collect()
+    };
+    let xt: Vec<Vec<C32>> = (0..2).map(|e| obj(e, 9.0)).collect();
+    // the store: data of ANOTHER object (what the old staged grouped branch read)
+    let other: Vec<Vec<C32>> = (0..2).map(|e| obj(e, 3.0).iter().map(|z| C32::new(-z.im, 2.0 * z.re)).collect()).collect();
+    let ystore: Vec<Vec<C32>> = (0..6)
+        .map(|t| {
+            let mut y = st.alloc_zeros::<C32>(sets.len_y(t)).unwrap();
+            sets.forward(&st, t, &st.clone_htod(&other[t % 2]).unwrap(), &mut y).unwrap();
+            st.clone_dtoh(&y).unwrap()
+        })
+        .collect();
+    let group_of: Vec<usize> = (0..6).map(|t| t % 2).collect();
+    let iters = 12;
+    let run = |sets: &mut SegSets, mode: PooledGrad, staged: bool| -> Vec<C32> {
+        let m: Vec<usize> = (0..6).map(|t| sets.pts[t].m).collect();
+        let lens_y: Vec<usize> = (0..6).map(|t| sets.len_y(t)).collect();
+        let xt2 = xt.clone();
+        let truth: hasty_recon::synth::TruthFn = Box::new(move |t: usize, out: &mut [C32]| out.copy_from_slice(&xt2[t % 2]));
+        let mut syn = SynthSets::new(&dev, sets, NC, 0.0, 1, truth).unwrap();
+        let ys_dev: Vec<CudaSlice<C32>> = lens_y.iter().map(|&l| st.alloc_zeros::<C32>(l).unwrap()).collect();
+        let mut p = if staged {
+            let ks = KStore::create(StoreSpec::parse("ram", std::path::Path::new("/unused")).unwrap(), NC, m, None, "").unwrap();
+            for (t, y) in ystore.iter().enumerate() {
+                ks.put(t, y).unwrap();
+            }
+            P2np::from_store(&mut syn, hasty_recon::kstage::Stager::new(&dev.ctx, Arc::new(ks)).unwrap(), vec![], &st).unwrap()
+        } else {
+            P2np::new(&mut syn, ys_dev.iter().collect(), vec![], &st).unwrap()
+        };
+        let mut xg = vec![vec![C32::new(0.0, 0.0); nv]; 2];
+        pooled_pcg_host_with(&mut p, &st, &group_of, &mut xg, iters, false, None, 0, mode).unwrap();
+        st.synchronize().unwrap();
+        xg.concat()
+    };
+    let x_rep = run(&mut sets, PooledGrad::Replicate, true);
+    let x_grp = run(&mut sets, PooledGrad::Grouped, true);
+    let x_res = run(&mut sets, PooledGrad::Grouped, false);
+    let (e_grp, e_res, e_obj, e_other) = (rel(&x_grp, &x_rep), rel(&x_res, &x_rep), rel(&x_grp, &xt.concat()), rel(&x_grp, &other.concat()));
+    eprintln!("synthetic pooled PCG, {iters} iterations: staged grouped vs staged replicate {e_grp:.1e}, resident grouped vs replicate {e_res:.1e}; grouped vs x★ {e_obj:.2e}, vs the store's object {e_other:.2e}");
+    assert!(e_grp <= 1e-3 && e_res <= 1e-3, "synthetic pooled PCG paths disagree: {e_grp:.1e} {e_res:.1e}");
+    assert!(e_obj < 0.5 && e_other > 0.9, "synthetic pooled PCG solved the store's data: vs x★ {e_obj:.2e}, vs store {e_other:.2e}");
+}

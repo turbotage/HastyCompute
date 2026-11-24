@@ -1,0 +1,31 @@
+[
+ {
+  "rho": 0.0,
+  "kappa_identity": Infinity,
+  "kappa_circ_floor_rho": Infinity,
+  "circ_eps1e-3_nonzero_range": [
+   0.24155937311316686,
+   30.308416198164657
+  ]
+ },
+ {
+  "rho": 0.1,
+  "kappa_identity": 60.99999999999999,
+  "kappa_circ_floor_rho": 313.5241402864772
+ },
+ {
+  "rho": 0.3,
+  "kappa_identity": 21.0,
+  "kappa_circ_floor_rho": 65.25628140703516
+ },
+ {
+  "rho": 1.0,
+  "kappa_identity": 7.0,
+  "kappa_circ_floor_rho": 12.997707339643716
+ },
+ {
+  "rho": 3.0,
+  "kappa_identity": 3.0,
+  "kappa_circ_floor_rho": 3.9939857845817386
+ }
+]

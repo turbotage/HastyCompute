@@ -500,6 +500,24 @@ pub fn pooled_pcg_host_with(
     every: usize,
     grad: PooledGrad,
 ) -> Result<Outcome, Error> {
+    pooled_pcg_host_probe(obj, st, group_of, x, iters, metric, ctl, every, grad, None)
+}
+
+/// [`pooled_pcg_host_with`] with a diagnostic `probe(k, x)` called after every iteration k (1-based) with the group
+/// images (chunk g = group g). Scoring only (e.g. the inverse-crime image error); it must not change the state.
+#[allow(clippy::too_many_arguments)]
+pub fn pooled_pcg_host_probe(
+    obj: &mut dyn Objective,
+    st: &Arc<CudaStream>,
+    group_of: &[usize],
+    x: &mut [Vec<C32>],
+    iters: usize,
+    metric: bool,
+    ctl: Option<(&RunCtl, &str)>,
+    every: usize,
+    grad: PooledGrad,
+    mut probe: Option<&mut dyn FnMut(usize, &HostStack)>,
+) -> Result<Outcome, Error> {
     let lens = obj.lens();
     let nt = lens.len();
     let ng = x.len();
@@ -648,6 +666,9 @@ pub fn pooled_pcg_host_with(
             rel.push(gdot(&rs, &rs, g).sqrt() / r0[g].max(1e-300));
         }
         eprintln!("  pooled PCG it {}: ‖r‖/‖r₀‖ per group {}", k + 1, rel.iter().map(|v| format!("{v:.2e}")).collect::<Vec<_>>().join(" "));
+        if let Some(pr) = probe.as_mut() {
+            pr(k + 1, &xs);
+        }
         if let Some((c, name)) = ctl {
             let next = k + 1;
             let meta = serde_json::json!({ "k": next, "rz": rz, "r0": r0 });
@@ -725,6 +746,9 @@ pub fn run_objective_host(
     // HASTY_STATE_STORE (recon_p2np --state-store): BFP gradient / secant stacks (hasty_recon::bfpstate); unset: this loop
     let store = crate::bfpstate::StateStore::from_env().map_err(Error::Format)?;
     if !store.is_f32() {
+        if crate::p2np::step_guard().is_some() {
+            eprintln!("    --step-guard: not implemented for the BFP state store (HASTY_STATE_STORE); not applied");
+        }
         return crate::bfpstate::run_objective_host_bfp(obj, st, x, precond, alpha, iters, denoise, report, ctl, store);
     }
     if let Some((c, name)) = ctl {
@@ -781,10 +805,13 @@ pub fn run_objective_host(
         let stacks: Vec<&HostStack> = if quasi { vec![x, xp, gp] } else { vec![x] };
         save_raw(c, name, &meta, &stacks, quasi.then_some((0, 1)))
     };
+    // step safeguard (p2np::step_guard, --step-guard): data term at the previous iterate, whether the last step was ZMSHR1
+    let guard = if quasi { crate::p2np::step_guard() } else { None };
+    let (mut f_prev, mut last_quasi, mut last_at, mut n_rej) = (f64::NAN, false, (f64::NAN, f64::NAN, f64::NAN), 0usize);
     for k in k0..iters {
         let mut tm = crate::p2np::IterTimer::start();
         obj.begin_iteration(k, iters);
-        let f = match obj.gradient_host(st, x, &mut g) {
+        let mut f = match obj.gradient_host(st, x, &mut g) {
             Ok(f) => f,
             Err(e) => {
                 // the state is consistent at the start of iteration k (the gradient only reads x): save it, so the
@@ -799,8 +826,24 @@ pub fn run_objective_host(
             }
         };
         tm.lap(st, 0);
-        // scaled gradient α g
-        g.data.par_chunks_mut(PAR).for_each(|c| c.iter_mut().for_each(|v| *v = C32::new(v.re * alpha as f32, v.im * alpha as f32)));
+        let reject = crate::p2np::step_guard_rejects(guard, last_quasi, f_prev, f);
+        if guard.is_some() {
+            eprintln!("    step guard it {k}: data term f {f:.4e}, f / f_prev {:.4}{}", f / f_prev, if last_quasi { " (after a ZMSHR1 step)" } else { " (after a plain step)" });
+        }
+        if reject {
+            // back to the previous iterate: x ← x_prev, α g ← g_prev (already scaled), f ← f_prev
+            n_rej += 1;
+            eprintln!("    step guard it {k}: f {f:.4e} > {:.2} × f_prev {f_prev:.4e} after the ZMSHR1 step (a {:.3}, τ {:.3e}, c {:.3e}): iterate rejected, plain step from the previous iterate ({n_rej} so far)", guard.unwrap(), last_at.0, last_at.1, last_at.2);
+            x.data.par_chunks_mut(PAR).zip(x_prev.data.par_chunks(PAR)).for_each(|(a, b)| a.copy_from_slice(b));
+            g.data.par_chunks_mut(PAR).zip(g_prev.data.par_chunks(PAR)).for_each(|(a, b)| a.copy_from_slice(b));
+            f = f_prev;
+        } else {
+            // scaled gradient α g
+            g.data.par_chunks_mut(PAR).for_each(|c| c.iter_mut().for_each(|v| *v = C32::new(v.re * alpha as f32, v.im * alpha as f32)));
+        }
+        let plain_quasi = k == 0 || !obj.curvature_pair_ok() || reject;
+        last_quasi = quasi && !plain_quasi;
+        f_prev = f;
         // step kinds: `plain` = the scaled gradient itself, `fused` = already applied (x, x_prev, g_prev updated)
         let (mut plain, mut fused) = (false, false);
         match precond {
@@ -809,7 +852,7 @@ pub fn run_objective_host(
                 metric_step_fused(obj, st, x, &g, None, &vec![(1.0, 0.0); nt], &mut ta)?;
                 fused = true;
             }
-            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if k == 0 || !obj.curvature_pair_ok() => {
+            Precond::Zmshr1 | Precond::Zmshr1M | Precond::Zmshr1Set | Precond::Zmshr1MSet if plain_quasi => {
                 if metric {
                     metric_step_fused(obj, st, x, &g, Some((&mut x_prev, &mut g_prev)), &vec![(1.0, 0.0); nt], &mut ta)?;
                     fused = true;
@@ -851,6 +894,10 @@ pub fn run_objective_host(
                     dots(r, &|s, m, gv| { let (w, z) = wz(a, tau, s, m); [w[0] * z[0] + w[1] * z[1], w[0] * w[0] + w[1] * w[1], z[0] * z[0] + z[1] * z[1], w[0] * gv[0] + w[1] * gv[1]] })
                 }).collect();
                 let ct = zmshr1_rank_one_grouped(&d2, per_set, groups.as_deref());
+                last_at = (at[0].0, at[0].1, ct[0]);
+                if guard.is_some() && !per_set && k % 10 == 0 {
+                    eprintln!("    zmshr1 it {k}: a {:.3} tau {:.3e} c {:.3e}", at[0].0, at[0].1, ct[0]);
+                }
                 // step = τ g + c w, fused with the update: x_prev ← x, g_prev ← g, x ← x − step (no step stack)
                 for ((r, &(a, tau)), &c) in ranges.iter().zip(&at).zip(&ct) {
                     x.data[r.clone()].par_chunks_mut(PAR).zip(x_prev.data[r.clone()].par_chunks_mut(PAR)).zip(g.data[r.clone()].par_chunks(PAR)).zip(g_prev.data[r.clone()].par_chunks_mut(PAR))
@@ -897,6 +944,7 @@ pub fn run_objective_host(
                     d2.push([rdot_slice(w, z), rdot_slice(w, w), rdot_slice(z, z), rdot_slice(w, g.chunk(t))]);
                 }
                 let ct = zmshr1_rank_one_grouped(&d2, per_set, groups.as_deref());
+                last_at = (at[0].0, at[0].1, ct[0]);
                 if k % 10 == 0 {
                     let (lo, hi) = at.iter().fold((f64::INFINITY, 0.0f64), |(l, h), p| (l.min(p.1), h.max(p.1)));
                     eprintln!("    zmshr1-M{} it {k}: a {:.3} tau {lo:.3e}..{hi:.3e}, rank-one in {}/{nt}", if per_set { " per set" } else { "" }, at[0].0, ct.iter().filter(|&&c| c != 0.0).count());
@@ -946,6 +994,9 @@ pub fn run_objective_host(
             }
         }
         tm.lap(st, 1);
+        // the prox step of a fixed objective (crate::p2np::prox_step): α; the metric-consistent prox is device-loop only
+        assert!(!crate::p2np::prox_in_metric(), "--prox-metric: device solver state only (--state device)");
+        crate::p2np::set_prox_step(alpha);
         denoise(k, &mut x.data);
         tm.lap(st, 2);
         report(k, x, f);
@@ -961,6 +1012,21 @@ pub fn run_objective_host(
                 save(c, name, next, x, &x_prev, &g_prev)?;
             }
         }
+    }
+    // --step-guard: one extra gradient checks the last iterate (rejected → the previous iterate, reported again)
+    if guard.is_some() && last_quasi && iters > k0 {
+        let f = obj.gradient_host(st, x, &mut g)?;
+        if crate::p2np::step_guard_rejects(guard, last_quasi, f_prev, f) {
+            n_rej += 1;
+            eprintln!("    step guard (final check): f {f:.4e} > {:.2} × f_prev {f_prev:.4e} (a {:.3}, τ {:.3e}, c {:.3e}): the last iterate is rejected, the result is the previous iterate (reported again)", guard.unwrap(), last_at.0, last_at.1, last_at.2);
+            x.data.par_chunks_mut(PAR).zip(x_prev.data.par_chunks(PAR)).for_each(|(a, b)| a.copy_from_slice(b));
+            report(iters - 1, x, f_prev);
+        } else {
+            eprintln!("    step guard (final check, one extra gradient): f {f:.4e} vs f_prev {f_prev:.4e}, accepted");
+        }
+    }
+    if guard.is_some() {
+        eprintln!("    step guard: {n_rej} iterates rejected in iterations {k0}..{iters}");
     }
     if let Some((c, name)) = ctl {
         c.clear(name);

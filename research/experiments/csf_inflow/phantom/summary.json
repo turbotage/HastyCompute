@@ -1,0 +1,1 @@
+{"cmd": "phantom", "seconds": 3.5, "cardiac": {"f": 0.93, "alias": 0.0700, "r": 0.99989, "r_lowest4": 0.99998}, "respiratory": {"f": 0.23, "alias": 0.2300, "r": 0.99830, "r_lowest4": 0.99976}, "low": {"f": 0.077, "alias": 0.0770, "r": 0.99905, "r_lowest4": 0.99987}}

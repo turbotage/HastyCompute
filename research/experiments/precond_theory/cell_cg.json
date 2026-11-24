@@ -1,0 +1,77 @@
+[
+ {
+  "rho": 0.1,
+  "metric": "identity",
+  "its": 64
+ },
+ {
+  "rho": 0.1,
+  "metric": "circ 1/(mu + 1e-3 mu_max) (current form)",
+  "its": 192
+ },
+ {
+  "rho": 0.1,
+  "metric": "circ 1/(mu + rho) (floor = ridge)",
+  "its": 172
+ },
+ {
+  "rho": 0.1,
+  "metric": "floor at one sample: 1/max(mu, 1)",
+  "its": 89
+ },
+ {
+  "rho": 0.1,
+  "metric": "1/(max(mu,1) + rho)",
+  "its": 86
+ },
+ {
+  "rho": 0.3,
+  "metric": "identity",
+  "its": 60
+ },
+ {
+  "rho": 0.3,
+  "metric": "circ 1/(mu + 1e-3 mu_max) (current form)",
+  "its": 105
+ },
+ {
+  "rho": 0.3,
+  "metric": "circ 1/(mu + rho) (floor = ridge)",
+  "its": 89
+ },
+ {
+  "rho": 0.3,
+  "metric": "floor at one sample: 1/max(mu, 1)",
+  "its": 54
+ },
+ {
+  "rho": 0.3,
+  "metric": "1/(max(mu,1) + rho)",
+  "its": 47
+ },
+ {
+  "rho": 1.0,
+  "metric": "identity",
+  "its": 48
+ },
+ {
+  "rho": 1.0,
+  "metric": "circ 1/(mu + 1e-3 mu_max) (current form)",
+  "its": 50
+ },
+ {
+  "rho": 1.0,
+  "metric": "circ 1/(mu + rho) (floor = ridge)",
+  "its": 33
+ },
+ {
+  "rho": 1.0,
+  "metric": "floor at one sample: 1/max(mu, 1)",
+  "its": 32
+ },
+ {
+  "rho": 1.0,
+  "metric": "1/(max(mu,1) + rho)",
+  "its": 30
+ }
+]

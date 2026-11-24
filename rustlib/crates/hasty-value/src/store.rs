@@ -484,7 +484,17 @@ impl ValueWriter {
 
     fn send(&mut self, bufs: Vec<Vec<u8>>) -> Result<()> {
         self.pos += bufs.iter().map(|b| b.len() as u64).sum::<u64>();
-        self.tx.as_ref().unwrap().send(bufs).map_err(|_| Error::Io(std::io::Error::other("writer thread ended")))
+        if self.tx.as_ref().unwrap().send(bufs).is_ok() {
+            return Ok(());
+        }
+        // the writer thread stopped: report ITS error (e.g. no space left on the device), not just that it ended
+        let e = match self.io.take().map(|h| h.join()) {
+            Some(Ok(Err(e))) => std::io::Error::new(e.kind(), format!("writing {}: {e}", self.tmp.display())),
+            Some(Ok(Ok(_))) => std::io::Error::other(format!("writing {}: the writer thread ended early", self.tmp.display())),
+            Some(Err(_)) => std::io::Error::other(format!("writing {}: the writer thread panicked", self.tmp.display())),
+            None => std::io::Error::other(format!("writing {}: writer thread ended", self.tmp.display())),
+        };
+        Err(Error::Io(e))
     }
 
     fn key(&mut self, k: &str) -> Result<()> {

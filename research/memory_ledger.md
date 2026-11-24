@@ -297,3 +297,22 @@ With in place both gaps are a few tens of MB; with dense they are a slot fractio
     per encode at bfp24.
   - The ledger's maps and diagonals entries must add these when the switches are on. They are off by default.
   - Dropping the f32 copies (VRAM −0.24 × / −0.49 × instead of +0.76 × / +0.51 ×) needs every pad / crop variant to decode.
+
+## 12. Update 2026-11-23: ADMM (`--prior-mode admm`, research/precond_sampling_theory.md §6)
+
+| entry | size | tier |
+|---|---|---|
+| x, z, u | 3 stacks | H |
+| work stack for $D(x+u)$, then the previous z (dual residual) | 1 stack | H |
+| per-set data step | 7 single images + the set's residual and staged data | D, one set at a time |
+| clip metric | one circulant (4 N-grid arrays + 1 temporary, FFT plans) on the device; per-encode symbols μ̃_e on the host (E × n_v × 4 B) | D / H |
+
+The host state is four stacks, the same count as the P²nP host state (x, g, x_prev, g_prev). The data step never holds a
+stack on the device. The reference data step `admm::GradXStep` (gradient oracle, all sets together) holds six more stacks
+and is for tests only.
+
+**Measured 2026-11-23:** both ADMM arms (128 × 72 × 60, 560 sets, 31 coils, 2.31 GiB per stack) were OOM-killed at a
+24 GiB cap (anon RSS 23.7 GiB), one at outer 17, one at outer 3. The P²nP arms of the same config peak at 22.8–23.3 GiB
+(`/usr/bin/time` max RSS), so the four-stack count above does not bound the peak: the prior pipeline and the report
+add transients. `recon_p2np` now logs host RSS, peak (VmHWM) and RSS after `malloc_trim` every ADMM outer iteration;
+fill in the real peak from the rerun (admm/chain_air2.sh, cap 32 GiB).

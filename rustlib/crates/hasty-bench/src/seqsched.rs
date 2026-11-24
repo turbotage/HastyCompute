@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use hasty_mrsim::physio::Ecg;
-use hasty_mrsim::sequence::{sample_record, Schedule, SAMPLE_FLOATS};
+use hasty_mrsim::sequence::{sample_record, NavBlock, Schedule, SAMPLE_FLOATS};
 use hasty_seq::girf::{played_moments, Girf, PlayedStream};
 use hasty_seq::multiecho::{golden_dirs, EchoTrain};
 use hasty_seq::traj::{acquisition_order, rotations, RotSet};
@@ -136,6 +136,10 @@ pub struct FlowSchedule {
     /// through `played_moments`)
     pub hist: usize,
     stream: Option<std::sync::Arc<PlayedStream>>,
+    /// navigator ADC windows during the encode and the tail blocks (`hasty_seq::nav`, times from the TR start); on by
+    /// default ([`FlowSchedule::without_nav`] turns them off): `Schedule::nav_blocks` / `nav_params`
+    pub nav: Vec<hasty_seq::nav::AdcWindow>,
+    pub nav_rules: Option<hasty_seq::nav::AdcRules>,
 }
 
 impl FlowSchedule {
@@ -159,6 +163,16 @@ impl FlowSchedule {
         let recon: Vec<[usize; 2]> = b["recon"].as_array().map(|a| a.iter().map(|r| [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]).collect()).unwrap_or_else(|| vec![[0, i_adc]]);
         let mut fs = Self::assemble(dt, t_rf, i_ro, i_adc, n_tr, tr_grad, base, scan_time, dwell, b0, ecg, n_frames, girf, girf_name);
         fs.set_recon(recon);
+        // navigator ADC: the design's rules (seqdesign best.nav_adc) at this dwell; a design written before the navigator
+        // ADC existed gets the GE / pge2 rules, the RF end from a symmetric hard pulse after System::prisma_xr's RF dead
+        // time (seqdesign: 100 µs dead + 100 µs pulse, t_rf = 150 µs → RF end 200 µs); `enabled: false` → none
+        let nj = &b["nav_adc"];
+        if nj["enabled"].as_bool() != Some(false) {
+            let mut rules = hasty_seq::nav::AdcRules::from_json(&nj["rules"]).unwrap_or_else(|| hasty_seq::nav::AdcRules::ge_pge2(dwell));
+            rules.dwell = dwell;
+            let rf_end = nj["rf_end"].as_f64().unwrap_or(2.0 * t_rf - hasty_seq::system::System::prisma_xr().rf_dead);
+            fs.set_nav(rf_end, u("i_enc"), u("i_tail"), rules);
+        }
         fs.meta["run"] = serde_json::json!(run);
         fs.meta["encoding"] = summ["encoding"].clone();
         fs.meta["encode"] = summ.get("encode").cloned().unwrap_or(serde_json::json!({"shape": "two-lobe"}));
@@ -173,7 +187,27 @@ impl FlowSchedule {
         let base = tr.spoke.grad.g.clone();
         let mut fs = Self::assemble(tr.dt, tr.t_rf, tr.i_ro, tr.spoke.i_adc, tr.n, tr_grad, base, scan_time, dwell, b0, ecg, n_frames, girf, girf_name);
         fs.set_recon(tr.spoke.recon.clone());
+        fs.set_nav(tr.rf_end, tr.i_enc, tr.i_tail, hasty_seq::nav::AdcRules::ge_pge2(dwell));
         fs
+    }
+    /// navigator windows of the encode block [i_enc, i_ro] and the tail block [i_tail, n_tr] (`hasty_seq::nav`)
+    pub fn set_nav(&mut self, rf_end: f64, i_enc: usize, i_tail: usize, rules: hasty_seq::nav::AdcRules) {
+        let ro_end = self.i_ro as f64 * self.dt + self.n_adc as f64 * self.dwell;
+        self.nav = hasty_seq::nav::nav_windows(self.dt, rf_end, i_enc, self.i_ro, ro_end, i_tail, self.n_tr, &rules);
+        self.nav_rules = Some(rules);
+    }
+    /// the same schedule without navigator ADC
+    pub fn without_nav(mut self) -> Self {
+        self.nav.clear();
+        self.nav_rules = None;
+        self
+    }
+    /// the navigator description for meta.json (`nav`): rules, windows (times after the RF centre), ADC events
+    pub fn nav_meta(&self) -> serde_json::Value {
+        serde_json::json!({
+            "rules": self.nav_rules.as_ref().map(|r| r.to_json()),
+            "windows": self.nav.iter().map(|w| w.to_json(self.t_rf)).collect::<Vec<_>>(),
+        })
     }
     #[allow(clippy::too_many_arguments)]
     fn assemble(dt: f64, t_rf: f64, i_ro: usize, i_adc: usize, n_tr: usize, tr_grad: Vec<Vec<Vec3>>, base: Vec<Vec3>, scan_time: f64, dwell: f64, b0: f64, ecg: Ecg, n_frames: usize, girf: Girf, girf_name: &str) -> Self {
@@ -190,7 +224,7 @@ impl FlowSchedule {
             "n_rot": n_rot, "rotations": "super-Fibonacci (n_rot), acquisition_order; readout i = rotation i / n_enc, encode i % n_enc",
             "girf": girf_name,
         });
-        Self { dt, t_rf, i_ro, i_adc, n_tr, n_enc, tr_grad, base, rots, n_readouts, dwell, n_adc, b0, ecg, n_frames, girf, girf_name: girf_name.into(), meta, recon: vec![[0, i_adc]], hist: 0, stream: None }
+        Self { dt, t_rf, i_ro, i_adc, n_tr, n_enc, tr_grad, base, rots, n_readouts, dwell, n_adc, b0, ecg, n_frames, girf, girf_name: girf_name.into(), meta, recon: vec![[0, i_adc]], hist: 0, stream: None, nav: vec![], nav_rules: None }
     }
     /// set the reconstruction ranges of the base readout and record them in the meta (`recon_raster`, and
     /// `recon_adc`: half-open ADC-index ranges of the samples inside them, n·dwell ∈ [a·dt, b·dt] — what the
@@ -247,7 +281,7 @@ impl FlowSchedule {
     pub fn with_girf(&self, girf: Girf, name: &str) -> Self {
         let mut meta = self.meta.clone();
         meta["girf"] = serde_json::json!(name);
-        let s = Self { tr_grad: self.tr_grad.clone(), base: self.base.clone(), rots: self.rots.clone(), ecg: self.ecg.clone(), girf, girf_name: name.into(), meta, recon: self.recon.clone(), stream: None, ..*self };
+        let s = Self { tr_grad: self.tr_grad.clone(), base: self.base.clone(), rots: self.rots.clone(), ecg: self.ecg.clone(), girf, girf_name: name.into(), meta, recon: self.recon.clone(), stream: None, nav: self.nav.clone(), nav_rules: self.nav_rules.clone(), ..*self };
         if self.hist > 0 { s.with_history(self.hist) } else { s }
     }
 }
@@ -282,14 +316,34 @@ impl Schedule for FlowSchedule {
         v
     }
     fn sample_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
-        let times = self.adc_times();
+        self.records_at(range, &self.adc_times())
+    }
+    fn nav_blocks(&self) -> Vec<NavBlock> {
+        self.nav.iter().map(|w| NavBlock { name: w.name().to_string(), times: w.times().iter().map(|t| t - self.t_rf).collect(), events: w.event_ranges() }).collect()
+    }
+    fn nav_params(&self, range: std::ops::Range<usize>) -> Vec<f32> {
+        if self.nav.is_empty() {
+            return vec![];
+        }
+        let times: Vec<f64> = self.nav.iter().flat_map(|w| w.times()).collect();
+        self.records_at(range, &times)
+    }
+    fn describe(&self) -> String {
+        self.describe_()
+    }
+}
+
+impl FlowSchedule {
+    /// per-sample records of readouts `range` at `times` (s from the TR start): the readout ADC or the navigator windows
+    fn records_at(&self, range: std::ops::Range<usize>, times: &[f64]) -> Vec<f32> {
+        let n_s = times.len();
         let ideal = matches!(self.girf_name.as_str(), "ideal" | "none" | "");
         if let (Some(ps), false) = (&self.stream, ideal) {
             // the chain's TR history (with_history): LTI superposition of the precomputed block responses
             let per: Vec<Vec<f32>> = hasty_seq::par_map(&range.collect::<Vec<_>>(), |&i| {
-                let pl = ps.moments(&self.history(i, self.hist), self.t_rf, &times);
-                let mut out = Vec::with_capacity(self.n_adc * SAMPLE_FLOATS);
-                for (m, &t) in pl.iter().zip(&times) {
+                let pl = ps.moments(&self.history(i, self.hist), self.t_rf, times);
+                let mut out = Vec::with_capacity(n_s * SAMPLE_FLOATS);
+                for (m, &t) in pl.iter().zip(times) {
                     let mut r = sample_record(&m.m0, &m.m1, &m.m2, &m.p, self.b0, t - self.t_rf);
                     r[15] = m.phi_b0 as f32;
                     out.extend_from_slice(&r);
@@ -309,9 +363,9 @@ impl Schedule for FlowSchedule {
                 p.truncate(self.n_tr);
                 p
             };
-            let pl = played_moments(&self.girf, &prev, &this, self.t_rf, &times);
-            let mut out = Vec::with_capacity(self.n_adc * SAMPLE_FLOATS);
-            for (m, &t) in pl.iter().zip(&times) {
+            let pl = played_moments(&self.girf, &prev, &this, self.t_rf, times);
+            let mut out = Vec::with_capacity(n_s * SAMPLE_FLOATS);
+            for (m, &t) in pl.iter().zip(times) {
                 let mut r = sample_record(&m.m0, &m.m1, &m.m2, &m.p, self.b0, t - self.t_rf);
                 // the GIRF's B0 terms: a spatially constant phase since the excitation (slot 15, added by the kernel)
                 r[15] = m.phi_b0 as f32;
@@ -321,7 +375,7 @@ impl Schedule for FlowSchedule {
         });
         per.concat()
     }
-    fn describe(&self) -> String {
+    fn describe_(&self) -> String {
         format!(
             "4D-flow yarn TR ({}): {} encodes, TR {:.3} ms, TE {:.3} ms, T_adc {:.2} ms, dwell {:.1} µs, {} rotations, GIRF {}{}",
             self.meta["run"].as_str().unwrap_or("?"),
@@ -481,6 +535,58 @@ mod tests {
         assert!(t(r[0][1] - 1) <= (ia / 2) as f64 * fw.dt + 1e-12 && t(r[0][1]) > (ia / 2) as f64 * fw.dt);
         assert!(t(r[1][0]) >= (ia / 2 + 10) as f64 * fw.dt - 1e-12 && t(r[1][0] - 1) < (ia / 2 + 10) as f64 * fw.dt);
         assert!(r[1][1] <= fw.n_adc && t(r[1][1] - 1) <= (ia - 5) as f64 * fw.dt + 1e-12);
+    }
+
+    /// navigator ADC (encode / tail blocks): the records' k are the design's γ M0 at the window times (hasty_seq::nav),
+    /// τ the time after the excitation; switching the navigator off leaves the readout records untouched
+    #[test]
+    fn flow_schedule_navigator_records() {
+        let tr = flow_tr();
+        let fs = FlowSchedule::from_tr(&tr, 0.5, 2e-6, 2.89, Ecg::new(2.0, 1.0, 0.0, 1), 20, Girf::ideal(), "ideal");
+        let nb = fs.nav_blocks();
+        assert_eq!(nb.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(), vec!["encode", "tail"]);
+        let w = tr.nav_windows(&hasty_seq::nav::AdcRules::ge_pge2(2e-6));
+        let nn: usize = nb.iter().map(|b| b.times.len()).sum();
+        let gam = 2.6752218744e8f64;
+        for i in [0usize, 3, fs.n_enc + 2] {
+            let (j, e) = (i / fs.n_enc, i % fs.n_enc);
+            let p = fs.nav_params(i..i + 1);
+            assert_eq!(p.len(), nn * SAMPLE_FLOATS);
+            let mut s0 = 0;
+            for (blk, win) in nb.iter().zip(&w) {
+                assert_eq!(blk.times.len(), win.n());
+                let k = tr.nav_k(e, &fs.rots[j], win);
+                for n in 0..blk.times.len() {
+                    let r = &p[(s0 + n) * SAMPLE_FLOATS..(s0 + n + 1) * SAMPLE_FLOATS];
+                    for a in 0..3 {
+                        let want = 2.0 * std::f64::consts::PI * k[n][a];
+                        assert!((r[a] as f64 - want).abs() < 1e-3 * (1.0 + want.abs()), "readout {i} {} sample {n} axis {a}: {} vs {want}", blk.name, r[a]);
+                    }
+                    assert!((r[13] as f64 - blk.times[n]).abs() < 1e-9);
+                }
+                s0 += blk.times.len();
+            }
+            // the encode window's records equal the TR's moments at those times (γM1 too: flow phase of the navigator)
+            let m = tr.physical(e, &fs.rots[j]).moments_at(tr.t_rf, &w[0].times());
+            for n in (0..w[0].n()).step_by(41) {
+                for a in 0..3 {
+                    let want = gam * m[n].1[a];
+                    assert!((p[n * SAMPLE_FLOATS + 3 + a] as f64 - want).abs() < 1e-4 * want.abs().max(1e-3));
+                }
+            }
+        }
+        // off: no navigator, identical readout records
+        let off = fs.with_girf(Girf::ideal(), "ideal").without_nav();
+        assert!(off.nav_blocks().is_empty() && off.nav_params(0..1).is_empty());
+        assert_eq!(off.sample_params(0..2 * fs.n_enc), fs.sample_params(0..2 * fs.n_enc));
+        // through a chain with history: the navigator records follow it (finite, close to the nominal k)
+        let g = Girf::variants().into_iter().find(|v| v.0 == "resonance").unwrap().1;
+        let fg = fs.with_girf(g, "resonance").with_history(3);
+        let (a, b) = (fs.nav_params(9..10), fg.nav_params(9..10));
+        let dk = a.chunks(SAMPLE_FLOATS).zip(b.chunks(SAMPLE_FLOATS)).map(|(p, q)| (0..3).map(|k| (p[k] - q[k]).abs()).fold(0.0f32, f32::max)).fold(0.0f32, f32::max);
+        let kmx = a.chunks(SAMPLE_FLOATS).map(|r| (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt()).fold(0.0f32, f32::max);
+        eprintln!("navigator through the resonance chain: max |Δk| {dk:.2} of {kmx:.0} rad/m");
+        assert!(dk > 0.0 && dk < 0.05 * kmx && b.iter().all(|x| x.is_finite()));
     }
 
     /// the reconstruction-side model records (hasty_recon::played, `HASTY_TRAJ=girf:`) equal the simulator's schedule

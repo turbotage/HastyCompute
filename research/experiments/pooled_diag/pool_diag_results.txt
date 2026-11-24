@@ -1,0 +1,369 @@
+## a_k16_pd
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 16.8s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = NaN, lambda_max(M N) = 5.133e1, setup 36s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0716, static body 1.0538, blood NaN, air (/‖x★‖) 0.1942; LS scale 0.0227+0.0029i; corr |x|~PD body -0.1248, all 0.1323
+  pooled image vs x★ frame mean, it 2: rel error all 1.1097, static body 1.0835, blood NaN, air (/‖x★‖) 0.2398; LS scale 0.0311+0.0039i; corr |x|~PD body -0.1236, all 0.1108
+  pooled image vs x★ frame mean, it 3: rel error all 1.1329, static body 1.1022, blood NaN, air (/‖x★‖) 0.2619; LS scale 0.0390+0.0049i; corr |x|~PD body -0.1169, all 0.1104
+  pooled image vs x★ frame mean, it 5: rel error all 1.3086, static body 1.2609, blood NaN, air (/‖x★‖) 0.3503; LS scale 0.0803+0.0099i; corr |x|~PD body -0.0928, all 0.1746
+  pooled image vs x★ frame mean, it 10: rel error all 1.5781, static body 1.5297, blood NaN, air (/‖x★‖) 0.3879; LS scale 0.1372+0.0114i; corr |x|~PD body -0.0736, all 0.2553
+  pooled image vs x★ frame mean, it 15: rel error all 1.8130, static body 1.7654, blood NaN, air (/‖x★‖) 0.4128; LS scale 0.1827+0.0159i; corr |x|~PD body -0.0309, all 0.3014
+  pooled image vs x★ frame mean, it 20: rel error all 2.0659, static body 2.0113, blood NaN, air (/‖x★‖) 0.4720; LS scale 0.2248+0.0218i; corr |x|~PD body 0.0090, all 0.3206
+  pooled image vs x★ frame mean, it 25: rel error all 2.2663, static body 2.2043, blood NaN, air (/‖x★‖) 0.5267; LS scale 0.2548+0.0237i; corr |x|~PD body 0.0282, all 0.3242
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 4.77e-2 5.10e-2 3.54e-2 3.60e-2 5.65e-2 4.48e-2 4.89e-2
+  pooled image vs x★ frame mean, it 30: rel error all 2.4210, static body 2.3501, blood NaN, air (/‖x★‖) 0.5814; LS scale 0.2772+0.0231i; corr |x|~PD body 0.0352, all 0.3233
+  pooled image vs x★ frame mean, it 35: rel error all 2.5310, static body 2.4504, blood NaN, air (/‖x★‖) 0.6338; LS scale 0.2979+0.0207i; corr |x|~PD body 0.0328, all 0.3204
+  pooled image vs x★ frame mean, it 40: rel error all 2.6407, static body 2.5474, blood NaN, air (/‖x★‖) 0.6956; LS scale 0.3214+0.0178i; corr |x|~PD body 0.0276, all 0.3174
+  pooled image vs x★ frame mean, it 45: rel error all 2.7389, static body 2.6336, blood NaN, air (/‖x★‖) 0.7523; LS scale 0.3442+0.0116i; corr |x|~PD body 0.0225, all 0.3157
+  pooled image vs x★ frame mean, it 50: rel error all 2.8173, static body 2.7028, blood NaN, air (/‖x★‖) 0.7950; LS scale 0.3619+0.0063i; corr |x|~PD body 0.0178, all 0.3154
+  pooled image vs x★ frame mean, it 55: rel error all 2.8871, static body 2.7654, blood NaN, air (/‖x★‖) 0.8297; LS scale 0.3767+0.0021i; corr |x|~PD body 0.0153, all 0.3160
+  pooled PCG it 60: ‖r‖/‖r₀‖ per group 1.75e-2 2.38e-2 1.86e-2 1.86e-2 2.73e-2 1.75e-2 1.67e-2
+  pooled image vs x★ frame mean, it 60: rel error all 2.9499, static body 2.8220, blood NaN, air (/‖x★‖) 0.8590; LS scale 0.3900-0.0014i; corr |x|~PD body 0.0137, all 0.3168
+physics-model warm start: 60 pooled PCG iterations per encode (per-encode circulant) (54s)
+    pc score (974 voxels): RMSE 2.399 m/s (rel 5.647; time mean 2.372, detail 0.355 of truth 0.355), |Δv| median 1.983 p90 3.668, > 1.00 m/s 82.3 %, phase 1.715 rad; frames 2.36 2.43 2.58 2.51 2.48 2.45 2.39 2.37 2.36 2.36 2.36 2.38 2.38 2.37 2.36 2.36 2.36 2.36 2.37 2.37
+    pc score (974 voxels): RMSE 2.397 m/s (rel 5.643; time mean 2.369, detail 0.369 of truth 0.355), |Δv| median 1.980 p90 3.668, > 1.00 m/s 82.2 %, phase 1.715 rad; frames 2.36 2.43 2.57 2.51 2.48 2.45 2.39 2.37 2.36 2.36 2.36 2.37 2.37 2.36 2.36 2.36 2.36 2.36 2.37 2.36
+## b_plain
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics none, setup 15.7s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.888; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.546, > 1.00 m/s 4.3 %, phase 0.518 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.132 p90 0.698, > 1.00 m/s 5.5 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.347; time mean 0.022, detail 0.146 of truth 0.355), |Δv| median 0.043 p90 0.214, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+adjoint test set 0: ⟨Ex, y⟩ = -8.191350e2-1.104220e4i, ⟨x, Eᴴy⟩ = -8.207524e2-1.104597e4i, |diff| / (‖Ex‖‖y‖) = 7.15e-7
+adjoint test set 70: ⟨Ex, y⟩ = 1.651340e4+7.434329e3i, ⟨x, Eᴴy⟩ = 1.651425e4+7.432400e3i, |diff| / (‖Ex‖‖y‖) = 2.79e-7
+adjoint test set 139: ⟨Ex, y⟩ = -1.336168e4+1.306056e4i, ⟨x, Eᴴy⟩ = -1.336094e4+1.306021e4i, |diff| / (‖Ex‖‖y‖) = 9.77e-8
+grouped vs member-wise (4 sets of encode 0): forward rel 2.80e-6, adjoint rel 8.22e-5
+lambda_max(N) = NaN, lambda_max(M N) = 9.836e0, setup 152s
+  pooled image vs x★ frame mean, it 1: rel error all 1.1857, static body 1.0155, blood NaN, air (/‖x★‖) 0.6121; LS scale 0.0220+0.0001i; corr |x|~PD body 0.0942, all -0.2117
+  pooled image vs x★ frame mean, it 2: rel error all 1.2828, static body 1.0258, blood NaN, air (/‖x★‖) 0.7702; LS scale 0.0357-0.0006i; corr |x|~PD body 0.1052, all -0.1839
+  pooled image vs x★ frame mean, it 3: rel error all 1.4190, static body 1.0376, blood NaN, air (/‖x★‖) 0.9679; LS scale 0.1087-0.0005i; corr |x|~PD body 0.1275, all -0.1388
+  pooled image vs x★ frame mean, it 5: rel error all 1.7232, static body 1.1658, blood NaN, air (/‖x★‖) 1.2689; LS scale 0.2243-0.0008i; corr |x|~PD body 0.1516, all -0.0696
+  pooled image vs x★ frame mean, it 10: rel error all 1.5448, static body 1.0528, blood NaN, air (/‖x★‖) 1.1305; LS scale 0.5796+0.0002i; corr |x|~PD body 0.3013, all 0.1348
+  pooled image vs x★ frame mean, it 15: rel error all 1.2084, static body 0.8148, blood NaN, air (/‖x★‖) 0.8923; LS scale 0.7547+0.0008i; corr |x|~PD body 0.4501, all 0.3123
+  pooled image vs x★ frame mean, it 20: rel error all 1.0548, static body 0.6853, blood NaN, air (/‖x★‖) 0.8019; LS scale 0.8688+0.0005i; corr |x|~PD body 0.5620, all 0.4304
+  pooled image vs x★ frame mean, it 25: rel error all 0.9731, static body 0.5937, blood NaN, air (/‖x★‖) 0.7710; LS scale 0.9182+0.0010i; corr |x|~PD body 0.6229, all 0.4745
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 2.11e-2 1.69e-2 2.12e-2 2.18e-2 1.49e-2 2.14e-2 2.09e-2
+  pooled image vs x★ frame mean, it 30: rel error all 0.9193, static body 0.5246, blood NaN, air (/‖x★‖) 0.7550; LS scale 0.9497+0.0010i; corr |x|~PD body 0.6712, all 0.5025
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (14s)
+## c_full_none
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 16.4s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = 7.622e7, lambda_max(M N) = 1.000e0, setup 35s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9200, static body 0.9107, blood NaN, air (/‖x★‖) 0.1307; LS scale 0.1120+0.0000i; corr |x|~PD body 0.1713, all 0.3734
+  pooled image vs x★ frame mean, it 2: rel error all 0.8402, static body 0.8262, blood NaN, air (/‖x★‖) 0.1527; LS scale 0.2121-0.0000i; corr |x|~PD body 0.2848, all 0.4739
+  pooled image vs x★ frame mean, it 3: rel error all 0.7648, static body 0.7439, blood NaN, air (/‖x★‖) 0.1778; LS scale 0.3211-0.0000i; corr |x|~PD body 0.3501, all 0.5899
+  pooled image vs x★ frame mean, it 5: rel error all 0.6851, static body 0.6599, blood NaN, air (/‖x★‖) 0.1839; LS scale 0.4523-0.0000i; corr |x|~PD body 0.4240, all 0.7069
+  pooled image vs x★ frame mean, it 10: rel error all 0.5432, static body 0.5213, blood NaN, air (/‖x★‖) 0.1527; LS scale 0.6396-0.0000i; corr |x|~PD body 0.6308, all 0.8379
+  pooled image vs x★ frame mean, it 15: rel error all 0.4543, static body 0.4356, blood NaN, air (/‖x★‖) 0.1289; LS scale 0.7411-0.0000i; corr |x|~PD body 0.7338, all 0.8900
+  pooled image vs x★ frame mean, it 20: rel error all 0.3844, static body 0.3699, blood NaN, air (/‖x★‖) 0.1046; LS scale 0.8112-0.0000i; corr |x|~PD body 0.8030, all 0.9236
+  pooled image vs x★ frame mean, it 25: rel error all 0.3456, static body 0.3335, blood NaN, air (/‖x★‖) 0.0907; LS scale 0.8455+0.0000i; corr |x|~PD body 0.8397, all 0.9398
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 8.86e-3 6.95e-3 6.87e-3 1.02e-2 1.10e-2 7.12e-3 9.81e-3
+  pooled image vs x★ frame mean, it 30: rel error all 0.3102, static body 0.2997, blood NaN, air (/‖x★‖) 0.0799; LS scale 0.8743+0.0000i; corr |x|~PD body 0.8696, all 0.9519
+physics-model warm start: 30 pooled PCG iterations per encode (27s)
+    pc score (974 voxels): RMSE 1.408 m/s (rel 3.316; time mean 1.363, detail 0.355 of truth 0.355), |Δv| median 0.483 p90 2.729, > 1.00 m/s 32.9 %, phase 1.116 rad; frames 1.35 1.46 1.68 1.60 1.55 1.49 1.39 1.35 1.34 1.34 1.35 1.38 1.38 1.36 1.34 1.34 1.34 1.34 1.36 1.36
+    pc score (974 voxels): RMSE 1.416 m/s (rel 3.333; time mean 1.358, detail 0.400 of truth 0.355), |Δv| median 0.482 p90 2.758, > 1.00 m/s 32.7 %, phase 1.115 rad; frames 1.35 1.46 1.69 1.60 1.56 1.49 1.40 1.37 1.36 1.35 1.36 1.39 1.38 1.36 1.34 1.35 1.34 1.35 1.36 1.37
+## c_gnl
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics none + GNL, setup 17.0s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = NaN, lambda_max(M N) = 9.754e0, setup 29s
+  pooled image vs x★ frame mean, it 1: rel error all 1.2204, static body 1.0233, blood NaN, air (/‖x★‖) 0.6651; LS scale 0.0237+0.0006i; corr |x|~PD body 0.0737, all -0.2175
+  pooled image vs x★ frame mean, it 2: rel error all 1.3377, static body 1.0410, blood NaN, air (/‖x★‖) 0.8402; LS scale 0.0379+0.0002i; corr |x|~PD body 0.0810, all -0.1884
+  pooled image vs x★ frame mean, it 3: rel error all 1.5121, static body 1.0674, blood NaN, air (/‖x★‖) 1.0709; LS scale 0.1184+0.0000i; corr |x|~PD body 0.1076, all -0.1490
+  pooled image vs x★ frame mean, it 5: rel error all 1.7755, static body 1.1895, blood NaN, air (/‖x★‖) 1.3181; LS scale 0.2240+0.0001i; corr |x|~PD body 0.1356, all -0.0875
+  pooled image vs x★ frame mean, it 10: rel error all 1.6021, static body 1.1050, blood NaN, air (/‖x★‖) 1.1601; LS scale 0.5822+0.0005i; corr |x|~PD body 0.2849, all 0.1185
+  pooled image vs x★ frame mean, it 15: rel error all 1.2615, static body 0.8546, blood NaN, air (/‖x★‖) 0.9280; LS scale 0.7602+0.0006i; corr |x|~PD body 0.4340, all 0.2827
+  pooled image vs x★ frame mean, it 20: rel error all 1.1045, static body 0.7241, blood NaN, air (/‖x★‖) 0.8341; LS scale 0.8709+0.0002i; corr |x|~PD body 0.5430, all 0.3959
+  pooled image vs x★ frame mean, it 25: rel error all 1.0196, static body 0.6309, blood NaN, air (/‖x★‖) 0.8009; LS scale 0.9184+0.0008i; corr |x|~PD body 0.5994, all 0.4386
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 1.19e-2 1.45e-2 1.95e-2 1.48e-2 1.40e-2 1.52e-2 1.35e-2
+  pooled image vs x★ frame mean, it 30: rel error all 0.9670, static body 0.5560, blood NaN, air (/‖x★‖) 0.7912; LS scale 0.9495+0.0011i; corr |x|~PD body 0.6456, all 0.4592
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (14s)
+    pc score (974 voxels): RMSE 2.368 m/s (rel 5.574; time mean 2.341, detail 0.355 of truth 0.355), |Δv| median 1.913 p90 3.658, > 1.00 m/s 80.1 %, phase 1.699 rad; frames 2.32 2.41 2.57 2.51 2.46 2.42 2.35 2.33 2.33 2.32 2.33 2.34 2.34 2.33 2.32 2.32 2.32 2.33 2.34 2.33
+    pc score (974 voxels): RMSE 2.369 m/s (rel 5.577; time mean 2.311, detail 0.523 of truth 0.355), |Δv| median 1.911 p90 3.664, > 1.00 m/s 80.1 %, phase 1.699 rad; frames 2.32 2.41 2.56 2.51 2.46 2.44 2.36 2.35 2.33 2.32 2.34 2.34 2.34 2.33 2.32 2.32 2.32 2.33 2.34 2.33
+## c_phys_nognl
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full, setup 16.2s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.888; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.546, > 1.00 m/s 4.3 %, phase 0.518 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.132 p90 0.698, > 1.00 m/s 5.5 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.347; time mean 0.022, detail 0.146 of truth 0.355), |Δv| median 0.043 p90 0.214, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = NaN, lambda_max(M N) = 5.284e1, setup 35s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0610, static body 1.0460, blood NaN, air (/‖x★‖) 0.1780; LS scale 0.0207+0.0027i; corr |x|~PD body -0.1215, all 0.1538
+  pooled image vs x★ frame mean, it 2: rel error all 1.0970, static body 1.0742, blood NaN, air (/‖x★‖) 0.2227; LS scale 0.0288+0.0037i; corr |x|~PD body -0.1204, all 0.1291
+  pooled image vs x★ frame mean, it 3: rel error all 1.1190, static body 1.0922, blood NaN, air (/‖x★‖) 0.2435; LS scale 0.0363+0.0047i; corr |x|~PD body -0.1142, all 0.1295
+  pooled image vs x★ frame mean, it 5: rel error all 1.2963, static body 1.2544, blood NaN, air (/‖x★‖) 0.3270; LS scale 0.0771+0.0105i; corr |x|~PD body -0.0903, all 0.1978
+  pooled image vs x★ frame mean, it 10: rel error all 1.5605, static body 1.5179, blood NaN, air (/‖x★‖) 0.3621; LS scale 0.1327+0.0136i; corr |x|~PD body -0.0732, all 0.2709
+  pooled image vs x★ frame mean, it 15: rel error all 1.7962, static body 1.7534, blood NaN, air (/‖x★‖) 0.3900; LS scale 0.1792+0.0200i; corr |x|~PD body -0.0325, all 0.3124
+  pooled image vs x★ frame mean, it 20: rel error all 2.0556, static body 2.0060, blood NaN, air (/‖x★‖) 0.4488; LS scale 0.2223+0.0283i; corr |x|~PD body 0.0073, all 0.3294
+  pooled image vs x★ frame mean, it 25: rel error all 2.2586, static body 2.2012, blood NaN, air (/‖x★‖) 0.5063; LS scale 0.2526+0.0313i; corr |x|~PD body 0.0270, all 0.3309
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 4.84e-2 5.26e-2 4.51e-2 4.75e-2 5.44e-2 4.71e-2 4.28e-2
+  pooled image vs x★ frame mean, it 30: rel error all 2.4044, static body 2.3388, blood NaN, air (/‖x★‖) 0.5578; LS scale 0.2726+0.0316i; corr |x|~PD body 0.0318, all 0.3294
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (27s)
+## c_plain_none
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics none, setup 16.1s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.888; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.546, > 1.00 m/s 4.3 %, phase 0.518 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.132 p90 0.698, > 1.00 m/s 5.5 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.347; time mean 0.022, detail 0.146 of truth 0.355), |Δv| median 0.043 p90 0.214, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = 1.252e8, lambda_max(M N) = 1.000e0, setup 27s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9180, static body 0.9089, blood NaN, air (/‖x★‖) 0.1284; LS scale 0.1099+0.0000i; corr |x|~PD body 0.1377, all 0.3578
+  pooled image vs x★ frame mean, it 2: rel error all 0.7765, static body 0.7571, blood NaN, air (/‖x★‖) 0.1724; LS scale 0.2781-0.0000i; corr |x|~PD body 0.2261, all 0.4862
+  pooled image vs x★ frame mean, it 3: rel error all 0.6421, static body 0.6006, blood NaN, air (/‖x★‖) 0.2270; LS scale 0.4897+0.0000i; corr |x|~PD body 0.1910, all 0.6402
+  pooled image vs x★ frame mean, it 5: rel error all 0.5680, static body 0.5221, blood NaN, air (/‖x★‖) 0.2237; LS scale 0.6072+0.0000i; corr |x|~PD body 0.2423, all 0.7106
+  pooled image vs x★ frame mean, it 10: rel error all 0.3980, static body 0.3579, blood NaN, air (/‖x★‖) 0.1743; LS scale 0.8009-0.0000i; corr |x|~PD body 0.6119, all 0.8618
+  pooled image vs x★ frame mean, it 15: rel error all 0.3191, static body 0.2855, blood NaN, air (/‖x★‖) 0.1425; LS scale 0.8694+0.0002i; corr |x|~PD body 0.7511, all 0.9111
+  pooled image vs x★ frame mean, it 20: rel error all 0.2678, static body 0.2427, blood NaN, air (/‖x★‖) 0.1131; LS scale 0.9055+0.0000i; corr |x|~PD body 0.8232, all 0.9376
+  pooled image vs x★ frame mean, it 25: rel error all 0.2230, static body 0.2048, blood NaN, air (/‖x★‖) 0.0882; LS scale 0.9320+0.0000i; corr |x|~PD body 0.8791, all 0.9581
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 2.30e-3 2.93e-3 2.00e-3 2.91e-3 3.36e-3 2.55e-3 2.04e-3
+  pooled image vs x★ frame mean, it 30: rel error all 0.2009, static body 0.1850, blood NaN, air (/‖x★‖) 0.0784; LS scale 0.9440+0.0000i; corr |x|~PD body 0.9026, all 0.9664
+physics-model warm start: 30 pooled PCG iterations per encode (13s)
+## dev_k2
+--keep 2: 26674 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 162..214 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 38.2s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+lambda_max(N) = 7.183e8, lambda_max(M N) = 5.208e1, setup 86s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9219, static body 0.9070, blood 1.0092, air (/‖x★‖) 0.1251; LS scale 0.1074+0.0000i; corr |x|~PD body 0.1678, all 0.3546
+  pooled image vs x★ frame mean, it 2: rel error all 0.8586, static body 0.8408, blood 0.9336, air (/‖x★‖) 0.1436; LS scale 0.1874+0.0000i; corr |x|~PD body 0.2549, all 0.4552
+  pooled image vs x★ frame mean, it 3: rel error all 0.7794, static body 0.7567, blood 0.8265, air (/‖x★‖) 0.1684; LS scale 0.2980+0.0000i; corr |x|~PD body 0.3233, all 0.5784
+  pooled image vs x★ frame mean, it 5: rel error all 0.6918, static body 0.6630, blood 0.7544, air (/‖x★‖) 0.1768; LS scale 0.4406+0.0000i; corr |x|~PD body 0.3881, all 0.6952
+  pooled image vs x★ frame mean, it 10: rel error all 0.5422, static body 0.5141, blood 0.6438, air (/‖x★‖) 0.1442; LS scale 0.6399+0.0000i; corr |x|~PD body 0.6061, all 0.8276
+  pooled image vs x★ frame mean, it 15: rel error all 0.4530, static body 0.4291, blood 0.5568, air (/‖x★‖) 0.1167; LS scale 0.7397-0.0000i; corr |x|~PD body 0.7142, all 0.8803
+  pooled image vs x★ frame mean, it 20: rel error all 0.3805, static body 0.3618, blood 0.4763, air (/‖x★‖) 0.0906; LS scale 0.8106-0.0000i; corr |x|~PD body 0.7852, all 0.9133
+  pooled image vs x★ frame mean, it 25: rel error all 0.3321, static body 0.3174, blood 0.4192, air (/‖x★‖) 0.0715; LS scale 0.8522-0.0000i; corr |x|~PD body 0.8283, all 0.9317
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 7.32e-3 6.99e-3 6.72e-3 7.14e-3 9.49e-3 7.98e-3 1.14e-2
+  pooled image vs x★ frame mean, it 30: rel error all 0.2921, static body 0.2805, blood 0.3689, air (/‖x★‖) 0.0572; LS scale 0.8829-0.0000i; corr |x|~PD body 0.8604, all 0.9445
+  pooled image vs x★ frame mean, it 35: rel error all 0.2628, static body 0.2529, blood 0.3299, air (/‖x★‖) 0.0494; LS scale 0.9036-0.0000i; corr |x|~PD body 0.8814, all 0.9521
+  pooled image vs x★ frame mean, it 40: rel error all 0.2345, static body 0.2260, blood 0.2913, air (/‖x★‖) 0.0438; LS scale 0.9221+0.0000i; corr |x|~PD body 0.8967, all 0.9575
+  pooled image vs x★ frame mean, it 45: rel error all 0.2110, static body 0.2033, blood 0.2591, air (/‖x★‖) 0.0407; LS scale 0.9362-0.0000i; corr |x|~PD body 0.9093, all 0.9619
+  pooled image vs x★ frame mean, it 50: rel error all 0.1947, static body 0.1874, blood 0.2366, air (/‖x★‖) 0.0395; LS scale 0.9455-0.0000i; corr |x|~PD body 0.9177, all 0.9648
+  pooled image vs x★ frame mean, it 55: rel error all 0.1781, static body 0.1710, blood 0.2137, air (/‖x★‖) 0.0387; LS scale 0.9544+0.0000i; corr |x|~PD body 0.9242, all 0.9670
+  pooled PCG it 60: ‖r‖/‖r₀‖ per group 2.11e-3 1.78e-3 2.11e-3 1.59e-3 1.66e-3 1.95e-3 1.88e-3
+  pooled image vs x★ frame mean, it 60: rel error all 0.1658, static body 0.1587, blood 0.1969, air (/‖x★‖) 0.0385; LS scale 0.9607+0.0000i; corr |x|~PD body 0.9307, all 0.9692
+physics-model warm start: 60 pooled PCG iterations per encode (210s)
+    pc score (974 voxels): RMSE 0.381 m/s (rel 0.897; time mean 0.138, detail 0.355 of truth 0.355), |Δv| median 0.126 p90 0.554, > 1.00 m/s 4.4 %, phase 0.508 rad; frames 0.13 0.51 0.93 0.78 0.66 0.54 0.27 0.16 0.18 0.16 0.15 0.23 0.21 0.18 0.15 0.14 0.13 0.11 0.14 0.16
+    pc score (974 voxels): RMSE 0.380 m/s (rel 0.894; time mean 0.139, detail 0.354 of truth 0.355), |Δv| median 0.124 p90 0.549, > 1.00 m/s 4.3 %, phase 0.505 rad; frames 0.13 0.50 0.94 0.78 0.65 0.54 0.27 0.16 0.18 0.15 0.15 0.23 0.21 0.18 0.15 0.14 0.13 0.11 0.14 0.16
+    pc score (974 voxels): RMSE 0.379 m/s (rel 0.891; time mean 0.139, detail 0.352 of truth 0.355), |Δv| median 0.122 p90 0.543, > 1.00 m/s 4.3 %, phase 0.501 rad; frames 0.13 0.50 0.94 0.78 0.65 0.53 0.27 0.16 0.17 0.15 0.15 0.23 0.21 0.18 0.15 0.14 0.12 0.11 0.14 0.16
+    pc score (974 voxels): RMSE 0.372 m/s (rel 0.876; time mean 0.139, detail 0.345 of truth 0.355), |Δv| median 0.114 p90 0.514, > 1.00 m/s 4.1 %, phase 0.485 rad; frames 0.12 0.49 0.94 0.77 0.64 0.52 0.25 0.15 0.16 0.14 0.14 0.22 0.20 0.16 0.14 0.13 0.12 0.10 0.13 0.15
+    pc score (974 voxels): RMSE 0.374 m/s (rel 0.879; time mean 0.139, detail 0.347 of truth 0.355), |Δv| median 0.116 p90 0.522, > 1.00 m/s 4.2 %, phase 0.488 rad; frames 0.12 0.49 0.94 0.77 0.64 0.52 0.26 0.15 0.17 0.14 0.14 0.22 0.20 0.17 0.14 0.13 0.12 0.10 0.13 0.15
+    pc score (974 voxels): RMSE 0.373 m/s (rel 0.879; time mean 0.139, detail 0.347 of truth 0.355), |Δv| median 0.115 p90 0.521, > 1.00 m/s 4.2 %, phase 0.488 rad; frames 0.12 0.49 0.94 0.77 0.64 0.52 0.26 0.15 0.17 0.14 0.14 0.22 0.20 0.17 0.14 0.13 0.12 0.10 0.13 0.15
+    pc score (974 voxels): RMSE 0.371 m/s (rel 0.874; time mean 0.140, detail 0.344 of truth 0.355), |Δv| median 0.111 p90 0.508, > 1.00 m/s 4.1 %, phase 0.480 rad; frames 0.12 0.49 0.95 0.77 0.64 0.51 0.25 0.15 0.16 0.14 0.14 0.21 0.19 0.16 0.13 0.12 0.11 0.10 0.13 0.14
+    pc score (974 voxels): RMSE 0.367 m/s (rel 0.863; time mean 0.140, detail 0.339 of truth 0.355), |Δv| median 0.105 p90 0.493, > 1.00 m/s 4.0 %, phase 0.469 rad; frames 0.11 0.48 0.94 0.77 0.63 0.50 0.24 0.14 0.15 0.13 0.13 0.21 0.19 0.15 0.13 0.12 0.11 0.09 0.12 0.14
+    pc score (974 voxels): RMSE 0.368 m/s (rel 0.866; time mean 0.140, detail 0.340 of truth 0.355), |Δv| median 0.105 p90 0.495, > 1.00 m/s 4.1 %, phase 0.470 rad; frames 0.12 0.48 0.95 0.77 0.63 0.51 0.24 0.14 0.15 0.13 0.13 0.21 0.19 0.16 0.13 0.12 0.11 0.09 0.12 0.14
+    pc score (974 voxels): RMSE 0.368 m/s (rel 0.865; time mean 0.140, detail 0.340 of truth 0.355), |Δv| median 0.105 p90 0.494, > 1.00 m/s 4.0 %, phase 0.469 rad; frames 0.11 0.48 0.95 0.77 0.63 0.50 0.24 0.14 0.15 0.13 0.13 0.21 0.19 0.15 0.13 0.12 0.11 0.09 0.12 0.14
+    pc score (974 voxels): RMSE 0.366 m/s (rel 0.861; time mean 0.141, detail 0.338 of truth 0.355), |Δv| median 0.100 p90 0.479, > 1.00 m/s 3.9 %, phase 0.459 rad; frames 0.11 0.47 0.97 0.76 0.62 0.50 0.24 0.14 0.15 0.13 0.13 0.20 0.18 0.15 0.12 0.11 0.10 0.09 0.12 0.13
+    pc score (974 voxels): RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad; frames 0.18 0.56 0.99 0.85 0.74 0.62 0.35 0.20 0.14 0.12 0.18 0.30 0.30 0.23 0.17 0.15 0.12 0.12 0.21 0.21
+    pc score (974 voxels): RMSE 0.539 m/s (rel 1.269; time mean 0.285, detail 0.457 of truth 0.355), |Δv| median 0.204 p90 0.812, > 1.00 m/s 6.9 %, phase 0.678 rad; frames 0.42 0.63 1.04 0.93 0.80 0.68 0.51 0.36 0.38 0.43 0.35 0.45 0.47 0.38 0.36 0.32 0.35 0.32 0.40 0.41
+    pc score (974 voxels): RMSE 0.623 m/s (rel 1.466; time mean 0.272, detail 0.560 of truth 0.355), |Δv| median 0.214 p90 0.911, > 1.00 m/s 8.6 %, phase 0.723 rad; frames 0.48 0.73 1.09 0.99 0.87 0.81 0.63 0.45 0.40 0.46 0.57 0.60 0.50 0.43 0.40 0.43 0.54 0.41 0.49 0.50
+    pc score (974 voxels): RMSE 0.619 m/s (rel 1.456; time mean 0.264, detail 0.560 of truth 0.355), |Δv| median 0.214 p90 0.891, > 1.00 m/s 8.4 %, phase 0.713 rad; frames 0.48 0.75 1.10 0.96 0.88 0.81 0.66 0.45 0.41 0.50 0.47 0.60 0.52 0.49 0.41 0.38 0.52 0.31 0.46 0.50
+    pc score (974 voxels): RMSE 0.549 m/s (rel 1.293; time mean 0.232, detail 0.498 of truth 0.355), |Δv| median 0.193 p90 0.804, > 1.00 m/s 7.0 %, phase 0.663 rad; frames 0.35 0.64 1.05 0.93 0.79 0.75 0.62 0.42 0.35 0.35 0.41 0.49 0.43 0.39 0.38 0.38 0.42 0.30 0.32 0.38
+    pc score (974 voxels): RMSE 0.524 m/s (rel 1.234; time mean 0.228, detail 0.472 of truth 0.355), |Δv| median 0.197 p90 0.744, > 1.00 m/s 6.2 %, phase 0.636 rad; frames 0.29 0.59 1.08 0.95 0.76 0.70 0.51 0.36 0.33 0.30 0.30 0.44 0.40 0.47 0.35 0.34 0.37 0.32 0.35 0.31
+    pc score (974 voxels): RMSE 0.487 m/s (rel 1.146; time mean 0.220, detail 0.434 of truth 0.355), |Δv| median 0.179 p90 0.704, > 1.00 m/s 5.5 %, phase 0.608 rad; frames 0.28 0.55 1.06 0.90 0.72 0.67 0.46 0.36 0.31 0.27 0.27 0.37 0.41 0.30 0.29 0.29 0.29 0.27 0.27 0.29
+    pc score (974 voxels): RMSE 0.473 m/s (rel 1.115; time mean 0.216, detail 0.421 of truth 0.355), |Δv| median 0.174 p90 0.694, > 1.00 m/s 5.3 %, phase 0.599 rad; frames 0.26 0.54 1.05 0.89 0.72 0.64 0.45 0.34 0.27 0.22 0.26 0.35 0.40 0.29 0.26 0.27 0.24 0.27 0.25 0.27
+    pc score (974 voxels): RMSE 0.495 m/s (rel 1.164; time mean 0.228, detail 0.439 of truth 0.355), |Δv| median 0.181 p90 0.734, > 1.00 m/s 5.9 %, phase 0.621 rad; frames 0.30 0.59 1.03 0.88 0.73 0.62 0.44 0.33 0.31 0.31 0.33 0.40 0.41 0.34 0.33 0.31 0.35 0.36 0.28 0.31
+    pc score (974 voxels): RMSE 0.494 m/s (rel 1.164; time mean 0.235, detail 0.435 of truth 0.355), |Δv| median 0.179 p90 0.727, > 1.00 m/s 6.1 %, phase 0.618 rad; frames 0.29 0.62 1.03 0.88 0.74 0.66 0.42 0.33 0.33 0.31 0.31 0.43 0.39 0.32 0.33 0.32 0.28 0.23 0.36 0.36
+    pc score (974 voxels): RMSE 0.475 m/s (rel 1.118; time mean 0.229, detail 0.416 of truth 0.355), |Δv| median 0.158 p90 0.700, > 1.00 m/s 5.9 %, phase 0.594 rad; frames 0.23 0.59 1.02 0.86 0.74 0.63 0.45 0.27 0.27 0.30 0.25 0.38 0.36 0.30 0.29 0.26 0.28 0.25 0.33 0.34
+    pc score (974 voxels): RMSE 0.378 m/s (rel 0.890; time mean 0.138, detail 0.352 of truth 0.355), |Δv| median 0.123 p90 0.544, > 1.00 m/s 4.3 %, phase 0.502 rad; frames 0.13 0.50 0.93 0.78 0.65 0.53 0.27 0.16 0.17 0.15 0.15 0.23 0.21 0.18 0.15 0.14 0.12 0.11 0.14 0.16
+    pc score (974 voxels): RMSE 0.370 m/s (rel 0.871; time mean 0.138, detail 0.343 of truth 0.355), |Δv| median 0.115 p90 0.516, > 1.00 m/s 4.0 %, phase 0.485 rad; frames 0.13 0.49 0.93 0.76 0.63 0.52 0.26 0.15 0.16 0.14 0.14 0.22 0.20 0.17 0.14 0.13 0.11 0.10 0.13 0.15
+    pc score (974 voxels): RMSE 0.364 m/s (rel 0.858; time mean 0.138, detail 0.337 of truth 0.355), |Δv| median 0.109 p90 0.495, > 1.00 m/s 3.9 %, phase 0.473 rad; frames 0.12 0.47 0.93 0.76 0.62 0.50 0.25 0.15 0.16 0.14 0.14 0.21 0.19 0.16 0.13 0.12 0.11 0.10 0.12 0.14
+    pc score (974 voxels): RMSE 0.349 m/s (rel 0.822; time mean 0.136, detail 0.322 of truth 0.355), |Δv| median 0.095 p90 0.439, > 1.00 m/s 3.6 %, phase 0.439 rad; frames 0.11 0.44 0.93 0.73 0.58 0.46 0.23 0.14 0.14 0.12 0.12 0.19 0.17 0.14 0.12 0.11 0.09 0.09 0.10 0.13
+    pc score (974 voxels): RMSE 0.350 m/s (rel 0.823; time mean 0.136, detail 0.322 of truth 0.355), |Δv| median 0.096 p90 0.443, > 1.00 m/s 3.6 %, phase 0.440 rad; frames 0.11 0.44 0.93 0.73 0.58 0.46 0.23 0.14 0.14 0.12 0.12 0.19 0.17 0.14 0.12 0.11 0.09 0.09 0.10 0.13
+    pc score (974 voxels): RMSE 0.350 m/s (rel 0.824; time mean 0.136, detail 0.322 of truth 0.355), |Δv| median 0.096 p90 0.443, > 1.00 m/s 3.6 %, phase 0.440 rad; frames 0.11 0.44 0.94 0.74 0.58 0.46 0.23 0.14 0.14 0.12 0.12 0.19 0.17 0.14 0.12 0.11 0.09 0.09 0.10 0.13
+    pc score (974 voxels): RMSE 0.346 m/s (rel 0.815; time mean 0.135, detail 0.319 of truth 0.355), |Δv| median 0.090 p90 0.420, > 1.00 m/s 3.5 %, phase 0.425 rad; frames 0.11 0.42 0.96 0.73 0.56 0.45 0.22 0.13 0.14 0.12 0.12 0.18 0.16 0.14 0.11 0.10 0.09 0.08 0.10 0.12
+    pc score (974 voxels): RMSE 0.362 m/s (rel 0.852; time mean 0.137, detail 0.335 of truth 0.355), |Δv| median 0.077 p90 0.348, > 1.00 m/s 3.1 %, phase 0.378 rad; frames 0.10 0.40 1.11 0.75 0.56 0.40 0.20 0.12 0.13 0.10 0.10 0.16 0.14 0.12 0.10 0.09 0.08 0.07 0.08 0.11
+    pc score (974 voxels): RMSE 0.335 m/s (rel 0.788; time mean 0.119, detail 0.313 of truth 0.355), |Δv| median 0.062 p90 0.253, > 1.00 m/s 2.0 %, phase 0.307 rad; frames 0.08 0.29 0.97 0.85 0.49 0.34 0.17 0.11 0.12 0.09 0.09 0.13 0.12 0.10 0.08 0.07 0.06 0.06 0.07 0.09
+    pc score (974 voxels): RMSE 0.353 m/s (rel 0.831; time mean 0.126, detail 0.330 of truth 0.355), |Δv| median 0.065 p90 0.269, > 1.00 m/s 2.3 %, phase 0.321 rad; frames 0.09 0.36 1.00 0.91 0.50 0.37 0.18 0.11 0.12 0.09 0.09 0.13 0.12 0.10 0.08 0.07 0.07 0.06 0.07 0.09
+    pc score (974 voxels): RMSE 0.421 m/s (rel 0.990; time mean 0.222, detail 0.358 of truth 0.355), |Δv| median 0.147 p90 0.670, > 1.00 m/s 4.9 %, phase 0.570 rad; frames 0.19 0.53 0.98 0.84 0.70 0.59 0.36 0.24 0.18 0.18 0.18 0.30 0.31 0.24 0.18 0.16 0.15 0.22 0.18 0.22
+    pc score (974 voxels): RMSE 0.424 m/s (rel 0.999; time mean 0.217, detail 0.365 of truth 0.355), |Δv| median 0.141 p90 0.664, > 1.00 m/s 4.9 %, phase 0.563 rad; frames 0.25 0.53 0.97 0.82 0.70 0.59 0.35 0.21 0.19 0.17 0.22 0.30 0.29 0.25 0.22 0.22 0.18 0.24 0.24 0.23
+    pc score (974 voxels): RMSE 0.408 m/s (rel 0.960; time mean 0.215, detail 0.347 of truth 0.355), |Δv| median 0.134 p90 0.645, > 1.00 m/s 4.7 %, phase 0.549 rad; frames 0.21 0.52 0.97 0.82 0.69 0.57 0.34 0.20 0.16 0.14 0.18 0.28 0.28 0.22 0.17 0.15 0.15 0.11 0.17 0.21
+    pc score (974 voxels): RMSE 0.405 m/s (rel 0.954; time mean 0.214, detail 0.344 of truth 0.355), |Δv| median 0.133 p90 0.639, > 1.00 m/s 4.6 %, phase 0.547 rad; frames 0.18 0.52 0.97 0.82 0.68 0.57 0.34 0.20 0.16 0.14 0.18 0.28 0.28 0.22 0.17 0.15 0.15 0.11 0.17 0.21
+    pc score (974 voxels): RMSE 0.401 m/s (rel 0.943; time mean 0.211, detail 0.340 of truth 0.355), |Δv| median 0.129 p90 0.624, > 1.00 m/s 4.5 %, phase 0.538 rad; frames 0.17 0.51 0.96 0.81 0.68 0.56 0.33 0.20 0.16 0.14 0.17 0.28 0.27 0.22 0.16 0.14 0.13 0.11 0.17 0.19
+    pc score (974 voxels): RMSE 0.403 m/s (rel 0.949; time mean 0.208, detail 0.345 of truth 0.355), |Δv| median 0.124 p90 0.614, > 1.00 m/s 4.4 %, phase 0.529 rad; frames 0.16 0.51 0.97 0.81 0.68 0.56 0.33 0.19 0.15 0.18 0.17 0.28 0.27 0.22 0.17 0.17 0.17 0.11 0.18 0.21
+    pc score (974 voxels): RMSE 0.403 m/s (rel 0.948; time mean 0.207, detail 0.345 of truth 0.355), |Δv| median 0.123 p90 0.613, > 1.00 m/s 4.4 %, phase 0.528 rad; frames 0.16 0.50 0.97 0.80 0.67 0.55 0.36 0.19 0.23 0.17 0.17 0.29 0.27 0.21 0.17 0.16 0.18 0.11 0.16 0.19
+    pc score (974 voxels): RMSE 0.394 m/s (rel 0.928; time mean 0.204, detail 0.337 of truth 0.355), |Δv| median 0.117 p90 0.594, > 1.00 m/s 4.3 %, phase 0.517 rad; frames 0.17 0.49 0.97 0.79 0.66 0.54 0.32 0.18 0.15 0.17 0.18 0.26 0.26 0.20 0.15 0.13 0.15 0.10 0.15 0.20
+    pc score (974 voxels): RMSE 0.393 m/s (rel 0.925; time mean 0.203, detail 0.336 of truth 0.355), |Δv| median 0.117 p90 0.592, > 1.00 m/s 4.3 %, phase 0.516 rad; frames 0.16 0.49 0.97 0.79 0.65 0.55 0.32 0.18 0.15 0.17 0.16 0.26 0.25 0.20 0.15 0.13 0.15 0.10 0.15 0.18
+    pc score (974 voxels): RMSE 0.382 m/s (rel 0.899; time mean 0.197, detail 0.327 of truth 0.355), |Δv| median 0.110 p90 0.553, > 1.00 m/s 4.0 %, phase 0.496 rad; frames 0.14 0.48 0.98 0.77 0.64 0.53 0.30 0.17 0.14 0.12 0.15 0.24 0.23 0.19 0.14 0.12 0.11 0.10 0.14 0.16
+## d_full_circ3d
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 17.0s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 552960 modes, 70619 outside the 3D sampled support floored at λ_edge / λ_max = 1.07e-4; 80.3 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 69787 outside the 3D sampled support floored at λ_edge / λ_max = 1.06e-4; 80.3 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 69736 outside the 3D sampled support floored at λ_edge / λ_max = 1.04e-4; 80.8 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 69318 outside the 3D sampled support floored at λ_edge / λ_max = 1.02e-4; 81.0 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 70111 outside the 3D sampled support floored at λ_edge / λ_max = 1.03e-4; 80.7 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 69637 outside the 3D sampled support floored at λ_edge / λ_max = 1.09e-4; 80.5 % of the modes at the floor ε = 1e-3 λ_max
+  circulant: 552960 modes, 69508 outside the 3D sampled support floored at λ_edge / λ_max = 1.04e-4; 80.5 % of the modes at the floor ε = 1e-3 λ_max
+lambda_max(N) = NaN, lambda_max(M N) = 5.134e1, setup 37s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0714, static body 1.0537, blood NaN, air (/‖x★‖) 0.1939; LS scale 0.0227+0.0029i; corr |x|~PD body -0.1248, all 0.1324
+  pooled image vs x★ frame mean, it 2: rel error all 1.1096, static body 1.0834, blood NaN, air (/‖x★‖) 0.2397; LS scale 0.0311+0.0039i; corr |x|~PD body -0.1236, all 0.1109
+  pooled image vs x★ frame mean, it 3: rel error all 1.1328, static body 1.1021, blood NaN, air (/‖x★‖) 0.2619; LS scale 0.0390+0.0049i; corr |x|~PD body -0.1168, all 0.1105
+  pooled image vs x★ frame mean, it 5: rel error all 1.3085, static body 1.2608, blood NaN, air (/‖x★‖) 0.3502; LS scale 0.0803+0.0099i; corr |x|~PD body -0.0927, all 0.1746
+  pooled image vs x★ frame mean, it 10: rel error all 1.5780, static body 1.5296, blood NaN, air (/‖x★‖) 0.3879; LS scale 0.1372+0.0114i; corr |x|~PD body -0.0736, all 0.2553
+  pooled image vs x★ frame mean, it 15: rel error all 1.8129, static body 1.7653, blood NaN, air (/‖x★‖) 0.4128; LS scale 0.1827+0.0159i; corr |x|~PD body -0.0309, all 0.3014
+  pooled image vs x★ frame mean, it 20: rel error all 2.0658, static body 2.0111, blood NaN, air (/‖x★‖) 0.4720; LS scale 0.2247+0.0218i; corr |x|~PD body 0.0092, all 0.3207
+  pooled image vs x★ frame mean, it 25: rel error all 2.2663, static body 2.2042, blood NaN, air (/‖x★‖) 0.5268; LS scale 0.2548+0.0236i; corr |x|~PD body 0.0304, all 0.3243
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 4.23e-2 3.53e-2 4.41e-2 5.37e-2 5.66e-2 4.77e-2 4.10e-2
+  pooled image vs x★ frame mean, it 30: rel error all 2.4216, static body 2.3507, blood NaN, air (/‖x★‖) 0.5818; LS scale 0.2773+0.0231i; corr |x|~PD body 0.0353, all 0.3231
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (27s)
+    pc score (974 voxels): RMSE 2.310 m/s (rel 5.438; time mean 2.282, detail 0.355 of truth 0.355), |Δv| median 1.873 p90 3.579, > 1.00 m/s 77.9 %, phase 1.677 rad; frames 2.28 2.33 2.47 2.41 2.38 2.35 2.30 2.29 2.28 2.28 2.28 2.29 2.29 2.28 2.28 2.28 2.28 2.28 2.28 2.28
+    pc score (974 voxels): RMSE 2.307 m/s (rel 5.431; time mean 2.271, detail 0.405 of truth 0.355), |Δv| median 1.874 p90 3.579, > 1.00 m/s 78.0 %, phase 1.677 rad; frames 2.27 2.33 2.46 2.41 2.37 2.35 2.30 2.29 2.28 2.28 2.28 2.28 2.28 2.28 2.28 2.28 2.28 2.28 2.27 2.28
+## e_k16_eps1e1
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 17.0s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 100.0 % of the 552960 modes at the floor ε = 1e-1 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 1.204e0, setup 36s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9577, static body 0.9446, blood NaN, air (/‖x★‖) 0.1578; LS scale 0.0791+0.0004i; corr |x|~PD body -0.0109, all 0.1627
+  pooled image vs x★ frame mean, it 2: rel error all 0.9174, static body 0.8982, blood NaN, air (/‖x★‖) 0.1871; LS scale 0.1404+0.0005i; corr |x|~PD body 0.1110, all 0.2616
+  pooled image vs x★ frame mean, it 3: rel error all 0.8811, static body 0.8523, blood NaN, air (/‖x★‖) 0.2231; LS scale 0.2155-0.0010i; corr |x|~PD body 0.1726, all 0.3808
+  pooled image vs x★ frame mean, it 5: rel error all 0.8440, static body 0.8031, blood NaN, air (/‖x★‖) 0.2596; LS scale 0.3264-0.0056i; corr |x|~PD body 0.2065, all 0.5075
+  pooled image vs x★ frame mean, it 10: rel error all 0.7662, static body 0.7177, blood NaN, air (/‖x★‖) 0.2682; LS scale 0.4999-0.0020i; corr |x|~PD body 0.3715, all 0.6509
+  pooled image vs x★ frame mean, it 15: rel error all 0.7029, static body 0.6548, blood NaN, air (/‖x★‖) 0.2557; LS scale 0.6067-0.0015i; corr |x|~PD body 0.4869, all 0.7260
+  pooled image vs x★ frame mean, it 20: rel error all 0.6466, static body 0.6043, blood NaN, air (/‖x★‖) 0.2300; LS scale 0.6898-0.0032i; corr |x|~PD body 0.5704, all 0.7853
+  pooled image vs x★ frame mean, it 25: rel error all 0.6087, static body 0.5716, blood NaN, air (/‖x★‖) 0.2091; LS scale 0.7382-0.0037i; corr |x|~PD body 0.6325, all 0.8256
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 1.35e-2 1.13e-2 1.45e-2 1.08e-2 1.13e-2 1.48e-2 1.31e-2
+  pooled image vs x★ frame mean, it 30: rel error all 0.5681, static body 0.5358, blood NaN, air (/‖x★‖) 0.1889; LS scale 0.7822-0.0037i; corr |x|~PD body 0.6900, all 0.8586
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (28s)
+    pc score (974 voxels): RMSE 1.745 m/s (rel 4.108; time mean 1.709, detail 0.355 of truth 0.355), |Δv| median 0.849 p90 3.263, > 1.00 m/s 45.9 %, phase 1.290 rad; frames 1.70 1.80 1.99 1.92 1.87 1.82 1.73 1.70 1.69 1.68 1.69 1.70 1.71 1.70 1.69 1.68 1.68 1.68 1.70 1.70
+    pc score (974 voxels): RMSE 1.743 m/s (rel 4.103; time mean 1.701, detail 0.380 of truth 0.355), |Δv| median 0.857 p90 3.258, > 1.00 m/s 46.1 %, phase 1.292 rad; frames 1.70 1.80 1.99 1.91 1.86 1.82 1.73 1.70 1.69 1.68 1.69 1.70 1.71 1.71 1.69 1.68 1.68 1.69 1.70 1.70
+## e_k16_eps1e2
+--keep 16: 3301 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 13..35 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 16.7s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 99.8 % of the 552960 modes at the floor ε = 1e-2 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 1.093e1, setup 36s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0150, static body 0.9966, blood NaN, air (/‖x★‖) 0.1920; LS scale 0.0384+0.0024i; corr |x|~PD body -0.1068, all 0.0626
+  pooled image vs x★ frame mean, it 2: rel error all 1.0171, static body 0.9941, blood NaN, air (/‖x★‖) 0.2153; LS scale 0.0506+0.0033i; corr |x|~PD body -0.0905, all 0.0599
+  pooled image vs x★ frame mean, it 3: rel error all 1.0244, static body 0.9921, blood NaN, air (/‖x★‖) 0.2552; LS scale 0.0787+0.0051i; corr |x|~PD body -0.0539, all 0.1051
+  pooled image vs x★ frame mean, it 5: rel error all 1.0828, static body 1.0277, blood NaN, air (/‖x★‖) 0.3409; LS scale 0.1453+0.0064i; corr |x|~PD body -0.0601, all 0.2158
+  pooled image vs x★ frame mean, it 10: rel error all 1.1877, static body 1.1187, blood NaN, air (/‖x★‖) 0.3989; LS scale 0.2513+0.0060i; corr |x|~PD body -0.0326, all 0.3344
+  pooled image vs x★ frame mean, it 15: rel error all 1.2686, static body 1.1936, blood NaN, air (/‖x★‖) 0.4296; LS scale 0.3272+0.0076i; corr |x|~PD body 0.0171, all 0.3729
+  pooled image vs x★ frame mean, it 20: rel error all 1.3296, static body 1.2545, blood NaN, air (/‖x★‖) 0.4407; LS scale 0.3846+0.0043i; corr |x|~PD body 0.0433, all 0.3932
+  pooled image vs x★ frame mean, it 25: rel error all 1.3730, static body 1.3000, blood NaN, air (/‖x★‖) 0.4416; LS scale 0.4187+0.0010i; corr |x|~PD body 0.0556, all 0.4073
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 2.66e-2 3.31e-2 2.41e-2 2.50e-2 2.29e-2 2.72e-2 2.44e-2
+  pooled image vs x★ frame mean, it 30: rel error all 1.4119, static body 1.3407, blood NaN, air (/‖x★‖) 0.4427; LS scale 0.4574-0.0027i; corr |x|~PD body 0.0723, all 0.4243
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (28s)
+    pc score (974 voxels): RMSE 1.983 m/s (rel 4.669; time mean 1.951, detail 0.355 of truth 0.355), |Δv| median 1.416 p90 3.363, > 1.00 m/s 58.8 %, phase 1.477 rad; frames 1.95 2.01 2.17 2.10 2.06 2.03 1.97 1.95 1.94 1.94 1.95 1.96 1.97 1.96 1.95 1.95 1.94 1.94 1.95 1.95
+    pc score (974 voxels): RMSE 1.981 m/s (rel 4.663; time mean 1.933, detail 0.431 of truth 0.355), |Δv| median 1.414 p90 3.358, > 1.00 m/s 58.8 %, phase 1.477 rad; frames 1.94 2.02 2.16 2.09 2.07 2.03 1.97 1.95 1.94 1.94 1.95 1.96 1.97 1.95 1.95 1.95 1.93 1.94 1.95 1.95
+## e_k2_circ
+--keep 2: 26674 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 162..214 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 38.3s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 90.9 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 91.0 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 5.208e1, setup 99s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0629, static body 1.0459, blood NaN, air (/‖x★‖) 0.1895; LS scale 0.0244+0.0029i; corr |x|~PD body -0.1314, all 0.1244
+  pooled image vs x★ frame mean, it 2: rel error all 1.1007, static body 1.0748, blood NaN, air (/‖x★‖) 0.2375; LS scale 0.0330+0.0040i; corr |x|~PD body -0.1270, all 0.1081
+  pooled image vs x★ frame mean, it 3: rel error all 1.1265, static body 1.0950, blood NaN, air (/‖x★‖) 0.2647; LS scale 0.0425+0.0050i; corr |x|~PD body -0.1150, all 0.1088
+  pooled image vs x★ frame mean, it 5: rel error all 1.2591, static body 1.2137, blood NaN, air (/‖x★‖) 0.3351; LS scale 0.0784+0.0086i; corr |x|~PD body -0.0888, all 0.1774
+  pooled image vs x★ frame mean, it 10: rel error all 1.5604, static body 1.5131, blood NaN, air (/‖x★‖) 0.3810; LS scale 0.1502+0.0104i; corr |x|~PD body -0.0584, all 0.2758
+  pooled image vs x★ frame mean, it 15: rel error all 1.7421, static body 1.6985, blood NaN, air (/‖x★‖) 0.3873; LS scale 0.1897+0.0157i; corr |x|~PD body -0.0208, all 0.3213
+  pooled image vs x★ frame mean, it 20: rel error all 1.9290, static body 1.8870, blood NaN, air (/‖x★‖) 0.4001; LS scale 0.2313+0.0210i; corr |x|~PD body 0.0246, all 0.3523
+  pooled image vs x★ frame mean, it 25: rel error all 2.0822, static body 2.0427, blood NaN, air (/‖x★‖) 0.4033; LS scale 0.2633+0.0227i; corr |x|~PD body 0.0518, all 0.3659
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 4.74e-2 4.38e-2 5.57e-2 6.48e-2 4.58e-2 6.38e-2 5.35e-2
+  pooled image vs x★ frame mean, it 30: rel error all 2.1897, static body 2.1519, blood NaN, air (/‖x★‖) 0.4050; LS scale 0.2882+0.0227i; corr |x|~PD body 0.0662, all 0.3739
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (109s)
+    pc score (974 voxels): RMSE 1.410 m/s (rel 3.318; time mean 1.364, detail 0.355 of truth 0.355), |Δv| median 0.552 p90 2.690, > 1.00 m/s 33.5 %, phase 1.174 rad; frames 1.35 1.46 1.68 1.60 1.54 1.48 1.39 1.35 1.34 1.34 1.35 1.38 1.38 1.36 1.35 1.35 1.35 1.35 1.36 1.37
+    pc score (974 voxels): RMSE 1.418 m/s (rel 3.338; time mean 1.364, detail 0.388 of truth 0.355), |Δv| median 0.554 p90 2.705, > 1.00 m/s 33.5 %, phase 1.174 rad; frames 1.35 1.46 1.69 1.61 1.55 1.49 1.40 1.37 1.35 1.35 1.36 1.39 1.39 1.36 1.36 1.35 1.35 1.35 1.37 1.37
+## e_k2_none
+--keep 2: 26674 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 162..214 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 38.0s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 90.9 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 91.0 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 5.208e1, setup 85s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9210, static body 0.9118, blood NaN, air (/‖x★‖) 0.1299; LS scale 0.1102+0.0000i; corr |x|~PD body 0.1695, all 0.3755
+  pooled image vs x★ frame mean, it 2: rel error all 0.8594, static body 0.8469, blood NaN, air (/‖x★‖) 0.1462; LS scale 0.1879+0.0000i; corr |x|~PD body 0.2530, all 0.4493
+  pooled image vs x★ frame mean, it 3: rel error all 0.7807, static body 0.7616, blood NaN, air (/‖x★‖) 0.1718; LS scale 0.2970+0.0000i; corr |x|~PD body 0.3389, all 0.5790
+  pooled image vs x★ frame mean, it 5: rel error all 0.6934, static body 0.6687, blood NaN, air (/‖x★‖) 0.1835; LS scale 0.4386+0.0000i; corr |x|~PD body 0.4121, all 0.7058
+  pooled image vs x★ frame mean, it 10: rel error all 0.5453, static body 0.5237, blood NaN, air (/‖x★‖) 0.1521; LS scale 0.6360+0.0000i; corr |x|~PD body 0.6262, all 0.8379
+  pooled image vs x★ frame mean, it 15: rel error all 0.4558, static body 0.4385, blood NaN, air (/‖x★‖) 0.1244; LS scale 0.7366-0.0000i; corr |x|~PD body 0.7349, all 0.8924
+  pooled image vs x★ frame mean, it 20: rel error all 0.3828, static body 0.3703, blood NaN, air (/‖x★‖) 0.0971; LS scale 0.8083+0.0000i; corr |x|~PD body 0.8065, all 0.9263
+  pooled image vs x★ frame mean, it 25: rel error all 0.3344, static body 0.3254, blood NaN, air (/‖x★‖) 0.0773; LS scale 0.8503+0.0000i; corr |x|~PD body 0.8503, all 0.9454
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 7.23e-3 7.78e-3 6.78e-3 7.45e-3 9.81e-3 6.67e-3 7.36e-3
+  pooled image vs x★ frame mean, it 30: rel error all 0.2943, static body 0.2878, blood NaN, air (/‖x★‖) 0.0617; LS scale 0.8812-0.0000i; corr |x|~PD body 0.8835, all 0.9586
+physics-model warm start: 30 pooled PCG iterations per encode (107s)
+    pc score (974 voxels): RMSE 0.739 m/s (rel 1.741; time mean 0.649, detail 0.355 of truth 0.355), |Δv| median 0.204 p90 1.122, > 1.00 m/s 11.9 %, phase 0.782 rad; frames 0.63 0.83 1.16 1.04 0.95 0.86 0.70 0.64 0.62 0.62 0.63 0.68 0.67 0.65 0.63 0.63 0.62 0.62 0.64 0.64
+    pc score (974 voxels): RMSE 0.737 m/s (rel 1.735; time mean 0.640, detail 0.365 of truth 0.355), |Δv| median 0.204 p90 1.119, > 1.00 m/s 11.9 %, phase 0.782 rad; frames 0.62 0.83 1.16 1.04 0.95 0.86 0.70 0.63 0.61 0.61 0.64 0.68 0.67 0.64 0.64 0.63 0.63 0.60 0.63 0.64
+## e_k4_circ
+--keep 4: 13228 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 77..121 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 30.2s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 79.8 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 80.0 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 79.9 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 79.7 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 80.2 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 4.842e1, setup 59s
+  pooled image vs x★ frame mean, it 1: rel error all 1.0637, static body 1.0486, blood NaN, air (/‖x★‖) 0.1790; LS scale 0.0214+0.0023i; corr |x|~PD body -0.1267, all 0.1331
+  pooled image vs x★ frame mean, it 2: rel error all 1.1107, static body 1.0857, blood NaN, air (/‖x★‖) 0.2342; LS scale 0.0313+0.0033i; corr |x|~PD body -0.1255, all 0.1096
+  pooled image vs x★ frame mean, it 3: rel error all 1.1364, static body 1.1067, blood NaN, air (/‖x★‖) 0.2583; LS scale 0.0393+0.0042i; corr |x|~PD body -0.1191, all 0.1108
+  pooled image vs x★ frame mean, it 5: rel error all 1.3139, static body 1.2680, blood NaN, air (/‖x★‖) 0.3439; LS scale 0.0791+0.0086i; corr |x|~PD body -0.0971, all 0.1720
+  pooled image vs x★ frame mean, it 10: rel error all 1.5783, static body 1.5323, blood NaN, air (/‖x★‖) 0.3784; LS scale 0.1344+0.0108i; corr |x|~PD body -0.0738, all 0.2508
+  pooled image vs x★ frame mean, it 15: rel error all 1.8147, static body 1.7735, blood NaN, air (/‖x★‖) 0.3843; LS scale 0.1822+0.0163i; corr |x|~PD body -0.0250, all 0.3098
+  pooled image vs x★ frame mean, it 20: rel error all 2.0413, static body 1.9998, blood NaN, air (/‖x★‖) 0.4095; LS scale 0.2262+0.0223i; corr |x|~PD body 0.0226, all 0.3408
+  pooled image vs x★ frame mean, it 25: rel error all 2.1922, static body 2.1517, blood NaN, air (/‖x★‖) 0.4194; LS scale 0.2545+0.0244i; corr |x|~PD body 0.0461, all 0.3524
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 4.37e-2 3.80e-2 4.02e-2 3.98e-2 4.06e-2 4.61e-2 4.40e-2
+  pooled image vs x★ frame mean, it 30: rel error all 2.3515, static body 2.3102, blood NaN, air (/‖x★‖) 0.4391; LS scale 0.2860+0.0233i; corr |x|~PD body 0.0628, all 0.3617
+physics-model warm start: 30 pooled PCG iterations per encode (per-encode circulant) (54s)
+    pc score (974 voxels): RMSE 1.920 m/s (rel 4.519; time mean 1.887, detail 0.355 of truth 0.355), |Δv| median 1.232 p90 3.357, > 1.00 m/s 56.1 %, phase 1.430 rad; frames 1.88 1.96 2.13 2.05 2.00 1.97 1.90 1.88 1.88 1.88 1.88 1.90 1.90 1.89 1.88 1.88 1.88 1.87 1.88 1.89
+    pc score (974 voxels): RMSE 1.922 m/s (rel 4.526; time mean 1.880, detail 0.402 of truth 0.355), |Δv| median 1.234 p90 3.363, > 1.00 m/s 56.1 %, phase 1.429 rad; frames 1.88 1.96 2.13 2.05 2.00 1.97 1.90 1.88 1.88 1.88 1.89 1.90 1.90 1.89 1.88 1.88 1.88 1.88 1.89 1.89
+## e_k4_none
+--keep 4: 13228 of 53144 readouts kept (a shorter scan; hash-spread over all strata)
+140 sets (20 frames x 7 encodes), 77..121 readouts per set, 8 virtual coils, model seg, physics full + GNL, setup 29.6s
+  pc score oracle truth frames        : RMSE 0.000 m/s (rel 0.000; time mean 0.000, detail 0.000 of truth 0.355), |Δv| median 0.000 p90 0.000, > 1.00 m/s 0.0 %, phase 0.000 rad
+  pc score oracle time-averaged truth : RMSE 0.378 m/s (rel 0.889; time mean 0.129, detail 0.355 of truth 0.355), |Δv| median 0.137 p90 0.545, > 1.00 m/s 4.2 %, phase 0.519 rad
+  pc score oracle zero image          : RMSE 0.425 m/s (rel 1.000; time mean 0.234, detail 0.355 of truth 0.355), |Δv| median 0.131 p90 0.698, > 1.00 m/s 5.4 %, phase 0.574 rad
+  pc score oracle truth_vel sampled   : RMSE 0.148 m/s (rel 0.349; time mean 0.022, detail 0.147 of truth 0.355), |Δv| median 0.043 p90 0.216, > 1.00 m/s 0.0 %, phase 0.000 rad (velocity part only: the gap between the two yardsticks)
+  circulant: 79.8 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 79.9 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 80.0 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 79.7 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+  circulant: 80.2 % of the 552960 modes at the floor ε = 1e-3 λ_max (M's gain 1/ε there)
+lambda_max(N) = NaN, lambda_max(M N) = 4.842e1, setup 59s
+  pooled image vs x★ frame mean, it 1: rel error all 0.9182, static body 0.9091, blood NaN, air (/‖x★‖) 0.1286; LS scale 0.1142-0.0000i; corr |x|~PD body 0.1776, all 0.3881
+  pooled image vs x★ frame mean, it 2: rel error all 0.8294, static body 0.8143, blood NaN, air (/‖x★‖) 0.1574; LS scale 0.2262-0.0000i; corr |x|~PD body 0.2937, all 0.4893
+  pooled image vs x★ frame mean, it 3: rel error all 0.7605, static body 0.7389, blood NaN, air (/‖x★‖) 0.1800; LS scale 0.3291-0.0000i; corr |x|~PD body 0.3451, all 0.6010
+  pooled image vs x★ frame mean, it 5: rel error all 0.6817, static body 0.6564, blood NaN, air (/‖x★‖) 0.1840; LS scale 0.4562-0.0000i; corr |x|~PD body 0.4242, all 0.7125
+  pooled image vs x★ frame mean, it 10: rel error all 0.5376, static body 0.5163, blood NaN, air (/‖x★‖) 0.1497; LS scale 0.6446-0.0000i; corr |x|~PD body 0.6361, all 0.8422
+  pooled image vs x★ frame mean, it 15: rel error all 0.4434, static body 0.4262, blood NaN, air (/‖x★‖) 0.1222; LS scale 0.7498-0.0000i; corr |x|~PD body 0.7448, all 0.8961
+  pooled image vs x★ frame mean, it 20: rel error all 0.3735, static body 0.3612, blood NaN, air (/‖x★‖) 0.0952; LS scale 0.8173-0.0000i; corr |x|~PD body 0.8142, all 0.9294
+  pooled image vs x★ frame mean, it 25: rel error all 0.3310, static body 0.3219, blood NaN, air (/‖x★‖) 0.0773; LS scale 0.8534-0.0000i; corr |x|~PD body 0.8517, all 0.9457
+  pooled PCG it 30: ‖r‖/‖r₀‖ per group 9.31e-3 1.05e-2 1.03e-2 8.79e-3 1.04e-2 9.67e-3 1.03e-2
+  pooled image vs x★ frame mean, it 30: rel error all 0.2900, static body 0.2833, blood NaN, air (/‖x★‖) 0.0620; LS scale 0.8849+0.0000i; corr |x|~PD body 0.8844, all 0.9587
+physics-model warm start: 30 pooled PCG iterations per encode (54s)
+    pc score (974 voxels): RMSE 1.088 m/s (rel 2.562; time mean 1.029, detail 0.355 of truth 0.355), |Δv| median 0.296 p90 1.895, > 1.00 m/s 21.4 %, phase 0.975 rad; frames 1.02 1.15 1.41 1.32 1.25 1.18 1.06 1.02 1.01 1.01 1.02 1.04 1.04 1.02 1.01 1.01 1.01 1.01 1.03 1.03
+    pc score (974 voxels): RMSE 1.094 m/s (rel 2.575; time mean 1.021, detail 0.392 of truth 0.355), |Δv| median 0.296 p90 1.896, > 1.00 m/s 21.4 %, phase 0.975 rad; frames 1.02 1.16 1.42 1.32 1.25 1.19 1.06 1.03 1.02 1.01 1.02 1.05 1.04 1.02 1.01 1.01 1.01 1.01 1.04 1.04

@@ -142,6 +142,9 @@ impl SetOp for SynthSets<'_> {
     fn n_coils(&self) -> usize {
         self.ncoils
     }
+    fn residual_ignores_data(&self) -> bool {
+        true
+    }
     fn forward(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
         self.inner.forward(st, t, x, y)
     }

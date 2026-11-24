@@ -43,6 +43,14 @@ pub trait SetOp {
         self.kernels().axpby(st, num_complex::Complex64::new(-1.0, 0.0), y, num_complex::Complex64::new(1.0, 0.0), r)
     }
 
+    /// True when [`forward_residual`](Self::forward_residual) / [`forward_residual_group`](Self::forward_residual_group)
+    /// form their residuals from their own data and ignore the `y` passed in (`synth::SynthSets`: r = E(x − x★) + n).
+    /// Callers that would otherwise build a residual as `forward` minus external data (the staged grouped gradient)
+    /// must then call the residual methods. Default: false.
+    fn residual_ignores_data(&self) -> bool {
+        false
+    }
+
     /// Several images on the same samples of set t: y = Σ_k w_k ⊙ E_t x_k, `ws` per-sample weights (one value per
     /// sample, the same for every coil; None = 1). Default: one `forward` per image plus the weights; operators that
     /// can share the gridding over the images override it (`SegSets`).
@@ -103,6 +111,20 @@ pub trait SetOp {
     /// coils of the data (all of them, also while a subset is selected); 0 = unknown (default)
     fn n_coils(&self) -> usize {
         0
+    }
+
+    /// Exchange the operator's coil maps (device, coil-major nc × nv, all coils) with `m`; the same call with the same
+    /// buffer restores them. Used by [`PerSetMaps`] (maps per respiratory bin). Returns false when the operator cannot
+    /// (default; nothing changes).
+    fn swap_maps(&mut self, _st: &Arc<CudaStream>, _m: &mut CudaSlice<C32>) -> Result<bool, Error> {
+        Ok(false)
+    }
+
+    /// Replace the operator's segment table in `slot` (the index `SegSets::seg_of_set` gives a set) by `tab`, uploaded
+    /// to the device. Used by [`PerSetSegs`] (one ratemap per operator frame). Returns false when the operator cannot
+    /// (default; nothing changes).
+    fn load_segs(&mut self, _st: &Arc<CudaStream>, _slot: usize, _tab: &HostSegTab) -> Result<bool, Error> {
+        Ok(false)
     }
 
     /// x_k = E_tᴴ(w̄_k ⊙ y) for every image k (conjugated per-sample weights; None = 1). Default: one `adjoint` per
@@ -321,6 +343,22 @@ impl SetOp for SegSets {
     }
     fn n_coils(&self) -> usize {
         self.eng.nc_all()
+    }
+    /// the main engine's maps; not with a surrogate engine (it holds its own copy of the maps) or a coil subset
+    fn swap_maps(&mut self, _st: &Arc<CudaStream>, m: &mut CudaSlice<C32>) -> Result<bool, Error> {
+        if self.surrogate.is_some() || self.eng.nc != self.eng.nc_all() || m.len() != self.eng.nc * self.eng.nv() {
+            return Ok(false);
+        }
+        self.eng.swap_smaps(m);
+        Ok(true)
+    }
+    /// the main engine's table in `slot` (not with a surrogate engine: its tables would stay the old ones)
+    fn load_segs(&mut self, st: &Arc<CudaStream>, slot: usize, tab: &HostSegTab) -> Result<bool, Error> {
+        if self.surrogate.is_some() || slot >= self.segs.len() {
+            return Ok(false);
+        }
+        self.segs[slot] = self.eng.segments(st, &tab.segph, &tab.atab, tab.t0, tab.dt)?;
+        Ok(true)
     }
     fn forward(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
         let i = self.seg_of_set[t];
@@ -962,5 +1000,357 @@ impl SetOp for FatSets<'_> {
         self.inner.kernels().mul_real(st, &af, wf, &mut aw)?;
         let one = num_complex::Complex64::new(1.0, 0.0);
         self.inner.kernels().axpby(st, one, &aw, one, x)
+    }
+}
+
+/// Coil maps per set around any stack whose operator can exchange its maps ([`SetOp::swap_maps`], e.g. `SegSets`):
+/// set t uses `maps[i]` for `map_of_set[t] = Some(i)` and the operator's own maps for None (research/smaps_estimation.md:
+/// one map set per respiratory bin). The active set is swapped in lazily (a pointer exchange; an engine with BFP-packed
+/// maps repacks them at its next use), so runs of sets with one map cost nothing extra. Group calls are split by map:
+/// exact (members with different maps never share a gridding pass). Not with coil subsets (stochastic coil sampling)
+/// or a surrogate engine: the constructor checks that the operator accepts the exchange. [`PerSetMaps::restore`] puts
+/// the operator's own maps back.
+pub struct PerSetMaps<'a> {
+    inner: &'a mut dyn SetOp,
+    st: Arc<CudaStream>,
+    maps: Vec<CudaSlice<C32>>,
+    map_of_set: Vec<Option<usize>>,
+    cur: Option<usize>,
+}
+
+impl<'a> PerSetMaps<'a> {
+    /// `maps`: coil-major nc × nv each (the operator's coil count and grid); `map_of_set`: one entry per set
+    pub fn new(st: &Arc<CudaStream>, inner: &'a mut dyn SetOp, maps: &[Vec<C32>], map_of_set: Vec<Option<usize>>) -> Result<Self, Error> {
+        assert_eq!(map_of_set.len(), inner.nsets(), "PerSetMaps: one map index per set");
+        assert!(map_of_set.iter().flatten().all(|&i| i < maps.len()), "PerSetMaps: map index out of range");
+        let maps: Vec<CudaSlice<C32>> = maps.iter().map(|m| st.clone_htod(m)).collect::<Result<_, _>>()?;
+        let mut s = Self { inner, st: st.clone(), maps, map_of_set, cur: None };
+        if !s.maps.is_empty() {
+            // the operator must accept the exchange (and give its maps back)
+            assert!(s.inner.swap_maps(st, &mut s.maps[0])?, "PerSetMaps: the operator cannot exchange its coil maps (surrogate engine, coil subset or a wrapper in between)");
+            assert!(s.inner.swap_maps(st, &mut s.maps[0])?);
+        }
+        Ok(s)
+    }
+
+    fn activate(&mut self, want: Option<usize>) -> Result<(), Error> {
+        if self.cur == want {
+            return Ok(());
+        }
+        let st = self.st.clone();
+        if let Some(i) = self.cur.take() {
+            assert!(self.inner.swap_maps(&st, &mut self.maps[i])?, "PerSetMaps: map exchange refused");
+        }
+        if let Some(i) = want {
+            assert!(self.inner.swap_maps(&st, &mut self.maps[i])?, "PerSetMaps: map exchange refused");
+            self.cur = Some(i);
+        }
+        Ok(())
+    }
+
+    /// positions in `members` by map (maps in first-appearance order, positions ascending)
+    fn by_map(&self, members: &[usize]) -> Vec<(Option<usize>, Vec<usize>)> {
+        let mut v: Vec<(Option<usize>, Vec<usize>)> = Vec::new();
+        for (j, &t) in members.iter().enumerate() {
+            let k = self.map_of_set[t];
+            match v.iter_mut().find(|(m, _)| *m == k) {
+                Some((_, p)) => p.push(j),
+                None => v.push((k, vec![j])),
+            }
+        }
+        v
+    }
+
+    /// put the operator's own maps back (no Drop impl: a Drop would hold the inner borrow to the end of the caller's
+    /// scope; call this before using the inner operator directly again)
+    pub fn restore(&mut self) -> Result<(), Error> {
+        self.activate(None)
+    }
+}
+
+impl SetOp for PerSetMaps<'_> {
+    fn nsets(&self) -> usize {
+        self.inner.nsets()
+    }
+    fn len_x(&self, t: usize) -> usize {
+        self.inner.len_x(t)
+    }
+    fn len_y(&self, t: usize) -> usize {
+        self.inner.len_y(t)
+    }
+    fn kernels(&self) -> &Kernels {
+        self.inner.kernels()
+    }
+    fn residual_ignores_data(&self) -> bool {
+        self.inner.residual_ignores_data()
+    }
+    /// coil subsets are not supported with per-set maps (the exchange needs all coils)
+    fn select_coils(&mut self, st: &Arc<CudaStream>, idx: Option<&[usize]>) -> Result<bool, Error> {
+        match idx {
+            None => self.inner.select_coils(st, None),
+            Some(_) => Ok(false),
+        }
+    }
+    /// the surrogate engine would keep the shared maps: refused
+    fn use_surrogate(&mut self, on: bool) -> bool {
+        if on {
+            false
+        } else {
+            self.inner.use_surrogate(false)
+        }
+    }
+    fn n_coils(&self) -> usize {
+        self.inner.n_coils()
+    }
+    fn forward(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(self.map_of_set[t])?;
+        self.inner.forward(st, t, x, y)
+    }
+    fn adjoint(&mut self, st: &Arc<CudaStream>, t: usize, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(self.map_of_set[t])?;
+        self.inner.adjoint(st, t, y, x)
+    }
+    fn forward_residual(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &CudaSlice<C32>, r: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(self.map_of_set[t])?;
+        self.inner.forward_residual(st, t, x, y, r)
+    }
+    fn forward_multi(&mut self, st: &Arc<CudaStream>, t: usize, xs: &[&CudaSlice<C32>], ws: &[Option<&CudaSlice<C32>>], y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(self.map_of_set[t])?;
+        self.inner.forward_multi(st, t, xs, ws, y)
+    }
+    fn adjoint_multi(&mut self, st: &Arc<CudaStream>, t: usize, y: &CudaSlice<C32>, ws: &[Option<&CudaSlice<C32>>], xs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.activate(self.map_of_set[t])?;
+        self.inner.adjoint_multi(st, t, y, ws, xs)
+    }
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert_eq!(members.len(), ys.len(), "forward_group: one output per member");
+        for (k, idx) in self.by_map(members) {
+            self.activate(k)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let mut out = pick_mut(ys, &idx);
+            self.inner.forward_group(st, &sub, x, &mut out)?;
+        }
+        Ok(())
+    }
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert!(members.len() == ys.len() && members.len() == rs.len(), "forward_residual_group: one data and one output per member");
+        for (k, idx) in self.by_map(members) {
+            self.activate(k)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            let mut out = pick_mut(rs, &idx);
+            self.inner.forward_residual_group(st, &sub, x, &d, &mut out)?;
+        }
+        Ok(())
+    }
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        let mut tmp: Option<CudaSlice<C32>> = None;
+        for (n, (k, idx)) in self.by_map(members).into_iter().enumerate() {
+            self.activate(k)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            if n > 0 && tmp.is_none() {
+                tmp = Some(st.alloc_zeros::<C32>(x.len())?);
+            }
+            let out: &mut CudaSlice<C32> = if n == 0 { &mut *x } else { tmp.as_mut().unwrap() };
+            self.inner.adjoint_group(st, &sub, &d, out)?;
+            if n > 0 {
+                let one = num_complex::Complex64::new(1.0, 0.0);
+                self.inner.kernels().axpby(st, one, tmp.as_ref().unwrap(), one, x)?;
+            }
+        }
+        Ok(())
+    }
+    fn table_bytes(&self) -> (usize, usize) {
+        self.inner.table_bytes()
+    }
+    fn tables_on_host(&self) -> bool {
+        self.inner.tables_on_host()
+    }
+    fn place_tables(&mut self, ctx: &Arc<CudaContext>, st: &Arc<CudaStream>, on_host: bool) -> Result<i64, Error> {
+        self.inner.place_tables(ctx, st, on_host)
+    }
+}
+
+/// One segment table on the host: diagonals P_l (nseg × nv, segment-major) and interpolators a_l(τ) ([ntab][nseg],
+/// τ_i = t0 + i·dt), as [`SegNufft::segments`] takes them.
+pub struct HostSegTab {
+    pub segph: Vec<C32>,
+    pub atab: Vec<C32>,
+    pub t0: f64,
+    pub dt: f64,
+}
+
+/// Segment tables per set around any stack whose operator can load a table into one of its slots
+/// ([`SetOp::load_segs`], e.g. `SegSets`): set t uses `tabs[tab_of_set[t]]`, loaded into the operator's slot
+/// `slot_of_set[t]` (the slot `SegSets::seg_of_set` gives set t). One ratemap per operator frame: tables per frame on
+/// the host, uploaded when a set of another frame comes (research/mathematics_of_paper/forward_chain_section.tex,
+/// eq. seg). Group calls are split by table: exact (members with different tables never share a gridding pass).
+/// Not with a surrogate engine (the constructor checks that the operator accepts the load). The operator's original
+/// tables are overwritten.
+pub struct PerSetSegs<'a> {
+    inner: &'a mut dyn SetOp,
+    st: Arc<CudaStream>,
+    tabs: Arc<Vec<HostSegTab>>,
+    tab_of_set: Vec<usize>,
+    slot_of_set: Vec<usize>,
+    /// table loaded in each slot
+    cur: Vec<Option<usize>>,
+    /// number of uploads so far (diagnostics)
+    pub uploads: usize,
+}
+
+impl<'a> PerSetSegs<'a> {
+    pub fn new(st: &Arc<CudaStream>, inner: &'a mut dyn SetOp, tabs: Arc<Vec<HostSegTab>>, tab_of_set: Vec<usize>, slot_of_set: Vec<usize>) -> Result<Self, Error> {
+        assert_eq!(tab_of_set.len(), inner.nsets(), "PerSetSegs: one table index per set");
+        assert_eq!(slot_of_set.len(), inner.nsets(), "PerSetSegs: one slot per set");
+        assert!(tab_of_set.iter().all(|&i| i < tabs.len()), "PerSetSegs: table index out of range");
+        let nslot = slot_of_set.iter().copied().max().map_or(0, |m| m + 1);
+        let mut s = Self { inner, st: st.clone(), tabs, tab_of_set, slot_of_set, cur: vec![None; nslot], uploads: 0 };
+        if s.inner.nsets() > 0 {
+            let t = 0;
+            let (k, sl) = (s.tab_of_set[t], s.slot_of_set[t]);
+            assert!(s.inner.load_segs(st, sl, &s.tabs[k])?, "PerSetSegs: the operator cannot load segment tables (surrogate engine or a wrapper in between)");
+            s.cur[sl] = Some(k);
+            s.uploads += 1;
+        }
+        Ok(s)
+    }
+
+    fn activate(&mut self, t: usize) -> Result<(), Error> {
+        let (k, sl) = (self.tab_of_set[t], self.slot_of_set[t]);
+        if self.cur[sl] != Some(k) {
+            let st = self.st.clone();
+            assert!(self.inner.load_segs(&st, sl, &self.tabs[k])?, "PerSetSegs: table load refused");
+            self.cur[sl] = Some(k);
+            self.uploads += 1;
+        }
+        Ok(())
+    }
+
+    /// positions in `members` by table (tables in first-appearance order, positions ascending)
+    fn by_tab(&self, members: &[usize]) -> Vec<Vec<usize>> {
+        let mut v: Vec<(usize, Vec<usize>)> = Vec::new();
+        for (j, &t) in members.iter().enumerate() {
+            let k = self.tab_of_set[t];
+            match v.iter_mut().find(|(m, _)| *m == k) {
+                Some((_, p)) => p.push(j),
+                None => v.push((k, vec![j])),
+            }
+        }
+        v.into_iter().map(|(_, p)| p).collect()
+    }
+
+    /// activate every member of a sub-group (they share one table; distinct slots may be involved)
+    fn activate_all(&mut self, members: &[usize], idx: &[usize]) -> Result<(), Error> {
+        for &j in idx {
+            self.activate(members[j])?;
+        }
+        Ok(())
+    }
+}
+
+impl SetOp for PerSetSegs<'_> {
+    fn nsets(&self) -> usize {
+        self.inner.nsets()
+    }
+    fn len_x(&self, t: usize) -> usize {
+        self.inner.len_x(t)
+    }
+    fn len_y(&self, t: usize) -> usize {
+        self.inner.len_y(t)
+    }
+    fn kernels(&self) -> &Kernels {
+        self.inner.kernels()
+    }
+    fn residual_ignores_data(&self) -> bool {
+        self.inner.residual_ignores_data()
+    }
+    fn select_coils(&mut self, st: &Arc<CudaStream>, idx: Option<&[usize]>) -> Result<bool, Error> {
+        self.inner.select_coils(st, idx)
+    }
+    /// the surrogate engine would keep its own tables: refused
+    fn use_surrogate(&mut self, on: bool) -> bool {
+        if on {
+            false
+        } else {
+            self.inner.use_surrogate(false)
+        }
+    }
+    fn n_coils(&self) -> usize {
+        self.inner.n_coils()
+    }
+    fn swap_maps(&mut self, st: &Arc<CudaStream>, m: &mut CudaSlice<C32>) -> Result<bool, Error> {
+        self.inner.swap_maps(st, m)
+    }
+    fn forward(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(t)?;
+        self.inner.forward(st, t, x, y)
+    }
+    fn adjoint(&mut self, st: &Arc<CudaStream>, t: usize, y: &CudaSlice<C32>, x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(t)?;
+        self.inner.adjoint(st, t, y, x)
+    }
+    fn forward_residual(&mut self, st: &Arc<CudaStream>, t: usize, x: &CudaSlice<C32>, y: &CudaSlice<C32>, r: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(t)?;
+        self.inner.forward_residual(st, t, x, y, r)
+    }
+    fn forward_multi(&mut self, st: &Arc<CudaStream>, t: usize, xs: &[&CudaSlice<C32>], ws: &[Option<&CudaSlice<C32>>], y: &mut CudaSlice<C32>) -> Result<(), Error> {
+        self.activate(t)?;
+        self.inner.forward_multi(st, t, xs, ws, y)
+    }
+    fn adjoint_multi(&mut self, st: &Arc<CudaStream>, t: usize, y: &CudaSlice<C32>, ws: &[Option<&CudaSlice<C32>>], xs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        self.activate(t)?;
+        self.inner.adjoint_multi(st, t, y, ws, xs)
+    }
+    fn forward_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert_eq!(members.len(), ys.len(), "forward_group: one output per member");
+        for idx in self.by_tab(members) {
+            self.activate_all(members, &idx)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let mut out = pick_mut(ys, &idx);
+            self.inner.forward_group(st, &sub, x, &mut out)?;
+        }
+        Ok(())
+    }
+    fn forward_residual_group(&mut self, st: &Arc<CudaStream>, members: &[usize], x: &CudaSlice<C32>, ys: &[&CudaSlice<C32>], rs: &mut [&mut CudaSlice<C32>]) -> Result<(), Error> {
+        assert!(members.len() == ys.len() && members.len() == rs.len(), "forward_residual_group: one data and one output per member");
+        for idx in self.by_tab(members) {
+            self.activate_all(members, &idx)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            let mut out = pick_mut(rs, &idx);
+            self.inner.forward_residual_group(st, &sub, x, &d, &mut out)?;
+        }
+        Ok(())
+    }
+    fn adjoint_group(&mut self, st: &Arc<CudaStream>, members: &[usize], ys: &[&CudaSlice<C32>], x: &mut CudaSlice<C32>) -> Result<(), Error> {
+        assert!(!members.is_empty() && members.len() == ys.len(), "adjoint_group: one input per member");
+        let mut tmp: Option<CudaSlice<C32>> = None;
+        for (n, idx) in self.by_tab(members).into_iter().enumerate() {
+            self.activate_all(members, &idx)?;
+            let sub: Vec<usize> = idx.iter().map(|&j| members[j]).collect();
+            let d: Vec<&CudaSlice<C32>> = idx.iter().map(|&j| ys[j]).collect();
+            if n > 0 && tmp.is_none() {
+                tmp = Some(st.alloc_zeros::<C32>(x.len())?);
+            }
+            let out: &mut CudaSlice<C32> = if n == 0 { &mut *x } else { tmp.as_mut().unwrap() };
+            self.inner.adjoint_group(st, &sub, &d, out)?;
+            if n > 0 {
+                let one = num_complex::Complex64::new(1.0, 0.0);
+                self.inner.kernels().axpby(st, one, tmp.as_ref().unwrap(), one, x)?;
+            }
+        }
+        Ok(())
+    }
+    fn table_bytes(&self) -> (usize, usize) {
+        self.inner.table_bytes()
+    }
+    fn tables_on_host(&self) -> bool {
+        self.inner.tables_on_host()
+    }
+    fn place_tables(&mut self, ctx: &Arc<CudaContext>, st: &Arc<CudaStream>, on_host: bool) -> Result<i64, Error> {
+        self.inner.place_tables(ctx, st, on_host)
     }
 }
