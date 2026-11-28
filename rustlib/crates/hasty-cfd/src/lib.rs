@@ -23,6 +23,7 @@ pub mod gpu;
 pub mod motion;
 pub mod params;
 pub mod probe;
+pub mod refine;
 pub mod solver;
 
 #[derive(Debug, thiserror::Error)]

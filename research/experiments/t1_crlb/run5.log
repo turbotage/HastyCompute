@@ -1,0 +1,24 @@
+
+== F. IR T_p 3 s, optimised K=8/12 flip schedule vs which nuisances are free
+  free ('rho', 'T1') K=8: kappa 0.2236  per tissue {'fat': 0.183, 'liver': 0.152, 'myocardium': 0.203, 'blood': 0.33}  angles [ 7.6 15.2 19.   1.1  2.5  1.   1.   1. ]  [11s]
+  free ('rho', 'T1') K=12: kappa 0.2212  per tissue {'fat': 0.176, 'liver': 0.152, 'myocardium': 0.202, 'blood': 0.328}  angles [ 1.  16.2  1.  26.9  1.   1.1  6.   1.   1.   1.   1.   1. ]  [35s]
+  free ('rho', 'T1', 'eta') K=8: kappa 0.4235  per tissue {'fat': 0.204, 'liver': 0.284, 'myocardium': 0.435, 'blood': 0.725}  angles [15.5 18.6 13.9  1.   1.   1.   1.  10.6]  [44s]
+  free ('rho', 'T1', 'eta') K=12: kappa 0.4098  per tissue {'fat': 0.228, 'liver': 0.275, 'myocardium': 0.409, 'blood': 0.672}  angles [15.8  2.1 24.7 17.1  4.8  1.   1.   1.   1.   1.   1.  12.5]  [65s]
+/home/turbotage/Documents/GitHub/HastyCompute/research/experiments/t1_crlb/t1crlb2.py:142: RuntimeWarning: overflow encountered in exp
+  return lo + (hi - lo) / (1.0 + np.exp(-x))
+  free ('rho', 'T1', 'B1') K=8: kappa 0.2439  per tissue {'fat': 0.204, 'liver': 0.166, 'myocardium': 0.205, 'blood': 0.384}  angles [ 7.  10.6 30.   1.   1.   1.   1.   1. ]  [76s]
+  free ('rho', 'T1', 'B1') K=12: kappa 0.2359  per tissue {'fat': 0.173, 'liver': 0.165, 'myocardium': 0.217, 'blood': 0.358}  angles [ 1.  15.9  9.6  1.  30.   1.   1.   1.   1.   1.   1.   1. ]  [91s]
+  free ('rho', 'T1', 'B1', 'eta') K=8: kappa 0.4454  per tissue {'fat': 0.225, 'liver': 0.3, 'myocardium': 0.445, 'blood': 0.765}  angles [15.  14.1 21.7  1.   1.   1.   1.  10.7]  [107s]
+  free ('rho', 'T1', 'B1', 'eta') K=12: kappa 0.4287  per tissue {'fat': 0.231, 'liver': 0.289, 'myocardium': 0.423, 'blood': 0.722}  angles [16.5  9.  17.4 26.   7.3  1.   1.   1.   1.   1.   1.  13.4]  [126s]
+
+== G. best VFA (no prep), K angle blocks of equal time, B1 free
+  K=3: kappa 0.3751 angles [ 1.   6.8 30. ]
+  K=4: kappa 0.3425 angles [ 1.   1.  11.7 30. ]
+  K=6: kappa 0.3474 angles [ 1.   1.   7.  11.2 30.  30. ]
+
+== H. IR period length, K=8, B1 + eta free
+  T_p 1.5 s: kappa 0.8058 angles [24.4 13.9 30.   1.1  1.   1.   1.  14.8]
+  T_p 2.0 s: kappa 0.5975 angles [17.  11.9 30.   1.   1.   1.   1.  12.3]
+  T_p 3.0 s: kappa 0.4454 angles [15.  14.1 21.7  1.   1.   1.   1.  10.7]
+  T_p 4.0 s: kappa 0.3886 angles [15.2 16.7 14.8  1.   1.   1.   1.  10.1]
+  T_p 6.0 s: kappa 0.3458 angles [18.6  6.1  1.   1.   1.  30.  20.1 11.9]

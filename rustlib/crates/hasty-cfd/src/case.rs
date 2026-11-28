@@ -16,7 +16,8 @@
 //!               "frame": "tissue" (default: deforms with the motion, reference pose) | "rigid", "push": 0 (fraction of
 //!               the leaflet rotation velocity imposed on the fluid; 1 pumps the swept volume through the valve),
 //!               "trigger": false (default) | true | {"p_open_mmHg": 5, "p_close_mmHg": 1, "tau_open": 0.015, "tau_close": 0.02,
-//!               "tau_filter": 0.005, "window": 0.1} (pressure-triggered opening on top of the schedule, see ValveTrigger)}],
+//!               "tau_filter": 0.005, "window": 0.1} (pressure-triggered opening on top of the schedule, see ValveTrigger),
+//!               "regurg_hole": [x, y, a, b] (optional: the closed valve's regurgitant orifice, valve-local units of R)}],
 //!   "cuts":   [{"name", "center", "normal" (outward), "radius", "slab", "kind": "inlet" | "pressure" | "windkessel",
 //!               "q": {"t", "v"} (inlet, m³/s into the domain), "p": Pa, "rcr": [R1, C, R2] (Pa·s/m³, m³/Pa),
 //!               "sponge": m (default 6 mm for outlets, 0 for inlets), "sponge_tau": added τ at the plane (0.3),
@@ -150,6 +151,14 @@ pub struct ValveSpec {
     /// fraction of the leaflets' prescribed rotation velocity imposed on the fluid (0: quasi-static leaflets — the
     /// geometry moves, the wall velocity is the tissue's; real leaflets are passive and move with the flow)
     pub push: f64,
+    /// regurgitant orifice of the closed valve (valve disease): an ellipse in valve-local 2D (units of the radius),
+    /// centre (x, y) on e1 / e2 and semi-axes (a, b), kept open through the leaflets and the closed disks
+    /// (JSON "regurg_hole": [x, y, a, b])
+    pub hole: Option<[f64; 4]>,
+    /// zero-thickness membrane leaflets (JSON "membrane": true): every lattice link crossing a leaflet or the closed
+    /// disk is an interpolated bounce-back wall link, instead of partially saturated plates `thickness` thick (which
+    /// act as sharp-edged orifices and push their own volume through the valve as they swing)
+    pub membrane: bool,
 }
 
 /// pressure-triggered opening on top of the prescribed schedule (a 0D valve law, geometry-free): the opening is
@@ -316,11 +325,36 @@ pub struct RunSpec {
     pub tau_bulk: f64,
     /// write the per-cycle beat library (`<out>/beats/`)
     pub beats: bool,
+    /// the inlet flux controller (κ) steers the exact link flux through the slab interface (node_diag; default) or,
+    /// as before, the u-based first-layer flux, which reads 2–3 % low at a velocity inlet (JSON "kappa_flux":
+    /// "link" | "layer")
+    pub kappa_link: bool,
+    /// a valve core's bounce-back wall where the solid fraction crosses ½ along the link instead of half-way (JSON
+    /// "valve_q": true); the half-way wall advances in half-cell steps as the sheet moves
+    pub valve_q: bool,
+    /// wall mass (2026-11-26): the moving walls and valves change the chambers' volumes, not their mass (node_wallmass);
+    /// JSON "wall_mass": true. Off: covering destroys a node's mass and the moving-wall bounce-back puts back ≈ 0.85–0.97
+    /// of it, so the chambers pump ≈ 0.9 of their stroke
+    pub wall_mass: bool,
+    /// wall pump (2026-11-27): each chamber's moving-wall bounce-back corrected to the cardiac model's volume rate
+    /// (Case::wall_pump; JSON run "wall_pump": true). The bounce-back is the chambers' pump (with a steady density a
+    /// region's outflow equals it); in the heart it injected ≈ 0.89 of the model's stroke
+    pub wall_pump: bool,
+    /// grid refinement: the non-equilibrium transfer between levels (kernels/lbm_core.h "grid refinement"; JSON run
+    /// "refine_neq"): "copy" (default: unscaled, consistent over a coarse step — Rohde 2006 / Chen 2006), "layers"
+    /// (per fine step: × (τ_f − 1) / (2 (τ_c − 1)) for the near ghost layer, × (τ_f − 2) / (2 (τ_c − 1)) for the far
+    /// one), "dc" (Dupuis–Chopard × (τ_f − 1) / (2 (τ_c − 1)) for all, a strain-rate stress correction fine → coarse:
+    /// worse interface pressure steps, kept for comparison)
+    pub refine_neq: String,
+    /// grid refinement: the WALE filter width ramped from the coarser level's at the interface to the level's own over
+    /// this many fine nodes (refine.rs wale_ramp; JSON run "refine_wale_ramp"; 0: none — ν_t then jumps 4× at the
+    /// interface for the same physical gradient)
+    pub refine_wale_ramp: usize,
 }
 
 impl Default for RunSpec {
     fn default() -> Self {
-        Self { cycles: 4, warmup: 2, bins: 50, out_factor: 2, acc_every: 10, geom_every: 4, cwale: 0.5, inv_iters: 3, uclip: 0.3, diag_every: 500, ckpt_every: 20_000, fb_every: 50, tau_bulk: 2.0, beats: false }
+        Self { cycles: 4, warmup: 2, bins: 50, out_factor: 2, acc_every: 10, geom_every: 4, cwale: 0.5, inv_iters: 3, uclip: 0.3, diag_every: 500, ckpt_every: 20_000, fb_every: 50, tau_bulk: 2.0, beats: false, kappa_link: true, valve_q: false, wall_mass: false, wall_pump: false, refine_neq: "copy".into(), refine_wale_ramp: 0 }
     }
 }
 
@@ -333,6 +367,92 @@ pub struct Regions {
     pub valves: std::collections::BTreeMap<String, (u16, u16)>,
     /// region id per sdf voxel (ids ≥ 256 clamp to 0)
     pub map: Vec<u8>,
+}
+
+/// wall transpiration: the compliance of rigid vessel trees (research/flow_phantom.md Tier B4). In a band of `band`
+/// lattice units (≥ 2; the last half unit tapers) on both sides of a tree's wall the wall velocity gains the outward
+/// normal velocity q_g(t) w(X) / (da/dA)
+/// (kernels/lbm_core.h node_geom1), so tree g stores q_g(t) = valve flow − Σ outlet targets − its motion volume change
+/// and its pressure outlet carries only the residual. `group` (u8, 0 = none) and `weight` (m⁻², ∮ w dA = 1 per group)
+/// on the sdf grid.
+#[derive(Clone, Debug)]
+pub struct Transpiration {
+    pub band: f64,
+    pub group: Vec<u8>,
+    pub weight: Vec<f32>,
+    /// (id ≥ 1, name, q_w(t) in m³/s, outward = stored)
+    pub groups: Vec<(u8, String, Table)>,
+}
+
+/// `case.json` "transpiration": {"group": "transp_group.npy", "weight": "transp_weight.npy", "band": 2.0,
+/// "groups": [{"id": 1, "name": .., "q": {"t": [..], "v": [..]}}]}; absent: None
+fn load_transpiration(dir: &Path, r: &Value, len: usize, period: f64) -> Result<Option<Transpiration>> {
+    if !r.is_object() {
+        return Ok(None);
+    }
+    let rd = |k: &str| -> Result<hasty_value::Tensor> {
+        let f = dir.join(r[k].as_str().ok_or_else(|| Error::Case(format!("transpiration.{k}: want a file name")))?);
+        let (t, _) = hasty_value::npy::read(&f).map_err(|e| Error::Value(format!("{}: {e}", f.display())))?;
+        Ok(t)
+    };
+    let group: Vec<u8> = rd("group")?.to_vec::<u8>().map_err(|e| Error::Value(e.to_string()))?;
+    let weight: Vec<f32> = rd("weight")?.to_vec::<f32>().map_err(|e| Error::Value(e.to_string()))?;
+    if group.len() != len || weight.len() != len {
+        return Err(Error::Case(format!("transpiration: {} group / {} weight voxels, the sdf has {len}", group.len(), weight.len())));
+    }
+    let mut groups = vec![];
+    for g in r["groups"].as_array().ok_or_else(|| Error::Case("transpiration.groups: want a list".into()))? {
+        let id = g["id"].as_u64().filter(|&x| (1..=8).contains(&x)).ok_or_else(|| Error::Case("transpiration group id: 1..8".into()))? as u8;
+        groups.push((id, g["name"].as_str().unwrap_or("").to_string(), table(&g["q"], period)?));
+    }
+    if let Some(&mx) = group.iter().max() {
+        if mx as usize > groups.iter().map(|g| g.0 as usize).max().unwrap_or(0) {
+            return Err(Error::Case(format!("transpiration: group map holds id {mx} without a waveform")));
+        }
+    }
+    let band = r["band"].as_f64().unwrap_or(2.0);
+    if band < 2.0 {
+        return Err(Error::Case(format!("transpiration.band {band}: ≥ 2 lattice units (the wall links reach √2, the taper takes ½)")));
+    }
+    Ok(Some(Transpiration { band, group, weight, groups }))
+}
+
+/// grid refinement: the region of level `level` (≥ 1: dx / 2^level, dt / 2^level) as a union of boxes and spheres in
+/// the lab frame (m); a level's region lies inside the next coarser level's (refine.rs keeps 3 coarse cells of margin).
+/// JSON "refine": [{"level": 1, "boxes": [{"min": [x, y, z], "max": [x, y, z]}], "spheres": [{"center": [..],
+/// "radius": r}]}, …]
+#[derive(Clone, Debug, Default)]
+pub struct RefineSpec {
+    pub level: usize,
+    pub boxes: Vec<([f64; 3], [f64; 3])>,
+    pub spheres: Vec<([f64; 3], f64)>,
+}
+
+impl RefineSpec {
+    pub fn contains(&self, x: &[f64; 3]) -> bool {
+        self.boxes.iter().any(|(lo, hi)| (0..3).all(|a| x[a] >= lo[a] && x[a] <= hi[a]))
+            || self.spheres.iter().any(|(c, r)| (0..3).map(|a| (x[a] - c[a]).powi(2)).sum::<f64>() <= r * r)
+    }
+}
+
+fn load_refine(r: &Value) -> Result<Vec<RefineSpec>> {
+    let Some(a) = r.as_array() else { return Ok(vec![]) };
+    let mut out = vec![];
+    for e in a {
+        let level = e["level"].as_u64().unwrap_or(1) as usize;
+        if !(1..=3).contains(&level) {
+            return Err(Error::Case(format!("refine.level {level}: 1..3")));
+        }
+        let mut sp = RefineSpec { level, ..Default::default() };
+        for b in e["boxes"].as_array().map(|x| x.as_slice()).unwrap_or(&[]) {
+            sp.boxes.push((v3(b, "min")?, v3(b, "max")?));
+        }
+        for b in e["spheres"].as_array().map(|x| x.as_slice()).unwrap_or(&[]) {
+            sp.spheres.push((v3(b, "center")?, num(b, "radius")?));
+        }
+        out.push(sp);
+    }
+    Ok(out)
 }
 
 #[derive(Clone, Debug)]
@@ -351,6 +471,13 @@ pub struct Case {
     pub regions: Option<Regions>,
     /// the blood spin history (set by the run's protocol, e.g. `cardiac_lbm --spin`)
     pub spin: Option<SpinSpec>,
+    /// wall transpiration of the vessel trees (None: rigid trees, the pressure outlets take the storage)
+    pub transpiration: Option<Transpiration>,
+    /// the chambers' volume rates of the cardiac model, (region id, dV/dt table in m³/s): with RunSpec::wall_pump each
+    /// chamber's moving-wall bounce-back injects exactly −dV/dt (JSON "wall_pump": {region name: table})
+    pub wall_pump: Vec<(u16, Table)>,
+    /// grid refinement regions (empty: a single uniform level)
+    pub refine: Vec<RefineSpec>,
 }
 
 /// `case.json` "regions": {"file": "region.npy" (i16 on the sdf grid), "names": {id: name}, "allowed": [[a, b], ..],
@@ -512,6 +639,8 @@ impl Case {
                     opening: table(&v["opening"], period)?,
                     tissue: v["frame"].as_str() != Some("rigid"),
                     push: v["push"].as_f64().unwrap_or(0.0),
+                    hole: v["regurg_hole"].as_array().map(|h| [0, 1, 2, 3].map(|i| h.get(i).and_then(|x| x.as_f64()).unwrap_or(0.0))),
+                    membrane: v["membrane"].as_bool().unwrap_or(false),
                     trigger: {
                         let d = ValveTrigger::default();
                         let t = &v["trigger"];
@@ -591,9 +720,28 @@ impl Case {
             fb_every: u("fb_every", d.fb_every).max(1),
             tau_bulk: f("tau_bulk", d.tau_bulk),
             beats: r["beats"].as_bool().unwrap_or(d.beats),
+            kappa_link: r["kappa_flux"].as_str().map_or(d.kappa_link, |x| x != "layer"),
+            valve_q: r["valve_q"].as_bool().unwrap_or(d.valve_q),
+            wall_mass: r["wall_mass"].as_bool().unwrap_or(d.wall_mass),
+            wall_pump: r["wall_pump"].as_bool().unwrap_or(d.wall_pump),
+            refine_neq: r["refine_neq"].as_str().map_or(d.refine_neq.clone(), String::from),
+            refine_wale_ramp: u("refine_wale_ramp", d.refine_wale_ramp),
         };
+        if !["copy", "layers", "dc"].contains(&run.refine_neq.as_str()) {
+            return Err(Error::Case(format!("run.refine_neq {:?}: copy, layers or dc", run.refine_neq)));
+        }
         if ![1, 2, 4, 8].contains(&run.out_factor) {
             return Err(Error::Case("run.out_factor: 1, 2, 4 or 8".into()));
+        }
+        let transpiration = load_transpiration(dir, &j["transpiration"], sdf_len, motion.period)?;
+        let regions = load_regions(dir, &j["regions"], sdf_len)?;
+        let mut wall_pump = vec![];
+        if let (Some(wp), Some(rg)) = (j["wall_pump"].as_object(), regions.as_ref()) {
+            for (name, tab) in wp {
+                if let Some((&id, _)) = rg.names.iter().find(|(_, n)| *n == name) {
+                    wall_pump.push((id, table(tab, motion.period)?));
+                }
+            }
         }
         Ok(Self {
             dir: dir.to_path_buf(),
@@ -607,8 +755,11 @@ impl Case {
             valves,
             cuts,
             run,
-            regions: load_regions(dir, &j["regions"], sdf_len)?,
+            regions,
             spin: None,
+            transpiration,
+            wall_pump,
+            refine: load_refine(&j["refine"])?,
         })
     }
 }

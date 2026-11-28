@@ -7,6 +7,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HastyClient } from '../../common/hasty_client.js';
 import { COLORMAPS, cssGradient, lut } from '../../flow/src/colormaps.js';
 import { meshValue } from '../../common/meshio.js';
+import { installHelp } from '../../common/help.js';
+import { HELP } from './help.js';
+installHelp(HELP);
 
 const client = new HastyClient();
 const $ = (id) => document.getElementById(id);

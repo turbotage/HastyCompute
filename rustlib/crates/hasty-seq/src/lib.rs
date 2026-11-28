@@ -22,7 +22,9 @@
 //! Units: SI throughout (T/m, T/m/s, s, m); k in cycles/m (k = γ̄ M0).
 
 pub mod acoustic;
+pub mod bloch;
 pub mod encode;
+pub mod epg;
 pub mod girf;
 pub mod metrics;
 pub mod multiecho;

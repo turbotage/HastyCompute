@@ -1,0 +1,54 @@
+TR 11.0 ms, scan 480 s, free = rho,T1,B1,eta ; B1 true in [1.0, 0.7]; kappa geometric mean over tissues
+tissues: [('fat', 0.29), ('liver', 0.8), ('myocardium', 1.2), ('blood', 1.75)]
+
+== A. steady-state VFA (no prep), 200 TR per angle, free rho,T1,B1 (eta absent)
+  (3, 15)                kappa 0.7354   (B1 known: 0.526)
+  (3, 8, 15)             kappa 0.9499   (B1 known: 0.5436)
+  (2, 5, 10, 18)         kappa 0.8914   (B1 known: 0.4308)
+  (2, 4, 8, 14, 22)      kappa 0.8775   (B1 known: 0.3763)
+
+== B. fixed flip, one prep per period; eta,B1,rho free
+  prep=ir
+    T_p 0.5 s:  4deg     8.99   8deg    0.422  12deg     0.28  16deg    0.166  22deg    0.082  30deg   0.0794
+    T_p 1.0 s:  4deg     2.59   8deg    0.154  12deg   0.0877  16deg   0.0682  22deg   0.0634  30deg    0.101
+    T_p 2.0 s:  4deg    0.962   8deg   0.0928  12deg   0.0559  16deg   0.0611  22deg   0.0847  30deg    0.143
+    T_p 3.0 s:  4deg    0.649   8deg   0.0901  12deg   0.0589  16deg   0.0722  22deg    0.104  30deg    0.175
+    T_p 4.0 s:  4deg    0.544   8deg   0.0947  12deg    0.066  16deg   0.0828  22deg     0.12  30deg    0.201
+  prep=sr
+    T_p 0.5 s:  4deg     10.8   8deg    0.617  12deg    0.212  16deg     0.14  22deg    0.102  30deg    0.154
+    T_p 1.0 s:  4deg     3.71   8deg    0.293  12deg    0.105  16deg   0.0971  22deg    0.132  30deg    0.204
+    T_p 2.0 s:  4deg     1.64   8deg    0.216  12deg    0.106  16deg    0.127  22deg    0.177  30deg    0.282
+    T_p 3.0 s:  4deg     1.19   8deg    0.203  12deg    0.123  16deg    0.151  22deg    0.214  30deg    0.344
+    T_p 4.0 s:  4deg     1.04   8deg    0.207  12deg    0.139  16deg    0.172  22deg    0.246  30deg    0.396
+
+== C. optimised piecewise flip angle in one period, eta,B1,rho free
+  ir T_p 0.5 s K=1: kappa  0.07556  angles [26.5]   [1s]
+  ir T_p 0.5 s K=4: kappa   0.1812  angles [15.5 15.5 15.5 15.5]   [1s]
+  ir T_p 0.5 s K=8: kappa   0.1812  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [2s]
+  ir T_p 1.0 s K=1: kappa  0.06056  angles [19.9]   [2s]
+  ir T_p 1.0 s K=4: kappa  0.07004  angles [15.5 15.5 15.5 15.5]   [4s]
+  ir T_p 1.0 s K=8: kappa  0.07004  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [6s]
+  ir T_p 2.0 s K=1: kappa   0.0557  angles [12.6]   [7s]
+  ir T_p 2.0 s K=4: kappa  0.05984  angles [15.5 15.5 15.5 15.5]   [9s]
+  ir T_p 2.0 s K=8: kappa  0.05984  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [13s]
+  ir T_p 3.0 s K=1: kappa  0.05843  angles [11.3]   [14s]
+  ir T_p 3.0 s K=4: kappa  0.07003  angles [15.5 15.5 15.5 15.5]   [18s]
+  ir T_p 3.0 s K=8: kappa  0.07003  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [21s]
+  sr T_p 0.5 s K=1: kappa   0.1004  angles [21.1]   [21s]
+  sr T_p 0.5 s K=4: kappa   0.1451  angles [15.5 15.5 15.5 15.5]   [22s]
+  sr T_p 0.5 s K=8: kappa   0.1451  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [23s]
+  sr T_p 1.0 s K=1: kappa  0.09372  angles [14.5]   [24s]
+  sr T_p 1.0 s K=4: kappa  0.09527  angles [15.5 15.5 15.5 15.5]   [25s]
+  sr T_p 1.0 s K=8: kappa  0.09527  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [26s]
+  sr T_p 2.0 s K=1: kappa   0.1061  angles [11.9]   [27s]
+  sr T_p 2.0 s K=4: kappa    0.123  angles [15.5 15.5 15.5 15.5]   [29s]
+  sr T_p 2.0 s K=8: kappa    0.123  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [32s]
+  sr T_p 3.0 s K=1: kappa   0.1226  angles [11.5]   [32s]
+  sr T_p 3.0 s K=4: kappa   0.1464  angles [15.5 15.5 15.5 15.5]   [38s]
+  sr T_p 3.0 s K=8: kappa   0.1464  angles [15.5 15.5 15.5 15.5 15.5 15.5 15.5 15.5]   [43s]
+
+== D. alternating IR period + SR period (super-period), optimised K=4 each
+  IR 2.0 s + SR 1.0 s: kappa 0.5473 angles [11.1 23.3  3.1  4.3  7.7  1.4  1.6  1.8]
+  IR 3.0 s + SR 1.0 s: kappa 0.5114 angles [15.2  4.5  2.6 10.5 21.9 20.2 13.  14. ]
+  IR 2.0 s + SR 0.5 s: kappa 0.6782 angles [16.9  3.6  1.1 12.4 29.9 24.6 14.7 29.6]
+done 64 s

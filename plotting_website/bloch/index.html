@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloch parcel</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        { "imports": { "three": "../vendor/three-0.186.1/three.module.js", "three/addons/": "../vendor/three-0.186.1/addons/" } }
+    </script>
+</head>
+<body>
+    <header>
+        <a class="home-link" href="../">HastyEdit</a>
+        <span class="sep">/</span>
+        <span class="title">Bloch parcel</span>
+        <span id="name" class="name"></span>
+        <button id="play" class="hdr-btn" title="Play / pause (space)" disabled>▶</button>
+        <input id="pos" type="range" min="0" max="0" value="0" step="1" disabled>
+        <span id="pos-label" class="mono">–</span>
+        <button id="step-b" class="hdr-btn" title="one sample back (←)" disabled>◀|</button>
+        <button id="step-f" class="hdr-btn" title="one sample forward (→)" disabled>|▶</button>
+        <label class="hdr-label">sim time per second <select id="rate" class="hdr-select">
+            <option value="0.001">1 µs</option><option value="0.002">2 µs</option><option value="0.005">5 µs</option><option value="0.01">10 µs</option><option value="0.02">20 µs</option><option value="0.05">50 µs</option>
+            <option value="0.1">100 µs</option><option value="0.2" selected>200 µs</option><option value="0.5">0.5 ms</option><option value="1">1 ms</option><option value="2">2 ms</option><option value="5">5 ms</option>
+            <option value="15.9">1 TR</option><option value="50">50 ms</option><option value="159">10 TR</option><option value="500">0.5 s</option><option value="1590">100 TR</option><option value="5000">5 s</option>
+        </select></label>
+        <label class="hdr-label"><input id="loop-tr" type="checkbox"> loop this TR</label>
+        <button id="tr-b" class="hdr-btn" title="same point in the previous TR (Page Up)" disabled>TR◀</button>
+        <button id="tr-f" class="hdr-btn" title="same point in the next TR (Page Down)" disabled>TR▶</button>
+        <label class="hdr-label"><input id="strobe" type="checkbox"> strobe <input id="strobe-rate" type="number" min="0.1" step="0.5" value="2" class="hdr-input" style="width:3.2em"> TR/s</label>
+        <button id="zoom" class="hdr-btn" title="re-simulate with every simulation step recorded for this TR" disabled>fine here</button>
+        <span id="status" class="status"></span>
+    </header>
+    <main>
+        <aside id="side">
+            <section id="src-flow">
+                <h3>Parcel</h3>
+                <p class="hint">Click the vessel MIP (right) to put the parcel; depth is the brightest voxel along the ray.</p>
+                <label class="trio">start voxel <input id="cx" type="number" step="1"><input id="cy" type="number" step="1"><input id="cz" type="number" step="1"></label>
+                <label class="sub"><span id="ray-info" class="mono">–</span></label>
+                <label>view <select id="mip-axis"><option value="1">coronal (along y)</option><option value="0">sagittal (along x)</option><option value="2">axial (along z)</option></select></label>
+                <label>release (cardiac frame) <input id="t0" type="range" min="0" max="0" value="0" step="1"></label>
+                <label class="sub"><span id="t0-label" class="mono">0</span></label>
+                <label>spins <input id="n-spins" type="number" min="1" max="2000" value="200"></label>
+                <label>radius (mm) <input id="radius" type="number" min="0" step="0.5" value="3"></label>
+                <label>motion <select id="advect"><option value="pathline">each spin on its pathline</option><option value="rigid">rigid parcel (pathline of the centre)</option></select></label>
+            </section>
+            <section id="src-plug" hidden>
+                <h3>Parcel (no flow value)</h3>
+                <p class="hint">Plug flow. Position in m from the isocentre.</p>
+                <label class="trio">start (m) <input id="px" type="number" step="0.05" value="0"><input id="py" type="number" step="0.05" value="0"><input id="pz" type="number" step="0.05" value="0"></label>
+                <label class="trio">velocity (m/s) <input id="vx" type="number" step="0.1" value="0"><input id="vy" type="number" step="0.1" value="0"><input id="vz" type="number" step="0.1" value="0.5"></label>
+                <label>spins <input id="n-spins-p" type="number" min="1" max="2000" value="200"></label>
+                <label>radius (mm) <input id="radius-p" type="number" min="0" step="0.5" value="3"></label>
+            </section>
+            <section>
+                <h3>Sequence</h3>
+                <label>design <select id="design"></select></label>
+                <label>magnetisation at the start <select id="start"><option value="relaxed">fully relaxed (entering, M_z = M0)</option><option value="steady">steady state (spins rested in place first)</option></select></label>
+                <label class="sub">pre-roll TRs (steady) <input id="preroll" type="number" min="0" value="600"></label>
+                <label>TRs played <input id="n-tr" type="number" min="1" max="5000" value="300"></label>
+                <label>simulation step <select id="dt-us"><option value="1" selected>1 µs</option><option value="2">2 µs</option><option value="5">5 µs</option><option value="10">10 µs (design raster)</option></select></label>
+                <label>samples per TR <input id="per-tr" type="number" min="4" max="500" value="48"></label>
+                <label>fine TRs <input id="d-a" type="number" min="0" value="0"> to <input id="d-b" type="number" min="0" value="1"></label>
+                <label class="sub">every (µs) <input id="d-s" type="number" min="1" value="1"></label>
+                <label>flip (°) <input id="flip" type="number" step="1" value="15"></label>
+                <label>RF spoil increment (°) <input id="rfinc" type="number" step="1" value="117"></label>
+            </section>
+            <section>
+                <h3>RF excitation</h3>
+                <label>pulse <select id="rf"><option value="slab">slab-selective (windowed sinc, slice-select gradient + rephaser)</option><option value="hard">non-selective hard pulse (design as is)</option></select></label>
+                <label class="sub">slab thickness (mm) <input id="slab-thk" type="number" step="5" value="175"></label>
+                <label class="sub">slab centre along z (mm) <input id="slab-c" type="number" step="5" value="0"></label>
+                <label class="sub">time-bandwidth <input id="tbw" type="number" step="0.5" value="6"></label>
+                <label class="sub">duration (µs) <input id="rf-dur" type="number" step="50" value="800"></label>
+            </section>
+            <section>
+                <h3>Spin physics</h3>
+                <label>material <select id="contrast"><option value="gad" selected>gadolinium (T1 0.39 s, T2 0.11 s)</option><option value="native">native blood (T1 1.7 s, T2 0.2 s)</option><option value="muscle">muscle, approx. 3 T (T1 1.4 s, T2 0.05 s)</option><option value="fat">fat, approx. 3 T (T1 0.38 s, T2 0.07 s)</option><option value="custom">custom</option></select></label>
+                <label>T1 (s) <input id="t1" type="number" step="0.05" value="0.388"></label>
+                <label>T2 (s) <input id="t2" type="number" step="0.01" value="0.111"></label>
+                <label>off-resonance (Hz) <input id="df" type="number" step="10" value="0"></label>
+                <label>B1 scale <input id="b1s" type="number" step="0.05" value="1"></label>
+                <label><input id="conc" type="checkbox" checked> concomitant (Maxwell) fields</label>
+                <label><input id="lh" type="checkbox" checked> physical precession sense (clockwise)</label>
+                <button id="run">Simulate</button>
+                <div id="progress" class="mono"></div>
+            </section>
+            <section>
+                <h3>Display</h3>
+                <label>timeline range <select id="tl-zoom"><option value="all">whole TR</option><option value="rf">RF + slice select + rephaser</option><option value="enc">rephase + encode</option><option value="out">readout, outgoing</option><option value="in">readout, returning</option><option value="spoil">spoiler</option></select></label>
+                <label>arrow colour <select id="color"><option value="phase">transverse phase</option><option value="offset">start position (along flow)</option><option value="plain">uniform</option></select></label>
+                <label>show components <select id="comp"><option value="full">full vector</option><option value="xy">transverse only (M⊥)</option><option value="z">longitudinal only (Mz)</option></select></label>
+                <label>camera <select id="cam"><option value="3d">3D</option><option value="top">top (looking down z: transverse plane)</option><option value="side">side (looking along y: Mz vs Mx)</option></select></label>
+                <label><input id="scope-on" type="checkbox" checked> scope: transverse plane + Mz of every spin</label>
+                <label>frame <select id="frame"><option value="carrier">RF carrier</option><option value="rf">follows RF phase (demodulated)</option></select></label>
+                <label>trail of the mean (samples) <input id="trail" type="range" min="0" max="200" value="0"></label>
+                <label><input id="show-spins" type="checkbox" checked> spin arrows</label>
+            </section>
+            <section id="info"></section>
+        </aside>
+        <div id="center-col">
+            <div id="view"><canvas id="canvas"></canvas><div id="readout" class="mono"></div><canvas id="scope"></canvas><div id="legend3d" class="mono">x red · y green · z blue (up) · mean white</div></div>
+            <div id="bottom">
+                <canvas id="timeline"></canvas>
+                <canvas id="history"></canvas>
+            </div>
+        </div>
+        <div id="right-col">
+            <div id="mip-wrap"><canvas id="mip"></canvas><div id="mip-info" class="mono"></div></div>
+            <div id="picker" hidden></div>
+        </div>
+    </main>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

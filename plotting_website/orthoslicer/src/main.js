@@ -2,6 +2,9 @@ import { LazyVolume } from './volume.js';
 import { PlaneStore, LazySource } from './planes.js';
 import { Renderer, normalizeComprepConfig, POOL_LAYERS } from './renderer.js';
 import { HastyClient, firstTensor } from '../../common/hasty_client.js';
+import { installHelp } from '../../common/help.js';
+import { HELP } from './help.js';
+installHelp(HELP);
 
 const client = new HastyClient().enableWorkers();     // slices are fetched and decoded off the main thread
 

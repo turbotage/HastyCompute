@@ -1,0 +1,10 @@
+T1 grid [0.1 0.2 0.4 0.7 1.  1.5 2.2 3.  3.8 4.3]  B1 [1.0, 0.8]  objective = L4 norm of sigma_R1 [1/s] at SNR_TR 1 (lower better); table = geometric mean over B1
+
+== E. earlier head-optimised schedules (1 s blocks) evaluated on the wide grid
+  2 flips x 3 TRs  3/30 deg, TR 11,20,20 (1 s blocks): L4 2.5738  max 5.1138  
+      sigma_R1 by T1 [s]: 0.1:4.337  0.2:1.471  0.4:0.603  0.7:0.354  1.0:0.293  1.5:0.279  2.2:0.306  3.0:0.355  3.8:0.410  4.3:0.446
+  6 free blocks 11.6/3/3/3/30/20.7 deg, TR 20,20,20,20,16.5,20: L4 3.0033  max 6.0645  
+      sigma_R1 by T1 [s]: 0.1:4.938  0.2:1.525  0.4:0.582  0.7:0.321  1.0:0.252  1.5:0.224  2.2:0.232  3.0:0.259  3.8:0.293  4.3:0.315
+  classic VFA 3/15 deg TR 11, 8 s blocks: L4 19.6427  max 40.3987  
+      sigma_R1 by T1 [s]: 0.1:30.823  0.2:7.247  0.4:2.024  0.7:0.844  1.0:0.526  1.5:0.340  2.2:0.257  3.0:0.231  3.8:0.227  4.3:0.230
+done 0 s

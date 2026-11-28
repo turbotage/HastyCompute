@@ -53,6 +53,11 @@ P_SYS, P_PUL = opt("--p-sys", 93.0), opt("--p-pul", 15.0)  # mean arterial press
 C_SCALE = opt("--ctot-scale", 1.0)  # total arterial compliance factor (both circulations)
 TERR_SIGMA, TERR_SEED = opt("--terr-sigma", 0.0), int(opt("--seed", 0))  # lognormal jitter of the territory fractions
 NH = int(opt("--harmonics", 25))
+# --coronary-imp κ (default 1, 2026-11-27; 0: the plain 3-element terminals as before): intramyocardial pressure
+# κ·P_LV(t) (left coronary territory) / κ·P_RV(t) (right) on the intramyocardial compliance of 5-element coronary terminals
+# (Kim et al. 2010), so the contracting myocardium squeezes the intramural vessels. On full17: LCA diastolic share
+# 0.48 → 0.57, systolic peak 7.5 → 4.8 mL/s (proximal peak velocity 65 → 41 cm/s), no backflow; RCA 0.34 → 0.42
+CORO_IMP = opt("--coronary-imp", 1.0)
 T = 60.0 / HR
 W = 2 * np.pi / T * np.arange(NH + 1)  # angular frequencies, W[0] = 0
 RHO, MU = 1060.0, 3.5e-3
@@ -98,12 +103,36 @@ def atrial(mean, a, c, v, tej):
 
 TEJ_L = 0.30 * (T / 0.857) ** 0.5  # ejection time shortens with heart rate (≈ √T)
 TEJ_R = 0.33 * (T / 0.857) ** 0.5
+# valve disease (valve_disease.py, --valve-disease <spec>): aortic / pulmonary regurgitation reverses the root flow in
+# diastole (RVol back into the ventricle) and the ventricle ejects SV + RVol, so the forward stroke stays SV; MR / TR
+# and the stenoses leave the root waveforms alone (the cardiac model and the LBM case take them)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import valve_disease as VD  # noqa: E402
+
+VDIS = VD.parse(sys.argv[sys.argv.index("--valve-disease") + 1] if "--valve-disease" in sys.argv else None)
+
+
+def root_wave(valve, tej, a, b, back, p_mean):
+    eroa = VDIS.get(valve, {}).get("regurgitation")
+    if not eroa:
+        return ejection(tej, a, b, back, SV)
+    qr = VD.regurgitant_flow(valve, eroa, tt, T, tej, p_mean)
+    rv = float(qr.sum() * T / NT)
+    return ejection(tej, a, b, back, SV + rv) - qr
+
+
 WAVE = {
-    "Q_aorta": ejection(TEJ_L, 1.2, 2.0, 0.06, SV),
-    "Q_pulmonary": ejection(TEJ_R, 1.6, 1.6, 0.03, SV),
+    "Q_aorta": root_wave("aortic", TEJ_L, 1.2, 2.0, 0.06, P_SYS),
+    "Q_pulmonary": root_wave("pulmonary", TEJ_R, 1.6, 1.6, 0.03, P_PUL),
     "P_RA": atrial(4.0, 3.0, 1.5, 3.0, TEJ_L),
     "P_LA": atrial(8.0, 3.0, 1.0, 5.0, TEJ_L),
 }
+# hepatic portal system (vessel_graph ORGAN_ROOTS, 2026-11-28): the portal vein's root is its porta-hepatis end, a sink
+# into the liver sinusoids at the right-atrial mean + the hepatic venous pressure gradient (normal 1–5 mmHg; --hvpg, 4)
+# with a damped share of the atrial wave (portal flow is near-continuous, mildly phasic). The hepatic veins carry the
+# liver's outflow (portal + hepatic artery ≈ 25 % of the output) into the IVC.
+HVPG = opt("--hvpg", 4.0)
+WAVE["P_PORTAL"] = (4.0 + HVPG) * MMHG + 0.15 * (WAVE["P_RA"] - WAVE["P_RA"].mean())
 
 
 def harm(x):
@@ -124,6 +153,7 @@ CLASS = {
     "pulmonary_arterial": dict(kind="artery", ehr=0.35, inflow="Q_pulmonary", p_mean=P_PUL, p_out=8.0, c_tot=5.0 * C_SCALE),
     "systemic_venous": dict(kind="vein", ehr=0.1, p_root="P_RA"),
     "pulmonary_venous": dict(kind="vein", ehr=0.15, p_root="P_LA"),
+    "portal_venous": dict(kind="vein", ehr=0.1, p_root="P_PORTAL"),
 }
 edges_of = defaultdict(list)
 for k in range(ne):
@@ -264,6 +294,12 @@ TERR = {
     "pulmonary_arterial": {"Right pulmonary artery": 0.55, "Left pulmonary artery": 0.37},
     "pulmonary_venous": {"Right superior pulmonary vein": 0.30, "Right inferior pulmonary vein": 0.25, "Left superior pulmonary vein": 0.25, "Left inferior pulmonary vein": 0.20},
 }
+# a separate portal tree (graphs from 2026-11-28): the gut / spleen drainage (20 %) enters the portal tree, the liver's
+# outflow (portal + hepatic artery, 25 %) leaves through the hepatic veins into the IVC; an older graph (portal vein
+# joined to the IVC) keeps the portal share in the systemic veins
+if any(c["class"] == "portal_venous" for c in comps.values()):
+    TERR["portal_venous"] = {"Hepatic portal vein": TERR["systemic_venous"].pop("Hepatic portal vein")}
+    TERR["systemic_venous"]["Hepatic veins"] = 0.25
 from scipy.sparse.csgraph import dijkstra  # noqa: E402
 
 elen_g = np.array([np.linalg.norm(np.diff(pts[eoff[k] : eoff[k + 1]], axis=0), axis=1).sum() for k in range(ne)])
@@ -384,53 +420,129 @@ P = np.zeros((NH + 1, NN), complex)
 QS = np.zeros((NH + 1, len(seg_u)), complex)
 resid = []
 order = sorted(setup, key=lambda c: (comps[c]["class"] not in main_of or c != main_of.get(comps[c]["class"]),))
-for h, w in enumerate(W):
-    diag = np.zeros(NN, complex)
-    for cid, s in setup.items():
-        if s["cfg"]["kind"] == "artery":
-            for n in s["terms"]:
-                rc, r, c = term_Rc[n], term_R[n] - term_Rc[n], term_C[n]
-                diag[n] = 1.0 / (rc + r / (1 + 1j * w * r * c))
-    Yh, ys, yt = assemble(w, diag)
-    Yh = Yh.tocsr()
-    art = [cid for cid in order if setup[cid]["cfg"]["kind"] == "artery"]
-    ven = [cid for cid in order if setup[cid]["cfg"]["kind"] != "artery"]
-    qfh, injs = {}, {}
-    for it in range(5 if any(setup[c]["fed"] is not None for c in art) else 1):  # fragments ↔ main tree
-        for cid in art:
+IMP_INJ = None  # [NH + 1, NN] extra terminal source currents (--coronary-imp), None in the first pass
+# --coronary-imp κ > 0: coronary terminals become Kim et al. 2010-style 5-element terminals Ra – Ca – Ram – Cim(P_im) –
+# Rv (Ra / Ram / Rv = 0.32 / 0.52 / 0.16 of the terminal resistance, Ca / Cim = 0.11 / 0.89 of its compliance): the
+# microvascular resistance between the arterial and the intramyocardial compliance damps the systolic backflow a single
+# compressed compliance pushed into the epicardial artery (−4.7 mL/s in the LCA at κ 1); DC unchanged
+CORO_SPLIT = (0.32, 0.52, 0.16, 0.11, 0.89)
+coro_terms = {n: t_ for n, t_ in territory.items() if t_ in ("Left coronary artery", "Right coronary artery") and n in term_C} if CORO_IMP > 0 else {}
+
+
+def coro_terminal(n, w):
+    """(Y, G): the 5-element coronary terminal's current i = Y p_n − G P_im at angular frequency w"""
+    Rt, Ct = term_R[n], term_C[n]
+    a, b, c = 1 / (CORO_SPLIT[0] * Rt), 1 / (CORO_SPLIT[1] * Rt), 1 / (CORO_SPLIT[2] * Rt)
+    ya, yi = 1j * w * CORO_SPLIT[3] * Ct, 1j * w * CORO_SPLIT[4] * Ct
+    M = np.array([[a + ya + b, -b], [-b, b + yi + c]], complex)
+    m_p = np.linalg.solve(M, np.array([a, 0], complex))
+    m_P = np.linalg.solve(M, np.array([0, yi], complex))
+    return a * (1 - m_p[0]), a * m_P[0]
+
+
+def harmonic_pass():
+    global P, QS, resid
+    P = np.zeros((NH + 1, NN), complex)
+    QS = np.zeros((NH + 1, len(seg_u)), complex)
+    resid = []
+    for h, w in enumerate(W):
+        diag = np.zeros(NN, complex)
+        for cid, s in setup.items():
+            if s["cfg"]["kind"] == "artery":
+                for n in s["terms"]:
+                    if n in coro_terms:
+                        diag[n] = coro_terminal(n, w)[0]
+                        continue
+                    rc, r, c = term_Rc[n], term_R[n] - term_Rc[n], term_C[n]
+                    diag[n] = 1.0 / (rc + r / (1 + 1j * w * r * c))
+        Yh, ys, yt = assemble(w, diag)
+        Yh = Yh.tocsr()
+        art = [cid for cid in order if setup[cid]["cfg"]["kind"] == "artery"]
+        ven = [cid for cid in order if setup[cid]["cfg"]["kind"] != "artery"]
+        qfh, injs = {}, {}
+        for it in range(5 if any(setup[c]["fed"] is not None for c in art) else 1):  # fragments ↔ main tree
+            for cid in art:
+                s = setup[cid]
+                act = node_comp == cid
+                inj = np.zeros(NN, complex)
+                if IMP_INJ is not None:
+                    inj[act] += IMP_INJ[h, act]
+                if s["fed"] is None:
+                    inj[s["root"]] = H[s["cfg"]["inflow"]][h]
+                    for c2, q2 in qfh.items():
+                        if comps[c2]["class"] == comps[cid]["class"]:
+                            inj[setup[c2]["fed"]] -= q2
+                    p = solve(Yh, inj, [], [], act)
+                else:
+                    p = solve(Yh, inj, [s["root"]], [P[h, s["fed"]]], act)
+                    qfh[cid] = complex((Yh[s["root"]] @ p)[0])
+                P[h, act] = p[act]
+                injs[cid] = inj
+        for cid in ven:
             s = setup[cid]
             act = node_comp == cid
             inj = np.zeros(NN, complex)
-            if s["fed"] is None:
-                inj[s["root"]] = H[s["cfg"]["inflow"]][h]
-                for c2, q2 in qfh.items():
-                    if comps[c2]["class"] == comps[cid]["class"]:
-                        inj[setup[c2]["fed"]] -= q2
-                p = solve(Yh, inj, [], [], act)
-            else:
-                p = solve(Yh, inj, [s["root"]], [P[h, s["fed"]]], act)
-                qfh[cid] = complex((Yh[s["root"]] @ p)[0])
+            if h == 0:
+                inj[s["terms"]] = [share[n] * CO for n in s["terms"]]
+            p = solve(Yh, inj, s["roots"], [H[s["cfg"]["p_root"]][h]] * len(s["roots"]), act)
             P[h, act] = p[act]
             injs[cid] = inj
-    for cid in ven:
-        s = setup[cid]
-        act = node_comp == cid
-        inj = np.zeros(NN, complex)
-        if h == 0:
-            inj[s["terms"]] = [share[n] * CO for n in s["terms"]]
-        p = solve(Yh, inj, s["roots"], [H[s["cfg"]["p_root"]][h]] * len(s["roots"]), act)
-        P[h, act] = p[act]
-        injs[cid] = inj
-    for cid in order:
-        s = setup[cid]
-        act = node_comp == cid
-        inj = injs[cid]
-        dn = s.get("roots", [s.get("root")] if s.get("fed") is not None else [])
-        free = np.flatnonzero(act & ~np.isin(np.arange(NN), dn))
-        r_ = (Yh[free] @ P[h] - inj[free])
-        scale = max(np.abs(inj[free]).max(), float(np.abs(ys).max() * np.abs(P[h, act]).max()), 1e-30)
-        resid.append((float(np.abs(r_).max() / scale), comps[cid]["class"] + f"#{cid}", h))
-    QS[h] = ys * (P[h, seg_u] - P[h, seg_v])
+        for cid in order:
+            s = setup[cid]
+            act = node_comp == cid
+            inj = injs[cid]
+            dn = s.get("roots", [s.get("root")] if s.get("fed") is not None else [])
+            free = np.flatnonzero(act & ~np.isin(np.arange(NN), dn))
+            r_ = (Yh[free] @ P[h] - inj[free])
+            scale = max(np.abs(inj[free]).max(), float(np.abs(ys).max() * np.abs(P[h, act]).max()), 1e-30)
+            resid.append((float(np.abs(r_).max() / scale), comps[cid]["class"] + f"#{cid}", h))
+        QS[h] = ys * (P[h, seg_u] - P[h, seg_v])
+
+
+harmonic_pass()
+coro_imp = None
+if CORO_IMP > 0:
+    # ventricular pressures from the first pass: the root pressure while ejecting, isovolumic ramps (relaxation 80 / 60 ms,
+    # contraction 40 ms × √(T / 0.857 s)), filling pressure rising 5 → 10 mmHg (LV) / 3 → 6 (RV) through diastole
+    S_HR = (T / 0.857) ** 0.5
+
+    def ventricle(root_node, p_out, tej, ivrt, edp0, edp1):
+        pa = synth(P[:, [root_node]].T)[0] + p_out * MMHG  # absolute, Pa
+        ivc = 0.04 * S_HR
+        pv = np.empty_like(tt)
+        pe, p0 = float(np.interp(tej, tt, pa)), float(pa[0])
+        for i, t_ in enumerate(tt):
+            if t_ <= tej:
+                pv[i] = pa[i]
+            elif t_ <= tej + ivrt:
+                x = (t_ - tej) / ivrt
+                pv[i] = edp0 * MMHG + (pe - edp0 * MMHG) * 0.5 * (1 + np.cos(np.pi * x))
+            elif t_ <= T - ivc:
+                x = (t_ - tej - ivrt) / max(T - ivc - tej - ivrt, 1e-6)
+                pv[i] = (edp0 + (edp1 - edp0) * x) * MMHG
+            else:
+                x = (t_ - (T - ivc)) / ivc
+                pv[i] = edp1 * MMHG + (p0 - edp1 * MMHG) * 0.5 * (1 - np.cos(np.pi * x))
+        return pv
+
+    sa_ = setup[main_of["systemic_arterial"]]
+    pa_ = setup[main_of["pulmonary_arterial"]]
+    P_LV = ventricle(sa_["root"], sa_["cfg"]["p_out"], TEJ_L, 0.08, 5.0, 10.0)
+    P_RV = ventricle(pa_["root"], pa_["cfg"]["p_out"], TEJ_R, 0.06, 3.0, 6.0)
+    H_im = {"Left coronary artery": harm(CORO_IMP * P_LV), "Right coronary artery": harm(CORO_IMP * P_RV)}
+    IMP_INJ = np.zeros((NH + 1, NN), complex)
+    nco = {"Left coronary artery": 0, "Right coronary artery": 0}
+    for n, t_ in coro_terms.items():
+        for h_, w_ in enumerate(W):
+            if h_ == 0:
+                continue
+            IMP_INJ[h_, n] = coro_terminal(n, w_)[1] * H_im[t_][h_]
+        nco[t_] += 1
+    harmonic_pass()
+    coro_imp = {"kappa": CORO_IMP, "terminals": nco, "p_lv_sys_dia_mmHg": [float(P_LV.max() / MMHG), float(P_LV.min() / MMHG)],
+                "p_rv_sys_dia_mmHg": [float(P_RV.max() / MMHG), float(P_RV.min() / MMHG)]}
+    print(f"coronary intramyocardial pressure κ {CORO_IMP:g}: {nco} terminals, P_LV {P_LV.max() / MMHG:.0f}/{P_LV.min() / MMHG:.0f}, P_RV {P_RV.max() / MMHG:.0f}/{P_RV.min() / MMHG:.0f} mmHg")
+
 # arterial gauge: pressure relative to the outflow pressure → absolute
 for cid, s in setup.items():
     if s["cfg"]["kind"] == "artery":
@@ -463,7 +575,7 @@ pi_edge = amp / np.maximum(np.abs(mean_q), 1e-12)
 np.savez_compressed(OUT / "network_flow.npz", q=q_s, p=p_s, omega=W, period=T, hr=HR, sv=SV, t=tt, **WAVE,
                     edge_mean_q=mean_q, edge_pulsatility=pi_edge, edge_has_flow=flow_ok)
 summary = {
-    "hr_bpm": HR, "sv_ml": SV * 1e6, "co_l_min": CO * 6e4, "harmonics": NH, "segments": int(len(seg_u)), "unknowns": int(NN),
+    "hr_bpm": HR, "sv_ml": SV * 1e6, "valve_disease": VDIS, "co_l_min": CO * 6e4, "harmonics": NH, "segments": int(len(seg_u)), "unknowns": int(NN),
     "mean_root_pressure_mmHg": {comps[c]["class"] + f"#{c}": round(v, 1) for c, v in mean_root_p.items()},
     "solve_residual_max": max(resid)[0], "solve_residual_worst": list(max(resid)[1:]), "kirchhoff_dc_rel_max": kir_rel,
     "terminals": {cls: sum(len(s["terms"]) for c, s in setup.items() if comps[c]["class"] == cls) for cls in CLASS},
@@ -488,8 +600,14 @@ for nm in KEY:
     table[nm] = {"r_mm": round(float(seg_r[jm] * 1e3), 2), "mean_ml_s": round(float(sgn * q.mean() * 1e6), 2), "peak_ml_s": round(float((sgn * q).max() * 1e6), 1),
                  "min_ml_s": round(float((sgn * q).min() * 1e6), 1), "mean_v_cm_s": round(float(sgn * q.mean() / (np.pi * seg_r[jm] ** 2) * 100), 1),
                  "peak_v_cm_s": round(float((sgn * q).max() / (np.pi * seg_r[jm] ** 2) * 100), 1),
-                 "p_mean_mmHg": round(float(pt.mean()), 1), "p_sys_dia_mmHg": [round(float(pt.max()), 1), round(float(pt.min()), 1)], "seg": int(jm), "sign": sgn}
+                 "p_mean_mmHg": round(float(pt.mean()), 1), "p_sys_dia_mmHg": [round(float(pt.max()), 1), round(float(pt.min()), 1)], "seg": int(jm), "sign": sgn,
+                 # share of the forward volume after the end of left ejection (diastole; coronaries ≈ 0.7–0.75 for the LCA)
+                 "diastolic_share": round(float(np.clip(sgn * q, 0, None)[TS > TEJ_L].sum() / max(np.clip(sgn * q, 0, None).sum(), 1e-30)), 3)}
 summary["vessels"] = table
+summary["coronary_imp"] = coro_imp
+for nm_ in ("Left coronary artery", "Right coronary artery"):
+    if nm_ in table:
+        print(f"{nm_}: mean {table[nm_]['mean_ml_s']:.2f} mL/s, peak {table[nm_]['peak_ml_s']:.1f}, diastolic share {table[nm_]['diastolic_share']:.2f}")
 (OUT / "network_flow.json").write_text(json.dumps(summary, indent=1))
 print(json.dumps({k: v for k, v in summary.items() if k != "vessels"}, indent=1))
 for nm, d in table.items():

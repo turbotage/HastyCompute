@@ -15,7 +15,10 @@ the vessel names a feature is placed on):
 - features (list), placed on a named vessel of the graph at a fraction `at` of its arclength:
   - "bulge" / "narrow": radial dilation of the lumen by `factor` (> 1 / < 1) over `length_mm` along the vessel
     (anisotropic Gaussian kernel: σ_r = 1.5 R across, σ_a = length / 2 along, fixed tangent: smooth everywhere);
-  - "rotate": a rotation by `deg` about `axis` within a ball of radius `radius_mm` around the point (heart axis).
+  - "rotate": a rotation by `deg` about `axis` within a ball of radius `radius_mm` around the point (heart axis);
+- "dilate" (placed on a label instead of a vessel: {"kind": "dilate", "label": "blood_LV", "factor": 1.5}): isotropic
+  dilation about the label's centroid by a volume factor (σ = `sigma` (1.2) × its equivalent-sphere radius) — the
+  volume-overload remodelling of valve disease (valve_disease.py), atrial enlargement.
 Labels: L'(x) = L(φ⁻¹(x)) (nearest), on each label grid. Graph: points φ(p), radii × the transverse stretch
 sqrt(det J / |J t|). Gates: min det J > 0 on the grid, inverse consistency |φ(φ⁻¹(x)) − x|. Figures: labels before /
 after, det J. Writes the spec and the gates to diffeo.json.
@@ -60,6 +63,9 @@ PRESETS = {
     "narrow": {"habitus": {"amp_mm": 6.0, "rbf_mm": 80.0, "log_scale": [-0.04, 0.04, 0.01]},
                "features": [{"kind": "narrow", "vessel": "Ascending aorta", "at": 0.35, "factor": 0.7, "length_mm": 18.0},
                             {"kind": "bulge", "vessel": "Bifurcation of pulmonary trunk", "at": 0.3, "factor": 1.25, "length_mm": 30.0}]},
+    # volume overload of chronic mitral / aortic regurgitation: dilated LV and LA (+ habitus)
+    "lv_overload": {"habitus": {"amp_mm": 4.0, "rbf_mm": 80.0, "log_scale": [0.0, 0.0, 0.0]},
+                    "features": [{"kind": "dilate", "label": "blood_LV", "factor": 1.5}, {"kind": "dilate", "label": "blood_LA", "factor": 1.5}]},
 }
 sp = opt("--spec", "habitus")
 SPEC = json.loads(Path(sp).read_text()) if Path(sp).exists() else json.loads(json.dumps(PRESETS[sp]))
@@ -160,6 +166,23 @@ def radial_eps(factor, sr, r0):
 
 feat_log = []
 for f in SPEC.get("features", []):
+    if f["kind"] == "dilate":
+        # isotropic dilation of a labelled structure (a heart chamber: volume-overload remodelling of valve disease)
+        # about its centroid, the radial field ε d e^{−|d|²/2σ²} with σ = sigma × the equivalent-sphere radius;
+        # `factor` is the structure's volume factor (the boundary at the equivalent radius moves by factor^{1/3})
+        lab_ = np.asarray(ref["labels"])
+        tid_ = list(ref["tissues"]).index(f["label"])
+        zz_, yy_, xx_ = np.nonzero(lab_ == tid_)
+        h_ = float(ref["voxel_m"])
+        c = np.stack([xx_, yy_, zz_], -1).mean(0) * h_ + o_at + h_ / 2
+        r0 = (3 * len(zz_) * h_**3 / (4 * np.pi)) ** (1 / 3)
+        sr = f.get("sigma", 1.2) * r0
+        d = X - c
+        eps = radial_eps(f["factor"] ** (1 / 3), sr, r0)
+        V += eps * d * np.exp(-(d**2).sum(-1) / (2 * sr * sr))[..., None] * W[..., None]
+        feat_log.append({**f, "center": c.tolist(), "radius_mm": r0 * 1e3, "eps": eps})
+        print(f"feature dilate {f['label']}: centre {np.round(c, 4).tolist()}, equivalent radius {r0 * 1e3:.1f} mm, volume × {f['factor']}, ε {eps:.3f}")
+        continue
     c, t, r0, L_ = vessel_point(f["vessel"], f.get("at", 0.5))
     d = X - c
     if f["kind"] in ("bulge", "narrow"):
@@ -293,6 +316,8 @@ g2["points"] = Pn.astype(G["points"].dtype)
 g2["radius"] = (R * stretch).astype(G["radius"].dtype)
 if "radius_atlas" in g2:
     g2["radius_atlas"] = (G["radius_atlas"].astype(np.float64) * stretch).astype(G["radius_atlas"].dtype)
+if "radius_ref" in g2:  # a cleared phantom's graph as the source: its shrink reference deforms with it
+    g2["radius_ref"] = (G["radius_ref"].astype(np.float64) * stretch).astype(G["radius_ref"].dtype)
 g2["node_pos"] = (G["node_pos"] + interp(U_f, G["node_pos"].astype(np.float64))).astype(G["node_pos"].dtype)
 np.savez_compressed(OUT / "graph.npz", **g2)
 shutil.copy(SRC_GRAPH / "graph.json", OUT / "graph.json")

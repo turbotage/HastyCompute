@@ -243,3 +243,21 @@ Purpose: validate simulator + forward model before the time-resolved P²nP bench
   simulator now also writes `data_clean.npy`, and `HASTY_NOISE_SIGMA` adds Ψ-correlated noise at load time.
 - Simulator: `--no-readout-motion` (velocity encoded by the bipolars only) and truth = velocity averaged over each
   frame's cardiac window.
+
+## Where the time goes (2026-11-26, factory_arms/ph0001 10-min thorax scan)
+
+| step | wall time |
+|---|---|
+| LBM beat library (0.5 mm, 18 cycles, 1067 MLUPS) | 72 min |
+| coronary LBM library | ≈ 40 min |
+| blood frames (phantom_4d) + prep_sim | ≈ 6 min |
+| 4D-flow k-space (simphantom, 60 001 bins) | ≈ 11.5 h at 350 W (172 s per 250-bin chunk) |
+| B0 / ratemap k-space (2.5 min scan) | 2.5 h |
+
+The direct sums are ≈ 85 % of the end-to-end time. Inside simphantom (`SIMPH_TIMING=1`, one 250-bin chunk at 200 W, 319 s; 15.5 M sources, 3990 samples per readout, 32 coils):
+- readout direct sum: 215 s (67 %);
+- the stage after each bin's sum: 76 s (24 %), mostly the navigator-ADC direct sum (encode / tail windows, its own launch), plus the virtual-to-physical coil expansion and the displacement combine;
+- blood source preparation (beat-library moments, spin history): 24 s (7 %);
+- tissue source preparation: 5 s (1.5 %).
+
+So ≈ 90 % of the k-space time is the two direct sums. The levers are there: fewer source × sample terms (octree sources, coil compression in the sum, skipping the navigator ADC when not studied), or a faster kernel.

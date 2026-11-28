@@ -19,3 +19,6 @@ research/experiments/**/*.bin
 research/experiments/**/*.raw
 research/experiments/**/*.cubin
 research/experiments/**/cache/
+# job logs and the GPU lock (jobs/README.md)
+jobs/logs/
+jobs/locks/

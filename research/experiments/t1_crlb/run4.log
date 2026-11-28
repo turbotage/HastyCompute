@@ -1,0 +1,61 @@
+TR 11.0 ms, scan 480 s, free = rho,T1,B1,eta ; B1 true in [1.0, 0.7]; kappa geometric mean over tissues
+tissues: [('fat', 0.29), ('liver', 0.8), ('myocardium', 1.2), ('blood', 1.75)]
+
+== A. steady-state VFA (no prep), 200 TR per angle, free rho,T1,B1 (eta absent)
+  (3, 15)                kappa 0.7354   (B1 known: 0.526)
+  (3, 8, 15)             kappa 0.9499   (B1 known: 0.5436)
+  (2, 5, 10, 18)         kappa 0.8914   (B1 known: 0.4308)
+  (2, 4, 8, 14, 22)      kappa 0.8775   (B1 known: 0.3763)
+
+== B. fixed flip, one prep per period; eta,B1,rho free
+  prep=ir
+    T_p 0.5 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 1.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 2.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 3.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 4.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+  prep=sr
+    T_p 0.5 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 1.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 2.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 3.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+    T_p 4.0 s:  4deg    1e+03   8deg    1e+03  12deg    1e+03  16deg    1e+03  22deg    1e+03  30deg    1e+03
+
+== C. optimised piecewise flip angle in one period, eta,B1,rho free
+  ir T_p 1.0 s K=1: kappa     1000  angles [18.5]   [0s]
+  ir T_p 1.0 s K=2: kappa    1.816  angles [28.2  9.1]   [1s]
+  ir T_p 1.0 s K=4: kappa    1.543  angles [19.1 30.   1.  10.8]   [2s]
+  ir T_p 1.0 s K=8: kappa    1.326  angles [19.6  1.  30.  30.   1.1  1.   1.  15.4]   [6s]
+  ir T_p 2.0 s K=1: kappa     1000  angles [18.5]   [6s]
+  ir T_p 2.0 s K=2: kappa   0.8567  angles [19.   6.5]   [7s]
+  ir T_p 2.0 s K=4: kappa   0.7295  angles [13.6 20.5  1.   8.2]   [10s]
+  ir T_p 2.0 s K=8: kappa   0.5975  angles [17.  11.9 30.   1.   1.   1.   1.  12.3]   [15s]
+  ir T_p 3.0 s K=1: kappa     1000  angles [18.5]   [15s]
+  ir T_p 3.0 s K=2: kappa   0.6169  angles [15.3  5.5]   [17s]
+  ir T_p 3.0 s K=4: kappa   0.5236  angles [24.9  8.5  1.   7.5]   [21s]
+  ir T_p 3.0 s K=8: kappa   0.4454  angles [15.  14.1 21.7  1.   1.   1.   1.  10.7]   [36s]
+  sr T_p 1.0 s K=1: kappa     1000  angles [18.5]   [36s]
+  sr T_p 1.0 s K=2: kappa    2.419  angles [14.7  9.4]   [37s]
+  sr T_p 1.0 s K=4: kappa      1.7  angles [30.  12.7  1.  18.2]   [38s]
+  sr T_p 1.0 s K=8: kappa     1.41  angles [30.  19.4 18.8 12.   1.   1.   1.  25.2]   [43s]
+  sr T_p 2.0 s K=1: kappa     1000  angles [18.5]   [43s]
+  sr T_p 2.0 s K=2: kappa    0.992  angles [ 4.8 30. ]   [45s]
+  sr T_p 2.0 s K=4: kappa   0.8274  angles [23.   6.9  1.  30. ]   [48s]
+  sr T_p 2.0 s K=8: kappa   0.6818  angles [30.  18.1 14.7  7.4  1.   1.   1.  30. ]   [54s]
+  sr T_p 3.0 s K=1: kappa     1000  angles [18.5]   [54s]
+  sr T_p 3.0 s K=2: kappa   0.6572  angles [ 3.7 30. ]   [57s]
+  sr T_p 3.0 s K=4: kappa    0.566  angles [18.9  4.7  1.  30. ]   [62s]
+  sr T_p 3.0 s K=8: kappa   0.4954  angles [30.  16.  12.5  5.3  1.   1.   1.  30. ]   [72s]
+
+== D. alternating IR period + SR period (super-period), optimised K=4 each
+  IR 2.0 s + SR 1.0 s: kappa 0.4858 angles [ 5.5 23.1  1.   4.7 13.1  1.   1.   1. ]
+  IR 3.0 s + SR 1.0 s: kappa 0.4725 angles [16.1  1.   1.  30.  30.  19.2 16.8 14.4]
+
+== E. cost of nuisances, IR T_p 2 s, fixed 12 deg (and optimum 12.6)
+  free ('rho', 'T1'): kappa 0.5411   per tissue {'fat': 0.189, 'liver': 0.369, 'myocardium': 0.594, 'blood': 1.009}
+  free ('rho', 'T1', 'B1'): kappa 28.83   per tissue {'fat': 5.587, 'liver': 19.042, 'myocardium': 35.261, 'blood': 65.876}
+  free ('rho', 'T1', 'eta'): kappa 0.9719   per tissue {'fat': 0.304, 'liver': 0.649, 'myocardium': 1.086, 'blood': 1.905}
+  free ('rho', 'T1', 'B1', 'eta'): kappa 1000   per tissue {'fat': 1000.0, 'liver': 1000.0, 'myocardium': 1000.0, 'blood': 1000.0}
+  same, eta_true = 0.85 (inversion worse than assumed):
+    1000
+done 102 s

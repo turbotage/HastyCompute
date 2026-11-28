@@ -79,6 +79,25 @@
                 <h3>Centerlines</h3>
                 <label><input id="cl-on" type="checkbox"> show centerlines <span id="cl-info" class="hint"></span></label>
             </section>
+            <section id="sf-section">
+                <h3>Surface (from the data)</h3>
+                <label><input id="sf-on" type="checkbox" disabled> moving blood-pool surface <span id="sf-info" class="hint"></span></label>
+                <div class="btn-row"><button id="sf-go">compute from the data</button> <button id="sf-stored" hidden>load stored</button></div>
+                <label class="sub">opacity <input id="sf-op" type="range" min="0.1" max="1" step="0.05" value="1"></label>
+                <label class="sub">colour <input id="sf-col" type="color" value="#e0654f"></label>
+                <label class="sub">cut <select id="sf-cut" autocomplete="off"><option value="" selected>off</option><option value="0">x (sagittal)</option><option value="1">y (coronal)</option><option value="2">z (axial)</option></select></label>
+                <label class="sub">cut position (mm) <input id="sf-cutpos" type="range" min="0" max="100" step="0.5" value="50"></label>
+                <label class="sub"><input id="sf-flip" type="checkbox"> keep the other side</label>
+                <label><input id="sf-wall-on" type="checkbox" disabled> wall shell (myocardium, from the magnitude) <span id="sf-wall-info" class="hint"></span></label>
+                <div class="btn-row"><button id="sf-wall-go" disabled>estimate the wall</button></div>
+                <label class="sub">wall opacity <input id="sf-wall-op" type="range" min="0.1" max="1" step="0.05" value="0.45"></label>
+                <label class="sub">wall colour <input id="sf-wall-col" type="color" value="#d8b46a"></label>
+                <label class="sub">show only where the data supports it <input id="sf-wall-sup" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+                <p class="hint" id="sf-wall-msg">The wall outside the blood is read from the magnitude along the surface normals: where there is an edge (fat, lung, other chamber) its position is estimated; where the wall meets tissue of the same brightness there is none and the shell is hidden.</p>
+                <label class="sub">magnitude threshold (blank = automatic) <input id="sf-mag" type="number" min="0" step="any"></label>
+                <label class="sub">speed threshold, m/s (blank = automatic) <input id="sf-speed" type="number" min="0" step="any"></label>
+                <p class="hint" id="sf-msg">Blood = bright in the magnitude or moving; no atlas, only <code>vel</code> and <code>mag</code>. Switch the volume (MIP) off to see inside a cut.</p>
+            </section>
             <section>
                 <h3>Vessel tool</h3>
                 <label><input id="vt-on" type="checkbox"> pick a vessel (click in the 3D view)</label>

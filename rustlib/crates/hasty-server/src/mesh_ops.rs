@@ -745,7 +745,7 @@ fn tri(s: &[f32], d: [usize; 3], p: V3) -> f64 {
 /// One mesh topology, one vertex per surface point, for every frame of a 4-D mask: frame 0 is the iso-surface; later frames move the previous vertices
 /// onto the 0.5 level of the blurred frame (Newton steps along the indicator gradient, at most one voxel each) with a little Laplacian relaxation, so
 /// vertices keep their identity and slide as little as the data allows.
-fn track_sequence(t: &Tensor, o: &Json) -> Result<(Vec<Mesh>, Vec<bool>, Vec<Option<Vec<u32>>>), Error> {
+pub(crate) fn track_sequence(t: &Tensor, o: &Json) -> Result<(Vec<Mesh>, Vec<bool>, Vec<Option<Vec<u32>>>), Error> {
     let &[nt, nz, ny, nx] = t.shape() else { return inv(format!("meshseq_track: tensor must be [T, Z, Y, X], got {:?}", t.shape())) };
     let dims = [nx, ny, nz];
     let nvox = nx * ny * nz;
@@ -753,7 +753,8 @@ fn track_sequence(t: &Tensor, o: &Json) -> Result<(Vec<Mesh>, Vec<bool>, Vec<Opt
     if sels[0].iter().all(|&x| x == 0) {
         return inv("meshseq_track: frame 0 selects no voxel");
     }
-    let (first, _) = largest_component(&sels[0], dims);
+    // frame 0 keeps its largest component only, unless `keep_first_all` (a pool that valves split in frame 0 must stay whole)
+    let first = if o["keep_first_all"].as_bool().unwrap_or(false) { sels[0].clone() } else { largest_component(&sels[0], dims).0 };
     let (mut lo, mut hi) = ([nx, ny, nz], [0usize; 3]);
     for (f, sel) in sels.iter().enumerate() {
         let s = if f == 0 { &first } else { sel };

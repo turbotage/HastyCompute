@@ -17,6 +17,9 @@
 //! research/girf_sensitivity.md: ≈ 10 needed for 10–30 ms eddy terms); default 0 = one previous TR (the original path).
 //! The meta records the design's reconstruction window (`sequence.recon_adc`: ADC-index ranges; seqdesign `recon`):
 //! the reconstruction loader keeps those samples, the rest (e.g. v2's rewinder) is navigator data.
+//! `--gpus i,j,… | all` (HASTY_GPUS; default all visible devices): one simulation over several GPUs — a worker thread
+//! per entry takes chunks of bins from one queue; the host tables (sources, maps, beat-library cache) are shared, the
+//! device copies are per GPU; rows are written at their offsets, so the result does not depend on the worker count.
 //! `--plan`: build the schedule, write readouts.npy, samples*.npy and plan.json (cost estimate), no GPU work.
 //! `--nav on|off` (default on; flow schedules): the navigator ADC during the velocity-encode block and the tail
 //! (ramp-down / spoiler) block of every TR (hasty_seq::nav windows, the design's rules or GE / pge2 timing, the
@@ -223,10 +226,14 @@ __device__ void jacobi3(float A[3][3], float V[3][3], float d[3])
 // relative-M_z amplitude in prep) and its PD loses the constant inflow gain (pd_scale = 1 / gain)
 // Output slots are packed (atomic counter `cnt`): a source without a moment record, or (collapse2 > 0) one whose
 // velocity covariance is below collapse2 (m²/s²) on every axis, gets one sub-source instead of six (the five others would
-// carry zero or negligible weight but cost a full source in the direct sum). The slot order is arbitrary.
+// carry zero or negligible weight but cost a full source in the direct sum). det = 0 (SIMPH_BSIG_ATOMIC=1, the original):
+// the slots come from the counter, in arbitrary order, so the direct sum's f32 rounding differs run to run (≈ 4e-5 of
+// the rms at most); det = 1 (default): source p's slots start at fbase + offs[p], the exclusive prefix sum of the
+// per-source counts nkv (bsig_nk, the same decision) — source order, bit-reproducible; cnt still counts the total.
 extern "C" __global__ void bsig(long long n, const float* pos, const float* vel, const float* m, const float* om, const float* r2,
                                 const float* e1, const float* zo, const int* row, const unsigned short* mom, float vs, int spin, float pd_scale,
                                 float collapse2, float dtt, float wf, unsigned long long* cnt,
+                                const unsigned int* nkv, const unsigned int* offs, unsigned long long fbase, int det,
                                 float* pos6, float* vel6, float* m6, float* om6, float* r26, float* e16, float* zo6)
 {
     long long p = blockIdx.x * (long long)blockDim.x + threadIdx.x;
@@ -245,9 +252,15 @@ extern "C" __global__ void bsig(long long n, const float* pos, const float* vel,
         for (int k = 0; k < 10; k++) t3[k] = h2f(M[10 + k]);
         jacobi3(A, V, d);
     }
-    const bool one = r < 0 || (collapse2 > 0.f && fmaxf(fmaxf(d[0], d[1]), d[2]) <= collapse2);
+    const bool one = det ? nkv[p] == 1u : (r < 0 || (collapse2 > 0.f && fmaxf(fmaxf(d[0], d[1]), d[2]) <= collapse2));
     const int nk = one ? 1 : 6;
-    const long long base = (long long)atomicAdd(cnt, (unsigned long long)nk);
+    long long base;
+    if (det) {
+        atomicAdd(cnt, (unsigned long long)nk);
+        base = (long long)(fbase + offs[p]);
+    } else {
+        base = (long long)atomicAdd(cnt, (unsigned long long)nk);
+    }
     for (int j = 0; j < nk; j++) {
         long long q = base + j;
         for (int c = 0; c < 3; c++) { pos6[3 * q + c] = pos[3 * p + c]; vel6[3 * q + c] = 0.f; }
@@ -297,6 +310,69 @@ extern "C" __global__ void bsig(long long n, const float* pos, const float* vel,
             e16[qm] = -fminf(fmaxf(smean + g * xm, 0.f), 1.f);
         }
     }
+}
+
+// bsig's per-source sub-source count (1 or 6) for a (beat, frame) moment slot: the decision of bsig's det = 0 path
+extern "C" __global__ void bsig_nk(long long n, const int* row, const unsigned short* mom, float collapse2, unsigned int* nkv)
+{
+    long long p = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (p >= n) return;
+    const int r = row[p];
+    bool one = r < 0;
+    if (!one && collapse2 > 0.f) {
+        const unsigned short* M = mom + (long long)MS * r;
+        float A[3][3] = {{h2f(M[4]), h2f(M[7]), h2f(M[8])}, {h2f(M[7]), h2f(M[5]), h2f(M[9])}, {h2f(M[8]), h2f(M[9]), h2f(M[6])}};
+        float V[3][3], d[3] = {0.f, 0.f, 0.f};
+        jacobi3(A, V, d);
+        one = fmaxf(fmaxf(d[0], d[1]), d[2]) <= collapse2;
+    }
+    nkv[p] = one ? 1u : 6u;
+}
+
+// exclusive prefix sum of n unsigned ints (deterministic): blocks of 1024 scanned in shared memory (scan_blk, block
+// totals to bsum), the block totals scanned by one block (scan_tot, the grand total to tot[0]), then added (scan_add)
+extern "C" __global__ void __launch_bounds__(1024) scan_blk(long long n, const unsigned int* in, unsigned int* out, unsigned int* bsum)
+{
+    __shared__ unsigned int s[1024];
+    const long long i = blockIdx.x * 1024LL + threadIdx.x;
+    const unsigned int v = i < n ? in[i] : 0u;
+    s[threadIdx.x] = v;
+    __syncthreads();
+    for (int o = 1; o < 1024; o <<= 1) {
+        const unsigned int t = threadIdx.x >= o ? s[threadIdx.x - o] : 0u;
+        __syncthreads();
+        s[threadIdx.x] += t;
+        __syncthreads();
+    }
+    if (i < n) out[i] = s[threadIdx.x] - v;
+    if (threadIdx.x == 1023) bsum[blockIdx.x] = s[1023];
+}
+extern "C" __global__ void __launch_bounds__(1024) scan_tot(int nb, unsigned int* bsum, unsigned int* tot)
+{
+    __shared__ unsigned int s[1024];
+    unsigned int carry = 0u;
+    for (int c0 = 0; c0 < nb; c0 += 1024) {
+        const int i = c0 + threadIdx.x;
+        const unsigned int v = i < nb ? bsum[i] : 0u;
+        s[threadIdx.x] = v;
+        __syncthreads();
+        for (int o = 1; o < 1024; o <<= 1) {
+            const unsigned int t = threadIdx.x >= o ? s[threadIdx.x - o] : 0u;
+            __syncthreads();
+            s[threadIdx.x] += t;
+            __syncthreads();
+        }
+        if (i < nb) bsum[i] = carry + s[threadIdx.x] - v;
+        const unsigned int last = s[1023];
+        __syncthreads();
+        carry += last;
+    }
+    if (threadIdx.x == 0) tot[0] = carry;
+}
+extern "C" __global__ void scan_add(long long n, unsigned int* out, const unsigned int* bsum)
+{
+    const long long i = blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (i < n) out[i] += bsum[i / 1024];
 }
 
 // out[i][c] += Σ_p amp[p][c] e^{−r2s τ} e^{−iφ}, sources split over blockIdx.y chunks (f64 atomics)
@@ -375,6 +451,109 @@ extern "C" __global__ void __launch_bounds__(128) dsum(const float* __restrict__
             atomicAdd(out + 2 * ((size_t)i * NC + c), (double)ar[c]);
             atomicAdd(out + 2 * ((size_t)i * NC + c) + 1, (double)ai[c]);
         }
+}
+
+// dsum with RB samples per thread (register blocking, SIMPH_DSUM_RB): each source's shared-memory record and coil
+// amplitudes are read once for RB samples. Per (sample, source) pair the arithmetic and the order over sources are
+// dsum's, so every thread's partial sums are bit-identical to dsum's for the same source chunk. Samples of a block:
+// i = blockIdx.x · blockDim.x · RB + threadIdx.x + r · blockDim.x (coalesced loads).
+#ifndef RB
+#define RB 2
+#endif
+extern "C" __global__ void __launch_bounds__(128) dsum_rb(const float* __restrict__ smp, int ns, const float* __restrict__ src,
+                                                          const float2* __restrict__ amp, long long np, long long chunk, double* __restrict__ out,
+                                                          const float* __restrict__ fatpk, int npk, int yoff)
+{
+    __shared__ float s_src[TS * SF];
+    __shared__ float2 s_amp[TS * NC];
+    const int i0 = blockIdx.x * blockDim.x * RB + threadIdx.x;
+    const long long p0 = (blockIdx.y + (long long)yoff) * chunk, p1 = min(np, p0 + chunk);
+    float p[RB][PF];
+    float ar[RB][NC], ai[RB][NC];
+    float cfr[RB], cfi[RB];
+#pragma unroll
+    for (int r = 0; r < RB; r++) {
+        const int i = i0 + r * blockDim.x;
+        const bool act = i < ns;
+#pragma unroll
+        for (int q = 0; q < PF; q++) p[r][q] = act ? smp[(size_t)i * PF + q] : 0.f;
+#pragma unroll
+        for (int c = 0; c < NC; c++) { ar[r][c] = 0.f; ai[r][c] = 0.f; }
+        cfr[r] = 0.f;
+        cfi[r] = 0.f;
+        for (int k = 0; k < npk; k++) {
+            float sn, cs;
+            sincosf(fatpk[npk + k] * p[r][13], &sn, &cs);
+            cfr[r] += fatpk[k] * cs;
+            cfi[r] -= fatpk[k] * sn;
+        }
+    }
+    // (the first sample inactive: all of the thread's samples are)
+    const bool any = i0 < ns;
+    for (long long base = p0; base < p1; base += TS) {
+        const int cnt = (int)min((long long)TS, p1 - base);
+        __syncthreads();
+        for (int q = threadIdx.x; q < cnt * SF; q += blockDim.x) s_src[q] = src[(size_t)base * SF + q];
+        for (int q = threadIdx.x; q < cnt * NC; q += blockDim.x) s_amp[q] = amp[(size_t)base * NC + q];
+        __syncthreads();
+        if (!any) continue;
+        for (int j = 0; j < cnt; j++) {
+            const float* s = s_src + j * SF;
+            float er[RB], ei[RB];
+#pragma unroll
+            for (int r = 0; r < RB; r++) {
+                const float* q = p[r];
+                float ph = q[0] * fmaf(q[14], s[7], s[0]) + q[1] * fmaf(q[14], s[8], s[1]) + q[2] * fmaf(q[14], s[9], s[2]);
+                ph += q[3] * fmaf(q[14], s[10], s[7]) + q[4] * fmaf(q[14], s[11], s[8]) + q[5] * fmaf(q[14], s[12], s[9]);
+                ph += q[6] * s[13] + q[7] * s[14] + q[8] * s[15];
+                ph += q[9] * s[3] + q[10] * s[4] + q[11] * s[5] + q[12] * s[6];
+                ph += s[16] * q[13] + q[15];
+                const float decay = __expf(-s[17] * q[13]);
+                float rr = ph * 0.15915494309189535f;
+                rr -= rintf(rr);
+                float sn, cs;
+                __sincosf(rr * 6.283185307179586f, &sn, &cs);
+                er[r] = decay * cs;
+                ei[r] = -decay * sn;
+                if (s[19] > 0.f) {
+                    const float hh = 0.5f * s[19];
+                    float fe = 1.f;
+#pragma unroll
+                    for (int a = 0; a < 3; a++) {
+                        const float xa = hh * fmaf(s[20 + a], q[13], q[a]);
+                        fe *= fabsf(xa) < 1e-3f ? 1.f - xa * xa * (1.f / 6.f) : __sinf(xa) / xa;
+                    }
+                    er[r] *= fe;
+                    ei[r] *= fe;
+                }
+                if (s[18] != 0.f) {
+                    const float tr = er[r] * cfr[r] - ei[r] * cfi[r];
+                    ei[r] = er[r] * cfi[r] + ei[r] * cfr[r];
+                    er[r] = tr;
+                }
+            }
+            const float2* a = s_amp + j * NC;
+#pragma unroll
+            for (int c = 0; c < NC; c++) {
+                const float2 av = a[c];
+#pragma unroll
+                for (int r = 0; r < RB; r++) {
+                    ar[r][c] = fmaf(er[r], av.x, fmaf(-ei[r], av.y, ar[r][c]));
+                    ai[r][c] = fmaf(er[r], av.y, fmaf(ei[r], av.x, ai[r][c]));
+                }
+            }
+        }
+    }
+#pragma unroll
+    for (int r = 0; r < RB; r++) {
+        const int i = i0 + r * blockDim.x;
+        if (i < ns)
+#pragma unroll
+            for (int c = 0; c < NC; c++) {
+                atomicAdd(out + 2 * ((size_t)i * NC + c), (double)ar[r][c]);
+                atomicAdd(out + 2 * ((size_t)i * NC + c) + 1, (double)ai[r][c]);
+            }
+    }
 }
 "#;
 
@@ -542,6 +721,8 @@ fn main() {
     let b0_k: usize = take("--b0-k").map(|s| s.parse().unwrap()).unwrap_or(24);
     let b0_pns: f64 = take("--b0-pns").map(|s| s.parse().unwrap()).unwrap_or(80.0);
     let dwell_opt: Option<f64> = take("--dwell").map(|s| s.parse().unwrap());
+    // GPU workers: device ordinals "0,1,…" (repeats: several workers on one device) or "all" (default; HASTY_GPUS)
+    let gpus_arg: Option<String> = take("--gpus");
     let flow_run = take("--flow-run").map(PathBuf::from).unwrap_or_else(|| hasty_site::data().join("seq/flow_thorax"));
     let girf_name = take("--girf").unwrap_or_else(|| "ideal".into());
     let girf_hist: usize = take("--girf-hist").map(|s| s.parse().expect("--girf-hist N")).unwrap_or(0);
@@ -1116,7 +1297,7 @@ fn main() {
             m
         }
     }
-    let mut beat_src: Option<BeatSrc> = beats_run.as_ref().map(|run| {
+    let beat_src: Option<BeatSrc> = beats_run.as_ref().map(|run| {
         use rayon::prelude::*;
         let mut lib = hasty_bench::beats::BeatLibrary::open(run).unwrap_or_else(|e| panic!("--beats: {e}"));
         // the bin cache holds one beat's bins (a beat's moments read each bin once)
@@ -1389,11 +1570,10 @@ fn main() {
     }
 
     // ── GPU ──
-    let dev = Device::new(0).unwrap();
-    let st = dev.default_stream();
-    let m = dev.load_module(&format!("simphantom_nc{ncs}_v10"), SRC, &CompileSettings { options: vec![format!("-DNC={ncs}")], no_cache: false }).unwrap();
-    let (kcomb, kprep, kdsum) = (m.load_function("combine").unwrap(), m.load_function("prep").unwrap(), m.load_function("dsum").unwrap());
-    let kbsig = m.load_function("bsig").unwrap();
+    // The host tables are built once here and shared; one worker thread per GPU (`--gpus` / HASTY_GPUS: device
+    // ordinals, default every visible device; an ordinal may repeat: several workers on one device) uploads them to its
+    // device and takes chunks of bins from one queue (below). Each chunk writes its rows at their offsets in the data
+    // files, so the output does not depend on the number of workers or the order in which they finish.
     // cardiac displacement samples (m)
     let cm = hasty_value::read(&mut std::io::BufReader::new(std::fs::File::open(v.get("cardiac_motion").and_then(|x| x.as_str()).unwrap()).unwrap())).unwrap();
     let ut = cm.get("U_mm").and_then(|x| x.as_tensor()).unwrap();
@@ -1403,11 +1583,8 @@ fn main() {
     let co = fls(&cm, "origin_m");
     let ch = fl(&cm, "voxel_m");
     let u_host: Vec<f32> = (0..ut.numel()).map(|i| (ut.get_f64(i).0 * 1e-3) as f32).collect();
-    let d_u = st.clone_htod(&u_host).unwrap();
-    drop(u_host);
+    drop(cm);
     let nv_c = 3 * cdims[0] * cdims[1] * cdims[2];
-    let mut d_uc = st.alloc_zeros::<f32>(nv_c).unwrap();
-    let mut d_vc = st.alloc_zeros::<f32>(nv_c).unwrap();
     let c0 = [co[0] + 0.5 * ch, co[1] + 0.5 * ch, co[2] + 0.5 * ch];
     // respiratory field (sum of the bases, m at r = 1)
     let rmo = hasty_value::read(&mut std::io::BufReader::new(std::fs::File::open(v.get("resp_motion").and_then(|x| x.as_str()).unwrap()).unwrap())).unwrap();
@@ -1421,9 +1598,9 @@ fn main() {
             s_host[q] += rbv[k * 3 * rn + q];
         }
     }
+    drop(rbv);
     let ro = fls(&rmo, "origin_m");
     let rh = fl(&rmo, "voxel_m");
-    let d_s = st.clone_htod(&s_host).unwrap();
     // gradient nonlinearity: f(xs) and J on a 4 mm grid over the source region (scanner frame)
     let gnl = if ideal { GradientCoils::ideal() } else { GradientCoils::clinical_synthetic() };
     let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
@@ -1453,7 +1630,6 @@ fn main() {
             }
         }
     }
-    let d_g = st.clone_htod(&g_host).unwrap();
     // coil sensitivities (re, im interleaved per coil)
     let sd = sens.re[0].dims;
     let sn_ = sd[0] * sd[1] * sd[2];
@@ -1479,25 +1655,12 @@ fn main() {
             }
         }
     }
-    let d_c = st.clone_htod(&c_host).unwrap();
     let sa = sens.re[0].affine;
-    // sources on the GPU
-    let d_tpos = st.clone_htod(&tpos).unwrap();
-    let d_tfat = st.clone_htod(&tfat).unwrap();
-    let d_fattab = st.clone_htod(&fat_tab).unwrap();
-    let (d_tm, d_tom, d_tr2) = (st.clone_htod(&tm).unwrap(), st.clone_htod(&tom).unwrap(), st.clone_htod(&tr2).unwrap());
-    let (d_te1, d_tzo) = (st.clone_htod(&te1).unwrap(), st.clone_htod(&tzo).unwrap());
-    let (d_telh, d_telg) = if tel_on { (st.clone_htod(&telh).unwrap(), st.clone_htod(&telg).unwrap()) } else { (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(3).unwrap()) };
     let el_on = tel_on as i32;
-    // (an empty frame — prep_sim --blood-frames-keep — gets one-element placeholders: no zero-size allocations)
-    let up = |x: &Vec<f32>| if x.is_empty() { st.alloc_zeros::<f32>(3).unwrap() } else { st.clone_htod(x).unwrap() };
-    let d_bf: Vec<_> = bf.iter().map(|b| (b.0, up(&b.1), up(&b.2), up(&b.3), up(&b.4), up(&b.5), b.3.len(), up(&b.6), up(&b.7))).collect();
-    let d_atab = st.clone_htod(&prof.alpha).unwrap();
-    let (ntab, az0, adz) = (prof.alpha.len() as i32, prof.z0 as f32, prof.dz as f32);
-    let nbmax0 = d_bf.iter().map(|b| b.6).max().unwrap_or(1);
-    // --resp-field: blood tables Δ_k [n][K] (rad/s) on the device; tissue: the f16 table [Q][K][n_in] (ppm) on the host,
-    // the state columns of the simulated sources uploaded on use (LRU of 8); the bin's ω buffers (tissue; two blood slots)
-    struct RespDev {
+    let nbmax0 = bf.iter().map(|b| b.3.len()).max().unwrap_or(1);
+    // --resp-field: blood tables Δ_k [n][K] (rad/s), uploaded by every worker; tissue: the f16 table [Q][K][n_in] (ppm)
+    // here on the host, the state columns of the simulated sources uploaded on use (per worker an LRU of 8)
+    struct RespHost {
         rk: Vec<f64>,
         k: i32,
         nq: usize,
@@ -1505,14 +1668,9 @@ fn main() {
         mode: String,
         n_in: usize,
         tab_t: Vec<u8>,
-        cols: Vec<(usize, CudaSlice<f32>)>,
-        tab_b: Vec<CudaSlice<f32>>,
-        om_t: CudaSlice<f32>,
-        om_b: [CudaSlice<f32>; 2],
-        func: cudarc::driver::CudaFunction,
-        func_bi: cudarc::driver::CudaFunction,
+        tab_b: Vec<Vec<f32>>,
     }
-    let mut resp_dev: Option<RespDev> = resp_field_path.as_ref().map(|path| {
+    let resp_host: Option<RespHost> = resp_field_path.as_ref().map(|path| {
         assert!(!ideal, "--resp-field with --ideal: the ideal run has no field");
         let t = Instant::now();
         let rf = hasty_value::read(&mut std::io::BufReader::new(std::fs::File::open(path).unwrap_or_else(|e| panic!("{}: {e}", path.display())))).unwrap();
@@ -1539,70 +1697,26 @@ fn main() {
             let d: Vec<f32> = b.as_tensor().unwrap().to_vec::<f32>().unwrap();
             assert_eq!(d.len(), n * k);
             let id: Vec<usize> = (0..n).collect();
-            let e = hasty_bench::respfield::expand(&d, k, &id, gam);
-            tab_b.push(if e.is_empty() { st.alloc_zeros::<f32>(1).unwrap() } else { st.clone_htod(&e).unwrap() });
+            tab_b.push(hasty_bench::respfield::expand(&d, k, &id, gam));
         }
-        let mr = dev.load_module("simphantom_respfield_v2", hasty_bench::respfield::KERNEL, &CompileSettings { options: vec![], no_cache: false }).unwrap();
-        let (func, func_bi) = (mr.load_function("rlerp").unwrap(), mr.load_function("bilerp").unwrap());
         let mb = (tab_t.len() + 4 * bf.iter().map(|b| b.3.len()).sum::<usize>() * k) as f64 / 1e6;
         println!("resp field ({mode}): {k} breathing states r = {:?} × {nq} cardiac phases from {} ({mb:.0} MB of tables, {:.1}s)",
                  rk.iter().map(|r| (r * 1e3).round() / 1e3).collect::<Vec<_>>(), path.display(), t.elapsed().as_secs_f64());
-        RespDev {
-            k: k as i32,
-            nq,
-            period,
-            mode,
-            n_in,
-            tab_t,
-            cols: vec![],
-            tab_b,
-            om_t: st.alloc_zeros::<f32>(nt.max(1)).unwrap(),
-            om_b: [st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap(), st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap()],
-            rk,
-            func,
-            func_bi,
-        }
+        RespHost { rk, k: k as i32, nq, period, mode, n_in, tab_t, tab_b }
     });
-    // ω of the bin's sources for breathing state r: out = base + Δ(r) (n sources)
-    let rlerp = |func: &cudarc::driver::CudaFunction, rk: &[f64], k: i32, n: usize, base: &CudaSlice<f32>, tab: &CudaSlice<f32>, r: f32, out: &mut CudaSlice<f32>| {
-        if n == 0 {
-            return;
-        }
-        let (j, a) = hasty_bench::respfield::segment(rk, r as f64);
-        let (nl, ji) = (n as i64, j as i32);
-        unsafe {
-            st.launch_builder(func)
-                .arg(&nl).arg(base).arg(tab).arg(&k).arg(&ji).arg(&a).arg(out)
-                .launch(LaunchConfig { grid_dim: ((n as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
-                .unwrap();
-        }
-    };
     // with a beat library every blood source becomes six sub-sources (zero amplitude where unused)
-    assert!(!blood_blend || beat_src.is_some(), "--blood-blend needs a beat library (--beats)");
-    let nbmax = if beat_src.is_some() { 6 * nbmax0 * if blood_blend { 2 } else { 1 } } else { nbmax0 };
-    let mut d_src = st.alloc_zeros::<f32>((nt + nbmax) * SRC_FLOATS).unwrap();
-    let d_bfat = st.alloc_zeros::<f32>(nbmax.max(1)).unwrap();
-    // blood box edges (--blood-box on) and zero field gradients
-    let (d_bh, d_bg) = if blood_box {
-        (st.clone_htod(&vec![fl(&v, "blood_voxel_m") as f32; nbmax.max(1)]).unwrap(), st.alloc_zeros::<f32>(3 * nbmax.max(1)).unwrap())
-    } else {
-        (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(3).unwrap())
-    };
-    let el_blood = blood_box as i32;
-    let mut d_amp = st.alloc_zeros::<C32>((nt + nbmax) * ncs).unwrap();
-    let d_rows: Vec<CudaSlice<i32>> = beat_src.as_ref().map_or(vec![], |bs| bs.rows.iter().map(|r| if r.is_empty() { st.alloc_zeros::<i32>(1).unwrap() } else { st.clone_htod(r).unwrap() }).collect());
-    let (mut d_p6, mut d_v6, mut d_m6, mut d_o6, mut d_r6) = if beat_src.is_some() {
-        (st.alloc_zeros::<f32>(3 * nbmax).unwrap(), st.alloc_zeros::<f32>(3 * nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap())
-    } else {
-        (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap())
-    };
-    let (mut d_e6, mut d_z6) = if beat_src.is_some() { (st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap()) } else { (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap()) };
-    // a library beat's moments at a frame, on the device: two slots (--blood-blend uses two frames per bin)
-    let mut d_moms = [st.alloc_zeros::<u16>(1).unwrap(), st.alloc_zeros::<u16>(1).unwrap()];
-    let mut d_cnt = st.alloc_zeros::<u64>(1).unwrap();
-    // (packed blood sub-sources, the unpacked six per frame source) summed over the bins: the saving of the packing
-    let mut packed = (0f64, 0f64);
-    let mut mom_keys: [Option<(usize, usize)>; 2] = [None, None];
+    let beat_on = beat_src.is_some();
+    assert!(!blood_blend || beat_on, "--blood-blend needs a beat library (--beats)");
+    let nbmax = if beat_on { 6 * nbmax0 * if blood_blend { 2 } else { 1 } } else { nbmax0 };
+    let blood_h = if blood_box { fl(&v, "blood_voxel_m") as f32 } else { 0.0 };
+    // the beat library's per-run constants, read by every worker without the library's lock
+    struct BeatPar {
+        seq: Vec<usize>,
+        n_lib: usize,
+        spin: i32,
+        pd_scale: f32,
+    }
+    let beat_par: Option<BeatPar> = beat_src.as_ref().map(|bs| BeatPar { seq: bs.seq.clone(), n_lib: bs.n_lib, spin: bs.spin, pd_scale: bs.pd_scale });
     // the stored blood frames of a cardiac time: (frame, weight) of the nearest one, or with --blood-blend the two
     // around it, linear in time
     let frames_at = |tc: f64| -> Vec<(usize, f64)> {
@@ -1616,12 +1730,7 @@ fn main() {
             vec![((sf.round() as usize) % nbf, 1.0)]
         }
     };
-    let ug = grid(&d_uc, &st, cdims, 3, c0, ch, false);
-    let vg = grid(&d_vc, &st, cdims, 3, c0, ch, false);
-    let sg = grid(&d_s, &st, [rs_[4], rs_[3], rs_[2]], 3, [ro[0] + 0.5 * rh, ro[1] + 0.5 * rh, ro[2] + 0.5 * rh], rh, true);
-    let gg = grid(&d_g, &st, gd, 12, lo, gh, true);
-    let cg = grid(&d_c, &st, sd, 2 * ncs, [sa[0][3], sa[1][3], sa[2][3]], sa[0][0], false);
-    println!("GPU ready ({:.1}s)", t0.elapsed().as_secs_f64());
+    println!("host tables ready ({:.1}s)", t0.elapsed().as_secs_f64());
 
     // breathing table
     let br = v.get("breathing").unwrap();
@@ -1686,14 +1795,14 @@ fn main() {
         f.write_all(&k_hdr).unwrap();
         f.set_len(k_need).unwrap();
     }
-    let mut kfile = std::fs::OpenOptions::new().read(true).write(true).open(&k_part).unwrap();
-    let write_rows = |f: &mut std::fs::File, rows: &[usize], vals: &[num_complex::Complex32]| {
-        use std::io::{Seek, SeekFrom, Write};
+    // (positioned writes on a shared handle: the GPU workers write their chunks' rows concurrently)
+    let kfile = std::fs::OpenOptions::new().read(true).write(true).open(&k_part).unwrap();
+    let write_rows = |f: &std::fs::File, rows: &[usize], vals: &[num_complex::Complex32]| {
+        use std::os::unix::fs::FileExt;
         let w = na * nc;
         for (k, &r) in rows.iter().enumerate() {
             let b: Vec<u8> = vals[k * w..(k + 1) * w].iter().flat_map(|c| [c.re.to_le_bytes(), c.im.to_le_bytes()].concat()).collect();
-            f.seek(SeekFrom::Start(k_hdr.len() as u64 + r as u64 * row_bytes)).unwrap();
-            f.write_all(&b).unwrap();
+            f.write_all_at(&b, k_hdr.len() as u64 + r as u64 * row_bytes).unwrap();
         }
         f.sync_data().unwrap();
     };
@@ -1723,13 +1832,12 @@ fn main() {
     // simulate the navigator in this run's chunks (off when finalised: then every chunk is done anyway)
     let nav_sim = nn > 0 && !nav_finalised;
     let mut nav_file = nav_sim.then(|| std::fs::OpenOptions::new().read(true).write(true).open(&nav_part).unwrap());
-    let write_nav_rows = |f: &mut std::fs::File, rows: &[usize], vals: &[num_complex::Complex32]| {
-        use std::io::{Seek, SeekFrom, Write};
+    let write_nav_rows = |f: &std::fs::File, rows: &[usize], vals: &[num_complex::Complex32]| {
+        use std::os::unix::fs::FileExt;
         let w = nn * nc;
         for (k, &r) in rows.iter().enumerate() {
             let b: Vec<u8> = vals[k * w..(k + 1) * w].iter().flat_map(|c| [c.re.to_le_bytes(), c.im.to_le_bytes()].concat()).collect();
-            f.seek(SeekFrom::Start(nav_hdr.len() as u64 + r as u64 * nav_row_bytes)).unwrap();
-            f.write_all(&b).unwrap();
+            f.write_all_at(&b, nav_hdr.len() as u64 + r as u64 * nav_row_bytes).unwrap();
         }
         f.sync_data().unwrap();
     };
@@ -1738,24 +1846,15 @@ fn main() {
     // the slab profile is centred on the slab (the RF frequency offset), not necessarily on the FOV
     let (pcx, pcy, pcz) = (slab_c[0] as f32, slab_c[1] as f32, slab_c[2] as f32);
 
-    let chunk_bins = 250;
+    // (SIMPH_CHUNK_BINS: smaller chunks for tests; the chunk states are named by their bins, so a resume needs the same value)
+    let chunk_bins: usize = std::env::var("SIMPH_CHUNK_BINS").ok().and_then(|s| s.parse().ok()).unwrap_or(250);
     let timing = std::env::var("SIMPH_TIMING").is_ok();
-    let mut tstage = [0f64; 5];
-    let mut tick = Instant::now();
-    let mut lap = |st: &std::sync::Arc<cudarc::driver::CudaStream>, k: usize, tstage: &mut [f64; 5]| {
-        if timing {
-            st.synchronize().unwrap();
-            tstage[k] += tick.elapsed().as_secs_f64();
-            tick = Instant::now();
-        }
-    };
     let t2 = Instant::now();
-    // paced runs: measured GPU seconds per (source chunk × sample) of the direct sum (ns_ref = 0: not measured yet)
-    let (mut per_chunk_s, mut ns_ref) = (1e-9f64, 0usize);
     let mut states = vec![];
     // a resumed finalisation: data_clean.npy is renamed only after every chunk, and the chunk states may be cleared
     let mut b0 = if resumed_outputs { nbins } else { 0 };
-    let mut terms = 0f64;
+    // the chunks still to simulate (a chunk with a marker state is done)
+    let mut pending: Vec<(usize, usize)> = vec![];
     while b0 < nbins {
         let b1 = (b0 + chunk_bins).min(nbins);
         let state = format!("sim_bins_{b0}_{b1}");
@@ -1767,7 +1866,7 @@ fn main() {
             if !rows.is_empty() && t.numel() == rows.len() * na * nc {
                 // an older state holds the chunk's samples: into the file
                 let o: Vec<num_complex::Complex32> = t.to_vec().unwrap();
-                write_rows(&mut kfile, &rows, &o);
+                write_rows(&kfile, &rows, &o);
                 if nav_sim {
                     println!("  WARNING: bins {b0}..{b1} come from an old chunk state without navigator data: their navigator rows stay zero");
                 }
@@ -1778,275 +1877,403 @@ fn main() {
                 assert!(!k_new, "{state} is done but {} was missing: rerun after deleting the state files (or --fresh)", k_part.display());
                 println!("  bins {b0}..{b1}: done (in the data file)");
             }
-            b0 = b1;
-            continue;
+        } else {
+            pending.push((b0, b1));
         }
-        let mut chunk_out = vec![num_complex::Complex32::new(0.0, 0.0); rows.len() * na * nc];
-        let mut nav_out = vec![num_complex::Complex32::new(0.0, 0.0); if nav_sim { rows.len() * nn * nc } else { 0 }];
-        let mut ro_off = 0;
-        for b in b0..b1 {
-            if by_bin[b].is_empty() {
-                continue;
+        b0 = b1;
+    }
+    // ── GPU workers ──
+    // one per entry of --gpus / HASTY_GPUS (device ordinals, repeats allowed), default every visible device
+    let gpus: Vec<usize> = match gpus_arg.clone().or_else(|| std::env::var("HASTY_GPUS").ok()).filter(|s| !s.is_empty() && s != "all") {
+        Some(s) => s.split(',').map(|x| x.trim().parse().expect("--gpus i,j,… (device ordinals)")).collect(),
+        None => (0..cudarc::driver::CudaContext::device_count().unwrap() as usize).collect(),
+    };
+    assert!(!gpus.is_empty(), "--gpus: no device");
+    let n_workers = gpus.len().min(pending.len());
+    println!("{} chunks of {chunk_bins} bins to simulate ({} done) on {} worker(s): GPUs {:?}", pending.len(), states.len() - pending.len(), n_workers, &gpus[..n_workers]);
+    // workers at different scan times draw different library beats: a cache smaller than the library recomputes moments
+    if let Some(bs) = beat_src.as_ref().filter(|bs| n_workers > 1 && bs.cache_cap < bs.n_lib) {
+        println!("note: --beat-cache {} < {} library beats with {n_workers} workers: beat moments will be recomputed (--beat-cache {} keeps them all, ≈ that many beats of host RAM)", bs.cache_cap, bs.n_lib, bs.n_lib);
+    }
+    let beat_src = std::sync::Mutex::new(beat_src);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (stop, abort) = (std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false));
+    // (terms, packed blood sub-sources, unpacked, chunks done) over all workers
+    let tot = std::sync::Mutex::new((0f64, 0f64, 0f64, 0usize));
+    // the direct-sum kernel: SIMPH_DSUM_RB = samples per thread (1: dsum, the original; 2 / 4: dsum_rb, register
+    // blocking, bit-identical per-thread partial sums; the source chunking is unchanged)
+    let dsum_rb: usize = std::env::var("SIMPH_DSUM_RB").ok().and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
+    // blood sub-source packing: deterministic (source order, default) or SIMPH_BSIG_ATOMIC=1 (the original counter order)
+    let bsig_det = std::env::var("SIMPH_BSIG_ATOMIC").map_or(true, |s| s.is_empty() || s == "0");
+    let det_i = bsig_det as i32;
+    // module loads one at a time (the NVRTC cache files)
+    let load_lock = std::sync::Mutex::new(());
+    /// a worker that panics stops the others after their current chunk
+    struct Bail<'a>(&'a std::sync::atomic::AtomicBool);
+    impl Drop for Bail<'_> {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                self.0.store(true, std::sync::atomic::Ordering::SeqCst);
             }
-            let tb = (b as f64 + 0.5) * bin;
-            let ct = ecg.at(tb);
-            let tc = if stat { 0.0 } else { ct.phase * period };
-            // the heartbeat's time scale: the template cycle stretched to this RR, velocities × period / RR
-            let rho = if stat { 1.0 } else { period / ct.rr };
-            let (r, rdot) = resp(tb);
-            // cardiac displacement / velocity grids at tc (periodic Catmull-Rom)
-            let s = (tc.rem_euclid(period)) / period * nu as f64;
-            let i = s.floor() as i64;
-            let f = s - i as f64;
-            let w = [(-f.powi(3) + 2.0 * f * f - f) / 2.0, (3.0 * f.powi(3) - 5.0 * f * f + 2.0) / 2.0, (-3.0 * f.powi(3) + 4.0 * f * f + f) / 2.0, (f.powi(3) - f * f) / 2.0];
-            let dw = [(-3.0 * f * f + 4.0 * f - 1.0) / 2.0, (9.0 * f * f - 10.0 * f) / 2.0, (-9.0 * f * f + 8.0 * f + 1.0) / 2.0, (3.0 * f * f - 2.0 * f) / 2.0].map(|x| x * nu as f64 / period);
-            let ks = [0, 1, 2, 3].map(|j| ((i - 1 + j as i64).rem_euclid(nu as i64)) as i32);
-            let nvl = nv_c as i64;
-            let (w0, w1, w2, w3) = (w[0] as f32, w[1] as f32, w[2] as f32, w[3] as f32);
-            let (d0, d1, d2, d3) = (dw[0] as f32, dw[1] as f32, dw[2] as f32, dw[3] as f32);
-            let (wz, dz) = if stat { (0f32, 0f32) } else { (1f32, rho as f32) };
-            let (w0, w1, w2, w3, d0, d1, d2, d3) = (w0 * wz, w1 * wz, w2 * wz, w3 * wz, d0 * dz, d1 * dz, d2 * dz, d3 * dz);
+        }
+    }
+    let worker = |wid: usize, gid: usize| {
+        use std::sync::atomic::Ordering::SeqCst;
+        let _bail = Bail(&abort);
+        let gtag = if n_workers > 1 { format!(" [gpu {gid}]") } else { String::new() };
+        let dev = Device::new(gid).unwrap();
+        let st = dev.default_stream();
+        let (m, mr) = {
+            let _l = load_lock.lock().unwrap();
+            let m = if dsum_rb > 1 {
+                dev.load_module(&format!("simphantom_nc{ncs}_rb{dsum_rb}_v10"), SRC, &CompileSettings { options: vec![format!("-DNC={ncs}"), format!("-DRB={dsum_rb}")], no_cache: false }).unwrap()
+            } else {
+                dev.load_module(&format!("simphantom_nc{ncs}_v10"), SRC, &CompileSettings { options: vec![format!("-DNC={ncs}")], no_cache: false }).unwrap()
+            };
+            let mr = resp_host.as_ref().map(|_| dev.load_module("simphantom_respfield_v2", hasty_bench::respfield::KERNEL, &CompileSettings { options: vec![], no_cache: false }).unwrap());
+            (m, mr)
+        };
+        let (kcomb, kprep, kdsum) = (m.load_function("combine").unwrap(), m.load_function("prep").unwrap(), m.load_function(if dsum_rb > 1 { "dsum_rb" } else { "dsum" }).unwrap());
+        let kbsig = m.load_function("bsig").unwrap();
+        let (kbnk, kscan_blk, kscan_tot, kscan_add) = (m.load_function("bsig_nk").unwrap(), m.load_function("scan_blk").unwrap(), m.load_function("scan_tot").unwrap(), m.load_function("scan_add").unwrap());
+        let d_u = st.clone_htod(&u_host).unwrap();
+        let mut d_uc = st.alloc_zeros::<f32>(nv_c).unwrap();
+        let mut d_vc = st.alloc_zeros::<f32>(nv_c).unwrap();
+        let d_s = st.clone_htod(&s_host).unwrap();
+        let d_g = st.clone_htod(&g_host).unwrap();
+        let d_c = st.clone_htod(&c_host).unwrap();
+        // sources on the GPU
+        let d_tpos = st.clone_htod(&tpos).unwrap();
+        let d_tfat = st.clone_htod(&tfat).unwrap();
+        let d_fattab = st.clone_htod(&fat_tab).unwrap();
+        let (d_tm, d_tom, d_tr2) = (st.clone_htod(&tm).unwrap(), st.clone_htod(&tom).unwrap(), st.clone_htod(&tr2).unwrap());
+        let (d_te1, d_tzo) = (st.clone_htod(&te1).unwrap(), st.clone_htod(&tzo).unwrap());
+        let (d_telh, d_telg) = if tel_on { (st.clone_htod(&telh).unwrap(), st.clone_htod(&telg).unwrap()) } else { (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(3).unwrap()) };
+        // (an empty frame — prep_sim --blood-frames-keep — gets one-element placeholders: no zero-size allocations)
+        let up = |x: &Vec<f32>| if x.is_empty() { st.alloc_zeros::<f32>(3).unwrap() } else { st.clone_htod(x).unwrap() };
+        let d_bf: Vec<_> = bf.iter().map(|b| (b.0, up(&b.1), up(&b.2), up(&b.3), up(&b.4), up(&b.5), b.3.len(), up(&b.6), up(&b.7))).collect();
+        let d_atab = st.clone_htod(&prof.alpha).unwrap();
+        let (ntab, az0, adz) = (prof.alpha.len() as i32, prof.z0 as f32, prof.dz as f32);
+        // --resp-field on the device: the blood tables, the LRU of tissue state columns, the bin's ω buffers (tissue;
+        // two blood slots)
+        struct RespDev<'a> {
+            h: &'a RespHost,
+            cols: Vec<(usize, CudaSlice<f32>)>,
+            tab_b: Vec<CudaSlice<f32>>,
+            om_t: CudaSlice<f32>,
+            om_b: [CudaSlice<f32>; 2],
+            func: cudarc::driver::CudaFunction,
+            func_bi: cudarc::driver::CudaFunction,
+        }
+        let mut resp_dev: Option<RespDev> = resp_host.as_ref().map(|h| {
+            let mr = mr.as_ref().unwrap();
+            RespDev {
+                h,
+                cols: vec![],
+                tab_b: h.tab_b.iter().map(|e| if e.is_empty() { st.alloc_zeros::<f32>(1).unwrap() } else { st.clone_htod(e).unwrap() }).collect(),
+                om_t: st.alloc_zeros::<f32>(nt.max(1)).unwrap(),
+                om_b: [st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap(), st.alloc_zeros::<f32>(nbmax0.max(1)).unwrap()],
+                func: mr.load_function("rlerp").unwrap(),
+                func_bi: mr.load_function("bilerp").unwrap(),
+            }
+        });
+        // ω of the bin's sources for breathing state r: out = base + Δ(r) (n sources)
+        let rlerp = |func: &cudarc::driver::CudaFunction, rk: &[f64], k: i32, n: usize, base: &CudaSlice<f32>, tab: &CudaSlice<f32>, r: f32, out: &mut CudaSlice<f32>| {
+            if n == 0 {
+                return;
+            }
+            let (j, a) = hasty_bench::respfield::segment(rk, r as f64);
+            let (nl, ji) = (n as i64, j as i32);
             unsafe {
-                st.launch_builder(&kcomb)
-                    .arg(&d_u).arg(&nvl).arg(&ks[0]).arg(&ks[1]).arg(&ks[2]).arg(&ks[3])
-                    .arg(&w0).arg(&w1).arg(&w2).arg(&w3).arg(&d0).arg(&d1).arg(&d2).arg(&d3)
-                    .arg(&mut d_uc).arg(&mut d_vc)
-                    .launch(LaunchConfig { grid_dim: ((nv_c as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                st.launch_builder(func)
+                    .arg(&nl).arg(base).arg(tab).arg(&k).arg(&ji).arg(&a).arg(out)
+                    .launch(LaunchConfig { grid_dim: ((n as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
                     .unwrap();
             }
-            lap(&st, 0, &mut tstage);
-            // tissue sources (--resp-field: ω of the bin's breathing state)
-            let ntl = nt as i64;
-            let (mode0, zero, one) = (0i32, 0f32, 1f32);
-            if let Some(rd) = resp_dev.as_mut() {
-                // the four states around (r, tc), their columns on the device (LRU of 8)
-                let w = hasty_bench::respfield::bilinear(&rd.rk, rd.nq, rd.period, r as f64, tc);
-                for &(s, _) in &w {
-                    if let Some(i) = rd.cols.iter().position(|e| e.0 == s) {
-                        let e = rd.cols.remove(i);
-                        rd.cols.push(e);
-                    } else {
-                        if rd.cols.len() >= 8 {
-                            rd.cols.remove(0);
-                        }
-                        let row = &rd.tab_t[2 * s * rd.n_in..2 * (s + 1) * rd.n_in];
-                        let col = hasty_bench::respfield::column(row, &tin, gam);
-                        rd.cols.push((s, st.clone_htod(&col).unwrap()));
-                    }
+        };
+        let mut d_src = st.alloc_zeros::<f32>((nt + nbmax) * SRC_FLOATS).unwrap();
+        let d_bfat = st.alloc_zeros::<f32>(nbmax.max(1)).unwrap();
+        // blood box edges (--blood-box on) and zero field gradients
+        let (d_bh, d_bg) = if blood_box {
+            (st.clone_htod(&vec![blood_h; nbmax.max(1)]).unwrap(), st.alloc_zeros::<f32>(3 * nbmax.max(1)).unwrap())
+        } else {
+            (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(3).unwrap())
+        };
+        let el_blood = blood_box as i32;
+        let mut d_amp = st.alloc_zeros::<C32>((nt + nbmax) * ncs).unwrap();
+        let d_rows: Vec<CudaSlice<i32>> = beat_src.lock().unwrap().as_ref().map_or(vec![], |bs| bs.rows.iter().map(|r| if r.is_empty() { st.alloc_zeros::<i32>(1).unwrap() } else { st.clone_htod(r).unwrap() }).collect());
+        let (mut d_p6, mut d_v6, mut d_m6, mut d_o6, mut d_r6) = if beat_on {
+            (st.alloc_zeros::<f32>(3 * nbmax).unwrap(), st.alloc_zeros::<f32>(3 * nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap())
+        } else {
+            (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap())
+        };
+        let (mut d_e6, mut d_z6) = if beat_on { (st.alloc_zeros::<f32>(nbmax).unwrap(), st.alloc_zeros::<f32>(nbmax).unwrap()) } else { (st.alloc_zeros::<f32>(1).unwrap(), st.alloc_zeros::<f32>(1).unwrap()) };
+        // a library beat's moments at a frame, on the device: two slots (--blood-blend uses two frames per bin)
+        let mut d_moms = [st.alloc_zeros::<u16>(1).unwrap(), st.alloc_zeros::<u16>(1).unwrap()];
+        // the slots' sub-source counts and their exclusive prefix sums (bsig det = 1), the slot totals on the host
+        let nsl = if beat_on { nbmax0.max(1) } else { 1 };
+        let mut d_nkv = [st.alloc_zeros::<u32>(nsl).unwrap(), st.alloc_zeros::<u32>(nsl).unwrap()];
+        let mut d_offs = [st.alloc_zeros::<u32>(nsl).unwrap(), st.alloc_zeros::<u32>(nsl).unwrap()];
+        let mut d_bsum = st.alloc_zeros::<u32>(nsl.div_ceil(1024) + 1).unwrap();
+        let mut d_tot = st.alloc_zeros::<u32>(1).unwrap();
+        let mut mom_tot = [0u64; 2];
+        let mut det_checks = 0usize;
+        let mut d_cnt = st.alloc_zeros::<u64>(1).unwrap();
+        let mut mom_keys: [Option<(usize, usize)>; 2] = [None, None];
+        let ug = grid(&d_uc, &st, cdims, 3, c0, ch, false);
+        let vg = grid(&d_vc, &st, cdims, 3, c0, ch, false);
+        let sg = grid(&d_s, &st, [rs_[4], rs_[3], rs_[2]], 3, [ro[0] + 0.5 * rh, ro[1] + 0.5 * rh, ro[2] + 0.5 * rh], rh, true);
+        let gg = grid(&d_g, &st, gd, 12, lo, gh, true);
+        let cg = grid(&d_c, &st, sd, 2 * ncs, [sa[0][3], sa[1][3], sa[2][3]], sa[0][0], false);
+        st.synchronize().unwrap();
+        println!("GPU ready{gtag} (worker {wid}, {:.1}s)", t0.elapsed().as_secs_f64());
+        let mut tstage = [0f64; 5];
+        let mut tick = Instant::now();
+        let mut lap = |st: &std::sync::Arc<cudarc::driver::CudaStream>, k: usize, tstage: &mut [f64; 5]| {
+            if timing {
+                st.synchronize().unwrap();
+                tstage[k] += tick.elapsed().as_secs_f64();
+                tick = Instant::now();
+            }
+        };
+        // paced runs: measured GPU seconds per (source chunk × sample) of the direct sum (ns_ref = 0: not measured yet)
+        let (mut per_chunk_s, mut ns_ref) = (1e-9f64, 0usize);
+        loop {
+            if stop.load(SeqCst) || abort.load(SeqCst) {
+                break;
+            }
+            let Some(&(b0, b1)) = pending.get(next.fetch_add(1, SeqCst)) else { break };
+            let state = format!("sim_bins_{b0}_{b1}");
+            let rows: Vec<usize> = (b0..b1).flat_map(|b| by_bin[b].iter().cloned()).collect();
+            // the chunk's terms and (packed, unpacked) blood sub-sources
+            let mut terms = 0f64;
+            let mut packed = (0f64, 0f64);
+            let mut chunk_out = vec![num_complex::Complex32::new(0.0, 0.0); rows.len() * na * nc];
+            let mut nav_out = vec![num_complex::Complex32::new(0.0, 0.0); if nav_sim { rows.len() * nn * nc } else { 0 }];
+            let mut ro_off = 0;
+            for b in b0..b1 {
+                if by_bin[b].is_empty() {
+                    continue;
                 }
-                let ci = w.map(|(s, _)| rd.cols.iter().position(|e| e.0 == s).unwrap());
-                let (ntl_, ww) = (nt as i64, w.map(|e| e.1));
+                let tb = (b as f64 + 0.5) * bin;
+                let ct = ecg.at(tb);
+                let tc = if stat { 0.0 } else { ct.phase * period };
+                // the heartbeat's time scale: the template cycle stretched to this RR, velocities × period / RR
+                let rho = if stat { 1.0 } else { period / ct.rr };
+                let (r, rdot) = resp(tb);
+                // cardiac displacement / velocity grids at tc (periodic Catmull-Rom)
+                let s = (tc.rem_euclid(period)) / period * nu as f64;
+                let i = s.floor() as i64;
+                let f = s - i as f64;
+                let w = [(-f.powi(3) + 2.0 * f * f - f) / 2.0, (3.0 * f.powi(3) - 5.0 * f * f + 2.0) / 2.0, (-3.0 * f.powi(3) + 4.0 * f * f + f) / 2.0, (f.powi(3) - f * f) / 2.0];
+                let dw = [(-3.0 * f * f + 4.0 * f - 1.0) / 2.0, (9.0 * f * f - 10.0 * f) / 2.0, (-9.0 * f * f + 8.0 * f + 1.0) / 2.0, (3.0 * f * f - 2.0 * f) / 2.0].map(|x| x * nu as f64 / period);
+                let ks = [0, 1, 2, 3].map(|j| ((i - 1 + j as i64).rem_euclid(nu as i64)) as i32);
+                let nvl = nv_c as i64;
+                let (w0, w1, w2, w3) = (w[0] as f32, w[1] as f32, w[2] as f32, w[3] as f32);
+                let (d0, d1, d2, d3) = (dw[0] as f32, dw[1] as f32, dw[2] as f32, dw[3] as f32);
+                let (wz, dz) = if stat { (0f32, 0f32) } else { (1f32, rho as f32) };
+                let (w0, w1, w2, w3, d0, d1, d2, d3) = (w0 * wz, w1 * wz, w2 * wz, w3 * wz, d0 * dz, d1 * dz, d2 * dz, d3 * dz);
                 unsafe {
-                    st.launch_builder(&rd.func_bi)
-                        .arg(&ntl_).arg(&d_tom).arg(&rd.cols[ci[0]].1).arg(&rd.cols[ci[1]].1).arg(&rd.cols[ci[2]].1).arg(&rd.cols[ci[3]].1)
-                        .arg(&ww[0]).arg(&ww[1]).arg(&ww[2]).arg(&ww[3]).arg(&mut rd.om_t)
-                        .launch(LaunchConfig { grid_dim: ((nt as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                    st.launch_builder(&kcomb)
+                        .arg(&d_u).arg(&nvl).arg(&ks[0]).arg(&ks[1]).arg(&ks[2]).arg(&ks[3])
+                        .arg(&w0).arg(&w1).arg(&w2).arg(&w3).arg(&d0).arg(&d1).arg(&d2).arg(&d3)
+                        .arg(&mut d_uc).arg(&mut d_vc)
+                        .launch(LaunchConfig { grid_dim: ((nv_c as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
                         .unwrap();
                 }
-            }
-            let tom_bin = resp_dev.as_ref().map_or(&d_tom, |rd| &rd.om_t);
-            unsafe {
-                st.launch_builder(&kprep)
-                    .arg(&mode0).arg(&ntl).arg(&d_tpos).arg(&d_tpos).arg(&d_tm).arg(tom_bin).arg(&d_tr2).arg(&d_tfat).arg(&d_te1).arg(&d_tzo).arg(&d_telh).arg(&d_telg).arg(&el_on)
-                    .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&zero)
-                    .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&one)
-                    .arg(&mut d_src).arg(&mut d_amp)
-                    .launch(LaunchConfig { grid_dim: ((nt as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
-                    .unwrap();
-            }
-            lap(&st, 1, &mut tstage);
-            // blood sources from the nearest stored cardiac frame (--blood-blend: the two around the bin)
-            let fparts = frames_at(tc);
-            let kf = fparts[0].0;
-            let bfr = &d_bf[kf];
-            // template time from a frame to the bin (bsig: the library mean at the bin's phase)
-            let dt_frame = |t_frame: f64| -> f64 {
-                let mut d = tc - t_frame;
-                if d > 0.5 * period {
-                    d -= period;
-                }
-                if d < -0.5 * period {
-                    d += period;
-                }
-                d
-            };
-            let dl = dt_frame(bfr.0);
-            // the physical time from the frame to the bin (the template offset stretched to this heartbeat): the
-            // Lagrangian shift of the blood sources (off with --blood-advect off)
-            let dl = if stat || (beat_src.is_some() && !blood_advect) { 0f32 } else { (dl / rho) as f32 };
-            for &(f, _) in &fparts {
-                assert!(d_bf[f].6 > 0 || only == "tissue", "blood frame {f} (t {:.4} s) has no sources: prep_sim --blood-frames-keep dropped a frame this run uses (see the 'blood frames used' list of a run with the same bins)", d_bf[f].0);
-            }
-            let nbl = bfr.6 as i64;
-            let mode1 = 1i32;
-            let vs = rho as f32;
-            let nb_used = if let Some(bs) = beat_src.as_mut() {
-                // the heartbeat's library beat; its moments at this frame (uploaded when (beat, frame) changes)
-                let k = bs.seq[ct.beat.min(bs.seq.len() - 1)] % bs.n_lib;
-                st.memset_zeros(&mut d_cnt).unwrap();
-                let collapse2 = beat_collapse * beat_collapse;
-                let mut nbl_all = 0i64;
-                for (fi, &(f, wf)) in fparts.iter().enumerate() {
-                    // the beat's moments at frame f in one of two device slots (uploaded when (beat, frame) is new;
-                    // the slot not holding the bin's other frame is replaced)
-                    let key = Some((k, f));
-                    let si = if mom_keys[0] == key {
-                        0
-                    } else if mom_keys[1] == key {
-                        1
-                    } else {
-                        let other = fparts.iter().find(|p| p.0 != f).map(|p| (k, p.0));
-                        let si = if other.is_some() && mom_keys[0] == other { 1 } else { 0 };
-                        let mb = bs.beat(k);
-                        let mm = &mb[f];
-                        d_moms[si] = if mm.is_empty() { st.alloc_zeros::<u16>(1).unwrap() } else { st.clone_htod(mm).unwrap() };
-                        mom_keys[si] = key;
-                        si
-                    };
-                    let bf_ = &d_bf[f];
-                    let nb_ = bf_.6 as i64;
-                    let dtt = if stat { 0f32 } else { dt_frame(bf_.0) as f32 };
-                    let wf = wf as f32;
-                    // --resp-field: the frame's ω at the bin's breathing state in slot fi
-                    if let Some(rd) = resp_dev.as_mut() {
-                        rlerp(&rd.func, &rd.rk, rd.k, bf_.6, &bf_.4, &rd.tab_b[f], r, &mut rd.om_b[fi]);
+                lap(&st, 0, &mut tstage);
+                // tissue sources (--resp-field: ω of the bin's breathing state)
+                let ntl = nt as i64;
+                let (mode0, zero, one) = (0i32, 0f32, 1f32);
+                if let Some(rd) = resp_dev.as_mut() {
+                    // the four states around (r, tc), their columns on the device (LRU of 8)
+                    let w = hasty_bench::respfield::bilinear(&rd.h.rk, rd.h.nq, rd.h.period, r as f64, tc);
+                    for &(s, _) in &w {
+                        if let Some(i) = rd.cols.iter().position(|e| e.0 == s) {
+                            let e = rd.cols.remove(i);
+                            rd.cols.push(e);
+                        } else {
+                            if rd.cols.len() >= 8 {
+                                rd.cols.remove(0);
+                            }
+                            let row = &rd.h.tab_t[2 * s * rd.h.n_in..2 * (s + 1) * rd.h.n_in];
+                            let col = hasty_bench::respfield::column(row, &tin, gam);
+                            rd.cols.push((s, st.clone_htod(&col).unwrap()));
+                        }
                     }
-                    let om_f = resp_dev.as_ref().map_or(&bf_.4, |rd| &rd.om_b[fi]);
+                    let ci = w.map(|(s, _)| rd.cols.iter().position(|e| e.0 == s).unwrap());
+                    let (ntl_, ww) = (nt as i64, w.map(|e| e.1));
                     unsafe {
-                        st.launch_builder(&kbsig)
-                            .arg(&nb_).arg(&bf_.1).arg(&bf_.2).arg(&bf_.3).arg(om_f).arg(&bf_.5).arg(&bf_.7).arg(&bf_.8).arg(&d_rows[f]).arg(&d_moms[si]).arg(&vs).arg(&bs.spin).arg(&bs.pd_scale)
-                            .arg(&collapse2).arg(&dtt).arg(&wf).arg(&mut d_cnt)
-                            .arg(&mut d_p6).arg(&mut d_v6).arg(&mut d_m6).arg(&mut d_o6).arg(&mut d_r6).arg(&mut d_e6).arg(&mut d_z6)
-                            .launch(LaunchConfig { grid_dim: ((nb_ as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                        st.launch_builder(&rd.func_bi)
+                            .arg(&ntl_).arg(&d_tom).arg(&rd.cols[ci[0]].1).arg(&rd.cols[ci[1]].1).arg(&rd.cols[ci[2]].1).arg(&rd.cols[ci[3]].1)
+                            .arg(&ww[0]).arg(&ww[1]).arg(&ww[2]).arg(&ww[3]).arg(&mut rd.om_t)
+                            .launch(LaunchConfig { grid_dim: ((nt as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
                             .unwrap();
                     }
-                    nbl_all += nb_;
                 }
-                // packed sub-sources (1 or 6 per frame source)
-                let n6 = st.clone_dtoh(&d_cnt).unwrap()[0] as i64;
-                packed.0 += n6 as f64;
-                packed.1 += 6.0 * nbl_all as f64;
-                let one = 1f32;
-                let mut src_b = d_src.slice_mut(nt * SRC_FLOATS..);
-                let mut amp_b = d_amp.slice_mut(nt * ncs..);
+                let tom_bin = resp_dev.as_ref().map_or(&d_tom, |rd| &rd.om_t);
                 unsafe {
                     st.launch_builder(&kprep)
-                        .arg(&mode1).arg(&n6).arg(&d_p6).arg(&d_v6).arg(&d_m6).arg(&d_o6).arg(&d_r6).arg(&d_bfat).arg(&d_e6).arg(&d_z6).arg(&d_bh).arg(&d_bg).arg(&el_blood)
-                        .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&dl)
+                        .arg(&mode0).arg(&ntl).arg(&d_tpos).arg(&d_tpos).arg(&d_tm).arg(tom_bin).arg(&d_tr2).arg(&d_tfat).arg(&d_te1).arg(&d_tzo).arg(&d_telh).arg(&d_telg).arg(&el_on)
+                        .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&zero)
                         .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&one)
-                        .arg(&mut src_b).arg(&mut amp_b)
-                        .launch(LaunchConfig { grid_dim: ((n6 as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                        .arg(&mut d_src).arg(&mut d_amp)
+                        .launch(LaunchConfig { grid_dim: ((nt as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
                         .unwrap();
                 }
-                n6 as usize
-            } else {
-                if let Some(rd) = resp_dev.as_mut() {
-                    rlerp(&rd.func, &rd.rk, rd.k, bfr.6, &bfr.4, &rd.tab_b[kf], r, &mut rd.om_b[0]);
-                }
-                let om_f = resp_dev.as_ref().map_or(&bfr.4, |rd| &rd.om_b[0]);
-                let mut src_b = d_src.slice_mut(nt * SRC_FLOATS..);
-                let mut amp_b = d_amp.slice_mut(nt * ncs..);
-                unsafe {
-                    st.launch_builder(&kprep)
-                        .arg(&mode1).arg(&nbl).arg(&bfr.1).arg(&bfr.2).arg(&bfr.3).arg(om_f).arg(&bfr.5).arg(&d_bfat).arg(&bfr.7).arg(&bfr.8).arg(&d_bh).arg(&d_bg).arg(&el_blood)
-                        .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&dl)
-                        .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&vs)
-                        .arg(&mut src_b).arg(&mut amp_b)
-                        .launch(LaunchConfig { grid_dim: ((bfr.6 as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
-                        .unwrap();
-                }
-                bfr.6
-            };
-            let np_ = nt + nb_used;
-            lap(&st, 2, &mut tstage);
-            // samples of the bin's readouts (δ = t_exc − t_bin)
-            let mut smp = Vec::with_capacity(by_bin[b].len() * na * SAMPLE_FLOATS);
-            for &ri in &by_bin[b] {
-                let mut sp = acq.sample_params(ri..ri + 1);
-                let dlt = (acq.t_exc(ri) - tb) as f32;
-                for n in 0..na {
-                    sp[n * SAMPLE_FLOATS + 14] = if stat { 0.0 } else { dlt };
-                    if ideal {
-                        for q in 9..13 {
-                            sp[n * SAMPLE_FLOATS + q] = 0.0;
-                        }
+                lap(&st, 1, &mut tstage);
+                // blood sources from the nearest stored cardiac frame (--blood-blend: the two around the bin)
+                let fparts = frames_at(tc);
+                let kf = fparts[0].0;
+                let bfr = &d_bf[kf];
+                // template time from a frame to the bin (bsig: the library mean at the bin's phase)
+                let dt_frame = |t_frame: f64| -> f64 {
+                    let mut d = tc - t_frame;
+                    if d > 0.5 * period {
+                        d -= period;
                     }
-                }
-                smp.extend(sp);
-            }
-            let ns = by_bin[b].len() * na;
-            lap(&st, 3, &mut tstage);
-            let d_smp = st.clone_htod(&smp).unwrap();
-            let mut d_out = st.alloc_zeros::<f64>(2 * ns * ncs).unwrap();
-            // ≈ 2048 blocks fill the GPU; more source chunks only add f64 atomics on the same outputs
-            let ychunks = (2048 / (ns as u64).div_ceil(128)).clamp(1, 4096);
-            let chunk_u = (np_ as u64).div_ceil(ychunks).max(2048);
-            let ny = (np_ as u64).div_ceil(chunk_u) as u32;
-            let chunk = chunk_u as i64;
-            let (ns_i, np_l) = (ns as i32, np_ as i64);
-            // unpaced: one launch over all source chunks; paced (HASTY_GPU_WATTS / DUTY): slices of ≈ HASTY_GPU_SLICE s
-            // of GPU time (whole source chunks, the outputs accumulate atomically either way) with a pace point after
-            // each, so the duty cycle switches fast; the slice size is calibrated from the measured time per chunk
-            let launch = |y0: u32, n: u32, out: &mut CudaSlice<f64>| {
-                let yo = y0 as i32;
-                unsafe {
-                    st.launch_builder(&kdsum)
-                        .arg(&d_smp).arg(&ns_i).arg(&d_src).arg(&d_amp).arg(&np_l).arg(&chunk).arg(out).arg(&d_fattab).arg(&npk).arg(&yo)
-                        .launch(LaunchConfig { grid_dim: ((ns as u32).div_ceil(128), n, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
-                        .unwrap();
-                }
-            };
-            match hasty_cuda::pace::slice_seconds() {
-                None => launch(0, ny, &mut d_out),
-                Some(slice) => {
-                    let mut y0 = 0u32;
-                    while y0 < ny {
-                        let n = if ns_ref == 0 { 1 } else { ((slice / (per_chunk_s * ns as f64).max(1e-9)) as u32).clamp(1, ny - y0) };
-                        let t = Instant::now();
-                        launch(y0, n, &mut d_out);
-                        st.synchronize().unwrap();
-                        // seconds per (source chunk × sample): the next slices aim at `slice` seconds
-                        let per = t.elapsed().as_secs_f64() / (n as f64 * ns as f64);
-                        per_chunk_s = if ns_ref == 0 { per } else { 0.7 * per_chunk_s + 0.3 * per };
-                        ns_ref = 1;
-                        y0 += n;
-                        hasty_cuda::pace::pace_synced();
+                    if d < -0.5 * period {
+                        d += period;
                     }
+                    d
+                };
+                let dl = dt_frame(bfr.0);
+                // the physical time from the frame to the bin (the template offset stretched to this heartbeat): the
+                // Lagrangian shift of the blood sources (off with --blood-advect off)
+                let dl = if stat || (beat_on && !blood_advect) { 0f32 } else { (dl / rho) as f32 };
+                for &(f, _) in &fparts {
+                    assert!(d_bf[f].6 > 0 || only == "tissue", "blood frame {f} (t {:.4} s) has no sources: prep_sim --blood-frames-keep dropped a frame this run uses (see the 'blood frames used' list of a run with the same bins)", d_bf[f].0);
                 }
-            }
-            let o = st.clone_dtoh(&d_out).unwrap();
-            lap(&st, 4, &mut tstage);
-            if timing && b % 50 == 0 {
-                println!("    bin {b}: combine+prep tissue+blood+samples+dsum cumulative {:?} s (ns {ns}, np {np_}, grid {} × {})", tstage.map(|x| (x * 100.0).round() / 100.0), (ns as u32).div_ceil(128), ny);
-            }
-            match &coil_u {
-                None => {
-                    for k in 0..ns * nc {
-                        chunk_out[ro_off * na * nc + k] = num_complex::Complex32::new(o[2 * k] as f32, o[2 * k + 1] as f32);
-                    }
-                }
-                Some(u) => {
-                    // physical coils y_c = Σ_v U_cv y_v
-                    for smp_i in 0..ns {
-                        for c in 0..nc {
-                            let mut a = Complex64::new(0.0, 0.0);
-                            for v in 0..ncs {
-                                a += u[c * ncs + v] * Complex64::new(o[2 * (smp_i * ncs + v)], o[2 * (smp_i * ncs + v) + 1]);
+                let nbl = bfr.6 as i64;
+                let mode1 = 1i32;
+                let vs = rho as f32;
+                let nb_used = if let Some(bs) = beat_par.as_ref() {
+                    // the heartbeat's library beat; its moments at this frame (uploaded when (beat, frame) changes)
+                    let k = bs.seq[ct.beat.min(bs.seq.len() - 1)] % bs.n_lib;
+                    st.memset_zeros(&mut d_cnt).unwrap();
+                    let collapse2 = beat_collapse * beat_collapse;
+                    let mut nbl_all = 0i64;
+                    // deterministic packing: the frames' slots follow each other (frame fi from the counts before it)
+                    let mut fbase = 0u64;
+                    for (fi, &(f, wf)) in fparts.iter().enumerate() {
+                        // the beat's moments at frame f in one of two device slots (uploaded when (beat, frame) is new;
+                        // the slot not holding the bin's other frame is replaced)
+                        let key = Some((k, f));
+                        let si = if mom_keys[0] == key {
+                            0
+                        } else if mom_keys[1] == key {
+                            1
+                        } else {
+                            let other = fparts.iter().find(|p| p.0 != f).map(|p| (k, p.0));
+                            let si = if other.is_some() && mom_keys[0] == other { 1 } else { 0 };
+                            let mb = beat_src.lock().unwrap().as_mut().unwrap().beat(k);
+                            let mm = &mb[f];
+                            d_moms[si] = if mm.is_empty() { st.alloc_zeros::<u16>(1).unwrap() } else { st.clone_htod(mm).unwrap() };
+                            mom_keys[si] = key;
+                            // the slot's per-source counts and offsets (deterministic packing)
+                            let nf = d_bf[f].6;
+                            mom_tot[si] = 0;
+                            if bsig_det && nf > 0 {
+                                let (nl, nb_blk) = (nf as i64, nf.div_ceil(1024) as i32);
+                                unsafe {
+                                    st.launch_builder(&kbnk)
+                                        .arg(&nl).arg(&d_rows[f]).arg(&d_moms[si]).arg(&collapse2).arg(&mut d_nkv[si])
+                                        .launch(LaunchConfig { grid_dim: ((nf as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                                        .unwrap();
+                                    st.launch_builder(&kscan_blk)
+                                        .arg(&nl).arg(&d_nkv[si]).arg(&mut d_offs[si]).arg(&mut d_bsum)
+                                        .launch(LaunchConfig { grid_dim: (nb_blk as u32, 1, 1), block_dim: (1024, 1, 1), shared_mem_bytes: 0 })
+                                        .unwrap();
+                                    st.launch_builder(&kscan_tot)
+                                        .arg(&nb_blk).arg(&mut d_bsum).arg(&mut d_tot)
+                                        .launch(LaunchConfig { grid_dim: (1, 1, 1), block_dim: (1024, 1, 1), shared_mem_bytes: 0 })
+                                        .unwrap();
+                                    st.launch_builder(&kscan_add)
+                                        .arg(&nl).arg(&mut d_offs[si]).arg(&d_bsum)
+                                        .launch(LaunchConfig { grid_dim: ((nf as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                                        .unwrap();
+                                }
+                                mom_tot[si] = st.clone_dtoh(&d_tot).unwrap()[0] as u64;
+                                // self-check of the prefix sum on the worker's first slots (offs[p + 1] = offs[p] + nk[p])
+                                if det_checks < 4 {
+                                    det_checks += 1;
+                                    let (nk_h, of_h) = (st.clone_dtoh(&d_nkv[si]).unwrap(), st.clone_dtoh(&d_offs[si]).unwrap());
+                                    let mut run = 0u64;
+                                    for q in 0..nf {
+                                        assert!(nk_h[q] == 1 || nk_h[q] == 6, "bsig_nk: count {} at source {q}", nk_h[q]);
+                                        assert_eq!(of_h[q] as u64, run, "bsig packing: offset of source {q} of frame {f}");
+                                        run += nk_h[q] as u64;
+                                    }
+                                    assert_eq!(run, mom_tot[si], "bsig packing: total of frame {f}");
+                                }
                             }
-                            chunk_out[(ro_off * na + smp_i) * nc + c] = num_complex::Complex32::new(a.re as f32, a.im as f32);
+                            si
+                        };
+                        let bf_ = &d_bf[f];
+                        let nb_ = bf_.6 as i64;
+                        let dtt = if stat { 0f32 } else { dt_frame(bf_.0) as f32 };
+                        let wf = wf as f32;
+                        // --resp-field: the frame's ω at the bin's breathing state in slot fi
+                        if let Some(rd) = resp_dev.as_mut() {
+                            rlerp(&rd.func, &rd.h.rk, rd.h.k, bf_.6, &bf_.4, &rd.tab_b[f], r, &mut rd.om_b[fi]);
                         }
+                        let om_f = resp_dev.as_ref().map_or(&bf_.4, |rd| &rd.om_b[fi]);
+                        unsafe {
+                            st.launch_builder(&kbsig)
+                                .arg(&nb_).arg(&bf_.1).arg(&bf_.2).arg(&bf_.3).arg(om_f).arg(&bf_.5).arg(&bf_.7).arg(&bf_.8).arg(&d_rows[f]).arg(&d_moms[si]).arg(&vs).arg(&bs.spin).arg(&bs.pd_scale)
+                                .arg(&collapse2).arg(&dtt).arg(&wf).arg(&mut d_cnt)
+                                .arg(&d_nkv[si]).arg(&d_offs[si]).arg(&fbase).arg(&det_i)
+                                .arg(&mut d_p6).arg(&mut d_v6).arg(&mut d_m6).arg(&mut d_o6).arg(&mut d_r6).arg(&mut d_e6).arg(&mut d_z6)
+                                .launch(LaunchConfig { grid_dim: ((nb_ as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                                .unwrap();
+                        }
+                        nbl_all += nb_;
+                        fbase += mom_tot[si];
                     }
-                }
-            }
-            // navigator ADC (encode / tail blocks): the same sources and per-sample physics, its own launch so the
-            // readout launch (sample count → source chunking) is exactly what it was without the navigator
-            if nav_sim {
-                let mut smp_n = Vec::with_capacity(by_bin[b].len() * nn * SAMPLE_FLOATS);
+                    // packed sub-sources (1 or 6 per frame source)
+                    let n6 = st.clone_dtoh(&d_cnt).unwrap()[0] as i64;
+                    assert!(!bsig_det || n6 as u64 == fbase, "bsig packing: {n6} sub-sources counted, the slot offsets end at {fbase}");
+                    packed.0 += n6 as f64;
+                    packed.1 += 6.0 * nbl_all as f64;
+                    let one = 1f32;
+                    let mut src_b = d_src.slice_mut(nt * SRC_FLOATS..);
+                    let mut amp_b = d_amp.slice_mut(nt * ncs..);
+                    unsafe {
+                        st.launch_builder(&kprep)
+                            .arg(&mode1).arg(&n6).arg(&d_p6).arg(&d_v6).arg(&d_m6).arg(&d_o6).arg(&d_r6).arg(&d_bfat).arg(&d_e6).arg(&d_z6).arg(&d_bh).arg(&d_bg).arg(&el_blood)
+                            .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&dl)
+                            .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&one)
+                            .arg(&mut src_b).arg(&mut amp_b)
+                            .launch(LaunchConfig { grid_dim: ((n6 as u32).div_ceil(256).max(1), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                            .unwrap();
+                    }
+                    n6 as usize
+                } else {
+                    if let Some(rd) = resp_dev.as_mut() {
+                        rlerp(&rd.func, &rd.h.rk, rd.h.k, bfr.6, &bfr.4, &rd.tab_b[kf], r, &mut rd.om_b[0]);
+                    }
+                    let om_f = resp_dev.as_ref().map_or(&bfr.4, |rd| &rd.om_b[0]);
+                    let mut src_b = d_src.slice_mut(nt * SRC_FLOATS..);
+                    let mut amp_b = d_amp.slice_mut(nt * ncs..);
+                    unsafe {
+                        st.launch_builder(&kprep)
+                            .arg(&mode1).arg(&nbl).arg(&bfr.1).arg(&bfr.2).arg(&bfr.3).arg(om_f).arg(&bfr.5).arg(&d_bfat).arg(&bfr.7).arg(&bfr.8).arg(&d_bh).arg(&d_bg).arg(&el_blood)
+                            .arg(&ug).arg(&vg).arg(&sg).arg(&gg).arg(&cg).arg(&r).arg(&rdot).arg(&dl)
+                            .arg(&isx).arg(&isy).arg(&isz).arg(&fcx).arg(&fcy).arg(&fcz).arg(&pcx).arg(&pcy).arg(&pcz).arg(&d_atab).arg(&ntab).arg(&az0).arg(&adz).arg(&vs)
+                            .arg(&mut src_b).arg(&mut amp_b)
+                            .launch(LaunchConfig { grid_dim: ((bfr.6 as u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                            .unwrap();
+                    }
+                    bfr.6
+                };
+                let np_ = nt + nb_used;
+                lap(&st, 2, &mut tstage);
+                // samples of the bin's readouts (δ = t_exc − t_bin)
+                let mut smp = Vec::with_capacity(by_bin[b].len() * na * SAMPLE_FLOATS);
                 for &ri in &by_bin[b] {
-                    let mut sp = acq.nav_params(ri..ri + 1);
-                    assert_eq!(sp.len(), nn * SAMPLE_FLOATS);
+                    let mut sp = acq.sample_params(ri..ri + 1);
                     let dlt = (acq.t_exc(ri) - tb) as f32;
-                    for n in 0..nn {
+                    for n in 0..na {
                         sp[n * SAMPLE_FLOATS + 14] = if stat { 0.0 } else { dlt };
                         if ideal {
                             for q in 9..13 {
@@ -2054,79 +2281,183 @@ fn main() {
                             }
                         }
                     }
-                    smp_n.extend(sp);
+                    smp.extend(sp);
                 }
-                let ns_n = by_bin[b].len() * nn;
-                let d_smp_n = st.clone_htod(&smp_n).unwrap();
-                let mut d_out_n = st.alloc_zeros::<f64>(2 * ns_n * ncs).unwrap();
-                let ych = (2048 / (ns_n as u64).div_ceil(128)).clamp(1, 4096);
-                let chunk_un = (np_ as u64).div_ceil(ych).max(2048);
-                let ny_n = (np_ as u64).div_ceil(chunk_un) as u32;
-                let (chunk_n, ns_ni) = (chunk_un as i64, ns_n as i32);
-                let launch_n = |y0: u32, n: u32, out: &mut CudaSlice<f64>| {
+                let ns = by_bin[b].len() * na;
+                lap(&st, 3, &mut tstage);
+                let d_smp = st.clone_htod(&smp).unwrap();
+                let mut d_out = st.alloc_zeros::<f64>(2 * ns * ncs).unwrap();
+                // ≈ 2048 blocks fill the GPU; more source chunks only add f64 atomics on the same outputs
+                let ychunks = (2048 / (ns as u64).div_ceil(128)).clamp(1, 4096);
+                let chunk_u = (np_ as u64).div_ceil(ychunks).max(2048);
+                let ny = (np_ as u64).div_ceil(chunk_u) as u32;
+                let chunk = chunk_u as i64;
+                let (ns_i, np_l) = (ns as i32, np_ as i64);
+                // unpaced: one launch over all source chunks; paced (HASTY_GPU_WATTS / DUTY): slices of ≈ HASTY_GPU_SLICE s
+                // of GPU time (whole source chunks, the outputs accumulate atomically either way) with a pace point after
+                // each, so the duty cycle switches fast; the slice size is calibrated from the measured time per chunk
+                let launch = |y0: u32, n: u32, out: &mut CudaSlice<f64>| {
                     let yo = y0 as i32;
                     unsafe {
                         st.launch_builder(&kdsum)
-                            .arg(&d_smp_n).arg(&ns_ni).arg(&d_src).arg(&d_amp).arg(&np_l).arg(&chunk_n).arg(out).arg(&d_fattab).arg(&npk).arg(&yo)
-                            .launch(LaunchConfig { grid_dim: ((ns_n as u32).div_ceil(128), n, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
+                            .arg(&d_smp).arg(&ns_i).arg(&d_src).arg(&d_amp).arg(&np_l).arg(&chunk).arg(out).arg(&d_fattab).arg(&npk).arg(&yo)
+                            .launch(LaunchConfig { grid_dim: ((ns as u32).div_ceil(128 * dsum_rb as u32), n, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
                             .unwrap();
                     }
                 };
                 match hasty_cuda::pace::slice_seconds() {
-                    None => launch_n(0, ny_n, &mut d_out_n),
+                    None => launch(0, ny, &mut d_out),
                     Some(slice) => {
                         let mut y0 = 0u32;
-                        while y0 < ny_n {
-                            let n = ((slice / (per_chunk_s * ns_n as f64).max(1e-9)) as u32).clamp(1, ny_n - y0);
-                            launch_n(y0, n, &mut d_out_n);
+                        while y0 < ny {
+                            let n = if ns_ref == 0 { 1 } else { ((slice / (per_chunk_s * ns as f64).max(1e-9)) as u32).clamp(1, ny - y0) };
+                            let t = Instant::now();
+                            launch(y0, n, &mut d_out);
                             st.synchronize().unwrap();
+                            // seconds per (source chunk × sample): the next slices aim at `slice` seconds
+                            let per = t.elapsed().as_secs_f64() / (n as f64 * ns as f64);
+                            per_chunk_s = if ns_ref == 0 { per } else { 0.7 * per_chunk_s + 0.3 * per };
+                            ns_ref = 1;
                             y0 += n;
                             hasty_cuda::pace::pace_synced();
                         }
                     }
                 }
-                let o = st.clone_dtoh(&d_out_n).unwrap();
+                let o = st.clone_dtoh(&d_out).unwrap();
+                lap(&st, 4, &mut tstage);
+                if timing && b % 50 == 0 {
+                    println!("    bin {b}: combine+prep tissue+blood+samples+dsum cumulative {:?} s (ns {ns}, np {np_}, grid {} × {})", tstage.map(|x| (x * 100.0).round() / 100.0), (ns as u32).div_ceil(128), ny);
+                }
                 match &coil_u {
                     None => {
-                        for k in 0..ns_n * nc {
-                            nav_out[ro_off * nn * nc + k] = num_complex::Complex32::new(o[2 * k] as f32, o[2 * k + 1] as f32);
+                        for k in 0..ns * nc {
+                            chunk_out[ro_off * na * nc + k] = num_complex::Complex32::new(o[2 * k] as f32, o[2 * k + 1] as f32);
                         }
                     }
                     Some(u) => {
-                        for smp_i in 0..ns_n {
+                        // physical coils y_c = Σ_v U_cv y_v
+                        for smp_i in 0..ns {
                             for c in 0..nc {
                                 let mut a = Complex64::new(0.0, 0.0);
                                 for v in 0..ncs {
                                     a += u[c * ncs + v] * Complex64::new(o[2 * (smp_i * ncs + v)], o[2 * (smp_i * ncs + v) + 1]);
                                 }
-                                nav_out[(ro_off * nn + smp_i) * nc + c] = num_complex::Complex32::new(a.re as f32, a.im as f32);
+                                chunk_out[(ro_off * na + smp_i) * nc + c] = num_complex::Complex32::new(a.re as f32, a.im as f32);
                             }
                         }
                     }
                 }
-                terms += ns_n as f64 * np_ as f64 * ncs as f64;
+                // navigator ADC (encode / tail blocks): the same sources and per-sample physics, its own launch so the
+                // readout launch (sample count → source chunking) is exactly what it was without the navigator
+                if nav_sim {
+                    let mut smp_n = Vec::with_capacity(by_bin[b].len() * nn * SAMPLE_FLOATS);
+                    for &ri in &by_bin[b] {
+                        let mut sp = acq.nav_params(ri..ri + 1);
+                        assert_eq!(sp.len(), nn * SAMPLE_FLOATS);
+                        let dlt = (acq.t_exc(ri) - tb) as f32;
+                        for n in 0..nn {
+                            sp[n * SAMPLE_FLOATS + 14] = if stat { 0.0 } else { dlt };
+                            if ideal {
+                                for q in 9..13 {
+                                    sp[n * SAMPLE_FLOATS + q] = 0.0;
+                                }
+                            }
+                        }
+                        smp_n.extend(sp);
+                    }
+                    let ns_n = by_bin[b].len() * nn;
+                    let d_smp_n = st.clone_htod(&smp_n).unwrap();
+                    let mut d_out_n = st.alloc_zeros::<f64>(2 * ns_n * ncs).unwrap();
+                    let ych = (2048 / (ns_n as u64).div_ceil(128)).clamp(1, 4096);
+                    let chunk_un = (np_ as u64).div_ceil(ych).max(2048);
+                    let ny_n = (np_ as u64).div_ceil(chunk_un) as u32;
+                    let (chunk_n, ns_ni) = (chunk_un as i64, ns_n as i32);
+                    let launch_n = |y0: u32, n: u32, out: &mut CudaSlice<f64>| {
+                        let yo = y0 as i32;
+                        unsafe {
+                            st.launch_builder(&kdsum)
+                                .arg(&d_smp_n).arg(&ns_ni).arg(&d_src).arg(&d_amp).arg(&np_l).arg(&chunk_n).arg(out).arg(&d_fattab).arg(&npk).arg(&yo)
+                                .launch(LaunchConfig { grid_dim: ((ns_n as u32).div_ceil(128 * dsum_rb as u32), n, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
+                                .unwrap();
+                        }
+                    };
+                    match hasty_cuda::pace::slice_seconds() {
+                        None => launch_n(0, ny_n, &mut d_out_n),
+                        Some(slice) => {
+                            let mut y0 = 0u32;
+                            while y0 < ny_n {
+                                let n = ((slice / (per_chunk_s * ns_n as f64).max(1e-9)) as u32).clamp(1, ny_n - y0);
+                                launch_n(y0, n, &mut d_out_n);
+                                st.synchronize().unwrap();
+                                y0 += n;
+                                hasty_cuda::pace::pace_synced();
+                            }
+                        }
+                    }
+                    let o = st.clone_dtoh(&d_out_n).unwrap();
+                    match &coil_u {
+                        None => {
+                            for k in 0..ns_n * nc {
+                                nav_out[ro_off * nn * nc + k] = num_complex::Complex32::new(o[2 * k] as f32, o[2 * k + 1] as f32);
+                            }
+                        }
+                        Some(u) => {
+                            for smp_i in 0..ns_n {
+                                for c in 0..nc {
+                                    let mut a = Complex64::new(0.0, 0.0);
+                                    for v in 0..ncs {
+                                        a += u[c * ncs + v] * Complex64::new(o[2 * (smp_i * ncs + v)], o[2 * (smp_i * ncs + v) + 1]);
+                                    }
+                                    nav_out[(ro_off * nn + smp_i) * nc + c] = num_complex::Complex32::new(a.re as f32, a.im as f32);
+                                }
+                            }
+                        }
+                    }
+                    terms += ns_n as f64 * np_ as f64 * ncs as f64;
+                }
+                ro_off += by_bin[b].len();
+                terms += ns as f64 * np_ as f64 * ncs as f64;
+                // GPU pacing point (HASTY_GPU_DUTY / HASTY_GPU_WATTS; a no-op unless configured)
+                hasty_cuda::pace::pace(&st);
             }
-            ro_off += by_bin[b].len();
-            terms += ns as f64 * np_ as f64 * ncs as f64;
-            // GPU pacing point (HASTY_GPU_DUTY / HASTY_GPU_WATTS; a no-op unless configured)
-            hasty_cuda::pace::pace(&st);
+            if let Some(f) = nav_file.as_ref() {
+                write_nav_rows(f, &rows, &nav_out);
+            }
+            // the readout rows last: a chunk is done once its marker is saved (below), both files written by then
+            write_rows(&kfile, &rows, &chunk_out);
+            drop(chunk_out);
+            drop(nav_out);
+            ctl.save(&state, &Value::Tensor(hasty_value::Tensor::from_slice(&[rows.len()], &rows.iter().map(|&r| r as f32).collect::<Vec<f32>>()).unwrap())).unwrap();
+            let (tt, p0, p1) = {
+                let mut t = tot.lock().unwrap();
+                t.0 += terms;
+                t.1 += packed.0;
+                t.2 += packed.1;
+                t.3 += 1;
+                (t.0, t.1, t.2)
+            };
+            let el = t2.elapsed().as_secs_f64();
+            println!("  bins {b0}..{b1} of {nbins}{gtag}: {} readouts, {:.1}s, {:.2e} terms/s{}", rows.len(), el, tt / el.max(1e-9), if p1 > 0.0 { format!(", blood sub-sources packed to {:.1} %", 100.0 * p0 / p1) } else { String::new() });
+            if ctl.stop_requested() {
+                stop.store(true, SeqCst);
+            }
         }
-        if let Some(f) = nav_file.as_mut() {
-            write_nav_rows(f, &rows, &nav_out);
-        }
-        // the readout rows last: a chunk is done once its marker is saved (below), both files written by then
-        write_rows(&mut kfile, &rows, &chunk_out);
-        drop(chunk_out);
-        drop(nav_out);
-        ctl.save(&state, &Value::Tensor(hasty_value::Tensor::from_slice(&[rows.len()], &rows.iter().map(|&r| r as f32).collect::<Vec<f32>>()).unwrap())).unwrap();
-        let el = t2.elapsed().as_secs_f64();
-        println!("  bins {b0}..{b1} of {nbins}: {} readouts, {:.1}s, {:.2e} terms/s{}", rows.len(), el, terms / el.max(1e-9), if packed.1 > 0.0 { format!(", blood sub-sources packed to {:.1} %", 100.0 * packed.0 / packed.1) } else { String::new() });
-        b0 = b1;
-        if b0 < nbins && ctl.stop_requested() {
-            println!("stopped after bins ..{b0} of {nbins}: rerun the same command to resume");
-            std::process::exit(0);
-        }
+    };
+    if n_workers > 0 {
+        std::thread::scope(|sc| {
+            for (wid, &gid) in gpus[..n_workers].iter().enumerate() {
+                let w = &worker;
+                sc.spawn(move || w(wid, gid));
+            }
+        });
     }
+    let left = pending.len() - tot.lock().unwrap().3;
+    if left > 0 {
+        println!("stopped with {left} of {} chunks left: rerun the same command to resume", pending.len());
+        std::process::exit(0);
+    }
+    let mut beat_src = beat_src.into_inner().unwrap();
+    drop((u_host, s_host, g_host, c_host));
     println!("simulation {:.1}s", t2.elapsed().as_secs_f64());
 
     // ── outputs ──
@@ -2509,7 +2840,7 @@ fn main() {
         nm["use"] = serde_json::json!("navigator / auxiliary data only: never reconstruction data (encode lobes and spoiler leave kmax)");
         meta["nav"] = nm;
     }
-    if let Some(rd) = resp_dev.as_ref() {
+    if let Some(rd) = resp_host.as_ref() {
         meta["resp_field"] = serde_json::json!({
             "file": resp_field_path.as_ref().map(|p| p.display().to_string()), "mode": rd.mode, "r_k": rd.rk, "n_cardiac": rd.nq, "period": rd.period,
             "c_q": (0..rd.nq).map(|q| q as f64 * rd.period / rd.nq as f64).collect::<Vec<_>>(),

@@ -65,6 +65,9 @@ impl Registry {
         let mut r = Self::new();
         base_commands(&mut r);
         crate::flow::register(&mut r);
+        crate::flow_surface::register(&mut r);
+        crate::flow_wall::register(&mut r);
+        crate::bloch::register(&mut r);
         crate::mesh::register(&mut r);
         crate::mesh_ops::register(&mut r);
         crate::mesh_flow::register(&mut r);

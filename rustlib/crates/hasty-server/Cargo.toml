@@ -9,6 +9,7 @@ license.workspace = true
 hasty-site = { path = "../hasty-site" }
 hasty-value = { path = "../hasty-value" }
 hasty-infer = { path = "../hasty-infer" }
+hasty-seq = { path = "../hasty-seq" }
 num-complex.workspace = true
 rustfft.workspace = true
 rayon = "1.12"

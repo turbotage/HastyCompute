@@ -46,7 +46,7 @@ gj = json.loads((E / "graph.json").read_text())
 fl = load_any(F / "network_flow.npz")
 pts, rad, eoff, ecomp = g["points"], g["radius"], g["edge_offsets"], g["edge_comp"]
 comps = {c["id"]: c for c in gj["components"]}
-CODE = {"systemic_arterial": 1, "systemic_venous": 2, "pulmonary_arterial": 3, "pulmonary_venous": 4, "arterial_other": 5, "coronary": 5, "venous_other": 6}
+CODE = {"systemic_arterial": 1, "systemic_venous": 2, "portal_venous": 2, "pulmonary_arterial": 3, "pulmonary_venous": 4, "arterial_other": 5, "coronary": 5, "venous_other": 6}
 ne = len(eoff) - 1
 cls = np.zeros(len(pts), np.uint8)
 for k in range(ne):

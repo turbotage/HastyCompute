@@ -43,6 +43,11 @@ pub const F_REFILL: u8 = 4;
 pub const F_BC: u8 = 8;
 pub const F_PSM: u8 = 16;
 pub const F_WALL: u8 = 32;
+/// grid refinement roles (static): a coarse node covered by the finer level
+pub const F_HIDDEN: u8 = 64;
+/// a fine node in a coarse-owned cell next to the fine region (exploded coarse populations; F_HIDDEN | F_GHOST: unused)
+pub const F_GHOST: u8 = 128;
+pub const F_IFACE: u8 = F_HIDDEN | F_GHOST;
 
 /// shifted equilibrium g_i = f_i^eq − w_i
 pub fn geq(i: usize, rho: f32, u: [f32; 3]) -> f32 {
@@ -79,6 +84,14 @@ pub struct GeomParams {
     pub ntiles: i32,
     /// 1: a region map is sampled at the reference position
     pub regions: i32,
+    /// wall transpiration groups (0: off; case.rs Transpiration)
+    pub ntrans: i32,
+    /// transpiration band half-width |φ| (lattice units)
+    pub tband: f32,
+    /// per group (index = id − 1): storage flux q_w(t) (m³/s) × vscale
+    pub tq: [f32; 8],
+    /// 1: a valve core's bounce-back wall where the solid fraction crosses ½ along the link (RunSpec::valve_q)
+    pub vq: i32,
 }
 
 #[repr(C)]
@@ -95,7 +108,12 @@ pub struct StepParams {
     pub tau_b: f32,
     /// lattice stress → Pa (ρ0 (dx/dt)²) for the wall shear stress accumulation
     pub stress_out: f32,
-    pub pad: i32,
+    /// wall mass: non-zero → the step accumulates each wall link's bounce-back mass change (node_wallmass)
+    pub wmask: i32,
+    /// refinement level of the nodes (their accumulation into the level-0 output cells, volume weight 8^−lshift)
+    pub lshift: i32,
+    /// refinement: a ghost's packets pulled from owned nodes get their non-equilibrium × rghost (fine → coarse; 1: off)
+    pub rghost: f32,
 }
 
 /// spin history (kernels/lbm_core.h SpinParams)

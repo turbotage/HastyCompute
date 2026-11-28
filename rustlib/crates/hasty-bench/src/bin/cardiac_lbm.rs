@@ -99,6 +99,34 @@ fn main() {
             nodes as f64 * steps as f64 / 2e9 / 60.0,
             nodes as f64 * steps as f64 / 1.5e9 / 60.0
         );
+        // grid refinement: the finer levels' tiles, ghosts and their share of the work (2^l steps per coarse step)
+        if !case.refine.is_empty() {
+            let topo = hasty_cfd::backend::Topology::new(&tiles);
+            match hasty_cfd::refine::build(&case, &topo, 24) {
+                Ok(b) => {
+                    let mut work = nodes as f64;
+                    for lb in &b.levels {
+                        let n = lb.topo.nodes();
+                        work += n as f64 * (1u64 << lb.level) as f64;
+                        println!(
+                            "  level {} ({:.3} mm): {} coarse cells refined (dropped {} nesting, {} never blood), {} tiles = {:.2} M nodes ≈ {:.1} GB, {} ghosts, {} rim",
+                            lb.level,
+                            case.grid.dx * 1e3 / (1u64 << lb.level) as f64,
+                            lb.cells,
+                            lb.dropped_nest,
+                            lb.dropped_inactive,
+                            lb.topo.ntiles,
+                            n as f64 / 1e6,
+                            hasty_cfd::gpu::GpuBackend::estimate_bytes(lb.topo.ntiles, 0, 0, 0, 0) as f64 / 1e9,
+                            lb.iface.glist.len(),
+                            lb.iface.rim.len()
+                        );
+                    }
+                    println!("  node updates per coarse step {:.1} M ({:.2}× the uniform level 0) ≈ {:.0}–{:.0} min", work / 1e6, work / nodes as f64, work * steps as f64 / 2e9 / 60.0, work * steps as f64 / 1.5e9 / 60.0);
+                }
+                Err(e) => println!("  refinement: {e}"),
+            }
+        }
         return;
     }
     std::fs::create_dir_all(&out).unwrap();

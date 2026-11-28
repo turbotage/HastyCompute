@@ -19,7 +19,12 @@ import { fetchRoi } from '../../common/roi.js';
 import { poolSlab } from '../../common/pool.js';
 import { GpuTracer } from './gputrace.js';
 import { VesselTool, drawProfile, profileSeries } from './vessel.js';
+import { SurfaceLayer } from './surface_layer.js';
+import { initSurfaceUI } from './surface_ui.js';
 import { Plot } from './plot.js';
+import { installHelp } from '../../common/help.js';
+import { HELP } from './help.js';
+installHelp(HELP);
 
 const client = new HastyClient().enableWorkers();   // slice / volume fetches are decoded off the main thread
 const $ = (id) => document.getElementById(id);
@@ -243,6 +248,11 @@ async function main() {
     scene.add(cursorMesh);
     const centerLayer = new CenterlineLayer();
     scene.add(centerLayer.group);
+    const surface = new SurfaceLayer();               // moving blood-pool surface (opt-in, see surface_ui.js)
+    scene.add(surface.group);
+    const wallShell = new SurfaceLayer();             // wall shell around it, same time base
+    wallShell.mesh.renderOrder = 2;
+    scene.add(wallShell.group);
     const stream = new LineLayer(sp, lutTex);
     const path = new LineLayer(sp, lutTex, { pathlines: true });
     scene.add(stream.group, path.group);
@@ -477,6 +487,7 @@ async function main() {
         $('frame-label').textContent = `t ${f} / ${F} (${(f * dt * 1e3).toFixed(0)} ms)`;
         paintSlices();
         planes.forEach((p, a) => { if ($(`s${a}-on`).checked && !p.has[f] && !p.cycleRequested) loadSlice(a, 0); });
+        if (surface.setTime(f) | wallShell.setTime(f)) invalidate();
         scheduleStreamlines();
         discs.forEach((d) => d.frame(f, vmax()));
         plot.setCursor(f * dt * 1e3);
@@ -742,6 +753,7 @@ async function main() {
             else { tau = nt; setFrame(nf, true); }
         }
         path.uniforms.tNow.value = tau;
+        surface.setTime(tau / dt); wallShell.setTime(tau / dt);
         if (dirty || playing || alwaysRender) {
             dirty = false;
             const t0 = performance.now();
@@ -803,6 +815,8 @@ async function main() {
         if (local() && ($('sl-on').checked)) updateStreamlines();
     }
     const clientReady = startClientLoad();
+
+    initSurfaceUI({ $, client, id, name: entry.name, surface, wall: wallShell, status, invalidate, params, ext, tau: () => tau / dt });
 
     frame = -1;
     setFrame(Math.floor(tau / dt) % F);

@@ -485,6 +485,47 @@ impl Flow {
         out
     }
 
+    /// Particle paths for the Bloch parcel: every seed (voxel coordinates) released at `t0` frames and advected with RK4
+    /// through the cyclic field for `duration_s` seconds, `substeps` steps per frame interval. Returns the step (s) and per
+    /// seed the positions after 0..=n steps (voxel coordinates) and the step at which it left the volume (positions are
+    /// held at the last valid one from there).
+    pub fn parcel_paths(&self, t0: f64, duration_s: f64, seeds: &[[f64; 3]], substeps: f64) -> (f64, Vec<(Vec<[f64; 3]>, Option<usize>)>) {
+        let duration = duration_s / self.dt; // frames
+        let nsteps = ((duration * substeps.max(1.0)).ceil() as usize).clamp(1, 4_000_000);
+        let h = duration / nsteps as f64; // frames per step
+        let hs = h * self.dt;
+        let vel = |p: [f64; 3], t: f64| self.sample(p, t).map(|v| self.vox(v));
+        let paths = seeds
+            .par_iter()
+            .map(|&s| {
+                let mut out = Vec::with_capacity(nsteps + 1);
+                let (mut p, mut t) = (s, t0);
+                let mut exit = None;
+                out.push(p);
+                for k in 0..nsteps {
+                    let next = (|| {
+                        let k1 = vel(p, t)?;
+                        let add = |p: [f64; 3], k: [f64; 3], f: f64| [p[0] + f * k[0], p[1] + f * k[1], p[2] + f * k[2]];
+                        let k2 = vel(add(p, k1, hs / 2.0), t + h / 2.0)?;
+                        let k3 = vel(add(p, k2, hs / 2.0), t + h / 2.0)?;
+                        let k4 = vel(add(p, k3, hs), t + h)?;
+                        Some([0, 1, 2].map(|a| p[a] + hs / 6.0 * (k1[a] + 2.0 * k2[a] + 2.0 * k3[a] + k4[a])))
+                    })();
+                    match next {
+                        Some(q) => p = q,
+                        None => {
+                            exit.get_or_insert(k);
+                        }
+                    }
+                    out.push(p);
+                    t += h;
+                }
+                (out, exit)
+            })
+            .collect();
+        (hs, paths)
+    }
+
     /// Flow through a disc: centre (voxel coordinates), normal (physical), radius (m), sampled on an n × n grid.
     /// Region inside the disc: the mask / PC-MRA region if `quantile` is given, else the whole disc.
     /// Returns (summary JSON, through-plane velocity [F, n, n] (0 outside), region [n, n]).

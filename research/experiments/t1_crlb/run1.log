@@ -1,0 +1,53 @@
+tissues: [('fat', 0.29), ('liver', 0.8), ('myocardium', 1.2), ('blood', 1.75)]
+TR 11.0 ms, scan 480 s; kappa = sqrt(CRLB_T1)/T1 at SNR_TR = 1 (smaller is better)
+
+== A. VFA steady-state (no prep), B1 unknown; angle sets (deg)
+  (3, 15)                      free=('rho', 'T1')  kappa(geo-mean) 0.4471   B1 known: 0.4471
+  (3, 8, 15)                   free=('rho', 'T1', 'B1')  kappa(geo-mean) 0.8131   B1 known: 0.4827
+  (2, 5, 10, 18)               free=('rho', 'T1', 'B1')  kappa(geo-mean) 0.7861   B1 known: 0.3988
+  (4, 6, 8, 10, 12, 15, 20)    free=('rho', 'T1', 'B1')  kappa(geo-mean) 1.023   B1 known: 0.4529
+
+== B. continuous IR, fixed flip, B1 + rho free (eta fixed 0.95)
+  T_period(s) alpha(deg) | kappa myo   blood   fat   liver | geo-mean
+    0.5      4     | 137.8 288.9 10.51 62.98 | 100.8
+    0.5      8     | 71.97 149.9 5.718 33.22 | 52.98
+    0.5     16     | 48.07 98.64 4.074 22.64 | 35.71
+    1.0      4     | 73.69 149.9 8.483 35.73 | 57.73
+    1.0      8     | 42.41 84.77 5.016 20.98 | 33.29
+    1.0     16     | 42.26 84.04 4.439 20.83 | 32.44
+    1.5      4     | 54.37 106 8.779 28.35 | 44.97
+    1.5      8     | 35.06 67.02 5.39 18.52 | 28.63
+    1.5     16     | 45.45 89.21 5.136 22.81 | 35.27
+    2.0      4     | 46.44 86.6 9.457 25.88 | 39.77
+    2.0      8     | 33.1 61.04 5.904 18.29 | 27.59
+    2.0     16     | 49.8 97.18 5.796 25.19 | 38.81
+    3.0      4     | 40.98 70.36 10.98 25.25 | 36.35
+    3.0      8     | 33.67 59.35 6.953 19.58 | 28.57
+    3.0     16     | 58.66 113.9 6.978 29.84 | 45.86
+    4.0      4     | 40.4 65.28 12.43 26.42 | 36.29
+    4.0      8     | 35.99 61.99 7.909 21.43 | 30.74
+    4.0     16     | 66.72 129.4 8 34.02 | 52.22
+    6.0      4     | 43.15 65.06 14.98 29.88 | 39.02
+    6.0      8     | 41.47 70 9.566 25.19 | 35.59
+    6.0     16     | 80.7 156.3 9.734 41.2 | 63.21
+    8.0      4     | 47.15 68.78 17.17 33.46 | 42.68
+    8.0      8     | 46.78 78.33 10.98 28.61 | 40.19
+    8.0     16     | 92.6 179.2 11.2 47.31 | 72.56
+  best fixed-flip IR: (np.float64(27.58749703516897), 2.0, 8)
+
+== C. saturation recovery, fixed flip
+  best fixed-flip SR: (np.float64(0.06482699710184411), 0.5, 16)
+
+== D. IR with optimised piecewise flip-angle schedule (K segments), B1 free
+  T_period 2.0 s, K=1: kappa 27.44  angles [8.7]
+  T_period 2.0 s, K=2: kappa 0.9292  angles [ 4.5 36.4]
+  T_period 2.0 s, K=4: kappa 0.3094  angles [ 6.9 23.4  0.4 -0.5]
+  T_period 2.0 s, K=8: kappa 0.3274  angles [-13.6  98.9   2.6  21.6  -5.1  -1.3  -1.    0.1]
+  T_period 3.0 s, K=1: kappa 28.47  angles [7.5]
+  T_period 3.0 s, K=2: kappa 0.6431  angles [ 3.6 31.9]
+  T_period 3.0 s, K=4: kappa 0.2518  angles [ 7.9 17.2  0.3  0.3]
+  T_period 3.0 s, K=8: kappa 0.2381  angles [  6.2   8.6  27.    0.1 -12.1  -0.1   0.3  -4. ]
+  T_period 4.0 s, K=1: kappa 30.23  angles [6.9]
+  T_period 4.0 s, K=2: kappa 0.2445  angles [12.1 -0.9]
+  T_period 4.0 s, K=4: kappa 0.2327  angles [ 8.8 14.5  0.4  0.2]
+  T_period 4.0 s, K=8: kappa 0.2261  angles [ 6.8 19.8 28.1 -2.3  2.3  2.6  0.6  0.4]

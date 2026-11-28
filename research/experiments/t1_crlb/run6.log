@@ -1,0 +1,27 @@
+head tissues [('scalp fat', 0.29), ('white matter', 0.83), ('grey matter', 1.33), ('blood', 1.75), ('CSF', 4.2)] B1 [1.0, 0.8]
+
+== 1. IR, flip floor sweep, K=12 pieces, B1+eta free
+  T_p 3.0 s floor   1°: kappa 0.5502  distinct levels >floor+1°: 7/12  angles [23.4 14.5 16.4 11.3  5.8  1.   1.   1.   1.   1.  30.  16.4]  [10s]
+  T_p 3.0 s floor   3°: kappa 0.5677  distinct levels >floor+1°: 6/12  angles [23.9 15.3 16.6 11.7  3.   3.   3.   3.   3.   3.  30.  17.4]  [20s]
+  T_p 3.0 s floor   5°: kappa 0.6131  distinct levels >floor+1°: 6/12  angles [24.7 17.4 18.2 10.2  5.   5.   5.   5.   5.   5.  30.  18.9]  [30s]
+  T_p 3.0 s floor   8°: kappa 0.7618  distinct levels >floor+1°: 6/12  angles [25.2 21.8 22.7 10.2  8.   8.   8.   8.   8.   8.  30.  19.6]  [38s]
+  T_p 6.0 s floor   1°: kappa 0.3642  distinct levels >floor+1°: 6/12  angles [19.3 16.4 12.6  9.3  1.   1.   1.   1.   1.   1.  30.  13.7]  [64s]
+  T_p 6.0 s floor   3°: kappa 0.3856  distinct levels >floor+1°: 6/12  angles [18.9 15.2 10.   3.   3.   3.   3.   3.   3.  30.  16.1 13.7]  [91s]
+  T_p 6.0 s floor   5°: kappa 0.4414  distinct levels >floor+1°: 6/12  angles [18.5 18.6 11.1  5.   5.   5.   5.   5.   5.  30.  17.9 12.5]  [119s]
+  T_p 6.0 s floor   8°: kappa 0.6004  distinct levels >floor+1°: 5/12  angles [17.1 20.   8.   8.   8.   8.   8.   8.  30.  23.5 21.5  8. ]  [144s]
+
+== 2. many-level VFA (no prep), equal blocks, B1 free (eta absent)
+  K= 3 equally spaced 2..30°: kappa 0.6104
+  K= 4 equally spaced 2..30°: kappa 0.7832
+  K= 6 equally spaced 2..30°: kappa 1.101
+  K=12 equally spaced 2..30°: kappa 1.362
+  K=24 equally spaced 2..30°: kappa 1.404
+  K= 4 optimised (floor 2°): kappa 0.4227 angles [ 2.   2.  29.7 29.9]
+  K=12 optimised (floor 2°): kappa 0.373 angles [ 2.   2.   2.   2.   2.   6.1  9.7 10.6 16.8 30.  30.  30. ]
+
+== 3. IR T_p 4 s with a smooth many-level schedule (24 pieces, floor 3°), B1+eta free, vs sinusoidal/random-smooth fixed designs
+  optimised 24 pieces: kappa 0.4243
+  linear ramp 3->25          kappa 1.4
+  sine 3..25 (3 periods)     kappa 1.228
+  random smooth              kappa 0.8898
+done 304s

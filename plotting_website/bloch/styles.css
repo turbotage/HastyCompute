@@ -1,0 +1,47 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; color: #ddd; font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; }
+header { display: flex; white-space: nowrap; align-items: center; gap: 0.9rem; padding: 0.4rem 1rem; background: #0d0d0d; border-bottom: 1px solid #2a2a2a; flex-shrink: 0; height: 38px; }
+header > * { flex-shrink: 0; }
+.home-link { color: #6a8aa8; text-decoration: none; font-size: 0.85rem; }
+.sep { color: #444; }
+.title { font-size: 0.88rem; font-weight: 600; color: #9ab8d0; letter-spacing: 0.04em; }
+.name { color: #bbb; font-size: 0.82rem; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
+.status { margin-left: auto; color: #888; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; flex-shrink: 1 !important; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; color: #aaa; }
+button { background: #1e2a36; color: #cde; border: 1px solid #34485c; border-radius: 3px; padding: 2px 9px; cursor: pointer; font-size: 0.8rem; }
+button:hover:not(:disabled) { background: #26384a; }
+button:disabled { opacity: 0.4; cursor: default; }
+.hdr-label { color: #888; font-size: 0.78rem; }
+select, input[type=number] { background: #1a1a1a; color: #ddd; border: 1px solid #333; border-radius: 3px; padding: 1px 4px; font-size: 0.8rem; }
+input[type=number] { width: 4.6rem; }
+#pos { width: 22vw; min-width: 6rem; flex-shrink: 1; }
+main { flex: 1; display: flex; min-height: 0; }
+aside { width: 290px; flex-shrink: 0; background: #141414; border-right: 1px solid #2a2a2a; overflow-y: auto; padding: 0.4rem 0.7rem 1rem; }
+section { border-bottom: 1px solid #242424; padding: 0.55rem 0; display: flex; flex-direction: column; gap: 0.32rem; }
+section[hidden] { display: none; }
+section h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7f9fbf; font-weight: 600; }
+section label { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; color: #bbb; flex-wrap: wrap; }
+section label.sub { padding-left: 1.2rem; color: #999; }
+section input[type=range] { flex: 1; min-width: 6rem; }
+.hint { color: #777; font-size: 0.74rem; }
+#center-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#view { flex: 1; position: relative; min-height: 0; }
+#canvas { width: 100%; height: 100%; display: block; }
+#readout { position: absolute; left: 12px; top: 8px; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; white-space: pre; pointer-events: none; line-height: 1.45; }
+#legend3d { position: absolute; left: 12px; bottom: 8px; background: rgba(0,0,0,0.45); padding: 2px 8px; border-radius: 4px; }
+#bottom { height: 300px; flex-shrink: 0; display: flex; flex-direction: column; border-top: 1px solid #2a2a2a; background: #0e0e0e; }
+#bottom canvas { width: 100%; flex: 1; min-height: 0; display: block; }
+#history { border-top: 1px solid #222; }
+#right-col { width: min(38vw, 520px); flex-shrink: 0; border-left: 1px solid #2a2a2a; background: #0c0c0c; position: relative; display: flex; }
+#mip-wrap { flex: 1; position: relative; min-width: 0; }
+#mip { width: 100%; height: 100%; display: block; cursor: crosshair; }
+#mip-info { position: absolute; left: 8px; bottom: 6px; background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 3px; pointer-events: none; }
+#picker { position: absolute; inset: 8% 6%; background: #161b20; border: 1px solid #334; border-radius: 6px; padding: 1rem 1.4rem; overflow: auto; z-index: 3; }
+#picker h2 { font-size: 1rem; color: #9ab8d0; margin-bottom: 0.6rem; }
+#picker a { color: #8fc1ff; display: block; padding: 3px 0; }
+#info { font-size: 0.74rem; color: #888; line-height: 1.5; }
+@media (max-width: 1100px) { #right-col { width: 34vw; } aside { width: 240px; } }
+#bottom canvas#timeline { flex: 1.5; }
+#bottom canvas#history { flex: 1; }
+.trio input[type=number] { width: 3.4rem; }
+#scope { position: absolute; right: 8px; bottom: 8px; width: 400px; height: 200px; background: rgba(8,10,12,0.8); border: 1px solid #333; border-radius: 4px; }

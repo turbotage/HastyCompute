@@ -64,6 +64,10 @@ pub struct Fields {
     pub um: Vec<f32>,
     pub bsol: Vec<f32>,
     pub bcid: Vec<u8>,
+    /// wall-link bits per node (bit i: population i bounces back)
+    pub links: Vec<u32>,
+    /// wall-link fractions q × 255 ([Q − 1][N])
+    pub qlink: Vec<u8>,
 }
 
 pub trait Backend {
@@ -72,14 +76,22 @@ pub trait Backend {
     fn motion(&mut self, mp: &MotionParams) -> Result<()>;
     /// geometry update: inverse motion, distance, valves, cuts, wall links; with `refill` the uncovered nodes get
     /// equilibrium populations (at start-up: all of them); then the fluid flags are committed
-    fn geometry(&mut self, gp: &GeomParams, valves: &[f32], cuts: &[f32], refill: bool) -> Result<()>;
+    fn geometry(&mut self, gp: &GeomParams, valves: &[f32], cuts: &[f32], refill: bool) -> Result<()> {
+        self.geometry1(gp, valves, cuts)?;
+        self.geometry2(gp, refill)
+    }
+    /// geometry pass 1 (inverse motion, distance, valves, cuts: the fluid flags) — the refinement ghosts are masked by
+    /// their coarse owners between the passes
+    fn geometry1(&mut self, gp: &GeomParams, valves: &[f32], cuts: &[f32]) -> Result<()>;
+    /// geometry pass 2 (wall links, refill, wall mass of the cover / refill, commit)
+    fn geometry2(&mut self, gp: &GeomParams, refill: bool) -> Result<()>;
     /// one stream + collide step (swaps the population and macroscopic buffers)
     fn step(&mut self, sp: &StepParams) -> Result<()>;
     /// add the latest velocity to the output accumulator (current phase bin)
     fn accumulate(&mut self, sp: &StepParams) -> Result<()>;
     /// the accumulator ([tile][cell][ACC_STRIDE]) and zero it
     fn take_acc(&mut self) -> Result<Vec<f32>>;
-    /// diagnostics [4·ncuts + 2·nprobes + 2·nreg + 4 + 2·ncuts] (see `node_diag`); `light`: cuts and probes only (the
+    /// diagnostics [4·ncuts + 2·nprobes + 2·nreg + 4 + 3·ncuts] (see `node_diag`); `light`: cuts and probes only (the
     /// regions and the global slots zero)
     fn diag(&mut self, ncuts: usize, nprobes: usize, nreg: usize, light: bool) -> Result<Vec<f32>>;
     /// populations (current source) and macroscopic fields (latest), for checkpoints
@@ -88,26 +100,82 @@ pub trait Backend {
     fn fields(&mut self) -> Result<Fields>;
     /// spin history: the α(z) table, one advection / saturation / recovery step of the scalar, its state
     fn set_spin_table(&mut self, atab: &[f32]) -> Result<()>;
+    /// wall transpiration (case.rs Transpiration): group map (u8) and weight (m⁻²) on the sdf grid
+    fn set_transpiration(&mut self, group: &[u8], weight: &[f32]) -> Result<()>;
+    /// valve planes for the exact valve flux of the diagnostics (8 floats each, see node_diag)
+    fn set_vplanes(&mut self, vp: &[f32]) -> Result<()>;
+    /// wall mass (node_wallmass): the region bit mask whose wall operations are corrected (0: off); `cover`: the
+    /// covered / refilled nodes' mass counts too (the neutral mode), else only the bounce-back's (the pump mode)
+    fn set_wall_mass(&mut self, wmask: u32, cover: bool);
+    /// reduce the wall mass accumulated since the last call per region; each region's fluid nodes get
+    /// (target_r − Σ_r) / N_r (target: lattice mass per region, None: zero); returns [Σ per region, node count per region]
+    fn wall_mass_apply(&mut self, target: Option<&[f32]>) -> Result<Vec<f32>>;
+    /// the same sums without applying or clearing them (diagnostics: the bounce-back share before a geometry update)
+    fn wall_mass_peek(&mut self) -> Result<Vec<f32>>;
+    /// clear the accumulated wall mass (diagnostics)
+    fn wall_mass_clear(&mut self) -> Result<()>;
     fn scalar(&mut self, sp: &SpinParams) -> Result<()>;
     fn save_scalar(&mut self) -> Result<Vec<f32>>;
     fn restore_scalar(&mut self, s: &[f32]) -> Result<()>;
     /// GPU pacing point (hasty_cuda::pace: HASTY_GPU_DUTY / HASTY_GPU_WATTS); a no-op unless configured, and on the CPU
     fn pace(&self) {}
+
+    // ── grid refinement (kernels/lbm_core.h "grid refinement", refine.rs) ──
+
+    /// a backend for a finer level of the same case (own topology and node buffers; the motion samples, sdf, region
+    /// and transpiration maps shared with this one on the GPU, copied on the CPU; the spin table is set per level); a
+    /// finer level accumulates into the level-0 backend (`accumulate_to`) and has no accumulator of its own
+    fn new_level(&self, topo: Topology) -> Result<Self>
+    where
+        Self: Sized;
+    /// static node roles (F_HIDDEN / F_GHOST bits), OR'ed into the flags
+    fn set_roles(&mut self, roles: &[u8]) -> Result<()>;
+    /// per node scale of the WALE eddy viscosity × 1/32 (kernels/lbm_core.h node_step; empty: none)
+    fn set_wale_scale(&mut self, s: &[u8]) -> Result<()>;
+    /// the interface tables of this (finer) level towards its coarser one
+    fn set_interface(&mut self, it: &crate::refine::Interface) -> Result<()>;
+    /// ghosts are fluid only where their coarse owner is (between geometry passes 1 and 2 of this level)
+    fn ghost_mask(&mut self, coarse: &Self) -> Result<()>;
+    /// the coarse post-collision populations, ρ, u (and s) of the rim into this level's ghosts (both buffers): the
+    /// equilibrium at ρ, u linear to the ghost's centre (interp; else the coarse cell's), the non-equilibrium × r[0] for
+    /// the packets the fine level pulls in its first step, × r[1] for those of its second (kernels/lbm_core.h)
+    fn explode(&mut self, coarse: &Self, r: [f32; 2], interp: bool) -> Result<()>;
+    /// the ghosts' mass exchange with the owned nodes in the coming step (first: reset)
+    fn iflux(&mut self, first: bool) -> Result<()>;
+    /// ρ, u (and s) of the coarse hidden nodes next to owned ones from this level
+    fn restrict_to(&self, coarse: &mut Self) -> Result<()>;
+    /// the fine packets into the coarse hidden slots with the levels' stress difference ρ kfd S (kfd 0: none), the
+    /// exact-mass correction of the rim
+    fn coalesce_to(&self, coarse: &mut Self, kfd: f32) -> Result<()>;
+    /// this level's latest velocity into the level-0 output accumulator
+    fn accumulate_to(&self, root: &mut Self, sp: &StepParams) -> Result<()>;
+    /// wall mass per region since the last call: [Σ per region, node count per region] (keep: do not clear)
+    fn wall_mass_sums(&mut self, keep: bool) -> Result<Vec<f32>>;
+    /// add the density corr[r] to every owned fluid node of region r
+    fn wall_mass_correct(&mut self, corr: &[f32]) -> Result<()>;
 }
 
 // ── CPU backend ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 extern "C" {
     fn cpu_motion(mp: *const MotionParams, k0: i64, k1: i64, uall: *const u16, ut: *mut f32, vt: *mut f32);
-    fn cpu_geom1(p: *const GeomParams, n0: i64, n1: i64, n: i64, txyz: *const i32, ut: *const f32, vt: *const f32, sdf: *const f32, valves: *const f32, cuts: *const f32, xref: *mut f32, phi: *mut f32, um: *mut f32, bsol: *mut f32, bcid: *mut u8, flags: *mut u8, spg: *mut f32, pid: *mut u8, rmap: *const u8, rid: *mut u8);
-    fn cpu_geom2(n0: i64, n1: i64, n: i64, tnbr: *const i32, phi: *const f32, links: *mut u32, qlink: *mut u8, flags: *mut u8);
+    fn cpu_geom1(p: *const GeomParams, n0: i64, n1: i64, n: i64, txyz: *const i32, ut: *const f32, vt: *const f32, sdf: *const f32, valves: *const f32, cuts: *const f32, xref: *mut f32, phi: *mut f32, um: *mut f32, bsol: *mut f32, bcid: *mut u8, flags: *mut u8, spg: *mut f32, pid: *mut u8, rmap: *const u8, rid: *mut u8, tgrp: *const u8, tw: *const f32);
+    fn cpu_geom2(p: *const GeomParams, n0: i64, n1: i64, n: i64, txyz: *const i32, tnbr: *const i32, phi: *const f32, bsol: *const f32, valves: *const f32, xref: *const f32, um: *mut f32, links: *mut u32, qlink: *mut u8, flags: *mut u8);
     fn cpu_refill(n0: i64, n1: i64, n: i64, tnbr: *const i32, flags: *const u8, um: *const f32, f: *mut f32, ru: *mut f32);
     fn cpu_commit(n0: i64, n1: i64, flags: *mut u8);
-    fn cpu_step(p: *const StepParams, n0: i64, n1: i64, n: i64, tnbr: *const i32, flags: *const u8, links: *const u32, qlink: *const u8, um: *const f32, bsol: *const f32, bcid: *const u8, cuts: *const f32, src: *const f32, dst: *mut f32, ru_prev: *const f32, ru_cur: *mut f32, spg: *const f32);
-    fn cpu_accum(p: *const StepParams, n0: i64, n1: i64, n: i64, flags: *const u8, bsol: *const f32, ru: *const f32, acc: *mut f32, tnbr: *const i32, phi: *const f32, spg: *const f32, f: *const f32, sc: *const f32);
+    fn cpu_step(p: *const StepParams, n0: i64, n1: i64, n: i64, tnbr: *const i32, flags: *const u8, links: *const u32, qlink: *const u8, um: *const f32, bsol: *const f32, bcid: *const u8, cuts: *const f32, src: *const f32, dst: *mut f32, ru_prev: *const f32, ru_cur: *mut f32, spg: *const f32, dm: *mut f32, wsc: *const u8);
+    fn cpu_accum(p: *const StepParams, n0: i64, n1: i64, n: i64, flags: *const u8, bsol: *const f32, ru: *const f32, acc: *mut f32, tnbr: *const i32, phi: *const f32, spg: *const f32, f: *const f32, sc: *const f32, txyz: *const i32, atile: *const i32);
+    fn cpu_explode(k0: i64, k1: i64, nf: i64, nc: i64, glist: *const i32, gown: *const i32, rnear: f32, rfar: f32, fc: *const f32, ruc: *const f32, scc: *const f32, tnbrc: *const i32, flc: *const u8, txyzf: *const i32, tnbrf: *const i32, flf: *const u8, fa: *mut f32, fb: *mut f32, rua: *mut f32, rub: *mut f32, sf: *mut f32);
+    fn cpu_ghostmask(k0: i64, k1: i64, glist: *const i32, gown: *const i32, flc: *const u8, flf: *mut u8);
+    fn cpu_iflux(k0: i64, k1: i64, nf: i64, glist: *const i32, tnbr: *const i32, flags: *const u8, links: *const u32, src: *const f32, first: i32, gio: *mut f32);
+    fn cpu_restrict(k0: i64, k1: i64, nf: i64, nc: i64, hrim: *const i32, hsub: *const i32, flf: *const u8, ruf: *const f32, sf: *const f32, ruc: *mut f32, ruc2: *mut f32, sc: *mut f32);
+    fn cpu_coalesce(k0: i64, k1: i64, nf: i64, nc: i64, rim: *const i32, csub: *const i32, glist: *const i32, gio: *const f32, tnbrc: *const i32, flc: *const u8, linksc: *const u32, ruc: *const f32, umc: *const f32, kfd: f32, flf: *const u8, ff: *const f32, fc: *mut f32);
     fn cpu_scalar(sp: *const SpinParams, pass: i32, n0: i64, n1: i64, n: i64, txyz: *const i32, tnbr: *const i32, flags: *const u8, bcid: *const u8, cuts: *const f32, ru: *const f32, atab: *const f32, s_old: *const f32, aux: *const f32, s_new: *mut f32);
     fn cpu_srefill(n0: i64, n1: i64, tnbr: *const i32, flags: *const u8, s: *mut f32);
-    fn cpu_diag(n0: i64, n1: i64, n: i64, ncuts: i32, nprobes: i32, nreg: i32, mode: i32, flags: *const u8, bcid: *const u8, pid: *const u8, rid: *const u8, cuts: *const f32, ru: *const f32, sc: *const f32, diag: *mut f32);
+    fn cpu_wallmass(n0: i64, n1: i64, flags: *const u8, ru: *const f32, dm: *mut f32);
+    fn cpu_wmreduce(n0: i64, n1: i64, flags: *const u8, rid: *const u8, wmask: u32, keep: i32, dm: *mut f32, sums: *mut f32);
+    fn cpu_wmapply(n0: i64, n1: i64, n: i64, flags: *const u8, rid: *const u8, corr: *const f32, f: *mut f32, ru: *mut f32);
+    fn cpu_diag(n0: i64, n1: i64, n: i64, ncuts: i32, nprobes: i32, nreg: i32, mode: i32, flags: *const u8, bcid: *const u8, pid: *const u8, rid: *const u8, cuts: *const f32, ru: *const f32, sc: *const f32, tnbr: *const i32, f: *const f32, nvp: i32, vp: *const f32, xref: *const f32, links: *const u32, diag: *mut f32);
 }
 
 /// a raw pointer that may cross threads (each thread writes a disjoint node range)
@@ -141,7 +209,13 @@ pub struct CpuBackend {
     bcid: Vec<u8>,
     pid: Vec<u8>,
     rid: Vec<u8>,
+    dm: Vec<f32>,
+    wmask: u32,
+    wcover: bool,
     rmap: Vec<u8>,
+    tgrp: Vec<u8>,
+    tw: Vec<f32>,
+    vplane: Vec<f32>,
     flags: Vec<u8>,
     links: Vec<u32>,
     qlink: Vec<u8>,
@@ -161,9 +235,38 @@ pub struct CpuBackend {
     atab: Vec<f32>,
     /// nodes per parallel chunk (whole tiles)
     chunk: usize,
+    /// grid refinement: the interface tables towards the coarser level (None: level 0) and the ghosts' mass exchange
+    it: Option<crate::refine::Interface>,
+    gio: Vec<f32>,
+    /// WALE scale per node × 1/32 (refinement ramp; empty: none)
+    wsc: Vec<u8>,
 }
 
 impl CpuBackend {
+    fn wm_reduce(&mut self, keep: i32) -> Result<Vec<f32>> {
+        let mr = crate::params::MAX_REGIONS;
+        let mut sums = vec![0f32; 2 * mr];
+        if self.wmask == 0 {
+            return Ok(sums);
+        }
+        let (fl, ri, dmm, wm) = (P::c(&self.flags), P::c(&self.rid), P::m(&mut self.dm), self.wmask);
+        let parts: Vec<Vec<f32>> = self
+            .ranges()
+            .par_iter()
+            .map(|&(a, b)| {
+                let mut s = vec![0f32; 2 * mr];
+                unsafe { cpu_wmreduce(a, b, fl.p(), ri.p(), wm, keep, dmm.p(), s.as_mut_ptr()) };
+                s
+            })
+            .collect();
+        for p in parts {
+            for k in 0..2 * mr {
+                sums[k] += p[k];
+            }
+        }
+        Ok(sums)
+    }
+
     /// `uall`: the motion samples (f16 bits [T][3][Z][Y][X]), `sdf`: the reference distance [Z][Y][X], `cells`: output
     /// cells per tile
     pub fn new(topo: Topology, uall: Vec<u16>, mvox: usize, sdf: Vec<f32>, rmap: Vec<u8>, cells: usize) -> Self {
@@ -181,7 +284,13 @@ impl CpuBackend {
             bcid: vec![0; n],
             pid: vec![0; n],
             rid: vec![0; n],
+            dm: vec![0.0; n],
+            wmask: 0,
+            wcover: true,
             rmap: if rmap.is_empty() { vec![0] } else { rmap },
+            tgrp: vec![0],
+            tw: vec![0.0],
+            vplane: vec![0.0; 8],
             flags: vec![0; n],
             links: vec![0; n],
             qlink: vec![0; (Q - 1) * n],
@@ -200,11 +309,23 @@ impl CpuBackend {
             atab: vec![0.0; 2],
             chunk: 8 * TILE3,
             topo,
+            it: None,
+            gio: vec![0.0; 2],
+            wsc: vec![],
         }
     }
 
     fn ranges(&self) -> Vec<(i64, i64)> {
         (0..self.n).step_by(self.chunk).map(|a| (a as i64, (a + self.chunk).min(self.n) as i64)).collect()
+    }
+
+    /// chunks of a list of `len` entries
+    fn list_ranges(len: usize) -> Vec<(i64, i64)> {
+        (0..len).step_by(4096).map(|a| (a as i64, (a + 4096).min(len) as i64)).collect()
+    }
+
+    fn iface(&self) -> Result<&crate::refine::Interface> {
+        self.it.as_ref().ok_or_else(|| crate::Error::Case("refinement call on a level without interface tables".into()))
     }
 }
 
@@ -222,23 +343,36 @@ impl Backend for CpuBackend {
         Ok(())
     }
 
-    fn geometry(&mut self, gp: &GeomParams, valves: &[f32], cuts: &[f32], refill: bool) -> Result<()> {
+    fn geometry1(&mut self, gp: &GeomParams, valves: &[f32], cuts: &[f32]) -> Result<()> {
         self.valves = if valves.is_empty() { vec![0.0] } else { valves.to_vec() };
         self.cuts = if cuts.is_empty() { vec![0.0] } else { cuts.to_vec() };
         let n = self.n as i64;
         let r = self.ranges();
-        let (tx, tn) = (P::c(&self.topo.txyz), P::c(&self.topo.tnbr));
+        let tx = P::c(&self.topo.txyz);
         let (ut, vt, sdf, va, cu) = (P::c(&self.ut), P::c(&self.vt), P::c(&self.sdf), P::c(&self.valves), P::c(&self.cuts));
         let (xr, ph, um, bs, bc, fl, sg, pi) = (P::m(&mut self.xref), P::m(&mut self.phi), P::m(&mut self.um), P::m(&mut self.bsol), P::m(&mut self.bcid), P::m(&mut self.flags), P::m(&mut self.spg), P::m(&mut self.pid));
-        let (rm, ri) = (P::c(&self.rmap), P::m(&mut self.rid));
-        r.par_iter().for_each(|&(a, b)| unsafe { cpu_geom1(gp, a, b, n, tx.p(), ut.p(), vt.p(), sdf.p(), va.p(), cu.p(), xr.p(), ph.p(), um.p(), bs.p(), bc.p(), fl.p(), sg.p(), pi.p(), rm.p(), ri.p()) });
+        let (rm, ri, tg, tw) = (P::c(&self.rmap), P::m(&mut self.rid), P::c(&self.tgrp), P::c(&self.tw));
+        r.par_iter().for_each(|&(a, b)| unsafe { cpu_geom1(gp, a, b, n, tx.p(), ut.p(), vt.p(), sdf.p(), va.p(), cu.p(), xr.p(), ph.p(), um.p(), bs.p(), bc.p(), fl.p(), sg.p(), pi.p(), rm.p(), ri.p(), tg.p(), tw.p()) });
+        Ok(())
+    }
+
+    fn geometry2(&mut self, gp: &GeomParams, refill: bool) -> Result<()> {
+        let n = self.n as i64;
+        let r = self.ranges();
+        let (tx, tn) = (P::c(&self.topo.txyz), P::c(&self.topo.tnbr));
+        let (va, ph, um, fl) = (P::c(&self.valves), P::c(&self.phi), P::m(&mut self.um), P::m(&mut self.flags));
         let (li, ql) = (P::m(&mut self.links), P::m(&mut self.qlink));
-        r.par_iter().for_each(|&(a, b)| unsafe { cpu_geom2(a, b, n, tn.p(), ph.p(), li.p(), ql.p(), fl.p()) });
+        let (bs2, xr2) = (P::c(&self.bsol), P::c(&self.xref));
+        r.par_iter().for_each(|&(a, b)| unsafe { cpu_geom2(gp, a, b, n, tx.p(), tn.p(), ph.p(), bs2.p(), va.p(), xr2.p(), um.p(), li.p(), ql.p(), fl.p()) });
         if refill {
             let (f, ru) = (P::m(&mut self.f[self.cur]), P::m(&mut self.ru[self.cur]));
             r.par_iter().for_each(|&(a, b)| unsafe { cpu_refill(a, b, n, tn.p(), fl.p(), um.p(), f.p(), ru.p()) });
             let sc = P::m(&mut self.sc[self.scur]);
             r.par_iter().for_each(|&(a, b)| unsafe { cpu_srefill(a, b, tn.p(), fl.p(), sc.p()) });
+        }
+        if self.wmask != 0 && self.wcover && refill && gp.first == 0 {
+            let (ruc, dmm) = (P::c(&self.ru[self.cur]), P::m(&mut self.dm));
+            r.par_iter().for_each(|&(a, b)| unsafe { cpu_wallmass(a, b, fl.p(), ruc.p(), dmm.p()) });
         }
         r.par_iter().for_each(|&(a, b)| unsafe { cpu_commit(a, b, fl.p()) });
         Ok(())
@@ -263,17 +397,21 @@ impl Backend for CpuBackend {
             (P::c(&b[0]), P::m(&mut a[0]))
         };
         let (tn, fl, li, ql, um, bs, bc, cu) = (P::c(&self.topo.tnbr), P::c(&self.flags), P::c(&self.links), P::c(&self.qlink), P::c(&self.um), P::c(&self.bsol), P::c(&self.bcid), P::c(&self.cuts));
-        let sg = P::c(&self.spg);
-        r.par_iter().for_each(|&(a, b)| unsafe { cpu_step(sp, a, b, n, tn.p(), fl.p(), li.p(), ql.p(), um.p(), bs.p(), bc.p(), cu.p(), src.p(), dst.p(), rp.p(), rc.p(), sg.p()) });
+        let (sg, dmm) = (P::c(&self.spg), P::m(&mut self.dm));
+        let ws = if self.wsc.is_empty() { P(std::ptr::null_mut()) } else { P::c(&self.wsc) };
+        r.par_iter().for_each(|&(a, b)| unsafe { cpu_step(sp, a, b, n, tn.p(), fl.p(), li.p(), ql.p(), um.p(), bs.p(), bc.p(), cu.p(), src.p(), dst.p(), rp.p(), rc.p(), sg.p(), dmm.p(), ws.p()) });
         self.cur = o;
         Ok(())
     }
 
     fn accumulate(&mut self, sp: &StepParams) -> Result<()> {
         let n = self.n as i64;
+        if self.it.is_some() {
+            return Err(crate::Error::Case("a finer level accumulates into level 0 (accumulate_to)".into()));
+        }
         let (fl, bs, ru, acc) = (P::c(&self.flags), P::c(&self.bsol), P::c(&self.ru[self.cur]), P::m(&mut self.acc));
-        let (tn, ph, sg, f, sc) = (P::c(&self.topo.tnbr), P::c(&self.phi), P::c(&self.spg), P::c(&self.f[self.cur]), P::c(&self.sc[self.scur]));
-        self.ranges().par_iter().for_each(|&(a, b)| unsafe { cpu_accum(sp, a, b, n, fl.p(), bs.p(), ru.p(), acc.p(), tn.p(), ph.p(), sg.p(), f.p(), sc.p()) });
+        let (tn, ph, sg, f, sc, tx) = (P::c(&self.topo.tnbr), P::c(&self.phi), P::c(&self.spg), P::c(&self.f[self.cur]), P::c(&self.sc[self.scur]), P::c(&self.topo.txyz));
+        self.ranges().par_iter().for_each(|&(a, b)| unsafe { cpu_accum(sp, a, b, n, fl.p(), bs.p(), ru.p(), acc.p(), tn.p(), ph.p(), sg.p(), f.p(), sc.p(), tx.p(), std::ptr::null()) });
         Ok(())
     }
 
@@ -285,14 +423,16 @@ impl Backend for CpuBackend {
 
     fn diag(&mut self, ncuts: usize, nprobes: usize, nreg: usize, light: bool) -> Result<Vec<f32>> {
         let n = self.n as i64;
-        let len = 4 * ncuts + 2 * nprobes + 2 * nreg + 4 + 2 * ncuts;
+        let nvp = self.vplane.len() / 8 * (self.vplane.iter().any(|&x| x != 0.0) as usize);
+        let len = 4 * ncuts + 2 * nprobes + 2 * nreg + 4 + 3 * ncuts + nvp;
         let (fl, bc, pi, ri, cu, ru, sc) = (P::c(&self.flags), P::c(&self.bcid), P::c(&self.pid), P::c(&self.rid), P::c(&self.cuts), P::c(&self.ru[self.cur]), P::c(&self.sc[self.scur]));
+        let (tn, ff, vpl, xr, lk) = (P::c(&self.topo.tnbr), P::c(&self.f[self.cur]), P::c(&self.vplane), P::c(&self.xref), P::c(&self.links));
         let parts: Vec<Vec<f32>> = self
             .ranges()
             .par_iter()
             .map(|&(a, b)| {
                 let mut d = vec![0f32; len];
-                unsafe { cpu_diag(a, b, n, ncuts as i32, nprobes as i32, nreg as i32, light as i32, fl.p(), bc.p(), pi.p(), ri.p(), cu.p(), ru.p(), sc.p(), d.as_mut_ptr()) };
+                unsafe { cpu_diag(a, b, n, ncuts as i32, nprobes as i32, nreg as i32, light as i32, fl.p(), bc.p(), pi.p(), ri.p(), cu.p(), ru.p(), sc.p(), tn.p(), ff.p(), nvp as i32, vpl.p(), xr.p(), lk.p(), d.as_mut_ptr()) };
                 d
             })
             .collect();
@@ -320,12 +460,55 @@ impl Backend for CpuBackend {
     }
 
     fn fields(&mut self) -> Result<Fields> {
-        Ok(Fields { flags: self.flags.clone(), ru: self.ru[self.cur].clone(), phi: self.phi.clone(), um: self.um.clone(), bsol: self.bsol.clone(), bcid: self.bcid.clone() })
+        Ok(Fields { flags: self.flags.clone(), ru: self.ru[self.cur].clone(), phi: self.phi.clone(), um: self.um.clone(), bsol: self.bsol.clone(), bcid: self.bcid.clone(), links: self.links.clone(), qlink: self.qlink.clone() })
     }
 
     fn set_spin_table(&mut self, atab: &[f32]) -> Result<()> {
         self.atab = if atab.len() < 2 { vec![0.0; 2] } else { atab.to_vec() };
         Ok(())
+    }
+
+    fn set_transpiration(&mut self, group: &[u8], weight: &[f32]) -> Result<()> {
+        if group.len() != weight.len() || group.len() != self.sdf.len() {
+            return Err(crate::Error::Case(format!("transpiration: {} group / {} weight voxels, the sdf has {}", group.len(), weight.len(), self.sdf.len())));
+        }
+        self.tgrp = group.to_vec();
+        self.tw = weight.to_vec();
+        Ok(())
+    }
+
+    fn set_vplanes(&mut self, vp: &[f32]) -> Result<()> {
+        self.vplane = if vp.is_empty() { vec![0.0; 8] } else { vp.to_vec() };
+        Ok(())
+    }
+
+    fn set_wall_mass(&mut self, wmask: u32, cover: bool) {
+        self.wmask = wmask;
+        self.wcover = cover;
+    }
+
+    fn wall_mass_peek(&mut self) -> Result<Vec<f32>> {
+        self.wm_reduce(1)
+    }
+
+    fn wall_mass_clear(&mut self) -> Result<()> {
+        self.dm.iter_mut().for_each(|x| *x = 0.0);
+        Ok(())
+    }
+
+    fn wall_mass_apply(&mut self, target: Option<&[f32]>) -> Result<Vec<f32>> {
+        let mr = crate::params::MAX_REGIONS;
+        if self.wmask == 0 {
+            return Ok(vec![0f32; 2 * mr]);
+        }
+        let sums = self.wm_reduce(0)?;
+        let n = self.n as i64;
+        let (fl, ri) = (P::c(&self.flags), P::c(&self.rid));
+        let corr: Vec<f32> = (0..mr).map(|r| if sums[mr + r] > 0.0 && (self.wmask >> r) & 1 == 1 { (target.map_or(0.0, |t| t[r]) - sums[r]) / sums[mr + r] } else { 0.0 }).collect();
+        let (f, ru) = (P::m(&mut self.f[self.cur]), P::m(&mut self.ru[self.cur]));
+        let co = P::c(&corr);
+        self.ranges().par_iter().for_each(|&(a, b)| unsafe { cpu_wmapply(a, b, n, fl.p(), ri.p(), co.p(), f.p(), ru.p()) });
+        Ok(sums)
     }
 
     fn scalar(&mut self, sp: &SpinParams) -> Result<()> {
@@ -357,6 +540,127 @@ impl Backend for CpuBackend {
 
     fn restore_scalar(&mut self, s: &[f32]) -> Result<()> {
         self.sc[self.scur].copy_from_slice(s);
+        Ok(())
+    }
+
+    fn new_level(&self, topo: Topology) -> Result<Self> {
+        let mut b = CpuBackend::new(topo, self.uall.clone(), self.mvox, self.sdf.clone(), self.rmap.clone(), 0);
+        b.tgrp = self.tgrp.clone();
+        b.tw = self.tw.clone();
+        b.atab = self.atab.clone();
+        b.wmask = self.wmask;
+        b.wcover = self.wcover;
+        Ok(b)
+    }
+
+    fn set_roles(&mut self, roles: &[u8]) -> Result<()> {
+        if roles.len() != self.n {
+            return Err(crate::Error::Case(format!("roles: {} for {} nodes", roles.len(), self.n)));
+        }
+        for (f, r) in self.flags.iter_mut().zip(roles) {
+            *f |= *r;
+        }
+        Ok(())
+    }
+
+    fn set_wale_scale(&mut self, s: &[u8]) -> Result<()> {
+        if !s.is_empty() && s.len() != self.n {
+            return Err(crate::Error::Case(format!("WALE scale: {} for {} nodes", s.len(), self.n)));
+        }
+        self.wsc = s.to_vec();
+        Ok(())
+    }
+
+    fn set_interface(&mut self, it: &crate::refine::Interface) -> Result<()> {
+        self.gio = vec![0.0; 2 * it.glist.len().max(1)];
+        self.it = Some(it.clone());
+        Ok(())
+    }
+
+    fn ghost_mask(&mut self, coarse: &Self) -> Result<()> {
+        let it = self.iface()?;
+        let (gl, go, flc, flf) = (P::c(&it.glist), P::c(&it.gown), P::c(&coarse.flags), P::m(&mut self.flags));
+        Self::list_ranges(self.iface()?.glist.len()).par_iter().for_each(|&(a, b)| unsafe { cpu_ghostmask(a, b, gl.p(), go.p(), flc.p(), flf.p()) });
+        Ok(())
+    }
+
+    fn explode(&mut self, coarse: &Self, r: [f32; 2], interp: bool) -> Result<()> {
+        let ng = self.iface()?.glist.len();
+        let (nf, nc) = (self.n as i64, coarse.n as i64);
+        let it = self.it.as_ref().unwrap();
+        let (gl, go) = (P::c(&it.glist), P::c(&it.gown));
+        let (fc, ruc, scc) = (P::c(&coarse.f[coarse.cur]), P::c(&coarse.ru[coarse.cur]), P::c(&coarse.sc[coarse.scur]));
+        let (tnc, flc, txf) = if interp { (P::c(&coarse.topo.tnbr), P::c(&coarse.flags), P::c(&self.topo.txyz)) } else { (P(std::ptr::null_mut()), P(std::ptr::null_mut()), P(std::ptr::null_mut())) };
+        let (fa, fb) = {
+            let (x, y) = self.f.split_at_mut(1);
+            (P::m(&mut x[0]), P::m(&mut y[0]))
+        };
+        let (rua, rub) = {
+            let (x, y) = self.ru.split_at_mut(1);
+            (P::m(&mut x[0]), P::m(&mut y[0]))
+        };
+        let sf = P::m(&mut self.sc[self.scur]);
+        let (tnf, flf) = (P::c(&self.topo.tnbr), P::c(&self.flags));
+        Self::list_ranges(ng).par_iter().for_each(|&(a, b)| unsafe { cpu_explode(a, b, nf, nc, gl.p(), go.p(), r[0], r[1], fc.p(), ruc.p(), scc.p(), tnc.p(), flc.p(), txf.p(), tnf.p(), flf.p(), fa.p(), fb.p(), rua.p(), rub.p(), sf.p()) });
+        Ok(())
+    }
+
+    fn iflux(&mut self, first: bool) -> Result<()> {
+        let ng = self.iface()?.glist.len();
+        let nf = self.n as i64;
+        let it = self.it.as_ref().unwrap();
+        let (gl, tn, fl, li, src, gio) = (P::c(&it.glist), P::c(&self.topo.tnbr), P::c(&self.flags), P::c(&self.links), P::c(&self.f[self.cur]), P::m(&mut self.gio));
+        Self::list_ranges(ng).par_iter().for_each(|&(a, b)| unsafe { cpu_iflux(a, b, nf, gl.p(), tn.p(), fl.p(), li.p(), src.p(), first as i32, gio.p()) });
+        Ok(())
+    }
+
+    fn restrict_to(&self, coarse: &mut Self) -> Result<()> {
+        let it = self.iface()?;
+        let (nf, nc) = (self.n as i64, coarse.n as i64);
+        let (hr, hs, flf, ruf, sf) = (P::c(&it.hrim), P::c(&it.hsub), P::c(&self.flags), P::c(&self.ru[self.cur]), P::c(&self.sc[self.scur]));
+        let (ruc, ruc2) = {
+            let (x, y) = coarse.ru.split_at_mut(1);
+            (P::m(&mut x[0]), P::m(&mut y[0]))
+        };
+        let sc = P::m(&mut coarse.sc[coarse.scur]);
+        Self::list_ranges(it.hrim.len()).par_iter().for_each(|&(a, b)| unsafe { cpu_restrict(a, b, nf, nc, hr.p(), hs.p(), flf.p(), ruf.p(), sf.p(), ruc.p(), ruc2.p(), sc.p()) });
+        Ok(())
+    }
+
+    fn coalesce_to(&self, coarse: &mut Self, kfd: f32) -> Result<()> {
+        let it = self.iface()?;
+        let (nf, nc) = (self.n as i64, coarse.n as i64);
+        let (rim, cs, gl, gio) = (P::c(&it.rim), P::c(&it.csub), P::c(&it.glist), P::c(&self.gio));
+        let (tnc, flc, lic, ruc, umc) = (P::c(&coarse.topo.tnbr), P::c(&coarse.flags), P::c(&coarse.links), P::c(&coarse.ru[coarse.cur]), P::c(&coarse.um));
+        let (flf, ff) = (P::c(&self.flags), P::c(&self.f[self.cur]));
+        let fc = P::m(&mut coarse.f[coarse.cur]);
+        Self::list_ranges(it.rim.len()).par_iter().for_each(|&(a, b)| unsafe { cpu_coalesce(a, b, nf, nc, rim.p(), cs.p(), gl.p(), gio.p(), tnc.p(), flc.p(), lic.p(), ruc.p(), umc.p(), kfd, flf.p(), ff.p(), fc.p()) });
+        Ok(())
+    }
+
+    fn accumulate_to(&self, root: &mut Self, sp: &StepParams) -> Result<()> {
+        let it = self.iface()?;
+        let n = self.n as i64;
+        let (fl, bs, ru, acc) = (P::c(&self.flags), P::c(&self.bsol), P::c(&self.ru[self.cur]), P::m(&mut root.acc));
+        let (tn, ph, sg, f, sc, tx, at) = (P::c(&self.topo.tnbr), P::c(&self.phi), P::c(&self.spg), P::c(&self.f[self.cur]), P::c(&self.sc[self.scur]), P::c(&self.topo.txyz), P::c(&it.atile));
+        // one range: fine tiles of different threads may share a level-0 cell
+        unsafe { cpu_accum(sp, 0, n, n, fl.p(), bs.p(), ru.p(), acc.p(), tn.p(), ph.p(), sg.p(), f.p(), sc.p(), tx.p(), at.p()) };
+        Ok(())
+    }
+
+    fn wall_mass_sums(&mut self, keep: bool) -> Result<Vec<f32>> {
+        self.wm_reduce(keep as i32)
+    }
+
+    fn wall_mass_correct(&mut self, corr: &[f32]) -> Result<()> {
+        if self.wmask == 0 {
+            return Ok(());
+        }
+        let n = self.n as i64;
+        let (fl, ri) = (P::c(&self.flags), P::c(&self.rid));
+        let (f, ru) = (P::m(&mut self.f[self.cur]), P::m(&mut self.ru[self.cur]));
+        let co = P::c(corr);
+        self.ranges().par_iter().for_each(|&(a, b)| unsafe { cpu_wmapply(a, b, n, fl.p(), ri.p(), co.p(), f.p(), ru.p()) });
         Ok(())
     }
 }

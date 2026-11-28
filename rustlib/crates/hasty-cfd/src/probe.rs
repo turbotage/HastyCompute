@@ -23,7 +23,8 @@ pub fn hot_spots<B: Backend>(s: &mut Solver<B>, k: usize) -> Result<serde_json::
     let sc = s.u.dx / s.u.dt;
     let t = s.time();
     let speed = |i: usize| ((f.ru[n + i].powi(2) + f.ru[2 * n + i].powi(2) + f.ru[3 * n + i].powi(2)).sqrt() as f64) * sc;
-    let mut all: Vec<(f64, usize)> = (0..n).filter(|&i| f.flags[i] & F_FLUID != 0).map(|i| (speed(i), i)).collect();
+    // level 0 only; refinement interface nodes (hidden under a finer level) carry no current state
+    let mut all: Vec<(f64, usize)> = (0..n).filter(|&i| f.flags[i] & F_FLUID != 0 && f.flags[i] & crate::params::F_IFACE == 0).map(|i| (speed(i), i)).collect();
     all.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
     let pct = |v: &[(f64, usize)], q: f64| if v.is_empty() { f64::NAN } else { v[((v.len() as f64 * (1.0 - q)) as usize).min(v.len() - 1)].0 };
     let class = |i: usize| {

@@ -1,0 +1,30 @@
+schedule 3:11:1,30:11:1,3:20:1,30:20:1   (geometric mean κ over WM, GM, blood, CSF and B1 1/0.8; lower better)
+  inc 117         ernst free 3: κ  1.860  {'WM': 0.607, 'GM': 1.198, 'blood': 1.863, 'CSF': 8.843}
+  inc 117         epg   free 3: κ  1.180  {'WM': 0.544, 'GM': 1.012, 'blood': 1.486, 'CSF': 2.372}
+  inc 117         epg   free 4: κ  1.348  {'WM': 0.573, 'GM': 1.123, 'blood': 1.725, 'CSF': 2.973}
+  inc 150         ernst free 3: κ  1.860  {'WM': 0.607, 'GM': 1.198, 'blood': 1.863, 'CSF': 8.843}
+  inc 150         epg   free 3: κ  1.474  {'WM': 0.613, 'GM': 1.242, 'blood': 2.041, 'CSF': 3.042}
+  inc 150         epg   free 4: κ  1.572  {'WM': 0.618, 'GM': 1.289, 'blood': 2.133, 'CSF': 3.591}
+  inc alt117/150  ernst free 3: κ  1.860  {'WM': 0.607, 'GM': 1.198, 'blood': 1.863, 'CSF': 8.843}
+  inc alt117/150  epg   free 3: κ  1.335  {'WM': 0.611, 'GM': 1.249, 'blood': 2.068, 'CSF': 2.011}
+  inc alt117/150  epg   free 4: κ  1.449  {'WM': 0.618, 'GM': 1.304, 'blood': 2.145, 'CSF': 2.549}
+schedule 6:11:1,24:11:1,6:20:1,24:20:1   (geometric mean κ over WM, GM, blood, CSF and B1 1/0.8; lower better)
+  inc 117         ernst free 3: κ  1.994  {'WM': 0.69, 'GM': 1.3, 'blood': 1.977, 'CSF': 8.914}
+  inc 117         epg   free 3: κ  1.388  {'WM': 0.626, 'GM': 1.12, 'blood': 1.581, 'CSF': 3.351}
+  inc 117         epg   free 4: κ  1.700  {'WM': 0.701, 'GM': 1.354, 'blood': 2.05, 'CSF': 4.295}
+  inc 150         ernst free 3: κ  1.994  {'WM': 0.69, 'GM': 1.3, 'blood': 1.977, 'CSF': 8.914}
+  inc 150         epg   free 3: κ  1.605  {'WM': 0.698, 'GM': 1.368, 'blood': 2.272, 'CSF': 3.055}
+  inc 150         epg   free 4: κ  1.680  {'WM': 0.719, 'GM': 1.475, 'blood': 2.368, 'CSF': 3.17}
+  inc alt117/150  ernst free 3: κ  1.994  {'WM': 0.69, 'GM': 1.3, 'blood': 1.977, 'CSF': 8.914}
+  inc alt117/150  epg   free 3: κ  1.483  {'WM': 0.695, 'GM': 1.362, 'blood': 2.153, 'CSF': 2.371}
+  inc alt117/150  epg   free 4: κ  1.581  {'WM': 0.717, 'GM': 1.457, 'blood': 2.187, 'CSF': 2.737}
+schedule 3:20:1,30:20:1,3:11:1,12:11:1,30:16:1,3:20:1   (geometric mean κ over WM, GM, blood, CSF and B1 1/0.8; lower better)
+  inc 117         ernst free 3: κ  1.106  {'WM': 0.472, 'GM': 0.74, 'blood': 1.043, 'CSF': 4.107}
+  inc 117         epg   free 3: κ  0.806  {'WM': 0.449, 'GM': 0.678, 'blood': 0.865, 'CSF': 1.601}
+  inc 117         epg   free 4: κ  0.880  {'WM': 0.452, 'GM': 0.709, 'blood': 0.996, 'CSF': 1.884}
+  inc 150         ernst free 3: κ  1.106  {'WM': 0.472, 'GM': 0.74, 'blood': 1.043, 'CSF': 4.107}
+  inc 150         epg   free 3: κ  0.981  {'WM': 0.472, 'GM': 0.747, 'blood': 1.092, 'CSF': 2.403}
+  inc 150         epg   free 4: κ  1.016  {'WM': 0.48, 'GM': 0.749, 'blood': 1.125, 'CSF': 2.633}
+  inc alt117/150  ernst free 3: κ  1.106  {'WM': 0.472, 'GM': 0.74, 'blood': 1.043, 'CSF': 4.107}
+  inc alt117/150  epg   free 3: κ  1.004  {'WM': 0.471, 'GM': 0.754, 'blood': 1.147, 'CSF': 2.497}
+  inc alt117/150  epg   free 4: κ  1.086  {'WM': 0.479, 'GM': 0.758, 'blood': 1.203, 'CSF': 3.179}

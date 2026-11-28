@@ -5,7 +5,8 @@
         [--stub-mm 45,30,20,15] [--v-max <m/s, default from the anatomy>] [--u-lattice 0.08] [--cycles 4] [--warmup 2] [--bins 50]
         [--out-factor 2] [--rcr] [--av-radius-mm 16,17] [--chamber-first] [--venous inertial|pressure|inlet]
         [--av-diastasis 0.5] [--wall-mm 2] [--sep-mm 1.5] [--carve-mm 2.5] [--carve-down-mm 4] [--open-thr 0.03] [--open-abs] [--dx-mm 0.5]
-        [--pulm-mtt 5] [--sys-capillary-s 2]
+        [--pulm-mtt 5] [--sys-capillary-s 2] [--sl-hinge lumen|annulus] [--motion <cardiac_motion.hv>]
+        [--refine aortic,pulmonary|all] [--refine-margin-mm 6] [--refine-down-mm 10] [--refine-levels 1]
 (--labels default: <phantom_dir>/atlas/tissue_0.5mm_heart.hv when the phantom has a deformed atlas, else p0's)
 
 Blood domain in the reference pose (the atlas pose that `cardiac_motion.hv` displaces):
@@ -23,6 +24,8 @@ disk disconnects them).
 Signed distance (> 0 in the blood) by exact EDT, lightly smoothed, on the label grid (or coarsened ×k).
 Valves:
 - aortic / pulmonary at the root connectors (centre, downstream axis, vessel radius), three leaflets (4 strips each);
+  --sl-hinge lumen (default): the hinge circle half a leaflet + half a cell outside the lumen, so the open cusps lie
+  in the wall (cusps opening into the sinuses) and the orifice is the lumen; annulus: hinge at the lumen (before);
 - mitral / tricuspid on a plane fitted to the LA–LV / RA–RV interface (normal atrium → ventricle, radius from the
   interface area ×1.1), mitral two leaflets (coaptation y = 0.2 R), tricuspid three;
 - opening: 1 while the cardiac model's valve flow (Q_AO, Q_PA, Q_MV, Q_TV) exceeds 3 % of its peak (--open-abs:
@@ -80,12 +83,51 @@ AV_BRIDGE = float(opt("--av-diastasis", 0.5))
 # thinner wall loses its solid nodes under smoothing, motion and sampling); forbidden regions ≥ SEP_MM and ≥ 3 cells apart
 WALL_MM = float(opt("--wall-mm", 2.0))
 SEP_MM = float(opt("--sep-mm", 1.5))
+# proximity walls between regions that must not exchange fluid: "half" (default, 2026-11-25) carves the separation from
+# both sides of the mid-surface — a voxel of b becomes wall where its distance to a plus its own depth in b is ≤ SEP + 1
+# (voxels), i.e. each side gives up (SEP − gap)/2 and the gap ends ≥ SEP; "each" (before): every voxel of b within SEP
+# of a becomes wall and vice versa (gap 2 SEP − gap; at the right hilum it carved the right PA / superior PV lumens to
+# slivers: 6 m/s and 3 m/s jets, research/flow_phantom.md Tier B4)
+SEP_SPLIT = opt("--sep-split", "half")
+assert SEP_SPLIT in ("half", "each"), SEP_SPLIT
+TRANSP = opt("--transpiration", "on")
+assert TRANSP in ("on", "off"), TRANSP
+LUMEN_MIN = float(opt("--lumen-min", 0.6))
 CARVE = float(opt("--carve-mm", 2.5)) * 1e-3
 CARVE_DOWN = float(opt("--carve-down-mm", 4.0)) * 1e-3  # into the downstream chamber (the inflow / outflow tract)
 CARVE_RIM = float(opt("--carve-rim-mm", 2.0)) * 1e-3  # beyond the annulus radius
+SPLIT_ZONE = opt("--split-zone", "passage")
+assert SPLIT_ZONE in ("passage", "wide"), SPLIT_ZONE
 OPEN_THR = float(opt("--open-thr", 0.03))
 OPEN_ABS = "--open-abs" in A
 ST18 = ndimage.generate_binary_structure(3, 2)  # face + edge neighbours: the D3Q19 links
+# --debug-pt x,y,z[,r] (mm): at each build stage, what holds the voxels within r (default 3 mm) of the point (domain,
+# regions, walls), to find the step that pinches a lumen
+_DBG = [[float(x) * 1e-3 for x in s_.split(",")] for s_ in A[A.index("--debug-pt") + 1].split(";")] if "--debug-pt" in A else []
+
+
+def _dbg(stage):
+    for q_ in _DBG:
+        p_, r_ = np.asarray(q_[:3]), (q_[3] if len(q_) > 3 else 3e-3)
+        dom_ = globals().get("domain")
+        if dom_ is None:
+            continue
+        lo_ = np.maximum(np.floor((p_ - r_ - lo0) / h).astype(int), 0)
+        hi_ = np.minimum(np.ceil((p_ + r_ - lo0) / h).astype(int) + 1, np.array(dom_.shape[::-1]))
+        zz_, yy_, xx_ = np.meshgrid(*(np.arange(lo_[d], hi_[d]) for d in (2, 1, 0)), indexing="ij")
+        Xq = np.stack([xx_, yy_, zz_], -1) * h + lo0 + h / 2
+        m_ = np.linalg.norm(Xq - p_, axis=-1) < r_
+        sl_ = (slice(lo_[2], hi_[2]), slice(lo_[1], hi_[1]), slice(lo_[0], hi_[0]))
+        dm_ = dom_[sl_][m_]
+        out_ = f"debug {stage:24s} at {np.round(p_ * 1e3, 1).tolist()} r {r_ * 1e3:.1f} mm: domain {dm_.mean() * 100:.0f} %"
+        lab_ = Lc[sl_][m_]
+        out_ += "; labels " + ", ".join(f"{names[i_]} {np.mean(lab_ == i_) * 100:.0f}" for i_ in np.unique(lab_))
+        if "region" in globals() and globals()["region"].shape == dom_.shape:
+            rg_ = globals()["region"][sl_][m_]
+            out_ += "; regions " + ", ".join(f"{i_}:{np.mean(rg_ == i_) * 100:.0f}" for i_ in np.unique(rg_))
+        if "wall" in globals() and globals()["wall"].shape == dom_.shape:
+            out_ += f"; wall {globals()['wall'][sl_][m_].mean() * 100:.0f} %"
+        print(out_)
 K = int(opt("--coarsen", 1))
 
 # ── labels (reference pose) ──────────────────────────────────────────────────────────────────────────────────────────
@@ -134,7 +176,9 @@ eoff, ea, eb = G["edge_offsets"], G["edge_a"], G["edge_b"]
 enames = GJ["edge_names"]
 net = load_any(P0 / "flow" / "network_flow.npz")
 om, qn, pn = net["omega"], net["q"], net["p"]
-cm = vf.read(P0 / "motion" / "cardiac_motion.hv")
+# --motion <cardiac_motion.hv>: another cardiac model of the same phantom (tests); default the phantom's own
+CM_FILE = Path(opt("--motion", str(P0 / "motion" / "cardiac_motion.hv")))
+cm = vf.read(CM_FILE)
 period = float(cm["period"])
 adj = {}
 for k in range(len(ea)):
@@ -211,6 +255,18 @@ def arclen(sm):
     return float(np.linalg.norm(np.diff(P_ref[sm], axis=0), axis=1).sum()) if len(sm) > 1 else 0.0
 
 
+def _off_junction(seg):
+    """a cut never on a junction (2026-11-26): the branch ends 1.5 r + 1 mm before its node when that node is a
+    junction — a cut disk through the crotch was 30 % fluid (the left superior pulmonary vein's inlet at its lingular /
+    anterior split delivered 1 % of its flow). `--cut-at-node`: as before"""
+    if "--cut-at-node" in A or len(seg) < 3:
+        return seg
+    d = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(P_ref[seg[::-1]], axis=0), axis=1))]  # arc from the end
+    keep = d >= 1.5 * R_ref[seg[-1]] + 1e-3
+    n_keep = len(seg) - int(np.argmax(keep)) if keep.any() else 2
+    return seg[: max(2, n_keep)]
+
+
 def build_tree(r):
     """branches [{samples, edge, sgn, parent, end}] of root r, depth first from the root node"""
     if "--stubs" in A:
@@ -242,10 +298,31 @@ def build_tree(r):
                 seen.add(other)
                 stack.append((other, k, len(br) - 1))
             elif n_in >= 2 and (parent == -1 or k == cont or arclen(seg) >= max(4e-3, 2 * R_ref[sm[0]])):
+                if full and len(adj.get(other, [])) >= 3:
+                    seg2 = _off_junction(seg)
+                    # the trimmed cut's cap (2.5 r beyond the plane) must stay clear of the parent's lumen: a side branch
+                    # too short for that is left out (its flow leaves through the tree's pressure outlet), the root and
+                    # continuation branches keep their cut at the node
+                    r_par = max(R_ref[edge_samples(k_, node)[0][0]] for k_ in adj.get(node, [k]))  # the largest lumen at the branch's origin
+                    if arclen(seg2) >= 2.5 * R_ref[seg2[-1]] + r_par + 1e-3:
+                        seg = seg2
+                    elif parent >= 0 and k != cont:
+                        continue
                 br.append({"samples": seg, "edge": int(k), "sgn": int(sg), "parent": parent, "end": True})
             elif k == cont and parent >= 0 and R_ref[sm[0]] >= R_CUT:
                 # the continuation leaves the box right at the node: the branch into the node ends in the cut
                 br[parent]["end"] = True
+                if not any(b_["parent"] == parent for b_ in br):  # no side branch starts at that node
+                    br[parent]["samples"] = _off_junction(br[parent]["samples"])
+    # a branch whose onward edges were all left out (thinner than R_CUT at their start, outside the box, too short)
+    # ends in a cut too, off its junction (2026-11-26: the coronary sinus continues into the 2.2 mm great cardiac vein;
+    # with no cut its tree was a sealed pocket with no inflow). `--no-orphan-cuts`: as before
+    if "--no-orphan-cuts" not in A:
+        has_child = {b_["parent"] for b_ in br}
+        for q_, b_ in enumerate(br):
+            if not b_["end"] and q_ not in has_child and len(b_["samples"]) >= 2:
+                b_["end"] = True
+                b_["samples"] = _off_junction(np.asarray(b_["samples"]))
     # dead ends: an end branch without network flow (graph artefacts, e.g. a 12 mm blind stub at the pulmonary
     # bifurcation) is no outlet — its cut and cap only destroy the neighbourhood (a 4 mL cap cut off a pulmonary-vein
     # tree): dropped
@@ -265,6 +342,122 @@ for k_, r in enumerate(roots):
     vol_ = sum(np.pi * float((R_ref[b["samples"]] ** 2).mean()) * arclen(b["samples"]) for b in mine)
     nd_ = sum(b["root"] == k_ and b.get("drop", False) for b in branches)
     print(f"tree {r['name'][:30]:30s} ({r['class']}): {len(mine)} branches, {sum(b['end'] for b in mine)} cuts, ≈ {vol_ * 1e6:.0f} mL of lumen ({nd_} dead ends dropped)")
+
+# ── cut clearance (2026-11-26): a cut's slab and flux layer (lateral < 1.3 R, −1.5 h … slab + 3 h past its plane) and
+#    its capsule end must hold no other lumen: the builder removes other branches' voxels there (the middle lobar artery
+#    was pinched to 0.52 r by its medial segmental branch's cut). An end branch slides its cut back along its samples
+#    until clear; a side branch with no clear position is left out (its flow leaves through the tree's pressure outlet,
+#    like the junction rule's), a root / continuation keeps its cut (reported). Lumens of all trees count; a ball of the
+#    other sample's radius must reach > 0.5 mm into the zone. `--cut-overlap`: as before
+from scipy.spatial import cKDTree  # noqa: E402
+
+CUT_TOL = 0.5e-3
+CUT_KILL = opt("--cut-kill", "geom")
+assert CUT_KILL in ("geom", "owner"), CUT_KILL
+
+
+def _in_capsule(Xq, poly):
+    """points inside the capsule chain (pts, rads) of a branch (as rasterized)"""
+    pts, rads = poly
+    ins = np.zeros(len(Xq), bool)
+    for a in range(len(pts) - 1):
+        pa, pb = pts[a], pts[a + 1]
+        ab = pb - pa
+        s = np.clip(((Xq - pa) @ ab) / max(ab @ ab, 1e-18), 0, 1)
+        d = np.linalg.norm(Xq - (pa + s[:, None] * ab), axis=1)
+        ins |= d <= rads[a] + s * (rads[a + 1] - rads[a])
+    return ins
+
+
+def _cut_zone_hits(b, n_use, kd, sid_, rad_, pts_, cont_parent=None):
+    """other-branch samples reaching into the cut zone of branch b cut at its sample n_use − 1 (cont_parent: the
+    parent of a continuation, the same lumen: its samples behind the cut plane do not count)"""
+    sm = np.asarray(b["samples"])[:n_use]
+    p = P_ref[sm]
+    if len(p) < 2:
+        par = [x for x in branches if x["root"] == b["root"]]
+        if b["parent"] < 0:
+            return []
+        p = np.vstack([P_ref[par[b["parent"]]["samples"][-1]], p])
+    c, t = p[-1], p[-1] - p[-2]
+    t = t / np.linalg.norm(t)
+    R_ = float(R_ref[sm[-1]])
+    slab = 3 * h
+    reach = 1.3 * R_ + slab + R_ + h + float(rad_.max())
+    out = []
+    for j in kd.query_ball_point(c, reach):
+        if sid_[j] == id(b):
+            continue
+        d = pts_[j] - c
+        s_ = float(d @ t)
+        if cont_parent is not None and sid_[j] == cont_parent and s_ < 0:
+            continue
+        lat = float(np.linalg.norm(d - s_ * t))
+        rq = float(rad_[j]) - CUT_TOL
+        thin = (-1.5 * h - rq <= s_ <= slab + 3 * h + rq) and lat < 1.3 * R_ + rq
+        cap = (slab < s_ <= slab + h + R_ + rq) and lat < R_ + rq
+        if thin or cap:
+            out.append(j)
+    return out
+
+
+if "--cut-overlap" not in A:
+    for _pass in range(4):
+        live = [b for b in branches if not b.get("drop")]
+        pts_ = np.vstack([P_ref[b["samples"]] for b in live])
+        rad_ = np.concatenate([R_ref[b["samples"]] for b in live])
+        sid_ = np.concatenate([np.full(len(b["samples"]), id(b), dtype=np.int64) for b in live])
+        bname = {id(b): (enames[b["edge"]] if b["edge"] >= 0 else roots[b["root"]]["name"]) for b in live}
+        kd_ = cKDTree(pts_)
+        changed_ = False
+        for b in live:
+            if not b["end"]:
+                continue
+            n0 = len(b["samples"])
+            par = [x for x in branches if x["root"] == b["root"]]
+            sib = [x for x in par if x["parent"] == b["parent"] and not x.get("drop")]
+            is_cont = b["parent"] < 0 or R_ref[b["samples"][0]] >= max(R_ref[x["samples"][0]] for x in sib)
+            cpar = id(par[b["parent"]]) if (is_cont and b["parent"] >= 0) else None
+            hits = _cut_zone_hits(b, n0, kd_, sid_, rad_, pts_, cpar)
+            if not hits:
+                continue
+            who = sorted({bname[int(sid_[j])][:30] for j in hits})
+            nm = bname[id(b)][:34]
+            n_ok = None
+            for n_ in range(n0 - 1, 1, -1):
+                if not _cut_zone_hits(b, n_, kd_, sid_, rad_, pts_, cpar):
+                    n_ok = n_
+                    break
+            # the slid cut keeps the junction rule's clearance from the parent (2.5 r + the parent's radius + 1 mm)
+            if n_ok is not None and b["parent"] >= 0:
+                r_par = float(R_ref[par[b["parent"]]["samples"][-1]])
+                if arclen(np.asarray(b["samples"])[:n_ok]) < 2.5 * R_ref[b["samples"][n_ok - 1]] + r_par + 1e-3 and not is_cont:
+                    n_ok = None
+            if n_ok is not None:
+                print(f"cut clearance: {nm} cut moved back {arclen(np.asarray(b['samples'])[n_ok - 1 :]) * 1e3:.1f} mm (its zone held {', '.join(who)})")
+                b["samples"] = np.asarray(b["samples"])[:n_ok]
+                changed_ = True
+            elif not is_cont:
+                print(f"cut clearance: {nm} left out (no clear cut position; its zone held {', '.join(who)})")
+                b["drop"] = True
+                changed_ = True
+                # a parent left without onward branches ends in a cut itself
+                if b["parent"] >= 0 and not any(x["parent"] == b["parent"] and not x.get("drop") for x in par):
+                    pb = par[b["parent"]]
+                    pb["end"] = True
+                    pb["samples"] = _off_junction(np.asarray(pb["samples"]))
+            elif not b.get("_kept"):
+                b["_kept"] = True
+                if "--debug-cuts" in A:
+                    sm_ = np.asarray(b["samples"])
+                    c_, t_ = P_ref[sm_[-1]], P_ref[sm_[-1]] - P_ref[sm_[-2]]
+                    t_ = t_ / np.linalg.norm(t_)
+                    for j in hits[:: max(1, len(hits) // 6)]:
+                        d_ = pts_[j] - c_
+                        print(f"    hit {bname[int(sid_[j])][:30]}: s {d_ @ t_ * 1e3:.1f} mm, lat {np.linalg.norm(d_ - (d_ @ t_) * t_) * 1e3:.1f} mm, r {rad_[j] * 1e3:.1f} mm; branch arclen {arclen(sm_) * 1e3:.1f} mm, R {R_ref[sm_[-1]] * 1e3:.1f} mm, {len(sm_)} samples, parent {b['parent']}")
+                print(f"cut clearance: {nm} keeps its cut (root / continuation, no clear position; its zone holds {', '.join(who)})")
+        if not changed_:
+            break
 
 # capsules (+ the slab beyond each cut, then capped)
 stub = np.zeros_like(blood)
@@ -308,12 +501,14 @@ for bi, b in enumerate(branches):
         d = np.linalg.norm(X - (pa + s[..., None] * ab), axis=-1)
         rr = rads[a] + s * (rads[a + 1] - rads[a])
         stub[lo[2] : hi[2], lo[1] : hi[1], lo[0] : hi[0]] |= d <= rr
+    b["_poly"] = (pts, rads)
     if b["end"]:
         nm_ = r["name"] if b["parent"] == -1 and sum(x["root"] == b["root"] and x["end"] for x in branches) == 1 else f"{enames[b['edge']] if b['edge'] >= 0 else r['name']} #{int(sm[-1])}"
         cuts.append({"name": nm_, "class": r["class"], "center": p[-1].tolist(), "normal": t_end.tolist(), "radius": float(rad[-1]), "slab": slab,
                      "sample": int(sm[-1]), "sgn": int(b["sgn"]), "end": (p[-1] + t_end * slab).tolist(), "root": b["root"], "branch": bi})
 print(f"{len(cuts)} cuts")
 domain = blood | stub
+_dbg("capsules")
 # cut the stubs' slabs beyond the cap plane (capsule ends are round): this stub's own capsule voxels beyond the plane
 # (owner = the stub of the nearest sample over its radius) and chamber blood just beyond it; another stub passing
 # behind the plane keeps its lumen (the 2.5 R kill cylinder of the pulmonary bifurcation cut ate 15–35 % of the
@@ -341,11 +536,20 @@ for c in cuts:
     # and anything not of this stub in the thin cylinder of its slab and flux layer (hasty-cfd decides slab, layer and
     # sponge membership in the reference pose within 1.25 / 1.1 R: a neighbour there would become outlet nodes)
     thin = (s_ > -1.5 * h) & (s_ <= c["slab"] + 3 * h) & (lat < 1.3 * c["radius"]) & (owner != k_)
+    # a voxel inside this branch's own capsule is its own lumen whatever its nearest sample (2026-11-26: a 1.3 mm
+    # continuation of the left subclavian artery past a junction lost the parent-owned voxels of its own lumen in its
+    # slab, 76 % fluid, 3 m/s jets). `--cut-kill owner`: as before
+    if CUT_KILL == "geom" and thin.any():
+        ti_ = np.flatnonzero(thin)
+        thin[ti_[_in_capsule(X[ti_], branches[k_]["_poly"])]] = False
     kill = (beyond & (((owner == k_) & (lat < 2.5 * c["radius"])) | (~is_stub & (lat < 1.5 * c["radius"])))) | thin
     spared = beyond & (lat < 2.5 * c["radius"]) & ~kill
     domain[zz[kill], yy[kill], xx[kill]] = False
+    if _DBG and kill.any() and min(np.linalg.norm(X[kill] - np.asarray(q_[:3]), axis=1).min() for q_ in _DBG) < 8e-3:
+        print(f"debug cut {c['name'][:30]} kills {int(kill.sum())} voxels within 8 mm of a debug point (beyond {int((kill & beyond).sum())}, thin {int((kill & thin).sum())})")
     if spared.sum() * h**3 * 1e6 > 0.05:
         print(f"cap {c['name'][:28]:28s}: {kill.sum() * h**3 * 1e6:.2f} mL removed beyond the slab, {spared.sum() * h**3 * 1e6:.2f} mL of other vessels / chambers spared")
+_dbg("capsules + caps")
 print(f"domain: {int(domain.sum())} voxels ({domain.sum() * h**3 * 1e6:.0f} mL), stubs {int((stub & ~blood).sum() * h**3 * 1e6)} mL")
 
 # ── valves ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -367,8 +571,11 @@ for k_, r in enumerate(roots):
                 sm = b["samples"]
                 v_ = qpk * np.minimum(np.abs(np.real(qn[sm, 0])) / q0, 1.0) / (np.pi * R_ref[sm] ** 2)
                 _vm = max(_vm, float(v_.max()))
-V_MAX = float(opt("--v-max", np.ceil(_vm * 2) / 2))
-print(f"velocity scale v_max {V_MAX} m/s (anatomy estimate {_vm:.2f} m/s)")
+
+
+# --open-ramp causal (default 2026-11-27) | centred (before): see opening()
+OPEN_RAMP = opt("--open-ramp", "causal")
+assert OPEN_RAMP in ("causal", "centred"), "--open-ramp causal | centred"
 
 
 def opening(Q, bridge=0.0):
@@ -395,6 +602,12 @@ def opening(Q, bridge=0.0):
     w = max(1, int(round(0.030 / (period / n))))
     ker = np.ones(w) / w
     sm = np.real(np.fft.ifft(np.fft.fft(raw) * np.fft.fft(np.roll(np.pad(ker, (0, n - w)), -(w // 2)))))
+    if OPEN_RAMP == "causal":
+        # opening starts at the flow onset (the pressure crossover), not 15 ms before it: a valve opening into a chamber
+        # that does not fill yet pushes its leaflets' volume back through the slit (2 m/s backward tricuspid jets at
+        # 401 ms on full17); the closing keeps the centred ramp (leaflets close while the flow decelerates)
+        sk = np.real(np.fft.ifft(np.fft.fft(raw) * np.fft.fft(np.pad(ker, (0, n - w)))))
+        sm = np.minimum(sm, sk)
     return {"t": tq.tolist(), "v": np.clip(sm, 0, 1).tolist()}
 
 
@@ -405,6 +618,22 @@ def perp(n):
 
 
 valves = []
+# semilunar hinge (--sl-hinge): "lumen" (default, 2026-11-27) puts the hinge circle half a leaflet thickness + half a cell
+# outside the lumen, so the open cusps lie in the wall like cusps opening into the sinuses of Valsalva and the orifice is
+# the lumen (healthy aortic peak velocity 1.0–1.7 m/s); "annulus" (before): hinge at 1.05 × the lumen radius, the open
+# 3-cell cusps stood inside it (aortic 2.85 of 4.4 cm² open on full17, jet 2.8 m/s at 500 mL/s)
+SL_HINGE = opt("--sl-hinge", "lumen")
+# --leaflets plates | membrane (hasty-cfd "membrane": zero-thickness leaflets — every lattice link crossing a leaflet or
+# the closed disk bounces back — instead of partially saturated plates three cells thick, which act as sharp-edged
+# orifices (EOA / GOA ≈ 0.5–0.6) and push their own volume through the valve as they swing)
+LEAFLETS = opt("--leaflets", "membrane")  # plates before 2026-11-27
+assert LEAFLETS in ("plates", "membrane"), "--leaflets plates | membrane"
+SL_SINUS = opt("--sl-sinus", "none" if LEAFLETS == "membrane" else "carve")
+assert SL_SINUS in ("none", "carve"), "--sl-sinus none | carve"
+# --theta-open-deg sl,av: the open leaflets' angle from the annulus plane (default 90,85 — measured: mitral jet −12 %; 90 = parallel to the axis: a
+# strip leaning in by 90° − θ reaches (90° − θ) × its length into the orifice, e.g. 0.2 R for the long mitral strips at 80°)
+TH_SL, TH_AV = (float(x) for x in opt("--theta-open-deg", "90,85").split(","))  # 85,80 before 2026-11-27
+assert SL_HINGE in ("lumen", "annulus"), "--sl-hinge lumen | annulus"
 for r in roots:
     if r["class"] not in ("systemic_arterial", "pulmonary_arterial"):
         continue
@@ -412,9 +641,12 @@ for r in roots:
     n = P_ref[s1] - P_ref[s0]
     n /= np.linalg.norm(n)
     q = cm["Q_AO"] if r["class"] == "systemic_arterial" else cm["Q_PA"]
-    valves.append({"name": "aortic" if r["class"] == "systemic_arterial" else "pulmonary", "kind": VALVES, "center": P_ref[s0].tolist(), "normal": n.tolist(),
-                   "e1": perp(n).tolist(), "radius": float(R_ref[s0] * 1.05), "ring": max(1e-3, 2 * DX), "thickness": max(1.5e-3, 3 * DX), "theta_open": float(np.radians(85)),
-                   "leaflets": "tri:90,4", "hole": [0.85, 0.85], "opening": opening(q)})
+    th_l = max(1.5e-3, 3 * DX)
+    r_l = float(R_ref[s0] * 1.05)
+    r_h = r_l + 0.5 * th_l + 0.5 * DX if SL_HINGE == "lumen" else r_l
+    valves.append({"_root": r, "name": "aortic" if r["class"] == "systemic_arterial" else "pulmonary", "kind": VALVES, "center": P_ref[s0].tolist(), "normal": n.tolist(),
+                   "e1": perp(n).tolist(), "radius": r_h, "lumen_radius": r_l, "ring": max(1e-3, 2 * DX), "thickness": th_l, "theta_open": float(np.radians(TH_SL)),
+                   "leaflets": "tri:90,4", "hole": [0.85 * r_l / r_h] * 2, "opening": opening(q)})
 for ca, cv, nm, q, lf in (("blood_LA", "blood_LV", "mitral", cm["Q_MV"], "bi:0.2,5,7"), ("blood_RA", "blood_RV", "tricuspid", cm["Q_TV"], "tri:90,4")):
     A_ = Lc == ID[ca]
     B_ = Lc == ID[cv]
@@ -469,9 +701,208 @@ for ca, cv, nm, q, lf in (("blood_LA", "blood_LV", "mitral", cm["Q_MV"], "bi:0.2
             break
     print(f"{nm}: centred on the passage, {np.linalg.norm(c - c0) * 1e3:.1f} mm from the contact centroid")
     valves.append({"name": nm, "kind": VALVES, "center": c.tolist(), "normal": nrm.tolist(), "e1": vt[0].tolist(), "radius": rad, "ring": max(1e-3, 2 * DX),
-                   "thickness": max(1.5e-3, 3 * DX), "theta_open": float(np.radians(80)), "leaflets": lf, "hole": [0.9, 0.6] if nm == "mitral" else [0.85, 0.85],
+                   "thickness": max(1.5e-3, 3 * DX), "theta_open": float(np.radians(TH_AV)), "leaflets": lf, "hole": [0.9, 0.6] if nm == "mitral" else [0.85, 0.85],
                    "opening": opening(q, AV_BRIDGE)})
     print(f"{nm}: centre {np.round(c * 1e3, 1)} mm, normal {np.round(nrm, 2)}, interface {area * 1e4:.2f} cm² → radius {rad * 1e3:.1f} mm")
+
+# semilunar axis (--sl-axis): "channel" (default, 2026-11-27) — the line from the outflow tract's centroid 20 mm upstream
+# (ventricle voxels around that depth within the tract's reach, the AV valves' inflow tracts left out) to the vessel
+# centreline two lumen diameters downstream; "stub" (before) — the first two centreline samples. On full17 the stub axis
+# was 30–38° off the LVOT–ascending-aorta channel, which runs straight: the flow crossed the valve obliquely and left as
+# an eccentric, bicuspid-like jet (2.4–2.5 m/s, displacement 0.27).
+SL_AXIS = opt("--sl-axis", "channel")
+assert SL_AXIS in ("channel", "stub"), "--sl-axis channel | stub"
+for v in valves:
+    r = v.pop("_root", None)
+    if r is None or SL_AXIS == "stub":
+        continue
+    c_, n0 = np.asarray(v["center"]), np.asarray(v["normal"])
+    rl = float(v["lumen_radius"])
+    # downstream: the centreline point at arc length 4 r_l
+    pp = P_ref[r["path"]]
+    arc = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(pp, axis=0), axis=1))]
+    c_dn = np.array([np.interp(4 * rl, arc, pp[:, k]) for k in range(3)])
+    # upstream: the ventricle's outflow tract around 20 mm before the valve
+    vent = ID["blood_LV"] if v["name"] == "aortic" else ID["blood_RV"]
+    iv = np.argwhere(Lc == vent)
+    Xv = iv[:, ::-1] * h + lo0 + h / 2
+    dv = -((Xv - c_) @ n0)
+    latv = np.linalg.norm((Xv - c_) + dv[:, None] * n0, axis=1)
+    sel = (np.abs(dv - 20e-3) < 3e-3) & (latv < 1.6 * rl + 10e-3)
+    for w in valves:
+        if w["name"] in ("mitral", "tricuspid"):
+            cw, nw = np.asarray(w["center"]), np.asarray(w["normal"])
+            ow = (Xv - cw) @ nw
+            lw = np.linalg.norm((Xv - cw) - ow[:, None] * nw, axis=1)
+            sel &= ~((ow > 0) & (ow < 25e-3) & (lw < w["radius"] + 4e-3))
+    if sel.sum() < 20:
+        print(f"{v['name']}: no outflow tract found 20 mm upstream — stub axis kept")
+        continue
+    c_up = Xv[sel].mean(0)
+    n1 = c_dn - c_up
+    n1 /= np.linalg.norm(n1)
+    ang = lambda a, b: float(np.degrees(np.arccos(np.clip(a @ b / np.linalg.norm(a) / np.linalg.norm(b), -1, 1))))
+    print(f"{v['name']}: channel axis {ang(n0, n1):.0f}° from the stub axis (outflow tract approach {ang(n0, c_ - c_up):.0f}°, vessel at 2 diameters {ang(n0, c_dn - c_):.0f}°)")
+    v["normal"] = n1.tolist()
+    v["e1"] = perp(n1).tolist()
+
+if LEAFLETS == "membrane":
+    for v in valves:
+        if v["kind"] == "leaflets":
+            v["membrane"] = True
+
+# ── valve disease (valve_disease.py; --valve-disease <spec>, default the phantom's params.json "pathology" →
+#    "valves"): a stenosis opens the leaflets to the angle of the target orifice area, a regurgitation keeps the closed
+#    valve's regurgitant orifice open (hasty-cfd "regurg_hole"); the cardiac model's flows carry the regurgitant volume
+#    and the slow E wave already. The jets enter the velocity scale.
+sys.path.insert(0, str(HERE))
+import valve_disease as VD  # noqa: E402
+
+_pp = P0 / "params.json"
+VDIS = VD.parse(opt("--valve-disease") if "--valve-disease" in A else (json.loads(_pp.read_text()).get("pathology", {}).get("valves") if _pp.exists() else None))
+def leaflet_polys(spec):
+    """the hasty-cfd leaflet presets (case.rs presets) in valve-local 2D, units of R"""
+    kind, args = (spec.split(":", 1) + [""])[:2]
+    nums = [float(x) for x in args.split(",") if x]
+    out = []
+    if kind == "tri":
+        a0, st = np.radians(nums[0] if nums else 90.0), int(nums[1]) if len(nums) > 1 else 4
+        for k in range(3):
+            a_, b_ = a0 + k * 2 * np.pi / 3, a0 + (k + 1) * 2 * np.pi / 3
+            for j in range(st):
+                s0, s1 = a_ + (b_ - a_) * j / st, a_ + (b_ - a_) * (j + 1) / st
+                out.append([[np.cos(s0), np.sin(s0)], [np.cos(s1), np.sin(s1)], [0.0, 0.0]])
+    elif kind == "bi":
+        yc = nums[0] if nums else 0.2
+        na, npo = (int(nums[1]) if len(nums) > 1 else 5), (int(nums[2]) if len(nums) > 2 else 7)
+        tc = np.arcsin(np.clip(yc, -0.9, 0.9))
+        for a_, b_, n_ in ((tc, np.pi - tc, na), (np.pi - tc, 2 * np.pi + tc, npo)):
+            for j in range(n_):
+                s0, s1 = a_ + (b_ - a_) * j / n_, a_ + (b_ - a_) * (j + 1) / n_
+                p0, p1 = [np.cos(s0), np.sin(s0)], [np.cos(s1), np.sin(s1)]
+                out.append([p0, p1, [p1[0], yc], [p0[0], yc]])
+    else:
+        raise SystemExit(f"leaflets {spec}: tri | bi")
+    return [np.asarray(q, float) for q in out]
+
+
+def open_area(polys, theta, th_r, n=241, r_in=1.0):
+    """open share of the valve disk seen along its axis with every strip turned by θ about its hinge chord (as the
+    kernel: strip coordinates a along the chord, b along the inward normal m0 rotated towards n, thickness th_r in
+    units of R, incl. the ½-cell ramp): a column (x, y) is blocked when some strip point (a, b) of the polygon with
+    |h| ≤ th/2 projects onto it, i.e. b ∈ [(c − ½th sin θ) / cos θ, (c + ½th sin θ) / cos θ] meets the polygon's b-range at a"""
+    g = np.linspace(-1, 1, n)
+    X, Y = np.meshgrid(g, g, indexing="ij")
+    # (r_in < 1: only the lumen disk counts, the hinge circle reaching into the wall; the share stays of the full disk)
+    inside = X**2 + Y**2 < r_in**2
+    P = np.stack([X[inside], Y[inside]], -1)
+    blocked = np.zeros(len(P), bool)
+    ct, st = np.cos(theta), np.sin(theta)
+    for q in polys:
+        pa, d = q[0], q[1] - q[0]
+        d = d / np.linalg.norm(d)
+        m0 = np.array([-d[1], d[0]])
+        if (q.mean(0) - pa) @ m0 < 0:
+            m0 = -m0
+        A_ = (q - pa) @ d
+        B_ = (q - pa) @ m0
+        a = (P - pa) @ d
+        c = (P - pa) @ m0
+        # the polygon's b-range at each a (convex polygon: intersect the edges)
+        bmin = np.full(len(P), np.inf)
+        bmax = np.full(len(P), -np.inf)
+        for i in range(len(q)):
+            a0_, a1_, b0_, b1_ = A_[i], A_[(i + 1) % len(q)], B_[i], B_[(i + 1) % len(q)]
+            lo_, hi_ = min(a0_, a1_), max(a0_, a1_)
+            m_ = (a >= lo_) & (a <= hi_)
+            f_ = np.where(abs(a1_ - a0_) > 1e-12, (a - a0_) / (a1_ - a0_ + 1e-30), 0.0)
+            bb_ = b0_ + f_ * (b1_ - b0_)
+            bmin = np.where(m_, np.minimum(bmin, bb_), bmin)
+            bmax = np.where(m_, np.maximum(bmax, bb_), bmax)
+        lo_b = (c - 0.5 * th_r * st) / max(ct, 1e-6)
+        hi_b = (c + 0.5 * th_r * st) / max(ct, 1e-6)
+        blocked |= (bmax >= bmin) & (hi_b >= bmin) & (lo_b <= bmax)
+        # the circular segment between the hinge chord and the annulus stays solid (the kernel's fixed ring part)
+        blocked |= (a >= 0) & (a <= np.linalg.norm(q[1] - q[0])) & (c < 0)
+    return float((1 - blocked.mean()) * r_in**2)
+
+
+def leaf_band(v):
+    """the band a leaflet blocks across its plane (m): plates their thickness + one cell (the ½-cell ramps), membranes
+    half a cell (the bounce-back wall sits on the membrane, ± half a link)"""
+    return 0.5 * DX if v.get("membrane") else v["thickness"] + DX
+
+
+def theta_for_area(v, area_geo):
+    """the opening angle whose open area (open_area, the leaflets' blocked band) equals area_geo, at most the normal angle"""
+    polys = leaflet_polys(v["leaflets"])
+    th_r = leaf_band(v) / v["radius"]
+    tot = np.pi * v["radius"] ** 2
+    th0 = v["theta_open"]
+    ri = lumen_share(v)
+    if open_area(polys, th0, th_r, r_in=ri) * tot <= area_geo:
+        return th0, open_area(polys, th0, th_r, r_in=ri) * tot
+    lo_, hi_ = 0.0, th0
+    for _ in range(30):
+        mid = 0.5 * (lo_ + hi_)
+        if open_area(polys, mid, th_r, r_in=ri) * tot < area_geo:
+            lo_ = mid
+        else:
+            hi_ = mid
+    return hi_, open_area(polys, hi_, th_r, r_in=ri) * tot
+
+
+def lumen_share(v):
+    """the lumen radius / the hinge radius (semilunar hinge outside the lumen, --sl-hinge lumen; else 1)"""
+    return v.get("lumen_radius", v["radius"]) / v["radius"]
+
+
+def open_cm2(v, theta=None):
+    """the valve's open area (cm²) at θ (default its opening angle), inside the lumen"""
+    return open_area(leaflet_polys(v["leaflets"]), v["theta_open"] if theta is None else theta, leaf_band(v) / v["radius"], r_in=lumen_share(v)) * np.pi * v["radius"] ** 2 * 1e4
+
+
+_vjet = 0.0
+for v in valves:
+    les = VDIS.get(v["name"], {})
+    _ql = np.asarray(cm[{"aortic": "Q_AO", "pulmonary": "Q_PA", "mitral": "Q_MV", "tricuspid": "Q_TV"}[v["name"]]], float)
+    print(f"{v['name']}: open {open_cm2(v):.2f} cm² of the {np.pi * v.get('lumen_radius', v['radius']) ** 2 * 1e4:.2f} cm² lumen at {np.degrees(v['theta_open']):.0f}° "
+          f"(hinge radius {v['radius'] * 1e3:.1f} mm), model peak {_ql.max() * 1e6:.0f} mL/s → mean orifice velocity {_ql.max() / (open_cm2(v) * 1e-4):.2f} m/s")
+    qv = np.asarray(cm[{"aortic": "Q_AO", "pulmonary": "Q_PA", "mitral": "Q_MV", "tricuspid": "Q_TV"}[v["name"]]], float)
+    if "bicuspid" in les:
+        # two cusps (strip fans as the mitral preset), the coaptation line at the offset; set before the stenosis angle
+        v["leaflets"] = f"bi:{les['bicuspid']:g},6,6"
+        print(f"{v['name']}: bicuspid, leaflets {v['leaflets']}")
+    if "stenosis" in les:
+        th0 = v["theta_open"]
+        # the spec's area is the effective orifice (continuity / Gorlin, as graded clinically): geometric = EOA / 0.75;
+        # the open area from the strips' actual projection incl. their thickness (2026-11-26: πR²(1 − cos θ) counted
+        # the slits between strips, which 3-cell leaflets close — an "1.0 cm²" aortic valve opened ≈ 0.2 cm² and the LV
+        # pressurised to a doubled density). `--stenosis-formula`: the old cos rule
+        if "--stenosis-formula" in A:
+            v["theta_open"] = VD.open_angle(les["stenosis"] / VD.CC, v["radius"], th0)
+            a_open = np.pi * v["radius"] ** 2 * (1 - np.cos(v["theta_open"]))
+        else:
+            v["theta_open"], a_open = theta_for_area(v, les["stenosis"] * 1e-4 / VD.CC)
+            if a_open < 0.9 * les["stenosis"] * 1e-4 / VD.CC:
+                print(f"{v['name']}: WARNING the leaflets reach only {a_open * 1e4:.2f} cm² open")
+        print(f"{v['name']}: normal leaflets open {open_cm2(v, th0):.2f} cm² of {np.pi * v.get('lumen_radius', v['radius']) ** 2 * 1e4:.2f} cm² at {np.degrees(th0):.0f}°")
+        _vjet = max(_vjet, float(qv.max()) / (VD.CC * a_open))
+        print(f"{v['name']}: stenosis {les['stenosis']:g} cm² → leaflets open to {np.degrees(v['theta_open']):.0f}° (normal {np.degrees(th0):.0f}°), jet ≈ {qv.max() / (VD.CC * a_open):.1f} m/s")
+    if "regurgitation" in les:
+        v["regurg_hole"] = VD.closed_hole(v["name"], les["regurgitation"], v["radius"], yc=0.2)
+        _vjet = max(_vjet, float(-qv.min()) / (les["regurgitation"] * 1e-4))
+        print(f"{v['name']}: regurgitation EROA {les['regurgitation']:g} cm² → closed-valve hole {np.round(v['regurg_hole'], 3).tolist()} (units of R {v['radius'] * 1e3:.1f} mm), "
+              f"peak backflow {-qv.min() * 1e6:.0f} mL/s, jet ≈ {-qv.min() / (les['regurgitation'] * 1e-4):.1f} m/s")
+# the geometric open area (inside the lumen) at the final opening angle, and a stenosis's target effective area: the
+# report compares the LBM's effective orifice area (peak flow / peak jet velocity, the echo continuity equation) to them
+for v in valves:
+    v["open_area_cm2"] = float(open_cm2(v))
+    if "stenosis" in VDIS.get(v["name"], {}):
+        v["target_eoa_cm2"] = float(VDIS[v["name"]]["stenosis"])
+REGURG_SIDES = VD.regurgitant_sides(VDIS)
+V_MAX = float(opt("--v-max", np.ceil(max(_vm, 1.1 * _vjet) * 2) / 2))
+print(f"velocity scale v_max {V_MAX} m/s (anatomy estimate {_vm:.2f} m/s" + (f", valve jets {_vjet:.2f} m/s" if _vjet else "") + ")")
 
 # ── annulus openings: the valve defines the orifice. The capped mitral disk overlapped 31 % atlas myocardium (the
 # LA–LV contact is irregular, 4.9 mm out of plane), the aortic one 13 % non-domain: carve each valve's cylinder
@@ -489,6 +920,11 @@ for v in valves:
     # radius + 2 mm: open leaflets (hinged at R, near-axial) must not hug the cylinder wall — moving to half open they
     # left a thin gap the fluid rushed into (3–6 m/s for a few ms at late E on ph0001); the collar ring stays solid
     m_ = (lat_ < v["radius"] + CARVE_RIM) & (off_ >= -CARVE) & (off_ <= CARVE_DOWN)
+    # --sl-sinus none (default with membrane leaflets, 2026-11-27): a sinus-hinged semilunar valve's carve stops at the
+    # lumen downstream of the valve plane — the R + rim pocket ended 4 mm on in a step down to the lumen (8.5 → 4.9 cm²
+    # aortic on full17), a sharp-edged contraction right after the valve; membranes need no clearance there
+    if SL_SINUS == "none" and "lumen_radius" in v and v["lumen_radius"] < v["radius"]:
+        m_ &= (off_ <= 1.5 * h) | (lat_ < v["lumen_radius"] + 0.5 * h)
     mk = np.zeros(domain.shape, bool)
     mk[lo_[2] : hi_[2], lo_[1] : hi_[1], lo_[0] : hi_[0]] = m_
     new_ = mk & ~domain
@@ -496,6 +932,7 @@ for v in valves:
     domain |= mk
     print(f"{v['name']}: annulus cylinder carved, {new_.sum() * h**3 * 1e6:.2f} mL of non-blood opened ({new_.sum() / max(mk.sum(), 1) * 100:.0f} % of the cylinder)")
 carved_any = np.zeros(domain.shape, bool)
+_dbg("annulus cylinders")
 for m_ in carved.values():
     carved_any |= m_
 
@@ -535,6 +972,11 @@ if len(sv_idx):
     root_p = {10 + k_: P_ref[r["path"][0]] for k_, r in enumerate(roots)}
     root_t = {10 + k_: (P_ref[r["path"][min(2, len(r["path"]) - 1)]] - P_ref[r["path"][0]]) / np.linalg.norm(P_ref[r["path"][min(2, len(r["path"]) - 1)]] - P_ref[r["path"][0]]) for k_, r in enumerate(roots)}
     beyond = np.einsum("ij,ij->i", Xs - np.array([root_p[x] for x in sreg]), np.array([root_t[x] for x in sreg])) > 0
+    # the half-ball at the root lies within 1.5 r_root of it: a curved vessel coming back behind its root plane further
+    # away is still its own lumen (2026-11-26: the coronary sinus, curving along the AV groove, lost lumen voxels
+    # labelled myocardium behind its root plane and was pinched to 0.39 r)
+    root_r = {10 + k_: float(R_ref[r["path"][0]]) for k_, r in enumerate(roots)}
+    beyond |= np.linalg.norm(Xs - np.array([root_p[x] for x in sreg]), axis=1) > 1.5 * np.array([root_r[x] for x in sreg])
     # arterial stubs also take their own ventricle's labels beyond the valve plane (the atlas LVOT / RVOT labels reach
     # into the root: kept as ventricle they got walled off inside the lumen beyond the valve-plane split zone)
     arterial = np.array([roots[x - 10]["class"] in ("systemic_arterial", "pulmonary_arterial") for x in sreg])
@@ -547,6 +989,7 @@ if len(sv_idx):
         if nv_ * h**3 * 1e6 >= 0.05:
             print(f"stub {roots[a_ - 10]['name'][:28]:28s} takes {nv_ * h**3 * 1e6:.2f} mL of {CH[b_ - 1]} labels")
 stub_region = {r["name"]: 10 + k_ for k_, r in enumerate(roots)}
+_dbg("regions (stubs)")
 up_down = {}
 for v in valves:
     if v["name"] == "aortic":
@@ -571,9 +1014,17 @@ for v in valves:
     U_, D_ = up_down[v["name"]]
     idx = np.argwhere(domain & (np.isin(region, [U_, D_]) | carved[v["name"]]))
     off, lat = frame(v, idx)
-    nb = (lat < v["radius"] + 6e-3) & (np.abs(off) < 20e-3)
+    # the plane split covers the valve's passage only (lateral < R + rim + 2 voxels, the carved cylinder): beyond it the
+    # atrium / ventricle boundary follows the labels (walls wherever the regions touch, so the seal does not depend on
+    # it). The old zone (R + 6 mm, ±20 mm; `--split-zone wide`) flipped the atrium voxels at the coronary sinus ostium,
+    # 7 mm below the flat tricuspid plane, into the RV: the proximity walls then pinched the sinus to 0.39 r (2026-11-26)
+    if SPLIT_ZONE == "wide":
+        nb = (lat < v["radius"] + 6e-3) & (np.abs(off) < 20e-3)
+    else:
+        nb = (lat < v["radius"] + CARVE_RIM + 2 * h) & (np.abs(off) < 20e-3)
     region[tuple(idx[nb & (off <= 0)].T)] = U_
     region[tuple(idx[nb & (off > 0)].T)] = D_
+_dbg("regions (valve planes)")
 # allowed contacts
 nreg = int(region.max()) + 1
 allowed = np.zeros((nreg, nreg), bool)
@@ -602,6 +1053,7 @@ for sh3 in [(a, b, c) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1
 # the two voxel layers at an interface are 1 mm; the smoothed SDF, the motion and the lattice sampling thin oblique
 # walls below a lattice spacing, and links cross them (pinhole jets at 4–5 m/s): grow by WALL_GROW voxels each side
 nw0 = int(wall.sum())
+_dbg("interface walls")
 if WALL_GROW > 0:
     wall = ndimage.binary_dilation(wall, ST, iterations=WALL_GROW) & domain
 # proximity walls: regions that must not exchange fluid (not a venous junction, not a valve's two sides) and come
@@ -623,18 +1075,72 @@ if SEP > 0:
             if b_ == a_ or allowed[a_, b_] or tuple(sorted((a_, b_))) in vp_pairs:
                 continue
             bad |= rb == b_
-        add = bad & (da <= SEP) & domain[sl] & ~wall[sl]
+        if SEP_SPLIT == "half":
+            depth = ndimage.distance_transform_edt(bad)  # a voxel's depth in the disallowed regions (1 at their surface)
+            add = bad & (da + depth <= SEP + 1) & domain[sl] & ~wall[sl]
+        else:
+            add = bad & (da <= SEP) & domain[sl] & ~wall[sl]
         nprox += int(add.sum())
         wall[sl] |= add
 domain &= ~wall
+_dbg("walls + proximity")
 region[~domain] = 0
-print(f"walls between regions: {nw0} interface voxels, {int(wall.sum())} after growing {WALL_GROW} voxel(s) each side ({(2 + 2 * WALL_GROW) * h * 1e3:.1f} mm) and {nprox} proximity voxels (separation ≥ {SEP} voxels = {SEP * h * 1e3:.1f} mm)")
+print(f"walls between regions: {nw0} interface voxels, {int(wall.sum())} after growing {WALL_GROW} voxel(s) each side ({(2 + 2 * WALL_GROW) * h * 1e3:.1f} mm) and {nprox} proximity voxels (separation ≥ {SEP} voxels = {SEP * h * 1e3:.1f} mm, split {SEP_SPLIT})")
 for v in valves:
     idx = np.argwhere(domain)
     off, lat = frame(v, idx)
     col = (np.abs(off) <= max(0.75e-3, 1.5 * h)) & (lat >= v["radius"]) & (lat <= v["radius"] + 4e-3)
     domain[tuple(idx[col].T)] = False
 region[~domain] = 0
+_dbg("collars")
+# outflow-tract funnel (--ot-funnel L_mm,k, e.g. 20,1.6; default 0 = off: measured worse, see flow_phantom.md): the atlas ventricle met the
+# semilunar passage through a step (full17 LVOT ≈ 7.1 cm² up to the annulus, lumen 4.9 cm²: a sudden contraction, flow
+# entering 30° off the axis, a 2.4 m/s eccentric jet in a healthy root). A real LVOT / RVOT narrows over ≈ 2 cm to the
+# annulus. Within L upstream of each semilunar valve, ventricle voxels outside the cone r(d) = r_lumen (1 + (k − 1)
+# (d / L)²) become wall (d the upstream distance; the plane / collar layer and the other valves' carved passages kept)
+_otf = opt("--ot-funnel", "0")
+if _otf not in ("0", "off"):
+    OT_L, OT_K = float(_otf.split(",")[0]) * 1e-3, float(_otf.split(",")[1]) if "," in _otf else 1.6
+    for v in valves:
+        if v["name"] not in ("aortic", "pulmonary"):
+            continue
+        U_, D_ = up_down[v["name"]]
+        rl = float(v.get("lumen_radius", v["radius"]))
+        # kept: the other valves' carved passages and the AV valves' inflow tracts (their passage cylinder 25 mm into
+        # the ventricle: the LVOT lies beside the mitral inflow, aorto-mitral continuity)
+        idx = np.argwhere(domain & (region == U_))
+        keep = np.zeros(len(idx), bool)
+        for w in valves:
+            if w is v:
+                continue
+            keep |= carved[w["name"]][tuple(idx.T)]
+            if w["name"] in ("mitral", "tricuspid"):
+                ow, lw = frame(w, idx)
+                keep |= (ow > 0) & (ow < 25e-3) & (lw < w["radius"] + CARVE_RIM + 2e-3)
+        off, lat = frame(v, idx)
+        d = -off
+        X_ = idx[:, ::-1] * h + lo0 + h / 2
+        c_, n_ = np.asarray(v["center"]), np.asarray(v["normal"])
+        lv_ = (X_ - c_) - off[:, None] * n_  # lateral vectors
+        # the tract bends: its centre is on the valve axis at the annulus and at the cavity's own centroid at the mouth
+        # (the ventricle voxels 2–4 mm around depth L within the mouth's reach, AV inflow tracts left out), the offset
+        # growing ∝ (d / L)² so the flow enters the valve along its axis (full17: the LVOT approached 30–40° off it)
+        mouth = (np.abs(d - OT_L) < 3e-3) & (lat < rl * OT_K + 10e-3) & ~keep
+        o_L = lv_[mouth].mean(0) if mouth.sum() > 20 else np.zeros(3)
+        if np.linalg.norm(o_L) > rl * OT_K:
+            o_L *= rl * OT_K / np.linalg.norm(o_L)
+        zone = (d > 1.5 * h) & (d <= OT_L)
+        f_ = np.clip(d / OT_L, 0, 1) ** 2
+        latb = np.linalg.norm(lv_ - f_[:, None] * o_L, axis=1)
+        rcone = rl * (1 + (OT_K - 1) * f_)
+        # (laterally up to the mouth radius + 15 mm from the bent centre: the tract's walls, not the ventricle body)
+        cut = zone & (latb > rcone) & (latb < rl * OT_K + 15e-3) & ~keep
+        print(f"{v['name']}: outflow tract mouth {np.linalg.norm(o_L) * 1e3:.1f} mm off the valve axis at {OT_L * 1e3:.0f} mm "
+              f"({np.degrees(np.arctan2(np.linalg.norm(o_L), OT_L)):.0f}°)")
+        domain[tuple(idx[cut].T)] = False
+        print(f"{v['name']}: outflow-tract funnel over {OT_L * 1e3:.0f} mm (radius {rl * 1e3:.1f} → {rl * OT_K * 1e3:.1f} mm), {cut.sum() * h**3 * 1e6:.2f} mL of ventricle walled")
+    region[~domain] = 0
+    _dbg("outflow funnels")
 # sealing: without each valve's disk, no component holds both its upstream and its downstream region near the valve
 for v in valves:
     U_, D_ = up_down[v["name"]]
@@ -707,7 +1213,57 @@ for c_ in keep:
     parts = ", ".join(f"{rname.get(i_, i_)} {rr[i_] * h**3 * 1e6:.1f}" for i_ in np.argsort(-rr)[:6] if rr[i_] > 0)
     print(f"  component {c_}: {sz[c_ - 1] * h**3 * 1e6:.1f} mL: {parts}")
 domain = np.isin(lab, keep)
+_dbg("components kept")
 print(f"domain after walls: {int(domain.sum())} voxels ({domain.sum() * h**3 * 1e6:.0f} mL), {len(keep)} components kept")
+
+# ── lumen gate (2026-11-25): along every tree branch the wall distance at the centreline must stay ≥ LUMEN_MIN × the
+#    graph radius, away from the cut planes and the heart end (a wall carved through interpenetrating atlas tubes left
+#    the right PA and the right superior PV as slivers: 6 m/s and 3 m/s jets, research/flow_phantom.md Tier B4)
+_dw = ndimage.distance_transform_edt(domain) * h
+_cut_c = np.array([c["center"] for c in cuts]) if cuts else np.zeros((0, 3))
+_cut_r = np.array([c["radius"] for c in cuts]) if cuts else np.zeros(0)
+_bad = []
+for b in branches:
+    if b.get("drop"):
+        continue
+    sm = np.asarray(b["samples"])
+    pp, rr = P_ref[sm], R_ref[sm]
+    iv = np.floor((pp - lo0) / h).astype(int)
+    ok_ = np.all((iv >= 0) & (iv < np.array(domain.shape[::-1])), 1)
+    rt = P_ref[roots[b["root"]]["path"][0]]
+    near = np.linalg.norm(pp - rt, axis=1) < np.maximum(2 * rr, 4e-3)
+    for cc, cr in zip(_cut_c, _cut_r):
+        near |= np.linalg.norm(pp - cc, axis=1) < max(2 * cr, 4e-3) + 3 * h
+    use = ok_ & ~near
+    if not use.any():
+        continue
+    ratio = _dw[iv[use, 2], iv[use, 1], iv[use, 0]] / rr[use]
+    j_ = int(np.argmin(ratio))
+    if ratio[j_] < LUMEN_MIN:
+        _bad.append((float(ratio[j_]), enames[b["edge"]] if b["edge"] >= 0 else roots[b["root"]]["name"], float(rr[use][j_] * 1e3), (pp[use][j_] * 1e3).round(1).tolist()))
+# cut disks: the open share of each cut's flux disk (lateral < R, the voxel layer just inside its plane) in its own
+# region — a partly solid disk forces its flow through the rest (the left subclavian's 76 % disk: 3 m/s jets)
+_cd = []
+for c in cuts:
+    cc_, nn_, R_ = np.asarray(c["center"]), np.asarray(c["normal"]), float(c["radius"])
+    lo_ = np.maximum(np.floor((cc_ - R_ - 2 * h - lo0) / h).astype(int), 0)
+    hi_ = np.minimum(np.ceil((cc_ + R_ + 2 * h - lo0) / h).astype(int) + 1, np.array(domain.shape[::-1]))
+    zz_, yy_, xx_ = np.meshgrid(*(np.arange(lo_[d], hi_[d]) for d in (2, 1, 0)), indexing="ij")
+    Xq = np.stack([xx_, yy_, zz_], -1).reshape(-1, 3)
+    d_ = Xq * h + lo0 + h / 2 - cc_
+    sq = d_ @ nn_
+    lq = np.linalg.norm(d_ - sq[:, None] * nn_, axis=1)
+    m_ = (sq > -1.0 * h) & (sq <= 0) & (lq < R_)
+    if m_.sum() < 3:
+        continue
+    zi, yi, xi = Xq[m_, 2], Xq[m_, 1], Xq[m_, 0]
+    _cd.append((float((domain[zi, yi, xi] & (region[zi, yi, xi] == 10 + c["root"])).mean()), c["name"]))
+_cd.sort()
+print("cut disks: open share in the own region, lowest: " + ", ".join(f"{n_[:30]} {f_:.2f}" for f_, n_ in _cd[:6]))
+_bad.sort()
+print(f"lumen gate: {len(_bad)} branches with wall distance < {LUMEN_MIN} r at the centreline" + "".join(f"\n   {x[0]:.2f} r at {x[3]} mm, {x[1][:40]} (r {x[2]:.1f} mm)" for x in _bad[:15]))
+if _bad and LUMEN_MIN > 0:
+    sys.exit(f"lumen gate failed: {len(_bad)} pinched branches (--lumen-min 0 to build anyway)")
 
 # ── signed distance on the domain's bounding box (+5 mm) ─────────────────────────────────────────────────────────────
 nzv = np.nonzero(domain)
@@ -730,7 +1286,7 @@ tt = np.linspace(0, period, 256, endpoint=False)
 cut_out = []
 q_ins = []
 for c in cuts:
-    rec = {"name": c["name"], "center": c["center"], "normal": c["normal"], "radius": c["radius"], "slab": c["slab"]}
+    rec = {"name": c["name"], "center": c["center"], "normal": c["normal"], "radius": c["radius"], "slab": c["slab"], "class": c["class"]}
     q_t = np.real(qn[c["sample"], 0] + 2 * (qn[c["sample"], 1:] @ np.exp(1j * np.outer(om[1:], tt))))
     q_in = -q_t if c["sgn"] == 1 else q_t  # traversed away from the heart: positive network flow leaves the domain
     q_ins.append(q_in)
@@ -751,18 +1307,29 @@ for c in cuts:
 # pressure outlet and takes the rest — the ventricle's ejection (wall motion) less the prescribed outflows, incl. the
 # branches below R_CUT. Windkessel outlets would turn the pulse pressure into density swings of the weakly compressible
 # lattice (an artificial compliance of V / (ρ c_s²) ≈ 0.4 mL/mmHg at c_s = 14 m/s)
+tree_q = {}  # arterial root → valve flow and the outlets' summed network targets (the wall transpiration's storage)
 for k_, r in enumerate(roots):
     if r["class"] not in ("systemic_arterial", "pulmonary_arterial"):
         continue
     key = "Q_AO" if r["class"] == "systemic_arterial" else "Q_PA"
     Qroot = np.interp(tt, tq, np.asarray(cm[key], float), period=period)
     ci = [i for i, c in enumerate(cuts) if c["root"] == k_]
+    if ci and "--rcr" not in A:
+        _qo = {i: -q_ins[i] for i in ci}
+        _f = float(np.mean(Qroot)) / max(sum(float(np.mean(_qo[i])) for i in ci), 1e-12)
+        tree_q[k_] = {"Qroot": Qroot, "targets": sum(_qo[i] for i in ci) * _f}
     if len(ci) == 1 or "--rcr" in A:
         for i in ci:
-            cut_out[i]["q_ref"] = {"t": tt.tolist(), "v": Qroot.tolist()}
+            ref_ = tree_q[k_]["targets"] if (TRANSP == "on" and k_ in tree_q) else Qroot
+            cut_out[i]["q_ref"] = {"t": tt.tolist(), "v": ref_.tolist()}
         continue
     qout = {i: -q_ins[i] for i in ci}
     main = max(ci, key=lambda i: float(np.mean(qout[i])))
+    # a regurgitant valve on this side (MR / AR left, TR / PR right): no pressure outlet, every cut prescribed — the
+    # ventricle's contraction less the prescribed forward flow then has to go back through the regurgitant orifice
+    # (the lattice has no physiological pressures that would split it); the venous inertial inlets keep the reference
+    if ("left" if r["class"] == "systemic_arterial" else "right") in REGURG_SIDES:
+        main = None
     # the branches below R_CUT (lung segmental arteries, intercostals, coronaries) carry the rest of the root's mean
     # flow: share it over all outlets in proportion to their network flow (else it all exits the pressure outlet: 48 of
     # 98 mL/s through one 3 mm segmental artery of the pulmonary tree)
@@ -772,11 +1339,96 @@ for k_, r in enumerate(roots):
     rest = sum(qout[i] for i in ci if i != main)
     for i in ci:
         if i == main:
-            cut_out[i]["q_ref"] = {"t": tt.tolist(), "v": (Qroot - rest).tolist()}
+            # the diagnostics' reference: with the wall transpiration storing Qroot − Σ targets, the pressure outlet
+            # should carry its own network target; without, it takes the storage too
+            cut_out[i]["q_ref"] = {"t": tt.tolist(), "v": (qout[main] if TRANSP == "on" else Qroot - rest).tolist()}
         else:
             cut_out[i] |= {"kind": "inlet", "q": {"t": tt.tolist(), "v": (-qout[i]).tolist()}}
-    print(f"tree {r['name'][:30]}: outflows × {f_tree:.2f} (flow below R_CUT shared out); pressure outlet {cut_out[main]['name'][:36]} (network mean × f {np.mean(qout[main]) * 1e6:.1f} mL/s, takes "
-          f"{np.mean(Qroot - rest) * 1e6:.1f}), {len(ci) - 1} prescribed outflows totalling {np.mean(rest) * 1e6:.1f} mL/s of {np.mean(Qroot) * 1e6:.1f}")
+    if main is None:
+        print(f"tree {r['name'][:30]}: outflows × {f_tree:.2f} (flow below R_CUT shared out); no pressure outlet (regurgitant valve on this side), {len(ci)} prescribed outflows "
+              f"totalling {np.mean(rest) * 1e6:.1f} mL/s of {np.mean(Qroot) * 1e6:.1f}")
+    else:
+        print(f"tree {r['name'][:30]}: outflows × {f_tree:.2f} (flow below R_CUT shared out); pressure outlet {cut_out[main]['name'][:36]} (network mean × f {np.mean(qout[main]) * 1e6:.1f} mL/s, takes "
+              f"{np.mean(Qroot - rest) * 1e6:.1f}), {len(ci) - 1} prescribed outflows totalling {np.mean(rest) * 1e6:.1f} mL/s of {np.mean(Qroot) * 1e6:.1f}")
+# ── wall transpiration (2026-11-25, research/flow_phantom.md Tier B4): the arterial trees are rigid in the lattice
+#    apart from the cardiac motion field's volume change, so the storage of the network's compliance, Q_valve − Σ outlet
+#    targets, went through each tree's single pressure outlet (−118…+54 mL/s through a 3.4 mm segmental artery, 8.5 m/s
+#    jets; the head/arm outflow fed backwards up the aorta in diastole). Each tree instead stores
+#    q_w(t) = Q_valve(t) − Σ targets(t) − dV_tree/dt (motion), zero-mean, through its wall: in a band of 2 lattice units on
+#    both sides (hasty-cfd kernels: normal velocity q_w w / (da/dA), tapering over the last half unit) with the weight
+#    w ∝ the local graph radius (thin-wall compliance per wall area ∝ r), ∮ w dA = 1; not within 1.5 R + 3 mm of the
+#    tree's cuts and valve. The pressure outlet then carries its own target up to the residual.
+transp = None
+if TRANSP == "on" and tree_q:
+    Dc = D
+    Rc = np.where(domain, region, 0)[b0[0] : b1[0], b0[1] : b1[1], b0[2] : b1[2]]
+    grp = np.zeros(Dc.shape, np.uint8)
+    wgt = np.zeros(Dc.shape, np.float32)
+    gz, gy, gx = np.gradient(phi, h)
+    gmag = np.sqrt(gz**2 + gy**2 + gx**2)
+    del gz, gy, gx
+    eps_ = 1.5 * h
+    delta = np.where(np.abs(phi) < eps_, (1 + np.cos(np.pi * phi / eps_)) / (2 * eps_), 0.0) * gmag
+    del gmag
+    # the cardiac motion's Jacobian J(X, t) = det(I + ∇U) on the motion grid, for the trees' volume change
+    Um = np.asarray(cm["U_mm"], np.float32) * 1e-3  # [T, 3, Z, Y, X]
+    m_o = np.asarray(cm["origin_m"], float)
+    m_h = float(cm["voxel_m"])
+    m_t = np.asarray(cm["t"], float)
+    Jt = []
+    for it_ in range(Um.shape[0]):
+        G_ = [[np.gradient(Um[it_, i_], m_h, axis=2 - j_) for j_ in range(3)] for i_ in range(3)]  # ∂U_i/∂X_j (x, y, z)
+        F_ = [[G_[i_][j_] + (1.0 if i_ == j_ else 0.0) for j_ in range(3)] for i_ in range(3)]
+        Jt.append(F_[0][0] * (F_[1][1] * F_[2][2] - F_[1][2] * F_[2][1]) - F_[0][1] * (F_[1][0] * F_[2][2] - F_[1][2] * F_[2][0]) + F_[0][2] * (F_[1][0] * F_[2][1] - F_[1][1] * F_[2][0]))
+    del Um
+    groups_ = []
+    for gid, (k_, tqd) in enumerate(sorted(tree_q.items()), start=1):
+        r = roots[k_]
+        rid = 10 + k_
+        Fg = Rc == rid
+        din_g = ndimage.distance_transform_edt(Fg)
+        dF = ndimage.distance_transform_edt(~Fg)
+        dO = ndimage.distance_transform_edt(~(Dc & ~Fg))
+        band = (Fg & (din_g <= 2.5)) | (~Dc & (dF <= 2.5) & (dF + 1 <= dO))
+        zz_, yy_, xx_ = np.nonzero(band)
+        Xb = np.stack([xx_, yy_, zz_], -1) * h + sdf_origin + h / 2
+        keep_ = np.ones(len(Xb), bool)
+        for c in cuts:
+            if c["root"] == k_:
+                keep_ &= np.linalg.norm(Xb - np.asarray(c["center"]), axis=1) > 1.5 * c["radius"] + 3e-3
+        for v in valves:
+            if v["name"] == ("aortic" if r["class"] == "systemic_arterial" else "pulmonary"):
+                keep_ &= np.linalg.norm(Xb - np.asarray(v["center"]), axis=1) > 1.5 * v["radius"] + 3e-3
+        zz_, yy_, xx_, Xb = zz_[keep_], yy_[keep_], xx_[keep_], Xb[keep_]
+        tp_ = np.vstack([P_ref[b["samples"]] for b in branches if b["root"] == k_ and not b.get("drop")])
+        tr_ = np.concatenate([R_ref[b["samples"]] for b in branches if b["root"] == k_ and not b.get("drop")])
+        rv_ = tr_[cKDTree(tp_).query(Xb)[1]]
+        dl_ = delta[zz_, yy_, xx_]
+        area = float(dl_.sum() * h**3)
+        C_ = float((dl_ * rv_).sum() * h**3)
+        grp[zz_, yy_, xx_] = gid
+        wgt[zz_, yy_, xx_] = (rv_ / C_).astype(np.float32)
+        # the tree's volume under the motion: Σ J h³ over its reference voxels (every 2nd voxel per axis, × 8)
+        fz, fy, fx = np.nonzero(Fg[::2, ::2, ::2])
+        Xf = np.stack([fx * 2, fy * 2, fz * 2], -1) * h + sdf_origin + h / 2
+        ic = ((Xf - m_o) / m_h - 0.5)[:, ::-1].T  # (z, y, x) index coordinates on the motion grid
+        Vt = np.array([float(ndimage.map_coordinates(Jt[it_], ic, order=1, mode="nearest").sum()) * 8 * h**3 for it_ in range(len(m_t))])
+        kf = np.fft.rfftfreq(len(m_t), d=period / len(m_t))
+        dV = np.fft.irfft(np.fft.rfft(Vt) * 2j * np.pi * kf, n=len(m_t))  # periodic derivative (m³/s); m_t uniform
+        assert np.allclose(np.diff(m_t), period / len(m_t), rtol=1e-6), "motion samples not uniform in time"
+        dVt = np.interp(tt, m_t, dV, period=period)
+        qw = tqd["Qroot"] - tqd["targets"] - dVt
+        qw_mean = float(qw.mean())
+        qw = qw - qw_mean
+        umax_ = float(np.abs(qw).max() * wgt[zz_, yy_, xx_].max())
+        print(f"transpiration group {gid} {r['name'][:30]} (region {rid}): band {len(zz_)} voxels, wall area {area * 1e4:.0f} cm², mean radius "
+              f"{C_ / max(area, 1e-12) * 1e3:.1f} mm; motion volume {Vt.min() * 1e6:.1f}…{Vt.max() * 1e6:.1f} mL; q_w {qw.min() * 1e6:.0f}…{qw.max() * 1e6:.0f} mL/s "
+              f"(mean removed {qw_mean * 1e6:.2f}), stored swing {np.ptp(np.cumsum(qw) * period / len(tt)) * 1e6:.1f} mL, largest wall speed {umax_ * 1e2:.2f} cm/s")
+        groups_.append({"id": gid, "name": r["name"], "region": rid, "q": {"t": tt.tolist(), "v": qw.tolist()}})
+    del Jt, delta
+    np.save(OUT / "transp_group.npy", grp)
+    np.save(OUT / "transp_weight.npy", wgt)
+    transp = {"group": "transp_group.npy", "weight": "transp_weight.npy", "band": 2.0, "groups": groups_}
 # venous inlets: the cardiac model's atrial inflow (Q_PV into the LA, Q_VR into the RA: the flows its volume curves are
 # built from), split by the network's mean shares; the network's own stub flows miss the branches without a stub
 for cls_, key in (("pulmonary_venous", "Q_PV"), ("systemic_venous", "Q_VR")):
@@ -805,7 +1457,7 @@ for cls_, key in (("pulmonary_venous", "Q_PV"), ("systemic_venous", "Q_VR")):
         else:
             r_["q"] = {"t": tt.tolist(), "v": (share * Qc).tolist()}
         print(f"inlet {r_['name'][:32]:32s} ({VENOUS}) share {share * 100:.0f} % of {key} (mean {np.mean(Qc) * 1e6:.1f} mL/s; network mean at the cut {r_['q_network_mean'] * 1e6:.1f})")
-        del r_["class"]
+        # the class stays in the record (2026-11-26: the report's cut balances per tree need it; hasty-cfd ignores it)
 # upstream paths of the venous inlets (hasty-cfd CutSpec::upstream: the spin history integrates the imaging slab's
 # saturation along them): the vessel graph beyond the cut, away from the heart along the main branch to its end, transit
 # times from the network's mean flow; at the end a capillary segment. Systemic veins start fresh (the systemic loop is
@@ -901,6 +1553,19 @@ glo = sdf_origin + h / 2 - marg
 ghi = sdf_origin + (np.array(phi.shape[::-1]) - 0.5) * h + marg
 dx = DX
 dims = (np.ceil((ghi - glo) / dx) + 1).astype(int)
+# ── grid refinement (hasty-cfd refine.rs, kernels/lbm_core.h "grid refinement"): level 1 (dx / 2) over spheres around
+# the named valves along their path through the cycle — the valve centre and points downstream along its normal (the
+# jet; --refine-down-mm) and half a radius upstream, each moved by the cardiac motion at every 4th motion sample —
+# of radius R + --refine-margin-mm. "--refine aortic,pulmonary" | "all"; --refine-levels 2 adds level 2 (dx / 4) with
+# half the margin and the downstream reach
+REFINE = opt("--refine", "")
+refine = []
+if REFINE:
+    from refine_spheres import spheres as refine_spheres  # noqa: E402
+
+    refine = refine_spheres(valves, cm, [v["name"] for v in valves] if REFINE == "all" else REFINE.split(","), float(opt("--refine-margin-mm", 6.0)) * 1e-3,
+                            float(opt("--refine-down-mm", 10.0)) * 1e-3, int(opt("--refine-levels", 1)))
+
 case = {
     "phantom": str(P0), "source": "rustlib/tools/phantom/lbm_case.py",
     "grid": {"origin": glo.tolist(), "dx": dx, "dims": dims.tolist()},
@@ -908,14 +1573,22 @@ case = {
     "regions": {"file": "region.npy", "names": {str(v_): k_ for k_, v_ in CHI.items()} | {str(10 + k_): r["name"] for k_, r in enumerate(roots)},
                 "allowed": [[int(a_), int(b_)] for a_, b_ in zip(*np.nonzero(allowed)) if a_ < b_],
                 "valves": {v["name"]: list(up_down[v["name"]]) for v in valves}},
-    "motion": {"file": str((P0 / "motion" / "cardiac_motion.hv").resolve())},
+    "motion": {"file": str(CM_FILE.resolve())},
     "fluid": {"nu": 3.5e-3 / 1060.0, "rho": 1060.0},
     # the blood's MR properties of this phantom (its contrast state: cardiac_lbm --spin takes T1 from here)
     "blood": BLOOD_MR,
     "v_max": V_MAX, "u_lattice": float(opt("--u-lattice", 0.08)),
     "valves": valves, "cuts": cut_out,
+    # the chambers' volume rates of the cardiac model (hasty-cfd Case::wall_pump, run.wall_pump; `--no-wall-pump`: as
+    # before): the moving-wall bounce-back is the chambers' pump and injected ≈ 0.89 of the stroke; corrected to −dV/dt per
+    # chamber, the healthy full15 case pumps 83.4–84.7 mL against the model's 83.8 (research/flow_phantom.md)
+    "wall_pump": {nm_: {"t": tq.tolist(), "v": (np.asarray(cm[a_], float) - np.asarray(cm[b_], float)).tolist()}
+                  for nm_, a_, b_ in (("blood_LV", "Q_MV", "Q_AO"), ("blood_LA", "Q_PV", "Q_MV"), ("blood_RV", "Q_TV", "Q_PA"), ("blood_RA", "Q_VR", "Q_TV"))},
+    **({"transpiration": transp} if transp else {}),
+    **({"refine": refine} if refine else {}),
     "run": {"cycles": int(opt("--cycles", 4)), "warmup": int(opt("--warmup", 2)), "bins": int(opt("--bins", 50)), "out_factor": int(opt("--out-factor", 2)),
-            "acc_every": 20, "geom_every": 4, "cwale": 0.5, "inv_iters": 3, "uclip": 0.35, "diag_every": 1000, "ckpt_every": 20000},
+            "acc_every": 20, "geom_every": 4, "cwale": 0.5, "inv_iters": 3, "uclip": 0.35, "diag_every": 1000, "ckpt_every": 20000,
+            "wall_pump": "--no-wall-pump" not in A},
 }
 (OUT / "case.json").write_text(json.dumps(case, indent=1))
 print(f"grid {dims.tolist()} at {dx * 1e3:.2f} mm ({np.prod(dims) / 1e6:.1f} M box nodes; max displacement {umax * 1e3:.1f} mm) → {OUT / 'case.json'}")

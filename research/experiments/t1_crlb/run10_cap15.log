@@ -1,0 +1,24 @@
+######## TRMAX 20
+
+===== mode cap15 (flip floor 3.0°, ceiling 30.0°, TR in [11, 80] ms) =====
+  flip only, K=2 flips, TR 11: kappa 1.007 flips [ 4.2 30. ]
+  flip only, K=3 flips, TR 11: kappa 0.6057 flips [ 3.   7.3 30. ]
+  flip only, K=4 flips, TR 11: kappa 0.477 flips [ 3.   3.  11.4 30. ]
+  one flip, 3 TRs (11 + 2 free): kappa 2.416 flip 15.2 TRs [20. 20.]
+  2 flips x 2 TRs (11, TR2): kappa 0.4702 flips [ 3.  28.6] TR2 20.0
+  2 flips x 3 TRs: kappa 0.3858 flips [ 3. 30.] TRs [20. 20.]
+  free (flip,TR) x 4 blocks: kappa 0.3869 flips [ 3.  30.  14.5  3. ] TRs [20.  16.5 20.  20. ]
+  free (flip,TR) x 6 blocks: kappa 0.3229 flips [11.6  3.   3.   3.  30.  20.7] TRs [20.  20.  20.  20.  16.5 20. ]
+done 90s
+######## TRMAX 25
+
+===== mode cap15 (flip floor 3.0°, ceiling 30.0°, TR in [11, 80] ms) =====
+  flip only, K=2 flips, TR 11: kappa 1.007 flips [ 4.2 30. ]
+  flip only, K=3 flips, TR 11: kappa 0.6057 flips [ 3.   7.3 30. ]
+  flip only, K=4 flips, TR 11: kappa 0.477 flips [ 3.   3.  11.4 30. ]
+  one flip, 3 TRs (11 + 2 free): kappa 1.771 flip 16.0 TRs [25. 25.]
+  2 flips x 2 TRs (11, TR2): kappa 0.4546 flips [ 3.  28.7] TR2 25.0
+  2 flips x 3 TRs: kappa 0.3749 flips [ 3. 30.] TRs [25. 25.]
+  free (flip,TR) x 4 blocks: kappa 0.3847 flips [ 3.   3.  30.  16.1] TRs [25.  25.  16.4 25. ]
+  free (flip,TR) x 6 blocks: kappa 0.3202 flips [12.9  3.   3.   3.  30.  22.7] TRs [25.  25.  25.  25.  16.5 25. ]
+done 90s
